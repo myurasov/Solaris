@@ -1,0 +1,16 @@
+{
+  "_comment": [
+    "Solaris MCP template. Copy this file to BOTH .mcp.json (Claude Code) and .cursor/mcp.json (Cursor).",
+    "Both runtime files are gitignored (they may carry tokens); this .example stays committed.",
+    "Keep the two copies identical:  uv run -m solaris.tools.mcp_sync --sync   (check drift: --check).",
+    "context7 is used via its CLI (ctx7), NOT as an MCP server - the agent suggests installing it if missing.",
+    "When a plugin is installed into a project, its mcps.json entries are merged into that project's MCP config.",
+    "Playwright's first run downloads Chromium (~150MB); remove the entry if you do not want browser automation."
+  ],
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}

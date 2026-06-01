@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "beforeSubmitPrompt": [
+      {
+        "command": "uv run -m solaris.tools.log_interaction",
+        "timeout": 5
+      }
+    ]
+  }
+}

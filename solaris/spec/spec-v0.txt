@@ -1,0 +1,123 @@
+Solaris v0 spec
+------------------
+
+I want to build a framework that will allow me to wok on multiple coding projects from one central point. It will be named Solaris.
+
+Projects will be very different in nature - python cli tools, web services, full stack apps, mobile applications, systems, ad-hoc utilities and experiments, etc.
+
+Main mode of development will be for code to be stored locally as outlined in dir structure below and deployed to remote machines for running/testing/debugging. Source of truth will be the local codebase.
+
+Initially we are targeting cursor anc claude code (incl extension for vscode and cursor) compatibility for both Solaris and ai-setups it produces.
+
+The directory structure will look like this:
+
+```
+<root>/
+    - .tmp <- temporary files for solaris operation
+    - .tools <- anything non-pythonic for solaris operation
+    - .venv <- uv virtual environment for solaris operation
+    - solaris/ <- solaris framework itself
+
+        solaris.agent.md
+        - spec/ <- spec for Solaris, already exists
+        - skills/
+            - create-project.md <- used to create a new project
+            - update-project.md <- used to update project's ai-setup to latest version
+            - develop-project.md <- used to work on the specific project
+            - self-reflect.md <- similar to Co-SA's tailor skill
+        - migrations/
+        - templates/
+            - ai-setup/
+                - coder.agent.md
+                - planner.agent.md
+                - spec.md
+                - memory
+                    - agent.memory.md
+                    - resources.md
+                    - credentials.md
+                    - ...
+            - projects/
+                - python-cli.md <- template for python cli project (in a form of a description, not literally template)
+                - ios-app.md <- template for ios app project
+                - ... more templates to come
+        - tools/
+    - plugins/ <- "custom" overlay that will contain skills and other knowledge and resources that are needed to adapt Solaris for specific use, for example job of Isaac Lab developer - gitignored
+    - memory/ <- memory, containing interactions.yaml and other important data we need to remember
+    - projects/ - user's projects - gitignored
+        - project1/
+            - ai/ <- "ai-setup"
+                - memory/
+                    - spec-v0.md
+                    - coder.memory.md
+                    - planner.memory.md
+                    - resources.md
+                    - credentials.md
+                    - interactions.yaml <- history of user queries and intractions (and outcomes of those) with ai-setup's agents, for further analysis
+                - spec.md <- current spec, created after first iteration of project development
+                - coder.agent.md
+                - planner.agent.md
+                - .version <- ai-setup version (Solaris's version that generated or updated this ai-setup)
+            - src/ <- project source code (.git root)
+        - project2/
+        - ...
+```
+
+The idea is to have a freamework that creates AI setups ("ai-setups") for for each project, that:
+
+    - Can be used independently outside pf Solaris dir.
+
+    - Will be produced by Solaris and be standardized. .agent.md files will be the same for all projects.
+
+    - Contain a spec.md file that describes the project. Those specs will be used to generate the project initially.
+
+    - Contain memory/ folder that will be used to store the project-specific memory for agents (instructions on how to operate), resources available (hardware, apis, payment methods, etc.), and credentials (api keys, passwords, etc.).
+
+    - Will be versioned and migrated to the latest version when solaris progressed further and version mismatch is detected.
+
+When creating a new project, the process will be as follows:
+
+    - Solaris will use create-project skill that will populate ai-setup folder with agents, specs and memory files.
+
+    - Specs and memory files will contain enough information to initialize project source code and develop it further.
+
+    - After this step the initialization will be handed off to the project's ai-setup's planner agent.
+
+    - Project's planner agent will use memory/spec-v0.md to generate the project source code.
+
+    - User will review the work on the plan until they are satisfied with the results. spec-v0.md will be updated during this process.
+
+    - When user is satisfied with the plan, they will approve and ai-setup's coder agent will generate the v0.0.0 version of the project source code.
+
+When working on the project, the process will be as follows:
+
+    - User will provide a prompt to the project's ai-setup's coder or planner agent directly or to Solaris agent that will then pass the prompt to the project's ai-setup's coder/planner agent.
+
+    - ai-setup's coder/planner agent will be updating spec.md file during iterative dialogue with the user.
+
+    - If the user works with planner, once plan is approved, it will be handed off to the ai-setup's coder agent to generate the project source code.
+
+    - If the user works with coder directly, coder will implement user's requests without planning phase.
+
+    - When the user is indicating that certain things about the developmen t process/environment/etc should be remembered, ai-setup's <agent>.memory.md files should be updated accordingly.
+
+    - If the user is working on a project through Solaris, a develop-project skill should be used. It is essentially a shim to hand of development work to ai-setup.
+
+
+Look into Solaris/solaris/spec/references folder for ideas of what i asked from coding agents. Make sure not to pick up anything Nvidia-specific.
+
+Also look at Co-SA (/Users/misha/icloud/NV-Co-SA-MY) and Superagent (/Users/misha/icloud/MY-Superagent) for ideas. But I want Solaris to be VERY minimal in the beginning, so do not bring over features that are not critiucal for its basic job - support my engineering projects.
+
+
+Misc important notes:
+
+    - Every time project specification is updated from user prompt, ai-setup's coder agent will update the spec.md file. Initial spec.md will be preserved in memory/spec-v0.md file.
+
+    - Initially i would like to instruct ai-setup's coder the following (among other necessary things):
+        - When creating commit messages, make sure they are one sentence and brief, contain only ascii symbols, no long dashes or "--", or emojis.
+        - Also non non-ascii chars or long dashes or -- in comments
+        - When making commits, make sure they dont have ai authoring attribution
+        - Make sure they are atomic and each one contains only closely related changes
+
+    - All tools that Solaris needs to operate should be pythonic if possible. All execution of such tools should be through uv run command.
+
+    - Solaris should utilize pyproject.toml and uv.lock, all the dependencies for tools should be in those.

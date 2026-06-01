@@ -1,0 +1,20 @@
+[project]
+name = "solaris"
+version = "0.2.0"
+description = "Solaris - run many coding projects from one central point; generates standardized, portable ai-setups."
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+# Solaris itself is not a built/installed package; tools run via `uv run -m solaris.tools.<name>`
+# with the repo root on sys.path (python -m adds the cwd). Tests get the same via pythonpath below.
+package = false
+default-groups = ["dev"]
+
+[tool.pytest.ini_options]
+testpaths = ["solaris/tests"]
+pythonpath = ["."]
+addopts = "-q"
