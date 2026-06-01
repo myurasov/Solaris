@@ -1,0 +1,76 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "solaris/templates/ai-setup/AGENTS.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "3aae4509e0d34e23aba83405390b23d3d161656c6917775b7c282a9bc68b7a33"
+        }
+      ],
+      "rev": 1,
+      "hash": "3aae4509e0d34e23aba83405390b23d3d161656c6917775b7c282a9bc68b7a33"
+    },
+    "solaris/templates/ai-setup/ai/developer.agent.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "0f98c635185ec3b36530fed0fac001c5dca2b8dffc9a1fc0aed4fb2268e984ae"
+        }
+      ],
+      "rev": 1,
+      "hash": "0f98c635185ec3b36530fed0fac001c5dca2b8dffc9a1fc0aed4fb2268e984ae"
+    },
+    "plugins/nvidia-isaac-lab/shared/bot-replies.rule.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "9a75de0ce3ee84d128e7cb97180d59aa1b09f221a1b7921134ec9f18230c75d8"
+        }
+      ],
+      "rev": 1,
+      "hash": "9a75de0ce3ee84d128e7cb97180d59aa1b09f221a1b7921134ec9f18230c75d8"
+    },
+    "plugins/nvidia-isaac-lab/shared/ci-checks.rule.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "7a05cb47d884eb82cf513f9e257b0438a3df97ee6187a2dfc891d55623560dff"
+        }
+      ],
+      "rev": 1,
+      "hash": "7a05cb47d884eb82cf513f9e257b0438a3df97ee6187a2dfc891d55623560dff"
+    },
+    "plugins/nvidia-isaac-lab/shared/git-workflow.rule.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "368d801bca9ce2910e430ec413e69d2d386d75a04553f643eb9f11f9be2db3d9"
+        }
+      ],
+      "rev": 1,
+      "hash": "368d801bca9ce2910e430ec413e69d2d386d75a04553f643eb9f11f9be2db3d9"
+    },
+    "plugins/nvidia-isaac-lab/shared/nvbugs.rule.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "35500571d56f9c00c74805137000ed37231db1da88a23426a7de8a3b9f3d9d40"
+        }
+      ],
+      "rev": 1,
+      "hash": "35500571d56f9c00c74805137000ed37231db1da88a23426a7de8a3b9f3d9d40"
+    },
+    "plugins/nvidia-isaac-lab/shared/nvbugs.skill.md": {
+      "history": [
+        {
+          "rev": 1,
+          "hash": "c9c95fe4a5af823b1ed8ebdc331b531dc9d243831a0ef4c04595d0003416eebc"
+        }
+      ],
+      "rev": 1,
+      "hash": "c9c95fe4a5af823b1ed8ebdc331b531dc9d243831a0ef4c04595d0003416eebc"
+    }
+  }
+}

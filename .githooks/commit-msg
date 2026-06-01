@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Solaris commit-msg hook - enforces the common cases of solaris/rules/commits.rule.md.
+# Install once per clone:  git config core.hooksPath .githooks
+set -euo pipefail
+
+msg_file="$1"
+subject="$(head -n1 "$msg_file")"
+fail=0
+err() { echo "commit-msg: $1" >&2; fail=1; }
+
+# ASCII only across the whole message (no emoji, smart quotes, em-dash, control chars).
+# In the C locale, [:print:] is ASCII 0x20-0x7E; [:space:] covers tab/newline.
+if LC_ALL=C grep -q '[^[:print:][:space:]]' "$msg_file"; then
+  err "non-ASCII or control characters found; use plain ASCII (no emoji, smart quotes, or em-dash)"
+fi
+
+# No double-dash as punctuation in the subject; use ':', '()', or a sentence break.
+case "$subject" in
+  *--*) err "subject contains '--'; use ':', '()', or a sentence break instead" ;;
+esac
+
+# No AI-authorship attribution anywhere in the message.
+if grep -niE 'co-authored-by:.*(claude|anthropic|openai|gpt|copilot|cursor|[^a-z]ai[^a-z])|generated (with|by) .*(claude|cursor|copilot|gpt|ai)|made with .*(cursor|claude|copilot)' "$msg_file" >/dev/null 2>&1; then
+  err "remove AI-authorship attribution (no 'Co-Authored-By: <AI>', 'Generated with ...', 'Made with ...')"
+fi
+
+if [ "$fail" -ne 0 ]; then
+  echo "commit-msg: rejected by Solaris policy - see solaris/rules/commits.rule.md" >&2
+  exit 1
+fi
+exit 0

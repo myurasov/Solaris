@@ -1,0 +1,24 @@
+{
+  "markdown.preview.openMarkdownLinks": "inEditor",
+  "workbench.editorAssociations": {
+    "*.md": "vscode.markdown.preview.editor"
+  },
+  "workbench.colorTheme": "◑ Dusk Office Nebula",
+  "workbench.editor.wrapTabs": true,
+  "files.exclude": {
+    "**/.git": true,
+    "**/.DS_Store": true,
+    "**/Thumbs.db": true,
+    "**/.mypy_cache": true,
+    "**/__pycache__": true,
+    "**/*.egg-info": true,
+    "**/.pytest_cache": true,
+    "**/.ruff_cache": true,
+    "*.*": false
+  },
+  "explorer.decorations.colors": true,
+  "workbench.colorCustomizations": {
+    "gitDecoration.ignoredResourceForeground": "#8264d5"
+  },
+  "markdown.preview.fontSize": 13
+}

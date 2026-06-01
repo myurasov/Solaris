@@ -1,0 +1,15 @@
+{
+  "_comment": "Managed by Solaris; do not edit by hand. Versions live here (no .version files).",
+  "schema_version": 1,
+  "project": {
+    "name": "{{NAME}}",
+    "slug": "{{SLUG}}",
+    "type": "{{TYPE}}",
+    "mode": "{{MODE}}"
+  },
+  "framework_version": "{{FRAMEWORK_VERSION}}",
+  "plugins": [],
+  "revisions": {},
+  "created": "{{DATE}}",
+  "info": {}
+}

@@ -1,0 +1,8 @@
+# Plugins overlay directory.
+#
+# Plugins adapt Solaris for a domain/employer/repo-specific way of working. Each plugin is a folder
+# here (e.g. plugins/nvidia-isaac-lab/). Plugins are user-private and gitignored; this committed
+# placeholder just keeps the directory present on a fresh clone, and Solaris deletes it the first time
+# a plugin is added.
+#
+# See solaris/spec/spec-v0.2.0.md (Plugins) and solaris/skills/import-plugin.skill.md.
