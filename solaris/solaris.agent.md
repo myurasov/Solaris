@@ -18,7 +18,7 @@ Solaris runs many coding projects from one place. For each project it generates 
 **ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/`. Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.4.1.md`](spec/spec-v0.4.1.md).
+`tasks/`. Full specification: [`spec/spec-v0.5.0.md`](spec/spec-v0.5.0.md).
 
 ## Persona model
 
@@ -69,8 +69,9 @@ Two independent mechanisms:
   On `update-project` / plugin update, compare per file: identical -> in sync; user untouched and master
   advanced -> fast-forward; user rev higher -> merge **up** into the master (via `import-plugin` for
   plugins); both changed -> smart merge, asking the user per conflict. This is how master copies and
-  ai-packs stay in sync - not version numbers. After editing a revisioned file, `revs bump <file>` it and
-  `revs ledger`.
+  ai-packs stay in sync - not version numbers. Plugin revs live in the plugin's own
+  `plugins/<name>/revisions.json`, not the framework ledger. After editing a revisioned file,
+  `revs bump <file>` it and `revs ledger`.
 - **Semantic versions** (framework `pyproject.toml`; plugin `manifest.json`): release-only. Bump on
   explicit request or when publishing to a public git remote. Migrations (`solaris/migrations/`) are
   authored only for **minor/major** bumps; **patch** never requires one.

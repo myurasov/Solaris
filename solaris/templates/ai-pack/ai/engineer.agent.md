@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -26,6 +26,11 @@ command center. Edit this file to tune how this project is developed.
    trigger-invoked skill.
 6. local mode: `src/AGENTS.md` if present, as project rules. remote-code mode: `remote.json` (host/path) -
    read, edit, and run the code there over Remote-SSH.
+
+**If `ai/memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
+invent host/deploy/credential values. First **bootstrap it interactively** - ask the user for the deploy/run
+target and hosts, hardware/APIs, and any secrets, then write `ai/memory/resources.md` and
+`ai/memory/credentials.md` (and seed `ai/memory/interactions.jsonl`) before doing project work.
 
 ## Planning workflow
 

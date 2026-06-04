@@ -130,3 +130,35 @@ def test_classify_renders_template_placeholders(tmp_path):
     rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
     assert rows["AGENTS.md"] == "in-sync"
     assert rows["ai/engineer.agent.md"] == "in-sync"
+
+
+def test_plugin_ledger_is_separate_from_framework(tmp_path):
+    # framework masters at the FRAMEWORK_GLOBS paths
+    fw = tmp_path / "solaris" / "templates" / "ai-pack"
+    _wmd(fw / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(fw / "ai" / "engineer.agent.md", "# eng\n\ny\n", 1)
+    # a plugin with its own shared files
+    plug = tmp_path / "plugins" / "myplug"
+    _wmd(plug / "shared" / "a.rule.md", "# a\n\nrule a\n", 1)
+    _wmd(plug / "shared" / "b.skill.md", "# b\n\nskill b\n", 2)
+
+    fw_ledger = tmp_path / "solaris" / "revisions.json"
+    R.rebuild_ledger(repo_root=tmp_path, path=fw_ledger)
+    for pd in R.plugin_dirs(tmp_path):
+        R.rebuild_plugin_ledger(pd)
+
+    # framework ledger holds ONLY framework masters - never plugin keys
+    fw_keys = set(json.loads(fw_ledger.read_text())["files"])
+    assert fw_keys == {"solaris/templates/ai-pack/AGENTS.md", "solaris/templates/ai-pack/ai/engineer.agent.md"}
+    assert not any("plugin" in k for k in fw_keys)
+
+    # the plugin keeps its own ledger, keyed relative to the plugin
+    pl = plug / "revisions.json"
+    assert pl.exists()
+    assert set(json.loads(pl.read_text())["files"]) == {"shared/a.rule.md", "shared/b.skill.md"}
+
+    # status (framework + plugins) is clean right after a rebuild...
+    assert R.status(repo_root=tmp_path, path=fw_ledger) == []
+    # ...and flags a plugin shared file edited without a rev bump (reported repo-relative)
+    (plug / "shared" / "a.rule.md").write_text(R.set_rev("# a\n\nrule a EDITED\n", ".md", 1), encoding="utf-8")
+    assert R.status(repo_root=tmp_path, path=fw_ledger) == ["plugins/myplug/shared/a.rule.md"]
