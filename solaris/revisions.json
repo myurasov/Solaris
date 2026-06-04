@@ -3,6 +3,8 @@
   "schema_version": 1,
   "files": {
     "solaris/templates/ai-pack/AGENTS.md": {
+      "rev": 3,
+      "hash": "3618c523158f253c563daa8f3bf5e8194bd93736ffe2511e8ca2c0b07bd2ca58",
       "history": [
         {
           "rev": 1,
@@ -16,11 +18,11 @@
           "rev": 3,
           "hash": "3618c523158f253c563daa8f3bf5e8194bd93736ffe2511e8ca2c0b07bd2ca58"
         }
-      ],
-      "rev": 3,
-      "hash": "3618c523158f253c563daa8f3bf5e8194bd93736ffe2511e8ca2c0b07bd2ca58"
+      ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
+      "rev": 5,
+      "hash": "2eb26c7d815af4147b43d196be93667e2212bd7ec3ddcb0e91899f0a802b7c8f",
       "history": [
         {
           "rev": 1,
@@ -37,60 +39,12 @@
         {
           "rev": 4,
           "hash": "692de3b3014e2aa7a070311207f3715d83793fcfa5b435b9d642d8db20b58d82"
-        }
-      ],
-      "rev": 4,
-      "hash": "692de3b3014e2aa7a070311207f3715d83793fcfa5b435b9d642d8db20b58d82"
-    },
-    "plugins/nvidia-isaac-lab/shared/bot-replies.rule.md": {
-      "history": [
+        },
         {
-          "rev": 1,
-          "hash": "9a75de0ce3ee84d128e7cb97180d59aa1b09f221a1b7921134ec9f18230c75d8"
+          "rev": 5,
+          "hash": "2eb26c7d815af4147b43d196be93667e2212bd7ec3ddcb0e91899f0a802b7c8f"
         }
-      ],
-      "rev": 1,
-      "hash": "9a75de0ce3ee84d128e7cb97180d59aa1b09f221a1b7921134ec9f18230c75d8"
-    },
-    "plugins/nvidia-isaac-lab/shared/ci-checks.rule.md": {
-      "history": [
-        {
-          "rev": 1,
-          "hash": "7a05cb47d884eb82cf513f9e257b0438a3df97ee6187a2dfc891d55623560dff"
-        }
-      ],
-      "rev": 1,
-      "hash": "7a05cb47d884eb82cf513f9e257b0438a3df97ee6187a2dfc891d55623560dff"
-    },
-    "plugins/nvidia-isaac-lab/shared/git-workflow.rule.md": {
-      "history": [
-        {
-          "rev": 1,
-          "hash": "368d801bca9ce2910e430ec413e69d2d386d75a04553f643eb9f11f9be2db3d9"
-        }
-      ],
-      "rev": 1,
-      "hash": "368d801bca9ce2910e430ec413e69d2d386d75a04553f643eb9f11f9be2db3d9"
-    },
-    "plugins/nvidia-isaac-lab/shared/nvbugs.rule.md": {
-      "history": [
-        {
-          "rev": 1,
-          "hash": "35500571d56f9c00c74805137000ed37231db1da88a23426a7de8a3b9f3d9d40"
-        }
-      ],
-      "rev": 1,
-      "hash": "35500571d56f9c00c74805137000ed37231db1da88a23426a7de8a3b9f3d9d40"
-    },
-    "plugins/nvidia-isaac-lab/shared/nvbugs.skill.md": {
-      "history": [
-        {
-          "rev": 1,
-          "hash": "c9c95fe4a5af823b1ed8ebdc331b531dc9d243831a0ef4c04595d0003416eebc"
-        }
-      ],
-      "rev": 1,
-      "hash": "c9c95fe4a5af823b1ed8ebdc331b531dc9d243831a0ef4c04595d0003416eebc"
+      ]
     }
   }
 }

@@ -6,12 +6,12 @@
 - [Layout](#layout)
 - [Development](#development)
 
-Run many coding projects from one command center. Solaris generates a standardized, portable **ai-setup**
+Run many coding projects from one command center. Solaris generates a standardized, portable **ai-pack**
 for each project (works in Cursor and Claude Code), supports domain **plugins**, deploys to remote hosts,
 migrates project setups forward as the framework evolves, and keeps a lightweight `tasks/` area for ad-hoc
 engineering, system-setup, and research.
 
-Authoritative spec: [`solaris/spec/spec-v0.4.1.md`](solaris/spec/spec-v0.4.1.md).
+Authoritative spec: [`solaris/spec/spec-v0.5.0.md`](solaris/spec/spec-v0.5.0.md).
 
 ## Requirements
 
@@ -65,7 +65,7 @@ Projects land under `projects/<slug>/` (gitignored); ad-hoc work under `tasks/` 
 | `solaris/solaris.agent.md` | orchestrator role |
 | `solaris/skills/` | skills (`*.skill.md`) |
 | `solaris/rules/` | always-on rules (commits, safety) |
-| `solaris/templates/` | ai-setup + project-type templates |
+| `solaris/templates/` | ai-pack + project-type templates |
 | `solaris/migrations/` | framework migrations |
 | `solaris/tools/` | Python tools (`version`, `revs`, `mcp_sync`, `log_interaction`, `toc`) |
 | `solaris/tests/` | pytest suite |
@@ -82,4 +82,4 @@ uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
 ```
 
 Conventions, the plugin contract, the migration engine, and the safety/commit policies are all specified in
-[`solaris/spec/spec-v0.4.1.md`](solaris/spec/spec-v0.4.1.md).
+[`solaris/spec/spec-v0.5.0.md`](solaris/spec/spec-v0.5.0.md).

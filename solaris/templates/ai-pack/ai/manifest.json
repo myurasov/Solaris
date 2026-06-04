@@ -1,5 +1,5 @@
 {
-  "_comment": "Managed by Solaris; do not edit by hand. Versions live here (no .version files).",
+  "_comment": "Managed by Solaris; do not edit by hand. Versions live here (no .version files). No host/deploy/secret specifics - those live in ai/memory/.",
   "schema_version": 1,
   "project": {
     "name": "{{NAME}}",

@@ -1,4 +1,4 @@
-# Solaris v0.4.1 - Specification <!-- omit in toc -->
+# Solaris v0.5.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -15,9 +15,9 @@
 - [Validation (acceptance)](#validation-acceptance)
 - [Deferred](#deferred)
 
-Authoritative description of Solaris v0.4.1. Supersedes the 0.1.0-0.3.0 specs (in git history; the latest is
+Authoritative description of Solaris v0.5.0. Supersedes the 0.1.0-0.4.1 specs (in git history; the latest snapshot is
 [`spec-v0.3.0.md`](spec-v0.3.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
-build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.5.0 (see [`../migrations/0.5.0.md`](../migrations/0.5.0.md)): `ai/manifest.json` holds only project metadata + versions - host/deploy/port/secret specifics live in `ai/memory/` (`resources.md` / `credentials.md`); the engineer **bootstraps `ai/memory/` interactively** when it is missing (a shared ai-pack); and each **plugin keeps its own** revision ledger at `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` tracks only framework masters). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
 shim is restored beside every `AGENTS.md` so **Claude Code** loads the canonical instructions (Cursor reads
 `AGENTS.md` natively). What changed in 0.4.0 - a terminology + conventions release
 (see [`../migrations/0.4.0.md`](../migrations/0.4.0.md)): the project persona **`developer` -> `engineer`**
@@ -160,8 +160,10 @@ Two independent mechanisms.
 sync mechanism (not version numbers). Every materialized framework/plugin file carries an integer rev
 marker, bumped +1 per edit, and a **content hash that excludes the marker** (a pure rev bump never changes
 the hash). Markers at the top of the file: `_Rev. N_` (md/mdc), `# rev. N` (py), a leading `"_rev": N` field (json). The
-framework ledger `solaris/revisions.json` records current rev+hash + short history per tracked file; a
-project records its baseline (`ai/manifest.json` -> `revisions`, `{rel: {rev, hash}}` at last sync). On
+framework ledger `solaris/revisions.json` records current rev+hash + short history per tracked **framework**
+file; each **plugin keeps its own** ledger at `plugins/<name>/revisions.json` (keys relative to the plugin),
+so a plugin's rev history travels inside its own repo - never in the framework ledger. A project records its
+baseline (`ai/manifest.json` -> `revisions`, `{rel: {rev, hash}}` at last sync). On
 `update-project` / plugin update, `solaris.tools.revs classify` gives a per-file verdict:
 
 | Verdict | Meaning | Action |
@@ -193,7 +195,12 @@ Framework `memory/`: `resources.md` (hosts/hardware), `credentials.md` (secrets;
 `ai/memory/` at init/update. A project's `ai/memory/` is its **private/local layer** (resources,
 credentials, the preserved `spec-v0.md`, interaction log); the **shareable** how-to-develop notes live one
 level up in `ai/engineer.instructions.md`, and any host/secret/internal-URL detail that surfaces there is
-relocated down into `ai/memory/` rather than dropped.
+relocated down into `ai/memory/` rather than dropped. Host/deploy targets, hardware, APIs, and secrets live
+only in `ai/memory/` (`resources.md` / `credentials.md`), never in `ai/manifest.json` (which holds project
+metadata, versions, plugins, and revisions only). When an ai-pack is shared without its private layer
+(`ai/memory/` dropped), the engineer detects the missing or empty `ai/memory/` on first run and **bootstraps
+it interactively** - asking the user for hosts / deploy target / APIs / secrets and writing `resources.md` +
+`credentials.md` - before doing project work.
 
 **Interaction logs (request + outcome).** Each meaningful turn is recorded as one append-only JSON line
 `{ts, project, request, outcome}`. The **framework** `memory/interactions.jsonl` is the master record of
@@ -240,7 +247,7 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
 ## Validation (acceptance)
 
 1. `uv run pytest` green (tools + revs + toc).
-2. `version current` -> `0.4.1`; `revs status` consistent; `revs classify`/`ff` behave on a project;
+2. `version current` -> `0.5.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
    `mcp_sync --check` and `toc --check --all` clean.
 3. **Todo app** (web-service, local): `create-project todo` (AGENTS.md-only root, runtime MCP) ->
    `develop-project` builds a FastAPI + vanilla UI -> runs locally; app tests pass.

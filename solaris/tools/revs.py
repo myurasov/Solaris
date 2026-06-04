@@ -10,7 +10,9 @@ Marker by file type (placed at the top of the file):
   .py        : first line      ``# rev. N``
   .json      : first field     ``"_rev": N``
 
-Framework ledger: ``solaris/revisions.json`` (current rev+hash + short history per tracked file).
+Framework ledger: ``solaris/revisions.json`` (current rev+hash + short history per tracked framework file).
+Each **plugin keeps its own** ledger at ``plugins/<name>/revisions.json`` (keys relative to the plugin) so the
+rev history travels inside the plugin's own git repo - it is never recorded in the framework ledger.
 ai-pack baseline: the ``revisions`` map in a project's ``ai/manifest.json`` ({rel: {rev, hash}} recorded
 at last materialization) - the merge base for detecting external user edits.
 
@@ -19,7 +21,7 @@ Run::
     uv run -m solaris.tools.revs bump <file>...
     uv run -m solaris.tools.revs hash <file>
     uv run -m solaris.tools.revs status               # framework files edited without a rev bump
-    uv run -m solaris.tools.revs ledger                # rebuild solaris/revisions.json
+    uv run -m solaris.tools.revs ledger                # rebuild solaris/revisions.json + each plugin's ledger
     uv run -m solaris.tools.revs classify --dir <project>   # per materialized file: verdict
 """
 
@@ -36,14 +38,15 @@ TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
 
-# The materialized set: master files copied into ai-packs, where per-file rev/hash sync matters.
-# (Other framework files evolve too, but they are not duplicated into projects, so they are versioned by
-# git + semver rather than by revisions.)
-TRACKED_GLOBS = [
+# Framework master files tracked in solaris/revisions.json. Plugins are deliberately NOT here: each plugin
+# keeps its own plugins/<name>/revisions.json (see plugin_dirs / rebuild_plugin_ledger) so its rev ledger
+# travels inside the plugin's own repo. (Other framework files evolve too, but they are not duplicated into
+# projects, so they are versioned by git + semver rather than by revisions.)
+FRAMEWORK_GLOBS = [
     "solaris/templates/ai-pack/AGENTS.md",
     "solaris/templates/ai-pack/ai/engineer.agent.md",
-    "plugins/*/shared/*.md",
 ]
+PLUGIN_SHARED_GLOB = "shared/*.md"  # per plugin, relative to plugins/<name>/
 
 _MD_RE = re.compile(r"^_Rev\.\s+(\d+)_\s*$")
 _PY_RE = re.compile(r"^#\s*rev\.\s+(\d+)\s*$")
@@ -126,16 +129,28 @@ def file_rev_hash(path: Path) -> "tuple[int | None, str]":
 
 
 def iter_tracked(repo_root: Path = REPO_ROOT) -> list[Path]:
+    """Framework master files tracked in solaris/revisions.json (plugins are tracked separately)."""
     out: list[Path] = []
-    for pattern in TRACKED_GLOBS:
+    for pattern in FRAMEWORK_GLOBS:
         out.extend(sorted(repo_root.glob(pattern)))
-    # de-dup, stable order
     seen, uniq = set(), []
     for p in out:
         if p not in seen:
             seen.add(p)
             uniq.append(p)
     return uniq
+
+
+def plugin_dirs(repo_root: Path = REPO_ROOT) -> list[Path]:
+    """Installed plugins (each plugins/<name>/ with a shared/ dir); each owns its revisions.json."""
+    base = Path(repo_root) / "plugins"
+    if not base.is_dir():
+        return []
+    return sorted(d for d in base.iterdir() if d.is_dir() and (d / "shared").is_dir())
+
+
+def iter_plugin_shared(plugin_dir: Path) -> list[Path]:
+    return sorted(Path(plugin_dir).glob(PLUGIN_SHARED_GLOB))
 
 
 # ----------------------------------------------------------------- ledger
@@ -146,33 +161,65 @@ def load_ledger(path: Path = LEDGER_PATH) -> dict:
     return {"_comment": "Managed by solaris.tools.revs; do not edit by hand.", "schema_version": 1, "files": {}}
 
 
-def rebuild_ledger(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> dict:
-    led = load_ledger(path)
-    files = led.setdefault("files", {})
-    for p in iter_tracked(repo_root):
-        rel = str(p.relative_to(repo_root))
+def _rebuild_files(existing: dict, items: "list[tuple[str, Path]]") -> dict:
+    """A fresh files map for exactly `items`, carrying history forward per key and pruning stale keys."""
+    out: dict = {}
+    for rel, p in items:
         rev, h = file_rev_hash(p)
         rev = rev if rev is not None else 1
-        entry = files.get(rel, {"history": []})
-        history = entry.get("history", [])
+        history = list(existing.get(rel, {}).get("history", []))
         if not history or history[-1].get("hash") != h:
             history.append({"rev": rev, "hash": h})
-        entry.update({"rev": rev, "hash": h, "history": history[-10:]})
-        files[rel] = entry
+        out[rel] = {"rev": rev, "hash": h, "history": history[-10:]}
+    return out
+
+
+def rebuild_ledger(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> dict:
+    """Rebuild the framework ledger (solaris/revisions.json) - framework masters only, never plugins."""
+    led = load_ledger(path)
+    items = [(str(p.relative_to(repo_root)), p) for p in iter_tracked(repo_root)]
+    led["files"] = _rebuild_files(led.get("files", {}), items)
     path.write_text(json.dumps(led, indent=2) + "\n", encoding="utf-8")
     return led
 
 
-def status(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> list[str]:
-    """Files whose content changed since the ledger but whose rev was not bumped (a missing-bump warning)."""
-    led = load_ledger(path).get("files", {})
-    stale: list[str] = []
-    for p in iter_tracked(repo_root):
-        rel = str(p.relative_to(repo_root))
+def rebuild_plugin_ledger(plugin_dir: Path) -> dict:
+    """Rebuild plugins/<name>/revisions.json from that plugin's shared/*.md (keys relative to the plugin)."""
+    plugin_dir = Path(plugin_dir)
+    path = plugin_dir / "revisions.json"
+    led = load_ledger(path)
+    items = [(str(p.relative_to(plugin_dir)), p) for p in iter_plugin_shared(plugin_dir)]
+    led["files"] = _rebuild_files(led.get("files", {}), items)
+    path.write_text(json.dumps(led, indent=2) + "\n", encoding="utf-8")
+    return led
+
+
+def rebuild_all(repo_root: Path = REPO_ROOT) -> dict:
+    """Rebuild the framework ledger and every plugin's own ledger."""
+    led = rebuild_ledger(repo_root)
+    for pd in plugin_dirs(repo_root):
+        rebuild_plugin_ledger(pd)
+    return led
+
+
+def _stale_against(items: "list[tuple[str, Path]]", led_files: dict, repo_root: Path) -> list[str]:
+    out: list[str] = []
+    for rel, p in items:
         rev, h = file_rev_hash(p)
-        rec = led.get(rel)
+        rec = led_files.get(rel)
         if rec and rec.get("hash") != h and rec.get("rev") == rev:
-            stale.append(rel)
+            out.append(str(p.relative_to(repo_root)))
+    return out
+
+
+def status(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> list[str]:
+    """Tracked files (framework + each plugin) changed since their ledger without a rev bump."""
+    stale: list[str] = []
+    fw = load_ledger(path).get("files", {})
+    stale += _stale_against([(str(p.relative_to(repo_root)), p) for p in iter_tracked(repo_root)], fw, repo_root)
+    for pd in plugin_dirs(repo_root):
+        pled = load_ledger(pd / "revisions.json").get("files", {})
+        stale += _stale_against([(str(p.relative_to(pd)), p) for p in iter_plugin_shared(pd)], pled, repo_root)
     return stale
 
 
@@ -315,13 +362,16 @@ def _cmd_status(args):
         for rel in stale:
             print(f"  {rel}")
         return 1
-    print(f"revs: {len(iter_tracked())} tracked file(s) consistent with ledger")
+    n = len(iter_tracked()) + sum(len(iter_plugin_shared(pd)) for pd in plugin_dirs())
+    print(f"revs: {n} tracked file(s) consistent with their ledgers")
     return 0
 
 
 def _cmd_ledger(args):
-    led = rebuild_ledger()
-    print(f"revs: ledger rebuilt for {len(led['files'])} file(s) -> {LEDGER_PATH.relative_to(REPO_ROOT)}")
+    led = rebuild_all()
+    plugs = plugin_dirs()
+    print(f"revs: framework ledger rebuilt for {len(led['files'])} file(s); "
+          f"{len(plugs)} plugin ledger(s) -> plugins/<name>/revisions.json")
     return 0
 
 
