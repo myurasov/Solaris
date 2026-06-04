@@ -46,9 +46,11 @@ Create `projects/` if it does not exist (gitignored, lazily created), then copy
 `{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO), and
 `{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`).
 
-The project root is intentionally minimal: only `AGENTS.md` plus `ai/` and (local mode) `src/`. There is no
-`CLAUDE.md`, no `.cursor/`, no `mcp.json.example`, and no `.gitignore` - the folder is not committed, and
-both IDEs read `AGENTS.md` natively. Copied files keep their `_Rev. N_` rev markers (first line).
+The project root is intentionally minimal: `AGENTS.md` + a one-line `CLAUDE.md` (`@AGENTS.md`, copied from
+the template) plus `ai/` and (local mode) `src/`. There is no `.cursor/`, no `mcp.json.example`, and no
+`.gitignore` - the folder is not committed. Cursor reads `AGENTS.md` natively; Claude Code reads the
+`CLAUDE.md` shim. If a project type adds a `src/AGENTS.md`, drop a sibling `src/CLAUDE.md` (`@AGENTS.md`) too.
+Copied files keep their `_Rev. N_` rev markers (first line).
 
 ## 4. Wire the code location by mode
 

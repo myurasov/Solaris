@@ -57,7 +57,7 @@ into the generic `engineer.instructions.md`.
   `ai/memory/credentials.md` - placeholders only; never copy real secrets out of the source.
 - Seed `ai/memory/interactions.jsonl` (empty). Write `ai/manifest.json`
   (`project.{name,slug,type,mode}`, `framework_version` from `version current`, `plugins`). Write the
-  minimal project root (`AGENTS.md` only - no CLAUDE.md / `.cursor/` / `mcp.json.example` / `.gitignore`),
+  minimal project root (`AGENTS.md` + a one-line `CLAUDE.md` `@AGENTS.md` shim; no `.cursor/` / `mcp.json.example` / `.gitignore`),
   the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root `mcp.json.example`
   plus any plugin servers), and the revisions baseline
   (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
