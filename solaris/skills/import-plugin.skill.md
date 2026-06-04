@@ -7,7 +7,7 @@ summary: Author a plugin from a project's domain specifics, or fold project-loca
 # import-plugin <!-- omit in toc -->
 
 - [Mode A - update-from-project](#mode-a---update-from-project)
-- [Mode B - create-from-aisetup](#mode-b---create-from-aisetup)
+- [Mode B - create-from-aipack](#mode-b---create-from-aipack)
 
 Two modes. Both keep the source plugin at `plugins/<name>/` as the editing source of truth; the materialized
 copy in `ai/<name>/` is disposable (wholesale-overwritten on update).
@@ -26,14 +26,14 @@ The user edited the materialized copy `projects/<slug>/ai/<name>/`. Capture it:
 This is the mechanism behind the **pre-overwrite check**: `install-plugin` (update) calls Mode A before it
 overwrites `ai/<name>/`, so local edits are never lost.
 
-## Mode B - create-from-aisetup
+## Mode B - create-from-aipack
 
-Build a **new** `plugins/<name>/` from domain-specific content in an existing project's ai-setup (or an
+Build a **new** `plugins/<name>/` from domain-specific content in an existing project's ai-pack (or an
 external `__ai/`-style setup):
 
 1. Read the source (e.g. an imported project's `ai/`, or files the user points at). Separate **domain /
    employer / repo-specific** material (NVBugs workflow, house git/PR conventions, CI specifics, a domain
-   MCP) from **generic** dev preferences (which stay in `developer.instructions.md`).
+   MCP) from **generic** dev preferences (which stay in `engineer.instructions.md`).
 2. Show the proposed split and the plugin name; confirm.
 3. Create `plugins/` if needed, write the plugin to `plugins/<name>/`, then delete the `plugins/.empty`
    placeholder (the directory now has content). Flat; only `migrations/` may be a subfolder:

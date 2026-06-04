@@ -4,10 +4,10 @@
 - [Authoring a migration](#authoring-a-migration)
 - [Rules](#rules)
 
-Migrations adapt an existing project **ai-setup** (`projects/<slug>/ai/`) to a newer framework version.
+Migrations adapt an existing project **ai-pack** (`projects/<slug>/ai/`) to a newer framework version.
 They never touch the project's `src/` code. The user-facing entry point is the
 [`update-project`](../skills/update-project.skill.md) skill; the policy is in
-[`spec/spec-v0.2.0.md`](../spec/spec-v0.2.0.md) ("Versioning: revisions + semver"). Routine ai-setup file
+[`spec/spec-v0.3.0.md`](../spec/spec-v0.3.0.md) ("Versioning: revisions + semver"). Routine ai-pack file
 changes are handled by per-file **revisions** (`solaris.tools.revs`); migrations are only for minor/major
 semantic-version bumps that change structure.
 
@@ -28,7 +28,7 @@ can be reintroduced later if it grows.
 ## Authoring a migration
 
 1. Bump `version` in `pyproject.toml` (a release). Author a migration only for **MINOR/MAJOR** bumps that
-   change the ai-setup structure; **PATCH never needs one**, and routine file evolution is handled by
+   change the ai-pack structure; **PATCH never needs one**, and routine file evolution is handled by
    revisions, not migrations.
 2. Copy `template.md` to `<to_version>.md` and fill in the frontmatter + the Summary / Pre-flight / Migrate
    / Validate / Revert sections.
@@ -39,7 +39,7 @@ can be reintroduced later if it grows.
 ## Rules
 
 - One file per `to_version`; the skill applies them one at a time (chained).
-- Idempotent: re-running over an already-migrated ai-setup is a no-op.
+- Idempotent: re-running over an already-migrated ai-pack is a no-op.
 - Revertible by default; mark `revertible: false` only for genuinely irreversible changes.
 - Migrations modify `ai/` only (excluding `ai/<plugin>/`, which each plugin's own `migrations/` owns).
 - `touches:` lists every path the migration writes/creates/deletes.

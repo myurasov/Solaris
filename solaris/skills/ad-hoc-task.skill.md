@@ -11,7 +11,7 @@ summary: Start/resume an ad-hoc engineering/system-setup/research task under tas
 - [3. Capture + close](#3-capture--close)
 - [4. Graduate (optional)](#4-graduate-optional)
 
-The command-center catch-all for work that is not a project. No ai-setup, no versioning - just a dated
+The command-center catch-all for work that is not a project. No ai-pack, no versioning - just a dated
 folder with notes and scratch.
 
 ## 1. Start or resume

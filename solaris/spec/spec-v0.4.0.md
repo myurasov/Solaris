@@ -1,10 +1,10 @@
-# Solaris v0.2.0 - Specification <!-- omit in toc -->
+# Solaris v0.4.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
 - [Dual-IDE wiring](#dual-ide-wiring)
 - [Execution model](#execution-model)
-- [Projects and the ai-setup](#projects-and-the-ai-setup)
+- [Projects and the ai-pack](#projects-and-the-ai-pack)
 - [Project modes](#project-modes)
 - [Plugins](#plugins)
 - [Versioning: revisions + semver](#versioning-revisions--semver)
@@ -12,19 +12,28 @@
 - [Memory and interaction logging](#memory-and-interaction-logging)
 - [Tools](#tools)
 - [Conventions](#conventions)
-- [Validation (v0.2.0 acceptance)](#validation-v020-acceptance)
-- [Deferred (not in v0.2.0)](#deferred-not-in-v020)
+- [Validation (acceptance)](#validation-acceptance)
+- [Deferred](#deferred)
 
-Authoritative description of Solaris v0.2.0. Supersedes [`spec-v0.1.0.md`](spec-v0.1.0.md) (kept as history,
-alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0 build plan
-[`plan-v0.1.0.md`](plan-v0.1.0.md)). What changed in 0.2.0: per-file **revisions** drive ai-setup sync
-(versions become release-only), `CLAUDE.md` and `.cursor/rules` shims are gone (both IDEs read `AGENTS.md`),
-and project roots are trimmed to just `AGENTS.md`.
+Authoritative description of Solaris v0.4.0. Supersedes the 0.1.0-0.3.0 specs (in git history; the latest is
+[`spec-v0.3.0.md`](spec-v0.3.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.4.0 - a terminology + conventions release
+(see [`../migrations/0.4.0.md`](../migrations/0.4.0.md)): the project persona **`developer` -> `engineer`**
+(`developer.agent.md` -> `engineer.agent.md`, `developer.instructions.md` -> `engineer.instructions.md`) and
+the **ai-setup -> ai-pack** (the `solaris/templates/ai-pack/` template dir, the `version` tool's `aisetup`
+subcommand -> `aipack`, and the term throughout). Two conventions are now explicit: a project's `ai/spec.md`
+is **self-sufficient** (reads standalone, references no other file), and **every change to a revisioned file
+increments its rev**. Interaction logging is also clarified - each turn is one
+`{ts, project, request, outcome}` record: the framework `memory/interactions.jsonl` is the master of every
+turn (incl handed-off project work), a project's `ai/memory/interactions.jsonl` its relevant slice. What
+changed in 0.3.0: `engineer.instructions.md` moved out of `ai/memory/` up to `ai/`
+- the shareable, portable layer alongside `engineer.agent.md` and `spec.md` - leaving `ai/memory/` as the
+private/local layer; see [`../migrations/0.3.0.md`](../migrations/0.3.0.md).
 
 ## Overview
 
 Solaris is a minimal framework for running many coding projects from one place (a "command center"). For
-each project it generates a standardized, **portable ai-setup** that also works opened on its own.
+each project it generates a standardized, **portable ai-pack** that also works opened on its own.
 Employer/domain-specific ways of working are factored into **plugins**. Ad-hoc engineering, system-setup,
 and research work that is not a project lives under `tasks/`.
 
@@ -67,11 +76,11 @@ sync. `context7` is used via its CLI (`ctx7`), not as an MCP server. Interaction
 
 One running agent adopts a **persona** by reading the active context: at the Solaris root, the
 **orchestrator** (`solaris/solaris.agent.md`) routes to skills and manages projects/plugins/tasks; inside a
-project, the **developer** (`projects/<slug>/ai/developer.agent.md`) loads the ai-setup, every
+project, the **engineer** (`projects/<slug>/ai/engineer.agent.md`) loads the ai-pack, every
 `ai/<plugin>/` overlay, and `src/AGENTS.md` if present. "Hand off" = switching the active instruction set +
 working directory.
 
-## Projects and the ai-setup
+## Projects and the ai-pack
 
 A project lives at `projects/<slug>/`. Its root carries only `AGENTS.md` (both IDEs read it) plus `ai/` and,
 in local mode, `src/`. There is no `CLAUDE.md`, `.cursor/`, `mcp.json.example`, or `.gitignore` - the folder
@@ -82,16 +91,21 @@ servers; plugin servers are merged into them on install.
 projects/<slug>/
   AGENTS.md                     # the only authored root file
   .mcp.json  .cursor/mcp.json   # runtime MCP (gitignored)
-  ai/
-    developer.agent.md          # combined coder + planner + runner (carries a rev marker)
+  ai/                           # shareable layer (engineer.agent.md + engineer.instructions.md + spec.md)
+    engineer.agent.md          # combined coder + planner + runner (carries a rev marker)
+    engineer.instructions.md   # shareable build/run/test commands + conventions (no host/secret specifics)
     manifest.json               # project {name,slug,type,mode}, framework_version, plugins[], revisions{}
     spec.md
-    memory/  spec-v0.md  developer.instructions.md  resources.md  credentials.md  interactions.jsonl
+    memory/                     # private/local layer (not for sharing): env-specific + sensitive bits
+      spec-v0.md  resources.md  credentials.md  interactions.jsonl
     <plugin>/                   # materialized plugin overlay(s): copies of each plugin's shared/ (rev-marked)
   src/                          # local mode: code (own .git)    | remote-code: replaced by remote.json
 ```
 
-The ai-setup is materialized from `solaris/templates/ai-setup/` with placeholder substitution (`{{SLUG}}`,
+The ai-pack splits into a **shareable layer** (`ai/engineer.agent.md`, `ai/engineer.instructions.md`,
+`ai/spec.md`, and the `ai/<plugin>/` overlays - portable, safe to share or hand off) and a **private/local
+layer** (`ai/memory/`: hosts, secrets, internal URLs, the preserved spec, logs). To share an ai-pack, drop
+`ai/memory/`. It is materialized from `solaris/templates/ai-pack/` with placeholder substitution (`{{SLUG}}`,
 `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{FRAMEWORK_VERSION}}`, `{{DATE}}`). Project types
 come from core (`solaris/templates/projects/*.md`) plus plugin-provided `plugins/<name>/<type>.project.md`;
 choosing a plugin-provided type auto-attaches that plugin.
@@ -121,7 +135,7 @@ plugins/<name>/
   migrations/                   # <to_version>.md for the plugin's own minor/major bumps
 ```
 
-Opted into per project (`ai/manifest.json` `plugins[]`); the developer agent loads each `ai/<name>/*.rule.md`
+Opted into per project (`ai/manifest.json` `plugins[]`); the engineer agent loads each `ai/<name>/*.rule.md`
 (always-on) and `*.skill.md` (trigger). Only `shared/` is materialized. `install-plugin` installs (copy `shared/`, merge `mcps.json` into the
 runtime MCP, run the plugin's `setup` prompts), updates/repairs via the revision sync below, and migrates on
 the plugin's own minor/major bumps. `import-plugin` authors a plugin
@@ -135,7 +149,7 @@ handoff, fork->develop git + PR conventions, `isaaclab.sh` CI checks, review-bot
 
 Two independent mechanisms.
 
-**Per-file revisions** keep ai-setups in sync with framework/plugin master copies - this is the primary
+**Per-file revisions** keep ai-packs in sync with framework/plugin master copies - this is the primary
 sync mechanism (not version numbers). Every materialized framework/plugin file carries an integer rev
 marker, bumped +1 per edit, and a **content hash that excludes the marker** (a pure rev bump never changes
 the hash). Markers at the top of the file: `_Rev. N_` (md/mdc), `# rev. N` (py), a leading `"_rev": N` field (json). The
@@ -160,7 +174,7 @@ scans `migrations/*.md` to compute the chain (no registry file). Migrations adap
 ## Command center (tasks)
 
 Ad-hoc work that is not a project lives under `tasks/<YYYY-MM-DD>-<slug>/` (gitignored): a `notes.md` plus
-scratch. No ai-setup, no versioning. A task that turns durable can graduate into a project or a plugin.
+scratch. No ai-pack, no versioning. A task that turns durable can graduate into a project or a plugin.
 `health-check` gives the overview (default: projects, revisions, versions, tasks, MCP) and health checks
 (`--deep`); the orchestrator runs the overview to orient **before working on a project** (the first
 `develop-project` of a session) and on request - not for ad-hoc tasks (per `AGENTS.md`).
@@ -168,16 +182,26 @@ scratch. No ai-setup, no versioning. A task that turns durable can graduate into
 ## Memory and interaction logging
 
 Framework `memory/`: `resources.md` (hosts/hardware), `credentials.md` (secrets; gitignored),
-`interactions.jsonl` (log). ai-setups never read it; needed values are copied into a project's own
-`ai/memory/` at init/update. A prompt-submit hook (`log_interaction`) appends one JSON line per turn,
-routed by cwd (inside `projects/<slug>/` -> that project's log, else framework). It is fail-safe and
-unbounded in v0.
+`interactions.jsonl` (log). ai-packs never read it; needed values are copied into a project's own
+`ai/memory/` at init/update. A project's `ai/memory/` is its **private/local layer** (resources,
+credentials, the preserved `spec-v0.md`, interaction log); the **shareable** how-to-develop notes live one
+level up in `ai/engineer.instructions.md`, and any host/secret/internal-URL detail that surfaces there is
+relocated down into `ai/memory/` rather than dropped.
+
+**Interaction logs (request + outcome).** Each meaningful turn is recorded as one append-only JSON line
+`{ts, project, request, outcome}`. The **framework** `memory/interactions.jsonl` is the master record of
+**all** turns through the Solaris agent - orchestrator work and every handed-off project turn. A
+**project's** `ai/memory/interactions.jsonl` holds the same entry for **every turn relevant to that project**
+(a subset of the master). The **agent** authors these entries: it is the only thing that knows the outcome
+and the true project, since "hand off" does not change the cwd. The prompt-submit hook (`log_interaction`)
+independently appends the raw request to the framework master as a fail-safe so a request is never lost.
+Both logs are fail-safe and unbounded in v0.
 
 ## Tools
 
 Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
 
-- `version` - framework + ai-setup semver, migration chain, plugin versions.
+- `version` - framework + ai-pack semver, migration chain, plugin versions.
 - `revs` - per-file revisions + rev-excluded content hashes: `bump`, `hash`, `status`, `ledger`,
   `classify --dir`, `ff --dir`, `baseline --dir`.
 - `mcp_sync` - detect/sync drift between `.mcp.json` and `.cursor/mcp.json`.
@@ -193,26 +217,31 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
   Append-only logs are JSON Lines (`.jsonl`). No standalone YAML data files (markdown frontmatter exempt).
 - **Markdown TOC:** every `.md` with two or more level-2+ headers carries a TOC (the H1 is marked
   `<!-- omit in toc -->`), maintained by `solaris.tools.toc`.
-- **Revisions:** after editing a tracked framework/plugin file, `revs bump` it and `revs ledger`.
+- **Revisions:** **every change to a revisioned file increments its rev.** After editing a tracked
+  framework/plugin file (or any file carrying a rev marker), `revs bump` it and `revs ledger`; a pure rev
+  bump leaves the content hash unchanged, and `revs status` flags a file changed without a bump.
+- **Self-sufficient spec:** a project's `ai/spec.md` is that project's single source of truth and reads
+  standalone - it references no other file (no links into `ai/memory/`, plugins, or external docs).
+  Background or the initial draft may live in `ai/memory/`, but the spec never points at them.
 - **Naming:** kebab-case. Skills `*.skill.md`, rules `*.rule.md`.
-- **Commits** (`rules/commits.rule.md`, embedded in each `developer.agent.md`): one ASCII sentence,
+- **Commits** (`rules/commits.rule.md`, embedded in each `engineer.agent.md`): one ASCII sentence,
   imperative, no `--`, no emoji, no AI-authorship attribution, atomic; confirm via numbered list unless the
   user grants autonomy or uses `commit!`. The `.githooks/commit-msg` hook enforces the mechanical cases.
 - **Safety** (`rules/safety.rule.md`, embedded too): confirm before destructive, remote-mutating, or
   outward actions; show the command/diff first; never print or commit secrets.
 
-## Validation (v0.2.0 acceptance)
+## Validation (acceptance)
 
 1. `uv run pytest` green (tools + revs + toc).
-2. `version current` -> `0.2.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
+2. `version current` -> `0.4.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
    `mcp_sync --check` and `toc --check --all` clean.
 3. **Todo app** (web-service, local): `create-project todo` (AGENTS.md-only root, runtime MCP) ->
    `develop-project` builds a FastAPI + vanilla UI -> runs locally; app tests pass.
 4. **Migration** `0.1.0 -> 0.2.0` authored and idempotent.
 
-## Deferred (not in v0.2.0)
+## Deferred
 
-A second `documenter` persona; splitting `developer.agent.md`; a base `nvidia` plugin; a hosts registry and
+A second `documenter` persona; splitting `engineer.agent.md`; a base `nvidia` plugin; a hosts registry and
 `run-remote`/`research`/`capture`/`provision` command-center skills; the `ios-app` build/run workflow;
 extending the revision/merge system beyond the materialized set; true automatic 3-way text merge (today the
 tool classifies and the agent merges).

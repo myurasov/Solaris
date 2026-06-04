@@ -1,10 +1,14 @@
-"""Prompt-submit hook: append one line to the interaction log. Stdlib only.
+"""Prompt-submit hook: append the raw user request to the framework interaction log. Stdlib only.
 
 Wired from ``.claude/settings.json`` (UserPromptSubmit) and ``.cursor/hooks.json`` (beforeSubmitPrompt).
 It is **fail-safe**: it never raises, never blocks the turn, always exits 0, prints nothing, and tolerates
-missing dirs / a missing venv. Routing: if the cwd is inside ``projects/<slug>/`` (and that ai-setup
-exists), the entry goes to that project's ``ai/memory/interactions.jsonl``; otherwise to the framework
-``memory/interactions.jsonl``.
+missing dirs / a missing venv.
+
+The hook records only the *request* (the outcome is unknown at submit time), and always to the **framework
+master log** ``memory/interactions.jsonl`` - the complete request stream, including project (handed-off)
+work, because "hand off" does not change the cwd. The agent additionally authors curated
+``{ts, project, request, outcome}`` entries into this master log and into each touched project's
+``ai/memory/interactions.jsonl``; this hook is the backstop that guarantees a request is never lost.
 """
 
 from __future__ import annotations
@@ -52,22 +56,19 @@ def build_entry(payload: dict, env: "dict | None" = None) -> dict:
     }
 
 
-def route(cwd: "str | Path", repo_root: Path = REPO_ROOT) -> Path:
-    """Return the interaction-log path for a given cwd."""
-    projects = (Path(repo_root) / "projects").resolve()
-    try:
-        rel = Path(cwd).resolve().relative_to(projects)
-        slug = rel.parts[0]
-        if (Path(repo_root) / "projects" / slug / "ai").exists():
-            return Path(repo_root) / "projects" / slug / "ai" / "memory" / "interactions.jsonl"
-    except (ValueError, IndexError, OSError):
-        pass
+def log_path(repo_root: Path = REPO_ROOT) -> Path:
+    """The framework master interaction log; the hook always writes here.
+
+    Routing by cwd is deliberately *not* done: "hand off" to a project does not change the cwd, so a
+    cwd-based rule would both miss handed-off turns and split the master stream. This log is the complete
+    record of requests; per-project request+outcome entries are authored by the agent.
+    """
     return Path(repo_root) / "memory" / "interactions.jsonl"
 
 
-def append(log_path: Path, entry: dict) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with open(log_path, "a", encoding="utf-8") as fh:
+def append(log: Path, entry: dict) -> None:
+    log.parent.mkdir(parents=True, exist_ok=True)
+    with open(log, "a", encoding="utf-8") as fh:
         fh.write(json.dumps(entry, ensure_ascii=True) + "\n")
 
 
@@ -75,7 +76,7 @@ def main() -> int:
     try:
         payload = read_payload(sys.stdin)
         entry = build_entry(payload)
-        append(route(entry["cwd"]), entry)
+        append(log_path(), entry)
     except Exception:
         pass  # fail-safe: a logging hook must never break the user's turn
     return 0

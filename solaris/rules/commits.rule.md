@@ -5,8 +5,8 @@
 - [Confirmation](#confirmation)
 - [Code comments + docstrings](#code-comments--docstrings)
 
-Canonical git-commit policy for Solaris and for every ai-setup it generates (the project
-`developer.agent.md` embeds a copy so detached projects keep it). The `.githooks/commit-msg` hook enforces
+Canonical git-commit policy for Solaris and for every ai-pack it generates (the project
+`engineer.agent.md` embeds a copy so detached projects keep it). The `.githooks/commit-msg` hook enforces
 the mechanical cases; install once per clone with `git config core.hooksPath .githooks`.
 
 ## Message

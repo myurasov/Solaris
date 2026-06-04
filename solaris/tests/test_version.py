@@ -62,19 +62,19 @@ def _write_manifest(project_dir, framework_version="0.1.0", plugins=None):
 def test_manifest_roundtrip_and_set(tmp_path):
     proj = tmp_path / "todo"
     _write_manifest(proj, "0.1.0", plugins=[{"name": "nvidia-isaac-lab", "version": "0.1.0"}])
-    assert V.aisetup_version(proj) == "0.1.0"
+    assert V.aipack_version(proj) == "0.1.0"
     assert V.plugin_recorded_version(proj, "nvidia-isaac-lab") == "0.1.0"
     assert V.plugin_recorded_version(proj, "absent") is None
 
-    V.set_aisetup_version(proj, "0.2.0")
-    assert V.aisetup_version(proj) == "0.2.0"
+    V.set_aipack_version(proj, "0.2.0")
+    assert V.aipack_version(proj) == "0.2.0"
     # set must preserve other fields
     data = V.read_manifest(proj)
     assert data["project"]["name"] == "todo"
     assert data["plugins"][0]["name"] == "nvidia-isaac-lab"
 
     with pytest.raises(ValueError):
-        V.set_aisetup_version(proj, "not-a-version")
+        V.set_aipack_version(proj, "not-a-version")
 
 
 def _write_migration(mig_dir, to_v, from_v, title="t", breaking=False, revertible=True):
@@ -139,8 +139,8 @@ def test_cli_check_exit_codes(tmp_path, capsys):
     _write_manifest(proj, V.framework_version())
     assert V.main(["check", "--dir", str(proj)]) == 0      # match
 
-    V.set_aisetup_version(proj, "0.0.1")
+    V.set_aipack_version(proj, "0.0.1")
     assert V.main(["check", "--dir", str(proj)]) == 1      # behind -> migrate
 
-    V.set_aisetup_version(proj, "9.9.9")
+    V.set_aipack_version(proj, "9.9.9")
     assert V.main(["check", "--dir", str(proj)]) == 2      # ahead -> downgrade

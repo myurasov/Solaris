@@ -1,7 +1,7 @@
 ---
 name: import-project
 triggers: ["import project", "adopt <path>", "adopt <host:path>", "bring <repo> into Solaris"]
-summary: Adopt an existing codebase; derive the ai-setup (and offer to factor domain specifics into a plugin).
+summary: Adopt an existing codebase; derive the ai-pack (and offer to factor domain specifics into a plugin).
 ---
 
 # import-project <!-- omit in toc -->
@@ -10,11 +10,11 @@ summary: Adopt an existing codebase; derive the ai-setup (and offer to factor do
 - [2. Land the code](#2-land-the-code)
 - [3. Detect type + toolchain (read-only)](#3-detect-type--toolchain-read-only)
 - [4. Detect + attach plugins (uses import-plugin)](#4-detect--attach-plugins-uses-import-plugin)
-- [5. Derive the ai-setup (best effort)](#5-derive-the-ai-setup-best-effort)
+- [5. Derive the ai-pack (best effort)](#5-derive-the-ai-pack-best-effort)
 - [6. Ask on ambiguity](#6-ask-on-ambiguity)
 - [7. Confirm + summary](#7-confirm--summary)
 
-Reverse of `create-project`: ingest existing code, then derive the ai-setup. Import never modifies the code
+Reverse of `create-project`: ingest existing code, then derive the ai-pack. Import never modifies the code
 - it only creates `ai/` + a minimal project root (+ `remote.json` in remote-code mode).
 
 ## 1. Inputs
@@ -45,13 +45,14 @@ Scan for domain markers and propose plugins. Examples: NVBugs / `isaaclab.sh` / 
 -> suggest `nvidia-isaac-lab`. If markers clearly indicate a domain that no existing plugin covers (e.g. a
 bespoke `__ai/` setup), offer `import-plugin` (create mode) to factor it into a new plugin first. For each
 confirmed plugin, run `install-plugin` (install). Domain-specific knowledge maps into the plugin, **not**
-into the generic `developer.instructions.md`.
+into the generic `engineer.instructions.md`.
 
-## 5. Derive the ai-setup (best effort)
+## 5. Derive the ai-pack (best effort)
 
 - `ai/spec.md` + `ai/memory/spec-v0.md` - reconstruct the spec from code + README.
-- `ai/memory/developer.instructions.md` - inferred **generic** build/run/test/lint commands + conventions
-  (plugins carry the domain-specific ones).
+- `ai/engineer.instructions.md` - inferred **generic, shareable** build/run/test/lint commands +
+  conventions (host/secret/internal-URL specifics go in `ai/memory/resources.md`/`credentials.md`, not here;
+  plugins carry the domain-specific ones).
 - `ai/memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
   `ai/memory/credentials.md` - placeholders only; never copy real secrets out of the source.
 - Seed `ai/memory/interactions.jsonl` (empty). Write `ai/manifest.json`
@@ -69,5 +70,5 @@ load-bearing details.
 
 ## 7. Confirm + summary
 
-Report detected vs assumed vs needs-your-eyes; point at `ai/developer.agent.md`; suggest
+Report detected vs assumed vs needs-your-eyes; point at `ai/engineer.agent.md`; suggest
 `develop-project <slug>`. Log one line to `memory/interactions.jsonl`.

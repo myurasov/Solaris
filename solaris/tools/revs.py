@@ -2,7 +2,7 @@
 
 Evolving framework files carry an integer **revision** marker, bumped +1 per edit. The **content hash**
 excludes the marker, so a pure rev bump never changes the hash - only real content edits move it. Together
-they drive sync/merge between the framework master copies and the materialized copies inside ai-setups,
+they drive sync/merge between the framework master copies and the materialized copies inside ai-packs,
 independent of semantic versions (which are release-only; see version.py).
 
 Marker by file type (placed at the top of the file):
@@ -11,7 +11,7 @@ Marker by file type (placed at the top of the file):
   .json      : first field     ``"_rev": N``
 
 Framework ledger: ``solaris/revisions.json`` (current rev+hash + short history per tracked file).
-ai-setup baseline: the ``revisions`` map in a project's ``ai/manifest.json`` ({rel: {rev, hash}} recorded
+ai-pack baseline: the ``revisions`` map in a project's ``ai/manifest.json`` ({rel: {rev, hash}} recorded
 at last materialization) - the merge base for detecting external user edits.
 
 Run::
@@ -32,16 +32,16 @@ import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-setup"
+TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
 
-# The materialized set: master files copied into ai-setups, where per-file rev/hash sync matters.
+# The materialized set: master files copied into ai-packs, where per-file rev/hash sync matters.
 # (Other framework files evolve too, but they are not duplicated into projects, so they are versioned by
 # git + semver rather than by revisions.)
 TRACKED_GLOBS = [
-    "solaris/templates/ai-setup/AGENTS.md",
-    "solaris/templates/ai-setup/ai/developer.agent.md",
+    "solaris/templates/ai-pack/AGENTS.md",
+    "solaris/templates/ai-pack/ai/engineer.agent.md",
     "plugins/*/shared/*.md",
 ]
 
@@ -183,8 +183,8 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     """(master_path, project_path, rel_in_project) for every file the framework materializes into a project."""
     pairs = [
         (template_dir / "AGENTS.md", project_dir / "AGENTS.md", "AGENTS.md"),
-        (template_dir / "ai" / "developer.agent.md", project_dir / "ai" / "developer.agent.md",
-         "ai/developer.agent.md"),
+        (template_dir / "ai" / "engineer.agent.md", project_dir / "ai" / "engineer.agent.md",
+         "ai/engineer.agent.md"),
     ]
     manifest = project_dir / "ai" / "manifest.json"
     if manifest.exists():

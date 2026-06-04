@@ -5,4 +5,4 @@
 # placeholder just keeps the directory present on a fresh clone, and Solaris deletes it the first time
 # a plugin is added.
 #
-# See solaris/spec/spec-v0.2.0.md (Plugins) and solaris/skills/import-plugin.skill.md.
+# See solaris/spec/spec-v0.4.0.md (Plugins) and solaris/skills/import-plugin.skill.md.

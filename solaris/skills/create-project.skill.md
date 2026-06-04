@@ -1,21 +1,21 @@
 ---
 name: create-project
 triggers: ["create project", "new project", "start a project named X", "scaffold a project"]
-summary: Scaffold a new project + portable ai-setup (type, mode, plugins) from templates; stop before planning.
+summary: Scaffold a new project + portable ai-pack (type, mode, plugins) from templates; stop before planning.
 ---
 
 # create-project <!-- omit in toc -->
 
 - [1. Gather inputs](#1-gather-inputs)
 - [2. Confirm the plan](#2-confirm-the-plan)
-- [3. Materialize the ai-setup template](#3-materialize-the-ai-setup-template)
+- [3. Materialize the ai-pack template](#3-materialize-the-ai-pack-template)
 - [4. Wire the code location by mode](#4-wire-the-code-location-by-mode)
 - [5. Attach plugins](#5-attach-plugins)
 - [6. Seed spec, manifest, revisions baseline](#6-seed-spec-manifest-revisions-baseline)
 - [7. Runtime MCP (gitignored)](#7-runtime-mcp-gitignored)
 - [8. Stop + hand off](#8-stop--hand-off)
 
-Scaffold a new project under `projects/<slug>/` with a standardized ai-setup, then stop so the user starts
+Scaffold a new project under `projects/<slug>/` with a standardized ai-pack, then stop so the user starts
 planning via `develop-project`. This skill does **not** write application source code.
 
 ## 1. Gather inputs
@@ -39,10 +39,10 @@ Read the chosen `templates/projects/<type>.md` for how that type is structured (
 Print a one-screen summary (slug, name, type, mode, plugins, destination `projects/<slug>/`, host/path if
 remote). Ask to proceed / edit / cancel. If `projects/<slug>/` exists and is non-empty, stop and say so.
 
-## 3. Materialize the ai-setup template
+## 3. Materialize the ai-pack template
 
 Create `projects/` if it does not exist (gitignored, lazily created), then copy
-`solaris/templates/ai-setup/` -> `projects/<slug>/` and substitute placeholders in every copied text file:
+`solaris/templates/ai-pack/` -> `projects/<slug>/` and substitute placeholders in every copied text file:
 `{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO), and
 `{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`).
 
@@ -52,7 +52,7 @@ both IDEs read `AGENTS.md` natively. Copied files keep their `_Rev. N_` rev mark
 
 ## 4. Wire the code location by mode
 
-- **local:** keep `src/`; `git init -b main` inside `src/` is deferred to the developer agent (never commit
+- **local:** keep `src/`; `git init -b main` inside `src/` is deferred to the engineer agent (never commit
   yet).
 - **remote-code:** delete `src/`; write `projects/<slug>/remote.json`:
   ```json

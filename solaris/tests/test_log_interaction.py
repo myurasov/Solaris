@@ -25,21 +25,13 @@ def test_build_entry_truncates_and_detects_ide():
     assert L.build_entry({}, env={})["ide"] == "unknown"
 
 
-def test_route_framework_vs_project(tmp_path):
+def test_log_path_is_always_framework(tmp_path):
     (tmp_path / "memory").mkdir()
-    # cwd outside projects -> framework log
-    assert L.route(tmp_path, repo_root=tmp_path) == tmp_path / "memory" / "interactions.jsonl"
-
-    proj_ai = tmp_path / "projects" / "todo" / "ai"
-    proj_ai.mkdir(parents=True)
-    cwd = tmp_path / "projects" / "todo" / "src"
-    cwd.mkdir(parents=True)
-    assert L.route(cwd, repo_root=tmp_path) == tmp_path / "projects" / "todo" / "ai" / "memory" / "interactions.jsonl"
-
-    # a projects/<slug> without an ai/ falls back to the framework log
-    bare = tmp_path / "projects" / "bare"
-    bare.mkdir(parents=True)
-    assert L.route(bare, repo_root=tmp_path) == tmp_path / "memory" / "interactions.jsonl"
+    # the hook always targets the framework master log (cwd is irrelevant - "hand off" never changes it)
+    assert L.log_path(repo_root=tmp_path) == tmp_path / "memory" / "interactions.jsonl"
+    # even with a project present, it still routes to the framework master (the agent writes project logs)
+    (tmp_path / "projects" / "todo" / "ai").mkdir(parents=True)
+    assert L.log_path(repo_root=tmp_path) == tmp_path / "memory" / "interactions.jsonl"
 
 
 def test_append_creates_parent_and_writes_jsonl(tmp_path):

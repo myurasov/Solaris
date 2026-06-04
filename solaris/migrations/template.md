@@ -20,7 +20,7 @@ Author guide:
 - Replace every frontmatter value above. `to_version` = the version this migrates TO; `from_version` = the
   immediately preceding version. Mark breaking: true for a MAJOR bump or a behaviorally breaking change.
 - Mark revertible: false ONLY for genuinely irreversible changes (data loss).
-- List every ai-setup path the migration writes/creates/deletes in `touches`.
+- List every ai-pack path the migration writes/creates/deletes in `touches`.
 - Helper scripts (optional) live under solaris/migrations/<to_version>/ and run via `uv run`.
 - Migrations modify projects/<slug>/ai/ only - never the project's src/ code, and never ai/<plugin>/
   (each plugin migrates itself via its own migrations/).
