@@ -11,7 +11,7 @@ for each project (works in Cursor and Claude Code), supports domain **plugins**,
 migrates project setups forward as the framework evolves, and keeps a lightweight `tasks/` area for ad-hoc
 engineering, system-setup, and research.
 
-Authoritative spec: [`solaris/spec/spec-v0.4.0.md`](solaris/spec/spec-v0.4.0.md).
+Authoritative spec: [`solaris/spec/spec-v0.4.1.md`](solaris/spec/spec-v0.4.1.md).
 
 ## Requirements
 
@@ -35,8 +35,8 @@ git config core.hooksPath .githooks
 ```
 
 `.venv/`, `.tmp/`, `.tools/`, and the runtime MCP configs are created lazily / gitignored. Open the repo
-root in your IDE - `AGENTS.md` drives the agent in both Cursor and Claude Code (both read it natively; there
-is no `CLAUDE.md` or `.cursor/rules` shim).
+root in your IDE - `AGENTS.md` drives the agent in both Cursor and Claude Code (Cursor reads it natively; Claude Code reads a one-line
+`CLAUDE.md` that imports it via `@AGENTS.md`).
 
 ## Using Solaris
 
@@ -82,4 +82,4 @@ uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
 ```
 
 Conventions, the plugin contract, the migration engine, and the safety/commit policies are all specified in
-[`solaris/spec/spec-v0.4.0.md`](solaris/spec/spec-v0.4.0.md).
+[`solaris/spec/spec-v0.4.1.md`](solaris/spec/spec-v0.4.1.md).

@@ -1,4 +1,4 @@
-# Solaris v0.4.0 - Specification <!-- omit in toc -->
+# Solaris v0.4.1 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -15,9 +15,11 @@
 - [Validation (acceptance)](#validation-acceptance)
 - [Deferred](#deferred)
 
-Authoritative description of Solaris v0.4.0. Supersedes the 0.1.0-0.3.0 specs (in git history; the latest is
+Authoritative description of Solaris v0.4.1. Supersedes the 0.1.0-0.3.0 specs (in git history; the latest is
 [`spec-v0.3.0.md`](spec-v0.3.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
-build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.4.0 - a terminology + conventions release
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
+shim is restored beside every `AGENTS.md` so **Claude Code** loads the canonical instructions (Cursor reads
+`AGENTS.md` natively). What changed in 0.4.0 - a terminology + conventions release
 (see [`../migrations/0.4.0.md`](../migrations/0.4.0.md)): the project persona **`developer` -> `engineer`**
 (`developer.agent.md` -> `engineer.agent.md`, `developer.instructions.md` -> `engineer.instructions.md`) and
 the **ai-setup -> ai-pack** (the `solaris/templates/ai-pack/` template dir, the `version` tool's `aisetup`
@@ -37,14 +39,15 @@ each project it generates a standardized, **portable ai-pack** that also works o
 Employer/domain-specific ways of working are factored into **plugins**. Ad-hoc engineering, system-setup,
 and research work that is not a project lives under `tasks/`.
 
-Solaris targets **Cursor** and **Claude Code** equally via a single canonical `AGENTS.md` (both read it
-natively). Its own tooling is Python (>=3.14), stdlib-only at runtime, run through `uv`.
+Solaris targets **Cursor** and **Claude Code** equally via a single canonical `AGENTS.md`: Cursor reads it
+natively, Claude Code via a one-line `CLAUDE.md` (`@AGENTS.md`) shim. Its own tooling is Python (>=3.14), stdlib-only at runtime, run through `uv`.
 
 ## Repository layout
 
 ```
 <root>/                         # the Solaris git repo
-  AGENTS.md                     # canonical, always-on instructions (both IDEs read it natively)
+  AGENTS.md                     # canonical, always-on instructions (Cursor reads it natively)
+  CLAUDE.md                     # one-line @AGENTS.md shim so Claude Code loads AGENTS.md
   mcp.json.example              # MCP template (playwright); copied to runtime configs
   pyproject.toml  uv.lock       # python >=3.14; runtime stdlib only; pytest for tests
   .cursor/hooks.json  .claude/settings.json   # interaction-log hook (both IDEs)
@@ -59,15 +62,17 @@ natively). Its own tooling is Python (>=3.14), stdlib-only at runtime, run throu
   tasks/                        # ad-hoc work (gitignored)
 ```
 
-There is **no `CLAUDE.md` and no `.cursor/rules`** anywhere. Gitignored: `.venv`, `.tmp`, `.tools`,
+Every `AGENTS.md` has a sibling one-line `CLAUDE.md` (`@AGENTS.md`) so Claude Code loads it; there is **no
+`.cursor/rules`** anywhere. Gitignored: `.venv`, `.tmp`, `.tools`,
 `.mcp.json`, `.cursor/mcp.json`, `projects/`, `tasks/`, `solaris/spec/references/`, and `plugins/*` /
 `memory/*` (each except its `.empty`). A `.empty` placeholder keeps those two fully-ignored dirs present on
 a fresh clone; the first time a skill writes real content into one, it deletes that `.empty`.
 
 ## Dual-IDE wiring
 
-`AGENTS.md` is the single canonical instruction file, read every turn by both Cursor and Claude Code with no
-shim. MCP is configured by a committed `mcp.json.example` (default server: `playwright`); the user copies it
+`AGENTS.md` is the single canonical instruction file. **Cursor** reads it natively; **Claude Code** reads a
+one-line `CLAUDE.md` shim (`@AGENTS.md`) that imports it - only `AGENTS.md` is authored, and both load it
+every turn. MCP is configured by a committed `mcp.json.example` (default server: `playwright`); the user copies it
 to `.mcp.json` (Claude Code) and `.cursor/mcp.json` (Cursor), and `solaris.tools.mcp_sync` keeps the two in
 sync. `context7` is used via its CLI (`ctx7`), not as an MCP server. Interaction-logging hooks live in
 `.cursor/hooks.json` and `.claude/settings.json`.
@@ -82,14 +87,16 @@ working directory.
 
 ## Projects and the ai-pack
 
-A project lives at `projects/<slug>/`. Its root carries only `AGENTS.md` (both IDEs read it) plus `ai/` and,
-in local mode, `src/`. There is no `CLAUDE.md`, `.cursor/`, `mcp.json.example`, or `.gitignore` - the folder
-is not committed. Runtime `.mcp.json` and `.cursor/mcp.json` are generated (gitignored) so the IDE has MCP
+A project lives at `projects/<slug>/`. Its root carries `AGENTS.md` (Cursor) + a one-line `CLAUDE.md`
+(`@AGENTS.md`, Claude Code) plus `ai/` and, in local mode, `src/` (which carries the same `AGENTS.md` +
+`CLAUDE.md` pair when it has project rules). There is no `.cursor/`, `mcp.json.example`, or `.gitignore` - the
+folder is not committed. Runtime `.mcp.json` and `.cursor/mcp.json` are generated (gitignored) so the IDE has MCP
 servers; plugin servers are merged into them on install.
 
 ```
 projects/<slug>/
-  AGENTS.md                     # the only authored root file
+  AGENTS.md                     # the authored root instructions (Cursor)
+  CLAUDE.md                     # one-line @AGENTS.md shim (Claude Code)
   .mcp.json  .cursor/mcp.json   # runtime MCP (gitignored)
   ai/                           # shareable layer (engineer.agent.md + engineer.instructions.md + spec.md)
     engineer.agent.md          # combined coder + planner + runner (carries a rev marker)
@@ -233,7 +240,7 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
 ## Validation (acceptance)
 
 1. `uv run pytest` green (tools + revs + toc).
-2. `version current` -> `0.4.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
+2. `version current` -> `0.4.1`; `revs status` consistent; `revs classify`/`ff` behave on a project;
    `mcp_sync --check` and `toc --check --all` clean.
 3. **Todo app** (web-service, local): `create-project todo` (AGENTS.md-only root, runtime MCP) ->
    `develop-project` builds a FastAPI + vanilla UI -> runs locally; app tests pass.
