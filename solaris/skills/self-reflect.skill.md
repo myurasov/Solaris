@@ -27,7 +27,7 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 
 - **Framework changes** - generic, benefit any project: edit `solaris/` (agent, skills, rules, templates,
   tools, spec).
-- **Project-specific** - belongs in that project's `ai/memory/developer.instructions.md`, not the framework.
+- **Project-specific** - belongs in that project's `ai/engineer.instructions.md`, not the framework.
 - **Plugin-worthy** - a domain workflow that recurs: suggest `import-plugin` (create) or extending an
   existing plugin.
 
@@ -36,7 +36,7 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 For approved framework changes: make the edit, show the diff, and follow `rules/commits.rule.md`. Keep
 changes minimal and consistent with surrounding style. After editing a revisioned framework/plugin file,
 `revs bump` it and rebuild the ledger (`revs ledger`). Do not touch a project's `src/` or another user's
-data. If a change alters the ai-setup schema or templates in a breaking way, that is a **minor/major**
+data. If a change alters the ai-pack schema or templates in a breaking way, that is a **minor/major**
 release: author a migration under `solaris/migrations/` (see `migrations/template.md`) and bump the semver
 in `pyproject.toml`. Routine content edits need only a rev bump, not a version bump.
 

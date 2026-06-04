@@ -7,8 +7,9 @@
 
 {{DESCRIPTION}}
 
-> Current specification. Updated through dialogue during planning/development. The initial version is
-> preserved in [`memory/spec-v0.md`](memory/spec-v0.md).
+> Current specification - the single source of truth for this project. Kept **self-sufficient**: it reads
+> standalone and does not reference or depend on any other file. Updated through dialogue during planning and
+> development.
 
 ## Goal
 

@@ -22,14 +22,14 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.2.0.md`](solaris/spec/spec-v0.2.0.md).
+Full specification: [`solaris/spec/spec-v0.4.0.md`](solaris/spec/spec-v0.4.0.md).
 
 ## Execution model
 
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<slug>/`) it is that project's **developer** (`projects/<slug>/ai/developer.agent.md`) plus the ai-setup (`ai/spec.md`, `ai/memory/*`) and every `ai/<plugin>/` overlay. It also reads `src/AGENTS.md` (if present) as project rules.
+- Inside a **project** (`projects/<slug>/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/memory/*`) and every `ai/<plugin>/` overlay. It also reads `src/AGENTS.md` (if present) as project rules.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 
@@ -39,12 +39,12 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 
 | Skill | Trigger (examples) | Does |
 |---|---|---|
-| `create-project` | "create / new project" | Scaffold a new project + ai-setup (pick type / mode / plugins). |
-| `import-project` | "import project", "adopt `<path or host:path>`" | Adopt an existing codebase; derive the ai-setup. |
+| `create-project` | "create / new project" | Scaffold a new project + ai-pack (pick type / mode / plugins). |
+| `import-project` | "import project", "adopt `<path or host:path>`" | Adopt an existing codebase; derive the ai-pack. |
 | `import-plugin` | "create / update plugin", "make a plugin from `<project>`" | Author a plugin from a project, or fold project-local edits back into a plugin. |
 | `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project. |
-| `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's developer agent (plan or implement). |
-| `update-project` | "update / migrate `<project>`" | Migrate an ai-setup + its plugins to the current framework version. |
+| `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's engineer agent (plan or implement). |
+| `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<date>-<slug>/`. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
@@ -54,12 +54,12 @@ When a project has plugins attached, also load and obey every `ai/<plugin>/*.rul
 ## Memory + logging
 
 - Framework state is in `memory/`: `resources.md` (hosts, hardware), `credentials.md` (secrets; gitignored), `interactions.jsonl` (log). Project state is in each `projects/<slug>/ai/memory/`.
-- ai-setups never read the framework `memory/`; needed values are copied into the project's own `ai/memory/` on init/update.
+- ai-packs never read the framework `memory/`; needed values are copied into the project's own `ai/memory/` on init/update.
 - A prompt-submit hook appends to the interaction log; skills append authoritative project entries when doing project work.
 
 ## Conventions (pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `log_interaction`, `toc`).
-- Versioning: per-file **revisions** (`solaris.tools.revs`) keep ai-setups in sync with framework/plugin master copies (sync/merge by rev + content hash); semantic **versions** (pyproject / plugin `manifest.json`) are release-only - bumped on request or when publishing, with migrations only on minor/major bumps.
+- Versioning: per-file **revisions** (`solaris.tools.revs`) keep ai-packs in sync with framework/plugin master copies (sync/merge by rev + content hash); semantic **versions** (pyproject / plugin `manifest.json`) are release-only - bumped on request or when publishing, with migrations only on minor/major bumps.
 - File formats: human docs are Markdown (`.md`, user-editable); machine state is JSON (`*.json`, carrying `"_comment": "do not edit"`); append-only logs are JSON Lines (`.jsonl`). No standalone YAML (markdown/MDC frontmatter is exempt).
-- Full conventions + architecture: [`solaris/spec/spec-v0.2.0.md`](solaris/spec/spec-v0.2.0.md).
+- Full conventions + architecture: [`solaris/spec/spec-v0.4.0.md`](solaris/spec/spec-v0.4.0.md).

@@ -1,7 +1,7 @@
 ---
 name: update-project
 triggers: ["update <project>", "sync <project>", "migrate <project>", "update-project <slug>"]
-summary: Sync an ai-setup with framework/plugin master copies by per-file revision; run minor/major migrations.
+summary: Sync an ai-pack with framework/plugin master copies by per-file revision; run minor/major migrations.
 ---
 
 # update-project <!-- omit in toc -->
@@ -11,7 +11,7 @@ summary: Sync an ai-setup with framework/plugin master copies by per-file revisi
 - [3. Update plugins](#3-update-plugins)
 - [4. Summary + revert](#4-summary--revert)
 
-Bring a project's ai-setup in sync with the current framework + plugin master copies. **Routine sync is
+Bring a project's ai-pack in sync with the current framework + plugin master copies. **Routine sync is
 per-file (revisions); semantic-version migrations run only for minor/major framework bumps.** Never touches
 the project's `src/` code.
 
@@ -23,7 +23,7 @@ the project's `src/` code.
   them (copies master -> project, updates the baseline). Files the user never touched just move forward.
 - **merge-up** (user rev > master): the user improved the materialized copy. For a plugin file, run
   `import-plugin` (update-from-project) to fold it into the plugin source and bump the master; for a core
-  template file, copy the improvement up into `solaris/templates/ai-setup/...` and `revs bump` it. Re-run ff.
+  template file, copy the improvement up into `solaris/templates/ai-pack/...` and `revs bump` it. Re-run ff.
 - **conflict** (both changed): show a 3-way view (baseline / master / project) and ask the user, per file or
   hunk, which side wins; write the merged result; `revs bump` the master if it changed.
 

@@ -1,7 +1,7 @@
 """Solaris versioning + migration-chain engine (stdlib only).
 
 The framework version is the single source of truth in ``pyproject.toml`` (``[project].version``). An
-ai-setup records the framework version it was written/updated at in ``<project>/ai/manifest.json``
+ai-pack records the framework version it was written/updated at in ``<project>/ai/manifest.json``
 (``framework_version``). Plugins version independently in ``plugins/<name>/manifest.json``; the
 materialized version is recorded per-plugin in the project's manifest. There are no ``.version`` files.
 
@@ -102,11 +102,11 @@ def write_manifest(project_dir: "str | Path", data: dict) -> None:
         fh.write("\n")
 
 
-def aisetup_version(project_dir: "str | Path") -> str:
+def aipack_version(project_dir: "str | Path") -> str:
     return str(read_manifest(project_dir)["framework_version"])
 
 
-def set_aisetup_version(project_dir: "str | Path", version: str) -> None:
+def set_aipack_version(project_dir: "str | Path", version: str) -> None:
     parse(version)  # validate before writing
     manifest = read_manifest(project_dir)
     manifest["framework_version"] = str(version)
@@ -198,19 +198,19 @@ def _cmd_current(_args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_aisetup(args: argparse.Namespace) -> int:
-    print(aisetup_version(args.dir))
+def _cmd_aipack(args: argparse.Namespace) -> int:
+    print(aipack_version(args.dir))
     return 0
 
 
 def _cmd_check(args: argparse.Namespace) -> int:
-    current, recorded = framework_version(), aisetup_version(args.dir)
+    current, recorded = framework_version(), aipack_version(args.dir)
     kind = bump_kind(recorded, current)
     if kind == "same":
         print(f"up to date ({current})")
         return 0
     if kind == "downgrade":
-        print(f"downgrade: ai-setup {recorded} is newer than framework {current}")
+        print(f"downgrade: ai-pack {recorded} is newer than framework {current}")
         return 2
     chain = find_chain(recorded, current)
     print(f"migrate needed: {recorded} -> {current} ({kind}); {len(chain)} migration(s) on disk")
@@ -218,7 +218,7 @@ def _cmd_check(args: argparse.Namespace) -> int:
 
 
 def _cmd_chain(args: argparse.Namespace) -> int:
-    current, recorded = framework_version(), aisetup_version(args.dir)
+    current, recorded = framework_version(), aipack_version(args.dir)
     chain = find_chain(recorded, current)
     if not chain:
         print(f"no migrations ({recorded} -> {current})")
@@ -230,7 +230,7 @@ def _cmd_chain(args: argparse.Namespace) -> int:
 
 
 def _cmd_set(args: argparse.Namespace) -> int:
-    set_aisetup_version(args.dir, args.version)
+    set_aipack_version(args.dir, args.version)
     print(f"set framework_version = {args.version} in {args.dir}/ai/manifest.json")
     return 0
 
@@ -277,15 +277,15 @@ def build_parser() -> argparse.ArgumentParser:
         sp.add_argument("--dir", required=True, help="project directory (contains ai/manifest.json)")
         return sp
 
-    _with_dir("aisetup", "print the ai-setup's recorded framework version").set_defaults(func=_cmd_aisetup)
-    _with_dir("check", "compare ai-setup vs framework (exit 0 match / 1 migrate / 2 downgrade)").set_defaults(func=_cmd_check)
+    _with_dir("aipack", "print the ai-pack's recorded framework version").set_defaults(func=_cmd_aipack)
+    _with_dir("check", "compare ai-pack vs framework (exit 0 match / 1 migrate / 2 downgrade)").set_defaults(func=_cmd_check)
     _with_dir("chain", "print the migration chain that would be applied").set_defaults(func=_cmd_chain)
 
-    sp_set = _with_dir("set", "write framework_version into the ai-setup manifest")
+    sp_set = _with_dir("set", "write framework_version into the ai-pack manifest")
     sp_set.add_argument("version", help="semver MAJOR.MINOR.PATCH")
     sp_set.set_defaults(func=_cmd_set)
 
-    sp_plugin = _with_dir("plugin", "print a plugin's recorded version in the ai-setup")
+    sp_plugin = _with_dir("plugin", "print a plugin's recorded version in the ai-pack")
     sp_plugin.add_argument("--plugin", required=True, help="plugin name")
     sp_plugin.set_defaults(func=_cmd_plugin)
 

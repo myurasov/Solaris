@@ -8,7 +8,7 @@
 
 Confirm before doing something that is hard to reverse or reaches outside the local machine. Solaris drives
 remote hosts (`ssh`, `rsync`, deploy) and git, so this is the most important operational guardrail. It is
-baked into each project's `developer.agent.md` too.
+baked into each project's `engineer.agent.md` too.
 
 ## Confirm before these
 

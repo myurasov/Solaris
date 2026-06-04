@@ -16,9 +16,9 @@
     "**/.ruff_cache": true,
     "*.*": false
   },
-  "explorer.decorations.colors": true,
   "workbench.colorCustomizations": {
-    "gitDecoration.ignoredResourceForeground": "#8264d5"
+    "gitDecoration.ignoredResourceForeground": "#bcace7",
   },
-  "markdown.preview.fontSize": 13
+  "markdown.preview.fontSize": 13,
+  "problems.visibility": false
 }
