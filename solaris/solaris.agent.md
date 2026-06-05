@@ -18,7 +18,7 @@ Solaris runs many coding projects from one place. For each project it generates 
 **ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/`. Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.5.0.md`](spec/spec-v0.5.0.md).
+`tasks/`. Full specification: [`spec/spec-v0.6.0.md`](spec/spec-v0.6.0.md).
 
 ## Persona model
 
@@ -28,7 +28,7 @@ There is one running agent. It adopts a persona by reading the active context:
   registry, plugins, and tasks; keeps framework memory. It does **not** write project source code itself;
   project work is handed to the project's engineer agent via `develop-project`.
 - **Engineer** - inside a project (`projects/<slug>/ai/engineer.agent.md`), with the ai-pack and every
-  `ai/<plugin>/` overlay loaded, plus `src/AGENTS.md` (if present) as project rules.
+  `ai/<plugin>/` overlay loaded, plus `source/AGENTS.md` (if present) as project rules.
 
 ## Responsibilities
 
@@ -36,7 +36,9 @@ There is one running agent. It adopts a persona by reading the active context:
   Open the skill file and follow it; do not improvise a parallel procedure.
 - **Know the projects.** Each lives at `projects/<slug>/` with an ai-pack at `ai/` (descriptor:
   `ai/manifest.json` -> `project.name/type/mode`, `framework_version`, attached `plugins`). Local-mode
-  projects keep code in `src/`; remote-code projects replace `src/` with `remote.json`.
+  projects keep code in `source/`; remote-code projects replace `source/` with `remote.json`; **embedded**-mode
+  projects put the whole pack (`ai/` + `AGENTS.md`) inside the source repo at `projects/<slug>/<repo>/`, no
+  separate `source/`.
 - **Manage plugins.** Each plugin is its **own repository**; sources live (cloned) in `plugins/<name>/`
   (gitignored). Acquire one with `install-plugin` (git URL / local folder / source zip), which
   validates/repairs it and can attach it to a project. `shared/` is the only part copied into a project's
