@@ -13,7 +13,7 @@ summary: Sync an ai-pack with framework/plugin master copies by per-file revisio
 
 Bring a project's ai-pack in sync with the current framework + plugin master copies. **Routine sync is
 per-file (revisions); semantic-version migrations run only for minor/major framework bumps.** Never touches
-the project's `src/` code.
+the project's `source/` code.
 
 ## 1. Classify + sync files by revision
 

@@ -1,4 +1,4 @@
-# Solaris v0.5.0 - Specification <!-- omit in toc -->
+# Solaris v0.6.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -15,9 +15,11 @@
 - [Validation (acceptance)](#validation-acceptance)
 - [Deferred](#deferred)
 
-Authoritative description of Solaris v0.5.0. Supersedes the 0.1.0-0.4.1 specs (in git history; the latest snapshot is
+Authoritative description of Solaris v0.6.0. Supersedes the 0.1.0-0.5.0 specs (in git history; the latest snapshot is
 [`spec-v0.3.0.md`](spec-v0.3.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
-build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.5.0 (see [`../migrations/0.5.0.md`](../migrations/0.5.0.md)): `ai/manifest.json` holds only project metadata + versions - host/deploy/port/secret specifics live in `ai/memory/` (`resources.md` / `credentials.md`); the engineer **bootstraps `ai/memory/` interactively** when it is missing (a shared ai-pack); and each **plugin keeps its own** revision ledger at `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` tracks only framework masters). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.6.0 (see [`../migrations/0.6.0.md`](../migrations/0.6.0.md)): the local-mode code directory is renamed **`src/` -> `source/`** (`projects/<slug>/source/` - the engineer's working dir, what `--remote` rsyncs, and where the project's own `git init` runs; a nested `ui/src/` etc. is unaffected). A new **opt-in `embedded`
+project mode** also lets the ai-pack live *inside* the source repo (`projects/<slug>/<repo>/ai/`, no separate
+`source/`), chosen at create/import time. What changed in 0.5.0 (see [`../migrations/0.5.0.md`](../migrations/0.5.0.md)): `ai/manifest.json` holds only project metadata + versions - host/deploy/port/secret specifics live in `ai/memory/` (`resources.md` / `credentials.md`); the engineer **bootstraps `ai/memory/` interactively** when it is missing (a shared ai-pack); and each **plugin keeps its own** revision ledger at `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` tracks only framework masters). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
 shim is restored beside every `AGENTS.md` so **Claude Code** loads the canonical instructions (Cursor reads
 `AGENTS.md` natively). What changed in 0.4.0 - a terminology + conventions release
 (see [`../migrations/0.4.0.md`](../migrations/0.4.0.md)): the project persona **`developer` -> `engineer`**
@@ -82,13 +84,13 @@ sync. `context7` is used via its CLI (`ctx7`), not as an MCP server. Interaction
 One running agent adopts a **persona** by reading the active context: at the Solaris root, the
 **orchestrator** (`solaris/solaris.agent.md`) routes to skills and manages projects/plugins/tasks; inside a
 project, the **engineer** (`projects/<slug>/ai/engineer.agent.md`) loads the ai-pack, every
-`ai/<plugin>/` overlay, and `src/AGENTS.md` if present. "Hand off" = switching the active instruction set +
+`ai/<plugin>/` overlay, and `source/AGENTS.md` if present. "Hand off" = switching the active instruction set +
 working directory.
 
 ## Projects and the ai-pack
 
 A project lives at `projects/<slug>/`. Its root carries `AGENTS.md` (Cursor) + a one-line `CLAUDE.md`
-(`@AGENTS.md`, Claude Code) plus `ai/` and, in local mode, `src/` (which carries the same `AGENTS.md` +
+(`@AGENTS.md`, Claude Code) plus `ai/` and, in local mode, `source/` (which carries the same `AGENTS.md` +
 `CLAUDE.md` pair when it has project rules). There is no `.cursor/`, `mcp.json.example`, or `.gitignore` - the
 folder is not committed. Runtime `.mcp.json` and `.cursor/mcp.json` are generated (gitignored) so the IDE has MCP
 servers; plugin servers are merged into them on install.
@@ -106,8 +108,23 @@ projects/<slug>/
     memory/                     # private/local layer (not for sharing): env-specific + sensitive bits
       spec-v0.md  resources.md  credentials.md  interactions.jsonl
     <plugin>/                   # materialized plugin overlay(s): copies of each plugin's shared/ (rev-marked)
-  src/                          # local mode: code (own .git)    | remote-code: replaced by remote.json
+  source/                          # local mode: code (own .git)    | remote-code: replaced by remote.json
 ```
+
+In **embedded** mode the ai-pack lives *inside* the source repo instead of beside it: there is no separate
+`source/`; the repo sits at `projects/<slug>/<repo>/` with `ai/` (and `AGENTS.md` + `CLAUDE.md`) at its root,
+so the shareable layer is committed with the repo while `ai/memory/` is gitignored by it:
+
+```
+projects/<slug>/
+  <repo>/                       # the source repo (own .git) - the code tree itself
+    AGENTS.md  CLAUDE.md        # engineer entry points, at the repo root
+    ai/                         # the ai-pack, embedded (memory/ added to the repo's .gitignore)
+      engineer.agent.md  engineer.instructions.md  spec.md  manifest.json  memory/  <plugin>/
+    ...                         # the repo's own code + files
+```
+
+Tools that take `--dir` get `projects/<slug>/<repo>/` (the dir holding `ai/`) for an embedded project.
 
 The ai-pack splits into a **shareable layer** (`ai/engineer.agent.md`, `ai/engineer.instructions.md`,
 `ai/spec.md`, and the `ai/<plugin>/` overlays - portable, safe to share or hand off) and a **private/local
@@ -119,10 +136,14 @@ choosing a plugin-provided type auto-attaches that plugin.
 
 ## Project modes
 
-- **local** (default): code in `projects/<slug>/src/` (own git root). Run locally; deploy by rsync over SSH
+- **local** (default): code in `projects/<slug>/source/` (own git root). Run locally; deploy by rsync over SSH
   (excludes `.venv`/`.git`/secrets/artifacts; no `--delete` by default); optional Docker.
-- **remote-code**: no `src/`; a `remote.json` records `host` + `path`. The code lives on the remote; it is
+- **remote-code**: no `source/`; a `remote.json` records `host` + `path`. The code lives on the remote; it is
   edited and run in place over Remote-SSH. No deploy by default. The mode is recorded in `ai/manifest.json`.
+- **embedded** (opt-in): the ai-pack lives *inside* the source repo. `projects/<slug>/<repo>/` is the repo
+  (own git), with `ai/` + `AGENTS.md` + `CLAUDE.md` at its root and **no separate `source/`**. The shareable
+  layer commits and travels with the repo; `ai/memory/` is added to the repo's `.gitignore` so the private
+  layer stays out. Chosen explicitly at create/import time; tools take `--dir projects/<slug>/<repo>/`.
 
 ## Plugins
 
@@ -178,7 +199,7 @@ baseline (`ai/manifest.json` -> `revisions`, `{rel: {rev, hash}}` at last sync).
 `manifest.json`. Bump on explicit request or when publishing to a public git remote. **Migrations
 (`solaris/migrations/<to_version>.md`) are authored only for MINOR/MAJOR bumps; PATCH never requires one.**
 `ai/manifest.json.framework_version` gates which migrations a project still needs; `solaris.tools.version`
-scans `migrations/*.md` to compute the chain (no registry file). Migrations adapt `ai/` only - never `src/`.
+scans `migrations/*.md` to compute the chain (no registry file). Migrations adapt `ai/` only - never `source/`.
 
 ## Command center (tasks)
 
@@ -247,7 +268,7 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
 ## Validation (acceptance)
 
 1. `uv run pytest` green (tools + revs + toc).
-2. `version current` -> `0.5.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
+2. `version current` -> `0.6.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
    `mcp_sync --check` and `toc --check --all` clean.
 3. **Todo app** (web-service, local): `create-project todo` (AGENTS.md-only root, runtime MCP) ->
    `develop-project` builds a FastAPI + vanilla UI -> runs locally; app tests pass.

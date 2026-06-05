@@ -22,7 +22,7 @@ Author guide:
 - Mark revertible: false ONLY for genuinely irreversible changes (data loss).
 - List every ai-pack path the migration writes/creates/deletes in `touches`.
 - Helper scripts (optional) live under solaris/migrations/<to_version>/ and run via `uv run`.
-- Migrations modify projects/<slug>/ai/ only - never the project's src/ code, and never ai/<plugin>/
+- Migrations modify projects/<slug>/ai/ only - never the project's source/ code, and never ai/<plugin>/
   (each plugin migrates itself via its own migrations/).
 -->
 

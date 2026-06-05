@@ -23,14 +23,18 @@ Reverse of `create-project`: ingest existing code, then derive the ai-pack. Impo
 
 ## 2. Land the code
 
-Create `projects/` if it does not exist (gitignored, lazily created).
+Create `projects/` if it does not exist (gitignored, lazily created). Ask the user the **mode** - `local`
+(default), `remote-code`, or `embedded` (ai-pack inside the repo) - then:
 
-- **local:** if `source` already is `projects/<slug>/src/`, adopt in place. Otherwise copy/rsync `source`
-  -> `projects/<slug>/src/`, excluding `.venv`, `.git` caches, `__pycache__`, `node_modules`, build
+- **local:** if `source` already is `projects/<slug>/source/`, adopt in place. Otherwise copy/rsync `source`
+  -> `projects/<slug>/source/`, excluding `.venv`, `.git` caches, `__pycache__`, `node_modules`, build
   artifacts. Preserve an existing `.git` only after confirming with the user. Never move or delete the
   original source.
 - **remote-code:** do **not** copy. Write `remote.json` (`host`, `path`, `deploy: false`). Read the remote
   tree over SSH (`ssh <host> 'ls / cat ...'`) for the detection steps.
+- **embedded:** adopt the repo at `projects/<slug>/<repo>/` (copy/rsync it there, or in place if already there)
+  and embed the ai-pack **inside** it - `ai/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `ai/memory/`
+  added to the repo's `.gitignore`. No separate `source/`. Use only when the user wants the pack committed with their repo.
 
 ## 3. Detect type + toolchain (read-only)
 

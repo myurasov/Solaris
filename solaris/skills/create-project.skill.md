@@ -29,7 +29,9 @@ Use the question tool (one batch) for anything not already given:
   - core: every `solaris/templates/projects/*.md` (filename stem = type).
   - plugin-provided: every `plugins/<name>/<type>.project.md` (offered as `<plugin>:<type>`).
   - choosing a plugin-provided type **auto-attaches that plugin** in step 5.
-- **mode** - `local` (code in `src/`, default) or `remote-code` (code on a remote; needs `host` + `path`).
+- **mode** - `local` (code in `source/`, default), `remote-code` (code on a remote; needs `host` + `path`),
+  or `embedded` (opt-in: the ai-pack lives **inside** the source repo at `projects/<slug>/<repo>/`, no separate
+  `source/`, so it commits with the repo). Offer `embedded` only when the user wants the pack to travel inside their repo.
 - **plugins** - any additional plugins to attach (names under `plugins/`).
 
 Read the chosen `templates/projects/<type>.md` for how that type is structured (it guides planning later).
@@ -47,21 +49,27 @@ Create `projects/` if it does not exist (gitignored, lazily created), then copy
 `{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`).
 
 The project root is intentionally minimal: `AGENTS.md` + a one-line `CLAUDE.md` (`@AGENTS.md`, copied from
-the template) plus `ai/` and (local mode) `src/`. There is no `.cursor/`, no `mcp.json.example`, and no
+the template) plus `ai/` and (local mode) `source/`. There is no `.cursor/`, no `mcp.json.example`, and no
 `.gitignore` - the folder is not committed. Cursor reads `AGENTS.md` natively; Claude Code reads the
-`CLAUDE.md` shim. If a project type adds a `src/AGENTS.md`, drop a sibling `src/CLAUDE.md` (`@AGENTS.md`) too.
-Copied files keep their `_Rev. N_` rev markers (first line).
+`CLAUDE.md` shim. If a project type adds a `source/AGENTS.md`, drop a sibling `source/CLAUDE.md` (`@AGENTS.md`) too.
+Copied files keep their `_Rev. N_` rev markers (first line). For **embedded** mode the destination is the
+repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is dropped) - see step 4.
 
 ## 4. Wire the code location by mode
 
-- **local:** keep `src/`; `git init -b main` inside `src/` is deferred to the engineer agent (never commit
+- **local:** keep `source/`; `git init -b main` inside `source/` is deferred to the engineer agent (never commit
   yet).
-- **remote-code:** delete `src/`; write `projects/<slug>/remote.json`:
+- **remote-code:** delete `source/`; write `projects/<slug>/remote.json`:
   ```json
   { "_comment": "do not edit by hand", "mode": "remote-code", "host": "<HOST>", "path": "<REMOTE_PATH>",
     "deploy": false, "sync": { "excludes": [".venv", ".git", "__pycache__", "outputs/", "logs/"] } }
   ```
   Set `project.mode` to `remote-code` in `ai/manifest.json`.
+- **embedded:** there is no `projects/<slug>/source/`. The code repo lives at `projects/<slug>/<repo>/` (an
+  existing repo, or one you `git init` for the project); materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at
+  **that repo's root** (not at `projects/<slug>/`), and add `ai/memory/` to the repo's `.gitignore` so the
+  private layer is not committed. Record `project.mode` `embedded` in `ai/manifest.json`; tools take
+  `--dir projects/<slug>/<repo>/`.
 
 ## 5. Attach plugins
 

@@ -33,11 +33,15 @@ Read, in this order, and then obey them:
    `ai/spec.md`, and `ai/memory/*` (private: `resources.md`, `credentials.md`).
 4. Every `projects/<slug>/ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
    `*.skill.md` as an additional trigger-invoked skill.
-5. If `mode` is `local`: `projects/<slug>/src/AGENTS.md` (if present) as project rules. If `remote-code`:
-   `projects/<slug>/remote.json` for the host/path; read the live `src/AGENTS.md` from the remote.
+5. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as project rules. If `remote-code`:
+   `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
 
-Set the working directory to `projects/<slug>/src/` (local) or operate over Remote-SSH against
-`remote.json` (remote-code).
+**Embedded mode** (manifest `mode: embedded`): the ai-pack + `AGENTS.md` live *inside* the repo, so read the
+context above from `projects/<slug>/<repo>/` (e.g. `projects/<slug>/<repo>/ai/engineer.agent.md`); there is no
+separate `source/`.
+
+Set the working directory to `projects/<slug>/source/` (local), `projects/<slug>/<repo>/` (embedded), or
+operate over Remote-SSH against `remote.json` (remote-code).
 
 ## 3. Act
 

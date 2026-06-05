@@ -23,14 +23,14 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.5.0.md`](solaris/spec/spec-v0.5.0.md).
+Full specification: [`solaris/spec/spec-v0.6.0.md`](solaris/spec/spec-v0.6.0.md).
 
 ## Execution model
 
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<slug>/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/memory/*`) and every `ai/<plugin>/` overlay. It also reads `src/AGENTS.md` (if present) as project rules.
+- Inside a **project** (`projects/<slug>/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/memory/*`) and every `ai/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 
@@ -63,4 +63,4 @@ When a project has plugins attached, also load and obey every `ai/<plugin>/*.rul
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `log_interaction`, `toc`).
 - Versioning: per-file **revisions** (`solaris.tools.revs`) keep ai-packs in sync with framework/plugin master copies (sync/merge by rev + content hash); semantic **versions** (pyproject / plugin `manifest.json`) are release-only - bumped on request or when publishing, with migrations only on minor/major bumps.
 - File formats: human docs are Markdown (`.md`, user-editable); machine state is JSON (`*.json`, carrying `"_comment": "do not edit"`); append-only logs are JSON Lines (`.jsonl`). No standalone YAML (markdown/MDC frontmatter is exempt).
-- Full conventions + architecture: [`solaris/spec/spec-v0.5.0.md`](solaris/spec/spec-v0.5.0.md).
+- Full conventions + architecture: [`solaris/spec/spec-v0.6.0.md`](solaris/spec/spec-v0.6.0.md).

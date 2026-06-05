@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 7_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -24,8 +24,9 @@ command center. Edit this file to tune how this project is developed.
    APIs), `credentials.md` (secrets; never echo or commit).
 5. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
    trigger-invoked skill.
-6. local mode: `src/AGENTS.md` if present, as project rules. remote-code mode: `remote.json` (host/path) -
-   read, edit, and run the code there over Remote-SSH.
+6. local mode: `source/AGENTS.md` if present, as project rules. remote-code mode: `remote.json` (host/path) -
+   read, edit, and run the code there over Remote-SSH. embedded mode: there is no `source/` - the code is this
+   repo (this `ai/` is a subdir of it); read project rules from the repo's own `README`/docs if present.
 
 **If `ai/memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
 invent host/deploy/credential values. First **bootstrap it interactively** - ask the user for the deploy/run
@@ -44,11 +45,13 @@ that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in s
 
 ## Run / deploy workflow
 
-- **local mode:** run and test locally first. To use a remote, `rsync` `src/` to the host in
+- **local mode:** run and test locally first. To use a remote, `rsync` `source/` to the host in
   `ai/memory/resources.md`, excluding `.venv`, `.git`, secrets, and build artifacts, with **no `--delete`**
   by default; run/test/debug via `ssh`. Optional `docker build`/`run` when the project ships a Dockerfile.
 - **remote-code mode:** the code already lives on the remote (`remote.json`); operate in place over
   Remote-SSH. **No deploy by default** - only sync/deploy if the user explicitly asks.
+- **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/memory/` is in the
+  repo's `.gitignore` - keep it that way so the private layer is never committed.
 
 ## Memory
 
