@@ -3,7 +3,7 @@
   "workbench.editorAssociations": {
     "*.md": "vscode.markdown.preview.editor"
   },
-  "workbench.colorTheme": "◑ Dusk Office Nebula",
+  "workbench.colorTheme": "Shades of Purple (Super Dark)",
   "workbench.editor.wrapTabs": true,
   "files.exclude": {
     "**/.git": true,
@@ -14,7 +14,7 @@
     "**/*.egg-info": true,
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
-    "*.*": false
+    "*.*": true
   },
   "workbench.colorCustomizations": {
     "gitDecoration.ignoredResourceForeground": "#bcace7",
