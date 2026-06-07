@@ -9,7 +9,7 @@ Editable, project-specific notes on how to develop this project. Rewrite freely 
 **Shareable layer.** This file sits in `ai/` alongside `engineer.agent.md` and `spec.md` - the portable,
 shareable "how to develop this project" layer. Keep it free of anything environment-specific or sensitive:
 **no** hostnames, IPs, internal/corporate URLs, deploy targets, remote paths, or secrets. Those live in the
-private `ai/memory/` layer (`resources.md`, `credentials.md`, and any project `info.md`). When such a detail
+private `ai/memory/` layer (`resources.md`, `credentials.md`, and the project context log `context.md`). When such a detail
 would otherwise land here, **relocate it into the right `ai/memory/` file and reference it - never drop it**
 (losslessly). Write commands as generic patterns (e.g. `--host <host> --port <port>`) and point at
 `ai/memory/resources.md` for the concrete values.

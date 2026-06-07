@@ -18,7 +18,7 @@ Solaris runs many coding projects from one place. For each project it generates 
 **ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/`. Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.6.1.md`](spec/spec-v0.6.1.md).
+`tasks/`. Full specification: [`spec/spec-v0.7.0.md`](spec/spec-v0.7.0.md).
 
 ## Persona model
 
@@ -94,8 +94,10 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
 - Never print or commit the contents of any `credentials.md`; reference secrets, do not echo them.
 - Log every meaningful turn as one `{ts, project, request, outcome}` line in the framework master log
   `memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
-  turn is project work, append the **same** line to that project's `ai/memory/interactions.jsonl`. The
-  prompt-submit hook captures the raw request to the master as a fail-safe.
+  turn is project work, append the **same** line to that project's `ai/memory/interactions.jsonl` and a
+  verbose prose entry to that project's `ai/memory/context.md` (the model-facing context log; engineer +
+  Solaris agents are its only writers). The prompt-submit hook captures the raw request to the master as a
+  fail-safe.
 - When the user teaches a durable preference about a project, update that project's
   `ai/engineer.instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
   `ai/memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
