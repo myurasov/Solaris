@@ -65,11 +65,12 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
     "deploy": false, "sync": { "excludes": [".venv", ".git", "__pycache__", "outputs/", "logs/"] } }
   ```
   Set `project.mode` to `remote-code` in `ai/manifest.json`.
-- **embedded:** there is no `projects/<slug>/source/`. The code repo lives at `projects/<slug>/<repo>/` (an
-  existing repo, or one you `git init` for the project); materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at
-  **that repo's root** (not at `projects/<slug>/`), and add `ai/memory/` to the repo's `.gitignore` so the
-  private layer is not committed. Record `project.mode` `embedded` in `ai/manifest.json`; tools take
-  `--dir projects/<slug>/<repo>/`.
+- **embedded:** the code repo lives at `projects/<slug>/<repo>/` (e.g. `source`; an existing repo, or one
+  you `git init` there) and holds the **whole** project - code, `ai/`, `AGENTS.md` + `CLAUDE.md`, `README`,
+  dotfiles. Materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at that repo's root (not at `projects/<slug>/`);
+  keep any non-repo local aux (`references/`, `screenshots/`) at `projects/<slug>/` *outside* `<repo>`. Add
+  `ai/memory/` **and `.secrets.env`** to the repo's `.gitignore` so no secrets/hosts are committed. Record
+  `project.mode` `embedded` in `ai/manifest.json`; tools take `--dir projects/<slug>/<repo>/`.
 
 ## 5. Attach plugins
 

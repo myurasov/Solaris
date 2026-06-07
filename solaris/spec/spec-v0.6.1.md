@@ -1,4 +1,4 @@
-# Solaris v0.6.0 - Specification <!-- omit in toc -->
+# Solaris v0.6.1 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -15,9 +15,9 @@
 - [Validation (acceptance)](#validation-acceptance)
 - [Deferred](#deferred)
 
-Authoritative description of Solaris v0.6.0. Supersedes the 0.1.0-0.5.0 specs (in git history; the latest snapshot is
+Authoritative description of Solaris v0.6.1. Supersedes the 0.1.0-0.6.0 specs (in git history; the latest snapshot is
 [`spec-v0.3.0.md`](spec-v0.3.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
-build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.6.0 (see [`../migrations/0.6.0.md`](../migrations/0.6.0.md)): the local-mode code directory is renamed **`src/` -> `source/`** (`projects/<slug>/source/` - the engineer's working dir, what `--remote` rsyncs, and where the project's own `git init` runs; a nested `ui/src/` etc. is unaffected). A new **opt-in `embedded`
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.6.1: the **embedded** layout is clarified - the whole project repo (code + `ai/` + `AGENTS.md`/`README`/dotfiles + its own `.git`) lives at `projects/<slug>/<repo>/`; the slug folder is a non-git container for the repo plus non-repo aux; and the repo's `.gitignore` excludes `ai/memory/` **and** `.secrets.env`. What changed in 0.6.0 (see [`../migrations/0.6.0.md`](../migrations/0.6.0.md)): the local-mode code directory is renamed **`src/` -> `source/`** (`projects/<slug>/source/` - the engineer's working dir, what `--remote` rsyncs, and where the project's own `git init` runs; a nested `ui/src/` etc. is unaffected). A new **opt-in `embedded`
 project mode** also lets the ai-pack live *inside* the source repo (`projects/<slug>/<repo>/ai/`, no separate
 `source/`), chosen at create/import time. What changed in 0.5.0 (see [`../migrations/0.5.0.md`](../migrations/0.5.0.md)): `ai/manifest.json` holds only project metadata + versions - host/deploy/port/secret specifics live in `ai/memory/` (`resources.md` / `credentials.md`); the engineer **bootstraps `ai/memory/` interactively** when it is missing (a shared ai-pack); and each **plugin keeps its own** revision ledger at `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` tracks only framework masters). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
 shim is restored beside every `AGENTS.md` so **Claude Code** loads the canonical instructions (Cursor reads
@@ -111,17 +111,22 @@ projects/<slug>/
   source/                          # local mode: code (own .git)    | remote-code: replaced by remote.json
 ```
 
-In **embedded** mode the ai-pack lives *inside* the source repo instead of beside it: there is no separate
-`source/`; the repo sits at `projects/<slug>/<repo>/` with `ai/` (and `AGENTS.md` + `CLAUDE.md`) at its root,
-so the shareable layer is committed with the repo while `ai/memory/` is gitignored by it:
+In **embedded** mode the ai-pack lives *inside* the source repo instead of beside it. The repo (its own
+`.git`) sits at `projects/<slug>/<repo>/` (name it `source` or after the repo) and holds **everything** - the
+code, `ai/`, `AGENTS.md` + `CLAUDE.md`, `README`, and the repo's own dotfiles. The slug folder
+`projects/<slug>/` is then a **non-git container**: the repo plus any non-repo local aux (e.g. `references/`,
+`screenshots/`) that should not ship with the repo. The repo's `.gitignore` keeps the private layer out -
+both `ai/memory/` and any `.secrets.env`:
 
 ```
-projects/<slug>/
-  <repo>/                       # the source repo (own .git) - the code tree itself
-    AGENTS.md  CLAUDE.md        # engineer entry points, at the repo root
-    ai/                         # the ai-pack, embedded (memory/ added to the repo's .gitignore)
+projects/<slug>/                # container (not a git repo)
+  references/  screenshots/      # non-repo local aux, kept outside <repo>
+  <repo>/                        # THE repo (its own .git); e.g. "source"
+    .gitignore  .secrets.env     # .gitignore excludes ai/memory/ + .secrets.env
+    AGENTS.md  CLAUDE.md  README.md
+    ai/                          # the ai-pack, embedded in the repo
       engineer.agent.md  engineer.instructions.md  spec.md  manifest.json  memory/  <plugin>/
-    ...                         # the repo's own code + files
+    ...                          # the repo's own code + files
 ```
 
 Tools that take `--dir` get `projects/<slug>/<repo>/` (the dir holding `ai/`) for an embedded project.
@@ -140,10 +145,12 @@ choosing a plugin-provided type auto-attaches that plugin.
   (excludes `.venv`/`.git`/secrets/artifacts; no `--delete` by default); optional Docker.
 - **remote-code**: no `source/`; a `remote.json` records `host` + `path`. The code lives on the remote; it is
   edited and run in place over Remote-SSH. No deploy by default. The mode is recorded in `ai/manifest.json`.
-- **embedded** (opt-in): the ai-pack lives *inside* the source repo. `projects/<slug>/<repo>/` is the repo
-  (own git), with `ai/` + `AGENTS.md` + `CLAUDE.md` at its root and **no separate `source/`**. The shareable
-  layer commits and travels with the repo; `ai/memory/` is added to the repo's `.gitignore` so the private
-  layer stays out. Chosen explicitly at create/import time; tools take `--dir projects/<slug>/<repo>/`.
+- **embedded** (opt-in): the ai-pack lives *inside* the source repo. `projects/<slug>/<repo>/` (e.g.
+  `source`) is the **whole** repo (its own `.git`) - code, `ai/`, `AGENTS.md` + `CLAUDE.md`, `README`,
+  dotfiles - and the slug folder above it is a non-git container for the repo plus non-repo aux
+  (`references/`, `screenshots/`). The shareable layer commits and travels with the repo; the repo's
+  `.gitignore` excludes `ai/memory/` **and `.secrets.env`**. Chosen explicitly at create/import time; tools
+  take `--dir projects/<slug>/<repo>/`.
 
 ## Plugins
 
@@ -268,7 +275,7 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
 ## Validation (acceptance)
 
 1. `uv run pytest` green (tools + revs + toc).
-2. `version current` -> `0.6.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
+2. `version current` -> `0.6.1`; `revs status` consistent; `revs classify`/`ff` behave on a project;
    `mcp_sync --check` and `toc --check --all` clean.
 3. **Todo app** (web-service, local): `create-project todo` (AGENTS.md-only root, runtime MCP) ->
    `develop-project` builds a FastAPI + vanilla UI -> runs locally; app tests pass.
