@@ -17,7 +17,7 @@
     "*.*": true
   },
   "workbench.colorCustomizations": {
-    "gitDecoration.ignoredResourceForeground": "#bcace7",
+    "gitDecoration.ignoredResourceForeground": "#e3d9ff",
   },
   "markdown.preview.fontSize": 13,
   "problems.visibility": false
