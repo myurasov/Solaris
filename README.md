@@ -11,7 +11,7 @@ for each project (works in Cursor and Claude Code), supports domain **plugins**,
 migrates project setups forward as the framework evolves, and keeps a lightweight `tasks/` area for ad-hoc
 engineering, system-setup, and research.
 
-Authoritative spec: [`solaris/spec/spec-v0.6.1.md`](solaris/spec/spec-v0.6.1.md).
+Authoritative spec: [`solaris/spec/spec-v0.7.0.md`](solaris/spec/spec-v0.7.0.md).
 
 ## Requirements
 
@@ -76,10 +76,10 @@ Projects land under `projects/<slug>/` (gitignored); ad-hoc work under `tasks/` 
 
 ```bash
 uv run pytest                              # run the tool tests
-uv run -m solaris.tools.version current    # -> 0.2.0
+uv run -m solaris.tools.version current    # -> 0.7.0
 uv run -m solaris.tools.revs status        # framework files vs the revision ledger
 uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
 ```
 
 Conventions, the plugin contract, the migration engine, and the safety/commit policies are all specified in
-[`solaris/spec/spec-v0.6.1.md`](solaris/spec/spec-v0.6.1.md).
+[`solaris/spec/spec-v0.7.0.md`](solaris/spec/spec-v0.7.0.md).

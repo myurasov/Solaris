@@ -7,7 +7,7 @@
 Migrations adapt an existing project **ai-pack** (`projects/<slug>/ai/`) to a newer framework version.
 They never touch the project's `src/` code. The user-facing entry point is the
 [`update-project`](../skills/update-project.skill.md) skill; the policy is in
-[`spec/spec-v0.3.0.md`](../spec/spec-v0.3.0.md) ("Versioning: revisions + semver"). Routine ai-pack file
+[`spec/spec-v0.7.0.md`](../spec/spec-v0.7.0.md) ("Versioning: revisions + semver"). Routine ai-pack file
 changes are handled by per-file **revisions** (`solaris.tools.revs`); migrations are only for minor/major
 semantic-version bumps that change structure.
 

@@ -23,7 +23,7 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.6.1.md`](solaris/spec/spec-v0.6.1.md).
+Full specification: [`solaris/spec/spec-v0.7.0.md`](solaris/spec/spec-v0.7.0.md).
 
 ## Execution model
 
@@ -54,13 +54,13 @@ When a project has plugins attached, also load and obey every `ai/<plugin>/*.rul
 
 ## Memory + logging
 
-- Framework state is in `memory/`: `resources.md` (hosts, hardware), `credentials.md` (secrets; gitignored), `interactions.jsonl` (log). Project state is in each `projects/<slug>/ai/memory/`.
+- Framework state is in `memory/`: `resources.md` (hosts, hardware), `credentials.md` (secrets; gitignored), `interactions.jsonl` (log). Project state is in each `projects/<slug>/ai/memory/` - including `context.md`, the engineer's verbose, model-facing context log (newest-first `## Log`, compacted into `## Previous History` past ~100KB; only the engineer + Solaris agents write it).
 - ai-packs never read the framework `memory/`; needed values are copied into the project's own `ai/memory/` on init/update.
-- A prompt-submit hook appends to the interaction log; skills append authoritative project entries when doing project work.
+- A prompt-submit hook appends to the interaction log; the engineer + Solaris agents append authoritative project entries (the terse `interactions.jsonl` line and the verbose `context.md` entry) when doing project work.
 
 ## Conventions (pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `log_interaction`, `toc`).
 - Versioning: per-file **revisions** (`solaris.tools.revs`) keep ai-packs in sync with framework/plugin master copies (sync/merge by rev + content hash); semantic **versions** (pyproject / plugin `manifest.json`) are release-only - bumped on request or when publishing, with migrations only on minor/major bumps.
 - File formats: human docs are Markdown (`.md`, user-editable); machine state is JSON (`*.json`, carrying `"_comment": "do not edit"`); append-only logs are JSON Lines (`.jsonl`). No standalone YAML (markdown/MDC frontmatter is exempt).
-- Full conventions + architecture: [`solaris/spec/spec-v0.6.1.md`](solaris/spec/spec-v0.6.1.md).
+- Full conventions + architecture: [`solaris/spec/spec-v0.7.0.md`](solaris/spec/spec-v0.7.0.md).
