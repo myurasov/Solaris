@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -50,8 +50,8 @@ that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in s
   by default; run/test/debug via `ssh`. Optional `docker build`/`run` when the project ships a Dockerfile.
 - **remote-code mode:** the code already lives on the remote (`remote.json`); operate in place over
   Remote-SSH. **No deploy by default** - only sync/deploy if the user explicitly asks.
-- **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/memory/` is in the
-  repo's `.gitignore` - keep it that way so the private layer is never committed.
+- **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/memory/` and
+  `.secrets.env` are in the repo's `.gitignore` - keep them there so secrets/hosts are never committed.
 
 ## Memory
 
