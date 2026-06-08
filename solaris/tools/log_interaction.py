@@ -1,8 +1,12 @@
 """Prompt-submit hook: append the raw user prompt to the framework interaction log. Stdlib only.
 
-Wired from ``.claude/settings.json`` (UserPromptSubmit) and ``.cursor/hooks.json`` (beforeSubmitPrompt).
-It is **fail-safe**: it never raises, never blocks the turn, always exits 0, prints nothing, and tolerates
-missing dirs / a missing venv.
+Wired from ``.claude/settings.json`` (UserPromptSubmit) and ``.cursor/hooks.json`` (beforeSubmitPrompt),
+always with **no arguments** and a JSON payload on stdin. In that hook context it is **fail-safe**: it never
+raises, never blocks the turn, always exits 0, prints nothing, and tolerates missing dirs / a missing venv.
+
+It is **not a CLI** and must never be called by hand. As a guard, if it is invoked with any arguments (or
+interactively with no piped payload) it prints a one-line notice and exits non-zero instead of blocking on
+``stdin.read()`` - the agent authors the full ``{ts, project, prompt, request, outcome}`` entries itself.
 
 The hook records only the raw *prompt* (the interpreted request and the outcome are unknown at submit time)
 as a ``{ts, cwd, ide, prompt}`` backstop line, and always to the **framework master log**
@@ -74,7 +78,29 @@ def append(log: Path, entry: dict) -> None:
         fh.write(json.dumps(entry, ensure_ascii=True) + "\n")
 
 
-def main() -> int:
+_NOT_A_CLI = (
+    "solaris.tools.log_interaction is the prompt-submit HOOK (it reads a JSON payload on stdin); "
+    "it is not a command-line tool and takes no arguments.\n"
+    "Do not call it by hand. To record an interaction, append the authoritative "
+    "{ts, project, prompt, request, outcome} line yourself to BOTH the project's "
+    "ai/memory/interactions.jsonl and the framework master memory/interactions.jsonl."
+)
+
+
+def main(argv: "list[str] | None" = None) -> int:
+    argv = sys.argv[1:] if argv is None else argv
+    # Footgun guard: this module is a stdin hook, never a CLI. If it is called with
+    # arguments (or interactively with no piped payload) fail fast with guidance
+    # instead of blocking forever on stdin.read() (which once hung a session ~2min).
+    if argv:
+        print(_NOT_A_CLI, file=sys.stderr)
+        return 2
+    try:
+        if sys.stdin is None or sys.stdin.isatty():
+            print(_NOT_A_CLI, file=sys.stderr)
+            return 2
+    except Exception:
+        pass
     try:
         payload = read_payload(sys.stdin)
         entry = build_entry(payload)

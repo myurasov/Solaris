@@ -1,6 +1,6 @@
 [project]
 name = "solaris"
-version = "0.8.0"
+version = "0.8.1"
 description = "Solaris - run many coding projects from one central point; generates standardized, portable ai-packs."
 requires-python = ">=3.14"
 dependencies = []
