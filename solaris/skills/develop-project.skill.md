@@ -53,9 +53,10 @@ Follow the engineer agent's workflows:
   embedded safety policy before any remote-mutating or outward action.
 - **Learn:** when the user teaches a durable project preference, update `ai/engineer.instructions.md`
   (keep it shareable - put any host/secret/internal-URL specifics in `ai/memory/` instead, never dropped).
-- **Log:** record the turn as one `{ts, project, request, outcome}` line in **both** the project's
-  `ai/memory/interactions.jsonl` (every project-relevant request + its outcome) and the framework master
-  `memory/interactions.jsonl` (all work).
+- **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
+  prompt, `request` your interpretation, `outcome` the result) in **both** the project's
+  `ai/memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (all work), plus a
+  verbose prose entry in the project's `ai/memory/context.md` (the model-facing context log).
 
 If a plugin edit emerges (the user changes how a domain workflow should behave), point them at
 `import-plugin` to fold it back into the plugin source.

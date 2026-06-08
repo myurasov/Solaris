@@ -1,4 +1,4 @@
-# Solaris v0.7.0 - Specification <!-- omit in toc -->
+# Solaris v0.8.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -15,9 +15,9 @@
 - [Validation (acceptance)](#validation-acceptance)
 - [Deferred](#deferred)
 
-Authoritative description of Solaris v0.7.0. Supersedes the 0.1.0-0.6.1 specs (in git history; the latest snapshot is
+Authoritative description of Solaris v0.8.0. Supersedes the 0.1.0-0.7.0 specs (in git history; the latest snapshot is
 [`spec-v0.3.0.md`](spec-v0.3.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
-build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.7.0 (see [`../migrations/0.7.0.md`](../migrations/0.7.0.md)): the private working-context file `ai/memory/info.md` is renamed to **`ai/memory/context.md`** and redefined as a **verbose, model-facing context log** - richer than `interactions.jsonl`, capturing the model's own answers/decisions/findings in prose, with a curated "Standing context" section that survives compaction, a newest-first "Log", and a "Previous History" of compacted older entries once Log grows past ~100KB; only the engineer and Solaris agents write it. What changed in 0.6.1: the **embedded** layout is clarified - the whole project repo (code + `ai/` + `AGENTS.md`/`README`/dotfiles + its own `.git`) lives at `projects/<slug>/<repo>/`; the slug folder is a non-git container for the repo plus non-repo aux; and the repo's `.gitignore` excludes `ai/memory/` **and** `.secrets.env`. What changed in 0.6.0 (see [`../migrations/0.6.0.md`](../migrations/0.6.0.md)): the local-mode code directory is renamed **`src/` -> `source/`** (`projects/<slug>/source/` - the engineer's working dir, what `--remote` rsyncs, and where the project's own `git init` runs; a nested `ui/src/` etc. is unaffected). A new **opt-in `embedded`
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.8.0 (see [`../migrations/0.8.0.md`](../migrations/0.8.0.md)): interaction-log entries gain a raw **`prompt`** field - each agent-authored line is now `{ts, project, prompt, request, outcome}` (`prompt` the user's verbatim prompt, `request` the agent's interpretation), authored identically into the framework master and the project log; the prompt-submit hook still appends a `{ts, cwd, ide, prompt}` backstop line to the master. Additive - existing logs stay valid. What changed in 0.7.0 (see [`../migrations/0.7.0.md`](../migrations/0.7.0.md)): the private working-context file `ai/memory/info.md` is renamed to **`ai/memory/context.md`** and redefined as a **verbose, model-facing context log** - richer than `interactions.jsonl`, capturing the model's own answers/decisions/findings in prose, with a curated "Standing context" section that survives compaction, a newest-first "Log", and a "Previous History" of compacted older entries once Log grows past ~100KB; only the engineer and Solaris agents write it. What changed in 0.6.1: the **embedded** layout is clarified - the whole project repo (code + `ai/` + `AGENTS.md`/`README`/dotfiles + its own `.git`) lives at `projects/<slug>/<repo>/`; the slug folder is a non-git container for the repo plus non-repo aux; and the repo's `.gitignore` excludes `ai/memory/` **and** `.secrets.env`. What changed in 0.6.0 (see [`../migrations/0.6.0.md`](../migrations/0.6.0.md)): the local-mode code directory is renamed **`src/` -> `source/`** (`projects/<slug>/source/` - the engineer's working dir, what `--remote` rsyncs, and where the project's own `git init` runs; a nested `ui/src/` etc. is unaffected). A new **opt-in `embedded`
 project mode** also lets the ai-pack live *inside* the source repo (`projects/<slug>/<repo>/ai/`, no separate
 `source/`), chosen at create/import time. What changed in 0.5.0 (see [`../migrations/0.5.0.md`](../migrations/0.5.0.md)): `ai/manifest.json` holds only project metadata + versions - host/deploy/port/secret specifics live in `ai/memory/` (`resources.md` / `credentials.md`); the engineer **bootstraps `ai/memory/` interactively** when it is missing (a shared ai-pack); and each **plugin keeps its own** revision ledger at `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` tracks only framework masters). What changed in 0.4.1: a minimal `CLAUDE.md` (`@AGENTS.md`)
 shim is restored beside every `AGENTS.md` so **Claude Code** loads the canonical instructions (Cursor reads
@@ -28,8 +28,9 @@ the **ai-setup -> ai-pack** (the `solaris/templates/ai-pack/` template dir, the 
 subcommand -> `aipack`, and the term throughout). Two conventions are now explicit: a project's `ai/spec.md`
 is **self-sufficient** (reads standalone, references no other file), and **every change to a revisioned file
 increments its rev**. Interaction logging is also clarified - each turn is one
-`{ts, project, request, outcome}` record: the framework `memory/interactions.jsonl` is the master of every
-turn (incl handed-off project work), a project's `ai/memory/interactions.jsonl` its relevant slice. What
+`{ts, project, prompt, request, outcome}` record (`prompt` the raw user prompt, `request` the agent's
+interpretation): the framework `memory/interactions.jsonl` is the master of every turn (incl handed-off
+project work), a project's `ai/memory/interactions.jsonl` its relevant slice. What
 changed in 0.3.0: `engineer.instructions.md` moved out of `ai/memory/` up to `ai/`
 - the shareable, portable layer alongside `engineer.agent.md` and `spec.md` - leaving `ai/memory/` as the
 private/local layer; see [`../migrations/0.3.0.md`](../migrations/0.3.0.md).
@@ -242,14 +243,17 @@ plugins and subagents do not. It carries a `solaris.tools.toc` table of contents
 file is private/local and gitignored; on a shared ai-pack it is bootstrapped fresh with the rest of
 `ai/memory/`.
 
-**Interaction logs (request + outcome).** Each meaningful turn is recorded as one append-only JSON line
-`{ts, project, request, outcome}`. The **framework** `memory/interactions.jsonl` is the master record of
-**all** turns through the Solaris agent - orchestrator work and every handed-off project turn. A
-**project's** `ai/memory/interactions.jsonl` holds the same entry for **every turn relevant to that project**
-(a subset of the master). The **agent** authors these entries: it is the only thing that knows the outcome
-and the true project, since "hand off" does not change the cwd. The prompt-submit hook (`log_interaction`)
-independently appends the raw request to the framework master as a fail-safe so a request is never lost.
-Both logs are fail-safe and unbounded in v0.
+**Interaction logs (prompt + request + outcome).** Each meaningful turn is recorded as one append-only JSON
+line `{ts, project, prompt, request, outcome}`, where **`prompt`** is the user's verbatim raw prompt,
+**`request`** is the agent's interpreted restatement of it, and **`outcome`** is what happened. The **agent**
+authors this full entry into **both** the framework master `memory/interactions.jsonl` (the record of **all**
+turns - orchestrator work and every handed-off project turn) **and**, for project work, the touched
+**project's** `ai/memory/interactions.jsonl` (a subset of the master) - identical schema in both. Only the
+agent can write it: it alone knows the interpreted request, the outcome, and the true project, since "hand
+off" does not change the cwd. The prompt-submit hook (`log_interaction`) independently appends a raw-prompt
+backstop line (`{ts, cwd, ide, prompt}`) to the framework master so a prompt is never lost; the master
+therefore mixes these backstop lines with the agent's full entries. Both logs are fail-safe and unbounded in
+v0.
 
 ## Tools
 
@@ -287,7 +291,7 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
 ## Validation (acceptance)
 
 1. `uv run pytest` green (tools + revs + toc).
-2. `version current` -> `0.7.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
+2. `version current` -> `0.8.0`; `revs status` consistent; `revs classify`/`ff` behave on a project;
    `mcp_sync --check` and `toc --check --all` clean.
 3. **Todo app** (web-service, local): `create-project todo` (AGENTS.md-only root, runtime MCP) ->
    `develop-project` builds a FastAPI + vanilla UI -> runs locally; app tests pass.

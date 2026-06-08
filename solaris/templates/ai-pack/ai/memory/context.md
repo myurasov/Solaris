@@ -6,7 +6,7 @@
 - [Previous History](#previous-history)
 
 Verbose, model-facing working memory for {{NAME}}: the running context a future session needs to continue
-immediately. Richer than `interactions.jsonl` (which stays the terse `{ts, project, request, outcome}`
+immediately. Richer than `interactions.jsonl` (which stays the terse `{ts, project, prompt, request, outcome}`
 machine record) - here each entry captures what was asked, what the agent did and answered, the decisions,
 and the findings, in prose. Private/local layer; companion to `../spec.md` (the contract) and
 `../engineer.instructions.md` (build/run). Gitignored - never shared or committed.
