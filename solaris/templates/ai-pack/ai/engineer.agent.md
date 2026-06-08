@@ -1,4 +1,4 @@
-_Rev. 10_
+_Rev. 11_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -64,8 +64,9 @@ When the user teaches a durable preference about this project, update `ai/engine
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the
 user's raw verbatim prompt, `request` your interpreted restatement, `outcome` what happened - in **both**
 this project's `ai/memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (the
-record of all work), identical schema in both. The prompt-submit hook also appends a raw-prompt backstop line
-to the master as a fail-safe.
+record of all work), identical schema in both. Write both files yourself, in the same turn, so they never
+drift. `solaris.tools.log_interaction` is **only** the prompt-submit hook (it appends a raw-prompt backstop
+line to the master as a fail-safe); never invoke it by hand to log - it reads stdin and will hang.
 
 Also append a verbose entry to `ai/memory/context.md` (the model-facing context log) each meaningful turn:
 the same trigger as the interaction line, but in prose - what was asked, what you did and answered, the
