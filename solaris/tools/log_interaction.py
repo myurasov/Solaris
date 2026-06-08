@@ -1,14 +1,16 @@
-"""Prompt-submit hook: append the raw user request to the framework interaction log. Stdlib only.
+"""Prompt-submit hook: append the raw user prompt to the framework interaction log. Stdlib only.
 
 Wired from ``.claude/settings.json`` (UserPromptSubmit) and ``.cursor/hooks.json`` (beforeSubmitPrompt).
 It is **fail-safe**: it never raises, never blocks the turn, always exits 0, prints nothing, and tolerates
 missing dirs / a missing venv.
 
-The hook records only the *request* (the outcome is unknown at submit time), and always to the **framework
-master log** ``memory/interactions.jsonl`` - the complete request stream, including project (handed-off)
-work, because "hand off" does not change the cwd. The agent additionally authors curated
-``{ts, project, request, outcome}`` entries into this master log and into each touched project's
-``ai/memory/interactions.jsonl``; this hook is the backstop that guarantees a request is never lost.
+The hook records only the raw *prompt* (the interpreted request and the outcome are unknown at submit time)
+as a ``{ts, cwd, ide, prompt}`` backstop line, and always to the **framework master log**
+``memory/interactions.jsonl`` - the complete prompt stream, including project (handed-off) work, because
+"hand off" does not change the cwd. The agent additionally authors the full ``{ts, project, prompt, request,
+outcome}`` entry (``prompt`` the raw prompt, ``request`` its interpretation) into this master log and into
+each touched project's ``ai/memory/interactions.jsonl``; so the master mixes these backstop lines with the
+agent's full entries, and this hook guarantees a prompt is never lost.
 """
 
 from __future__ import annotations
@@ -61,7 +63,7 @@ def log_path(repo_root: Path = REPO_ROOT) -> Path:
 
     Routing by cwd is deliberately *not* done: "hand off" to a project does not change the cwd, so a
     cwd-based rule would both miss handed-off turns and split the master stream. This log is the complete
-    record of requests; per-project request+outcome entries are authored by the agent.
+    prompt stream; the full {ts, project, prompt, request, outcome} entries are authored by the agent.
     """
     return Path(repo_root) / "memory" / "interactions.jsonl"
 
