@@ -220,7 +220,7 @@ scratch. No ai-pack, no versioning. A task that turns durable can graduate into 
 ## Memory and interaction logging
 
 Framework `memory/`: `resources.md` (hosts/hardware), `credentials.md` (secrets; gitignored),
-`interactions.jsonl` (log). ai-packs never read it; needed values are copied into a project's own
+`interactions.jsonl` (log), and `instructions.md` (operating memory; see below). ai-packs never read it; needed values are copied into a project's own
 `ai/memory/` at init/update. A project's `ai/memory/` is its **private/local layer** (resources,
 credentials, the preserved `spec-v0.md`, the context log, interaction log); the **shareable** how-to-develop notes live one
 level up in `ai/engineer.instructions.md`, and any host/secret/internal-URL detail that surfaces there is
@@ -230,6 +230,16 @@ metadata, versions, plugins, and revisions only). When an ai-pack is shared with
 (`ai/memory/` dropped), the engineer detects the missing or empty `ai/memory/` on first run and **bootstraps
 it interactively** - asking the user for hosts / deploy target / APIs / secrets and writing `resources.md`,
 `credentials.md`, and a fresh `context.md` - before doing project work.
+
+**Operating memory (`memory/instructions.md`).** Framework-level, cross-project working knowledge: terse,
+**timestamped** entries (`- [YYYY-MM-DD] ...`) on how to work with hosts/tools, recurring gotchas, and the
+user's durable preferences - distinct from any project's `ai/memory/context.md`. The Solaris agent loads it
+every session and updates it **in place** (merge, never duplicate) whenever a reusable fact/preference/gotcha
+surfaces, and **always** when the user says "remember it/this" or similar. Routing: cross-project/global goes
+here; project-specific to that project's `context.md`; hosts/secrets to `resources.md`/`credentials.md`. It
+is kept terse (context-cheap), carries a `solaris.tools.toc` TOC, and is compacted **oldest-first** (by
+timestamp) once it passes ~100KB. `self-reflect` promotes important, reusable entries into the core framework
+and then deletes them here. Private/local (gitignored); ai-packs never read it.
 
 **Context log (`ai/memory/context.md`).** The project's verbose, model-facing working memory: the running
 context a future session needs to continue immediately. It is richer than `interactions.jsonl` - rather than

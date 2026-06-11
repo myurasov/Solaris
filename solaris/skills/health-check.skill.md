@@ -27,6 +27,11 @@ demand.
 4. **Tasks** - the most recent `tasks/<date>-<slug>/` folders, with the first line of each `notes.md`.
 5. **MCP** - `uv run -m solaris.tools.mcp_sync --check` at the root (fix: `mcp_sync --sync`).
 6. **Framework** - `uv run -m solaris.tools.version current`.
+7. **Interaction log** - spot-check the tail of `memory/interactions.jsonl`: recent meaningful turns should
+   carry agent-authored `{ts, project, prompt, request, outcome}` entries, not just the hook's
+   `{ts, cwd, ide, prompt}` backstop lines. If full entries are missing for substantive turns, flag it and
+   author them by hand (never run `log_interaction` as a CLI). Likewise nudge if `memory/instructions.md`
+   looks stale given recent lessons.
 
 Print a compact table; end with any recommended actions.
 
