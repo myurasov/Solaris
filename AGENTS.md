@@ -24,7 +24,7 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.8.0.md`](solaris/spec/spec-v0.8.0.md).
+Full specification: [`solaris/spec/spec-v0.9.0.md`](solaris/spec/spec-v0.9.0.md).
 
 ## Execution model
 
@@ -66,4 +66,4 @@ When a project has plugins attached, also load and obey every `ai/<plugin>/*.rul
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`). `log_interaction` is the prompt-submit **hook** only - never run it by hand (it reads stdin and will hang); you author the authoritative `{ts, project, prompt, request, outcome}` log lines yourself, in **both** `memory/interactions.jsonl` and the project's `ai/memory/interactions.jsonl`.
 - Versioning: per-file **revisions** (`solaris.tools.revs`) keep ai-packs in sync with framework/plugin master copies (sync/merge by rev + content hash); semantic **versions** (pyproject / plugin `manifest.json`) are release-only - bumped on request or when publishing, with migrations only on minor/major bumps.
 - File formats: human docs are Markdown (`.md`, user-editable); machine state is JSON (`*.json`, carrying `"_comment": "do not edit"`); append-only logs are JSON Lines (`.jsonl`). No standalone YAML (markdown/MDC frontmatter is exempt).
-- Full conventions + architecture: [`solaris/spec/spec-v0.8.0.md`](solaris/spec/spec-v0.8.0.md).
+- Full conventions + architecture: [`solaris/spec/spec-v0.9.0.md`](solaris/spec/spec-v0.9.0.md).

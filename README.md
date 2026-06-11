@@ -11,7 +11,7 @@ for each project (works in Cursor and Claude Code), supports domain **plugins**,
 migrates project setups forward as the framework evolves, and keeps a lightweight `tasks/` area for ad-hoc
 engineering, system-setup, and research.
 
-Authoritative spec: [`solaris/spec/spec-v0.8.0.md`](solaris/spec/spec-v0.8.0.md).
+Authoritative spec: [`solaris/spec/spec-v0.9.0.md`](solaris/spec/spec-v0.9.0.md).
 
 ## Requirements
 
