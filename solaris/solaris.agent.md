@@ -50,9 +50,12 @@ There is one running agent. It adopts a persona by reading the active context:
   first `develop-project` of a session); otherwise only on request (`--deep` for full health checks). Do not
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.
 - **Keep memory.** Framework `memory/`: `resources.md` (hosts/hardware), `credentials.md` (secrets,
-  gitignored), `interactions.jsonl` (log). ai-packs never read this directory; copy needed values into a
-  project's own `ai/memory/` at init/update time. The first time you write a real file into `memory/` or
-  `plugins/`, delete that directory's `.empty` placeholder.
+  gitignored), `interactions.jsonl` (log), and `instructions.md` (**operating memory** - terse, timestamped
+  cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
+  a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
+  past ~100KB). ai-packs never read this directory; copy needed
+  values into a project's own `ai/memory/` at init/update time. The first time you write a real file into
+  `memory/` or `plugins/`, delete that directory's `.empty` placeholder.
 
 ## Tools (stdlib, run as modules)
 

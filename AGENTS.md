@@ -18,6 +18,7 @@ is a set of pointers. The detail lives in the files it points to.
 1. [`solaris/solaris.agent.md`](solaris/solaris.agent.md) - the framework agent role (orchestrator) and how Solaris is organized.
 2. [`solaris/rules/commits.rule.md`](solaris/rules/commits.rule.md) - git commit policy (always applies).
 3. [`solaris/rules/safety.rule.md`](solaris/rules/safety.rule.md) - confirm before destructive / remote-mutating / outward actions (always applies).
+4. [`memory/instructions.md`](memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + logging).
 
 Run the `health-check` overview to orient **before you start working on a project** (the first
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
@@ -47,6 +48,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's engineer agent (plan or implement). |
 | `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
+| `release` | "do a release", "cut a release", "publish a release" | Bump version, author migration, update spec + docs, tag + push, publish GitHub release. |
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<date>-<slug>/`. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 
@@ -55,6 +57,7 @@ When a project has plugins attached, also load and obey every `ai/<plugin>/*.rul
 ## Memory + logging
 
 - Framework state is in `memory/`: `resources.md` (hosts, hardware), `credentials.md` (secrets; gitignored), `interactions.jsonl` (log). Project state is in each `projects/<slug>/ai/memory/` - including `context.md`, the engineer's verbose, model-facing context log (newest-first `## Log`, compacted into `## Previous History` past ~100KB; only the engineer + Solaris agents write it).
+- `memory/instructions.md` is the framework's **operating memory**: terse, timestamped (`- [YYYY-MM-DD] ...`) cross-project lessons, gotchas, and durable user preferences. Whenever a reusable fact/preference/gotcha surfaces - and **always** when the user says "remember it/this", "note this", "don't forget", or similar - update it **in place** (merge, don't duplicate). Route project-specific notes to that project's `ai/memory/context.md` and hosts/secrets to `resources.md`/`credentials.md`. Compact **oldest-first** when it passes ~100KB; `self-reflect` promotes reusable items into the core framework and then deletes them here.
 - ai-packs never read the framework `memory/`; needed values are copied into the project's own `ai/memory/` on init/update.
 - A prompt-submit hook appends a raw-prompt backstop line to the master `memory/interactions.jsonl`; the engineer + Solaris agents append the authoritative `{ts, project, prompt, request, outcome}` line (`prompt` = raw prompt, `request` = its interpretation) to that master and, for project work, the same line to the project's `interactions.jsonl` plus a verbose `context.md` entry.
 
