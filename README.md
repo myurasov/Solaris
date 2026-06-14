@@ -4,13 +4,10 @@
 - [What You Get](#what-you-get)
 - [Core Concepts](#core-concepts)
 - [Getting Started](#getting-started)
-  - [Requirements](#requirements)
-  - [Install](#install)
-  - [Use](#use)
 - [Skills](#skills)
-- [Repository Layout](#repository-layout)
 - [Development](#development)
-- [Specification \& License](#specification--license)
+- [Specification](#specification)
+- [License](#license)
 
 **A command center for running many coding projects with an AI agent.**
 
@@ -61,13 +58,13 @@ AI assistants are powerful per session but forgetful across them. Without struct
 
 ## Getting Started
 
-### Requirements
+**Requirements**
 
 - [uv](https://docs.astral.sh/uv/) - manages Python 3.14 and the venv.
 - **Cursor** or **Claude Code**.
 - Node.js - only for the optional Playwright MCP server (`npx`).
 
-### Install
+**Install**
 
 ```bash
 # dependencies + venv (Python 3.14)
@@ -82,11 +79,9 @@ uv run -m solaris.tools.mcp_sync --check
 git config core.hooksPath .githooks
 ```
 
-### Use
-
-Open the repo root in Cursor or Claude Code and talk to the agent - e.g. *"create a new python-cli project
-called pingpong"*. `AGENTS.md` drives both IDEs (Claude Code via a one-line `CLAUDE.md` that imports it).
-`.venv/`, `.tmp/`, and runtime MCP configs are created lazily and gitignored.
+**Use** - open the repo root in Cursor or Claude Code and talk to the agent - e.g. *"create a new python-cli
+project called pingpong"*. `AGENTS.md` drives both IDEs (Claude Code via a one-line `CLAUDE.md` that imports
+it). `.venv/`, `.tmp/`, and runtime MCP configs are created lazily and gitignored.
 
 ## Skills
 
@@ -105,37 +100,22 @@ The agent routes natural-language requests to a skill:
 | "new task / research X" | `ad-hoc-task` | Start or resume ad-hoc work under `tasks/<date>-<slug>/`. |
 | "health-check / status" | `health-check` | Command-center overview; `--deep` for full checks. |
 
-## Repository Layout
-
-```
-<root>/                         # the Solaris git repo
-  AGENTS.md                     # canonical, always-on instructions (Cursor reads it natively)
-  CLAUDE.md                     # one-line @AGENTS.md shim so Claude Code loads AGENTS.md
-  mcp.json.example              # MCP template (playwright); copied to the runtime configs
-  pyproject.toml  uv.lock       # Python >=3.14; runtime is stdlib-only; pytest for tests
-  solaris/                      # the framework (python package: solaris, solaris.tools)
-    solaris.agent.md            # orchestrator role
-    spec/  skills/  rules/  migrations/  templates/  tools/  tests/
-  plugins/                      # plugin sources (gitignored except .empty)
-  memory/                       # framework memory (gitignored except .empty)
-  projects/                     # your projects (gitignored)
-  tasks/                        # ad-hoc work (gitignored)
-```
-
 ## Development
 
 ```bash
 uv run pytest                              # run the tool tests
-uv run -m solaris.tools.version current    # -> 0.10.0
+uv run -m solaris.tools.version current    # -> 0.11.0
 uv run -m solaris.tools.revs status        # framework files vs the revision ledger
 uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
 ```
 
 Tools run as modules (`uv run -m solaris.tools.<name>`): `version`, `revs`, `mcp_sync`, `toc`.
 
-## Specification & License
+## Specification
 
 Full conventions, the plugin contract, the migration engine, project modes, and the safety/commit policies
 live in [`solaris/spec/spec-v0.11.0.md`](solaris/spec/spec-v0.11.0.md).
+
+## License
 
 Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Mihail Yurasov <me@yurasov.me>.
