@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Solaris - a minimal framework to run many coding projects from one central point.
 
 This package exists so the tools can be invoked as modules: ``uv run -m solaris.tools.<name>``.

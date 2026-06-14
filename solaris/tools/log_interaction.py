@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Prompt-submit hook: append the raw user prompt to the framework interaction log. Stdlib only.
 
 Wired from ``.claude/settings.json`` (UserPromptSubmit) and ``.cursor/hooks.json`` (beforeSubmitPrompt),

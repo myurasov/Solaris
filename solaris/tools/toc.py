@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Generate/maintain a Markdown table of contents (stdlib only).
 
 Lists level-2-and-deeper headers; the level-1 title is omitted and marked ``<!-- omit in toc -->``. Output

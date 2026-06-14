@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Tests for solaris.tools.log_interaction (the fail-safe prompt-submit hook)."""
 
 from __future__ import annotations

@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Detect/sync divergence between the two runtime MCP configs (stdlib only).
 
 Claude Code reads ``.mcp.json``; Cursor reads ``.cursor/mcp.json``. They are meant to carry identical
