@@ -1,13 +1,13 @@
 # Solaris <!-- omit in toc -->
 
-- [Why It Exists](#why-it-exists)
-- [What You Get](#what-you-get)
-- [Core Concepts](#core-concepts)
+- [Why](#why)
+- [Benefits](#benefits)
+- [Key Concepts](#key-concepts)
 - [Getting Started](#getting-started)
-- [Skills](#skills)
-- [Development](#development)
-- [Specification](#specification)
-- [License](#license)
+- [Skills and Triggers](#skills-and-triggers)
+- [Development and Testing](#development-and-testing)
+- [The Complete Specification](#the-complete-specification)
+- [License and Copyright Notice](#license-and-copyright-notice)
 
 **Solaris manages your coding agents from one place.**
 
@@ -16,7 +16,7 @@ your AI assistant (Cursor or Claude Code) a ready-made kit for every project - w
 and what it already knows - so it behaves consistently and remembers what it learned from one session to the
 next. Under the hood it's just Markdown instructions and a small Python toolset, with no service to run.
 
-## Why It Exists
+## Why
 
 AI assistants are powerful per session but forgetful across them. Without structure you hit the same walls:
 
@@ -26,7 +26,7 @@ AI assistants are powerful per session but forgetful across them. Without struct
 - **Trapped workflows** - domain or employer conventions get reinvented instead of packaged and reused.
 - **IDE lock-in** - instructions for one assistant don't carry to another.
 
-## What You Get
+## Benefits
 
 - **One agent, both IDEs** - a single `AGENTS.md` drives Cursor and Claude Code; author once.
 - **Spec-driven** - every project plans and builds against a living `spec.md`.
@@ -38,7 +38,7 @@ AI assistants are powerful per session but forgetful across them. Without struct
 - **Versioned + migratable** - upgrades migrate existing projects forward, never stranding them.
 - **Safety + commit policies** - confirms destructive/outward actions; enforces commit-message rules.
 
-## Core Concepts
+## Key Concepts
 
 - **Command Center** - the Solaris repo you run everything from; your `projects/` and `tasks/` stay
   gitignored and separate from the framework.
@@ -83,7 +83,7 @@ git config core.hooksPath .githooks
 project called pingpong"*. `AGENTS.md` drives both IDEs (Claude Code via a one-line `CLAUDE.md` that imports
 it). `.venv/`, `.tmp/`, and runtime MCP configs are created lazily and gitignored.
 
-## Skills
+## Skills and Triggers
 
 The agent routes natural-language requests to a skill:
 
@@ -100,7 +100,7 @@ The agent routes natural-language requests to a skill:
 | "new task / research X" | `ad-hoc-task` | Start or resume ad-hoc work under `tasks/<date>-<slug>/`. |
 | "health-check / status" | `health-check` | Command-center overview; `--deep` for full checks. |
 
-## Development
+## Development and Testing
 
 ```bash
 uv run pytest                              # run the tool tests
@@ -111,11 +111,11 @@ uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
 
 Tools run as modules (`uv run -m solaris.tools.<name>`): `version`, `revs`, `mcp_sync`, `toc`.
 
-## Specification
+## The Complete Specification
 
 Full conventions, the plugin contract, the migration engine, project modes, and the safety/commit policies
 live in [`solaris/spec/spec-v0.11.0.md`](solaris/spec/spec-v0.11.0.md).
 
-## License
+## License and Copyright Notice
 
 Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Mihail Yurasov <me@yurasov.me>.
