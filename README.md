@@ -9,12 +9,12 @@
 - [Specification](#specification)
 - [License](#license)
 
-**A command center for running many coding projects with an AI agent.**
+**Solaris manages your coding agents from one place.**
 
-Drive it in natural language from one repo. For each project Solaris generates a portable **ai-pack** -
-agent instructions, a living spec, and structured memory - so a coding agent (Cursor or Claude Code) plans,
-builds, runs, deploys, remembers, and logs the same way everywhere. It's deliberately minimal: Markdown
-instructions and a stdlib-only Python toolset run through `uv`, with no runtime service.
+You run all your projects from a single home base instead of setting each one up from scratch. Solaris hands
+your AI assistant (Cursor or Claude Code) a ready-made kit for every project - what to build, how to work,
+and what it already knows - so it behaves consistently and remembers what it learned from one session to the
+next. Under the hood it's just Markdown instructions and a small Python toolset, with no service to run.
 
 ## Why It Exists
 
