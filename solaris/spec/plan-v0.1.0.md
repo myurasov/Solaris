@@ -108,7 +108,7 @@ Keep it lean. Port only what's load-bearing from Co-SA / Superagent.
     credentials.md           # framework-level secrets - user-editable, gitignored
   projects/                  # gitignored (user projects)
   tasks/                     # gitignored; dated ad-hoc task folders (see 3.4)
-  # lazily created, gitignored: .venv/ .tmp/ .tools/  .mcp.json  .cursor/mcp.json
+  # lazily created, gitignored: .venv/ .tmp/  .mcp.json  .cursor/mcp.json
 ```
 
 ai-setups never read Solaris's `memory/` — `create-project` / plugin `install.skill.md` copy whatever a project needs into that project's own `ai/memory/`.
