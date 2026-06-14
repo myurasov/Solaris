@@ -1,85 +1,141 @@
 # Solaris <!-- omit in toc -->
 
-- [Requirements](#requirements)
-- [Setup](#setup)
-- [Using Solaris](#using-solaris)
-- [Layout](#layout)
+- [Why It Exists](#why-it-exists)
+- [What You Get](#what-you-get)
+- [Core Concepts](#core-concepts)
+- [Getting Started](#getting-started)
+  - [Requirements](#requirements)
+  - [Install](#install)
+  - [Use](#use)
+- [Skills](#skills)
+- [Repository Layout](#repository-layout)
 - [Development](#development)
+- [Specification \& License](#specification--license)
 
-Run many coding projects from one command center. Solaris generates a standardized, portable **ai-pack**
-for each project (works in Cursor and Claude Code), supports domain **plugins**, deploys to remote hosts,
-migrates project setups forward as the framework evolves, and keeps a lightweight `tasks/` area for ad-hoc
-engineering, system-setup, and research.
+**A command center for running many coding projects with an AI agent.**
 
-Authoritative spec: [`solaris/spec/spec-v0.10.0.md`](solaris/spec/spec-v0.10.0.md).
+Drive it in natural language from one repo. For each project Solaris generates a portable **ai-pack** -
+agent instructions, a living spec, and structured memory - so a coding agent (Cursor or Claude Code) plans,
+builds, runs, deploys, remembers, and logs the same way everywhere. It's deliberately minimal: Markdown
+instructions and a stdlib-only Python toolset run through `uv`, with no runtime service.
 
-## Requirements
+## Why It Exists
 
-- [uv](https://docs.astral.sh/uv/) (manages Python 3.14 + the venv).
-- Cursor or Claude Code.
-- Node.js (only for the optional Playwright MCP / `npx`).
+AI assistants are powerful per session but forgetful across them. Without structure you hit the same walls:
 
-## Setup
+- **Repeated setup** - conventions and build/run/test commands get retyped per project and drift apart.
+- **No durable memory** - hosts, decisions, and gotchas vanish when the context window rolls.
+- **Scattered context** - juggling many repos means re-establishing each one every time.
+- **Trapped workflows** - domain or employer conventions get reinvented instead of packaged and reused.
+- **IDE lock-in** - instructions for one assistant don't carry to another.
+
+## What You Get
+
+- **One agent, both IDEs** - a single `AGENTS.md` drives Cursor and Claude Code; author once.
+- **Spec-driven** - every project plans and builds against a living `spec.md`.
+- **Persistent memory** - per-project resources/credentials/context plus cross-project lessons and
+  preferences the agent loads each session.
+- **Built-in workflows** - scope, implement, run/test locally, and deploy to a remote over SSH.
+- **Portable ai-packs** - work standalone, handed off, or driven from the command center.
+- **Reusable plugins** - package a domain workflow as its own repo and opt in per project.
+- **Versioned + migratable** - upgrades migrate existing projects forward, never stranding them.
+- **Safety + commit policies** - confirms destructive/outward actions; enforces commit-message rules.
+
+## Core Concepts
+
+- **Command Center** - the Solaris repo you run everything from; your `projects/` and `tasks/` stay
+  gitignored and separate from the framework.
+- **ai-pack** - the per-project bundle (`projects/<slug>/ai/`): a **shareable layer** (agent role,
+  build/run/test instructions, spec) and a **private layer** (`ai/memory/`: hosts, secrets, logs). Drop
+  `ai/memory/` to share it.
+- **Personas** - one agent, role by location: **orchestrator** at the root (routes to skills, manages
+  projects/plugins/tasks), **engineer** inside a project (plans, builds, runs).
+- **Project Types & Modes** - pick a type (`python-cli`, `web-service`, `ios-app`, or plugin-provided) and a
+  mode: **local**, **remote-code**, or **embedded** (ai-pack lives inside the source repo).
+- **Plugins** - each its own git repo of rules, skills, MCP servers, and project types; install from a git
+  URL, folder, or zip and attach per project.
+- **Memory Boundary** - the framework `memory/` and each project's `ai/memory/` are the only authoritative
+  stores; no external/global memory.
+- **Versioning & Migrations** - per-file revisions keep ai-packs in sync with masters; release-only semantic
+  versions gate migrations that upgrade `ai/` without touching your code.
+
+## Getting Started
+
+### Requirements
+
+- [uv](https://docs.astral.sh/uv/) - manages Python 3.14 and the venv.
+- **Cursor** or **Claude Code**.
+- Node.js - only for the optional Playwright MCP server (`npx`).
+
+### Install
 
 ```bash
-# 1. dependencies + venv (Python 3.14)
+# dependencies + venv (Python 3.14)
 uv sync
 
-# 2. MCP config: copy the template to both runtime configs, then keep them in sync
+# MCP config: copy the template to both runtime configs, then check sync
 cp mcp.json.example .mcp.json
 mkdir -p .cursor && cp mcp.json.example .cursor/mcp.json
 uv run -m solaris.tools.mcp_sync --check
 
-# 3. (optional) enable the commit-policy git hook
+# (optional) enable the commit-policy git hook
 git config core.hooksPath .githooks
 ```
 
-`.venv/`, `.tmp/`, `.tools/`, and the runtime MCP configs are created lazily / gitignored. Open the repo
-root in your IDE - `AGENTS.md` drives the agent in both Cursor and Claude Code (Cursor reads it natively; Claude Code reads a one-line
-`CLAUDE.md` that imports it via `@AGENTS.md`).
+### Use
 
-## Using Solaris
+Open the repo root in Cursor or Claude Code and talk to the agent - e.g. *"create a new python-cli project
+called pingpong"*. `AGENTS.md` drives both IDEs (Claude Code via a one-line `CLAUDE.md` that imports it).
+`.venv/`, `.tmp/`, and runtime MCP configs are created lazily and gitignored.
 
-Talk to the agent in natural language; it routes to a skill. Triggers:
+## Skills
 
-| Ask for | Skill |
-|---|---|
-| "create a project ..." | `create-project` |
-| "import / adopt `<path or host:path>`" | `import-project` |
-| "create / update a plugin" | `import-plugin` |
-| "install / repair a plugin (git/folder/zip)" | `install-plugin` |
-| "work on / develop `<project>`" | `develop-project` |
-| "update / migrate `<project>`" | `update-project` |
-| "self-reflect / improve Solaris" | `self-reflect` |
-| "new task / research X / set up Y" | `ad-hoc-task` |
-| "health-check / status" | `health-check` |
+The agent routes natural-language requests to a skill:
 
-Projects land under `projects/<slug>/` (gitignored); ad-hoc work under `tasks/` (gitignored).
+| Ask for | Skill | What it does |
+|---|---|---|
+| "create / new project" | `create-project` | Scaffold a new project + ai-pack (pick type / mode / plugins). |
+| "import / adopt `<path>`" | `import-project` | Adopt an existing codebase and derive its ai-pack. |
+| "create / update a plugin" | `import-plugin` | Author a plugin from a project, or fold edits back in. |
+| "install / repair a plugin" | `install-plugin` | Acquire, validate, and attach a plugin to a project. |
+| "work on / develop `<project>`" | `develop-project` | Hand off to the project's engineer to plan or implement. |
+| "update / migrate `<project>`" | `update-project` | Migrate an ai-pack and its plugins to the current version. |
+| "self-reflect / improve Solaris" | `self-reflect` | Review logs and propose framework improvements. |
+| "do a release" | `release` | Bump version, author the migration, update docs, tag and publish. |
+| "new task / research X" | `ad-hoc-task` | Start or resume ad-hoc work under `tasks/<date>-<slug>/`. |
+| "health-check / status" | `health-check` | Command-center overview; `--deep` for full checks. |
 
-## Layout
+## Repository Layout
 
-| Path | What |
-|---|---|
-| `AGENTS.md` | canonical instructions (both IDEs read it natively) |
-| `.cursor/hooks.json`, `.claude/settings.json` | interaction-log hooks |
-| `solaris/solaris.agent.md` | orchestrator role |
-| `solaris/skills/` | skills (`*.skill.md`) |
-| `solaris/rules/` | always-on rules (commits, safety) |
-| `solaris/templates/` | ai-pack + project-type templates |
-| `solaris/migrations/` | framework migrations |
-| `solaris/tools/` | Python tools (`version`, `revs`, `mcp_sync`, `log_interaction`, `toc`) |
-| `solaris/tests/` | pytest suite |
-| `plugins/` | plugin sources (gitignored; ships `nvidia-isaac-lab`) |
-| `memory/` | framework memory (resources, credentials, interactions) |
+```
+<root>/                         # the Solaris git repo
+  AGENTS.md                     # canonical, always-on instructions (Cursor reads it natively)
+  CLAUDE.md                     # one-line @AGENTS.md shim so Claude Code loads AGENTS.md
+  mcp.json.example              # MCP template (playwright); copied to the runtime configs
+  pyproject.toml  uv.lock       # Python >=3.14; runtime is stdlib-only; pytest for tests
+  solaris/                      # the framework (python package: solaris, solaris.tools)
+    solaris.agent.md            # orchestrator role
+    spec/  skills/  rules/  migrations/  templates/  tools/  tests/
+  plugins/                      # plugin sources (gitignored except .empty)
+  memory/                       # framework memory (gitignored except .empty)
+  projects/                     # your projects (gitignored)
+  tasks/                        # ad-hoc work (gitignored)
+```
 
 ## Development
 
 ```bash
 uv run pytest                              # run the tool tests
-uv run -m solaris.tools.version current    # -> 0.8.0
+uv run -m solaris.tools.version current    # -> 0.10.0
 uv run -m solaris.tools.revs status        # framework files vs the revision ledger
 uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
 ```
 
-Conventions, the plugin contract, the migration engine, and the safety/commit policies are all specified in
-[`solaris/spec/spec-v0.10.0.md`](solaris/spec/spec-v0.10.0.md).
+Tools run as modules (`uv run -m solaris.tools.<name>`): `version`, `revs`, `mcp_sync`, `toc`.
+
+## Specification & License
+
+Full conventions, the plugin contract, the migration engine, project modes, and the safety/commit policies
+live in [`solaris/spec/spec-v0.10.0.md`](solaris/spec/spec-v0.10.0.md).
+
+Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Mihail Yurasov <me@yurasov.me>.
