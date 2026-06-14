@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Solaris versioning + migration-chain engine (stdlib only).
 
 The framework version is the single source of truth in ``pyproject.toml`` (``[project].version``). An

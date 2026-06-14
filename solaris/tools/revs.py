@@ -1,3 +1,6 @@
+# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# SPDX-License-Identifier: Apache-2.0
+
 """Per-file revisions + content hashing for Solaris (stdlib only).
 
 Evolving framework files carry an integer **revision** marker, bumped +1 per edit. The **content hash**
