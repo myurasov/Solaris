@@ -114,7 +114,7 @@ Tools run as modules (`uv run -m solaris.tools.<name>`): `version`, `revs`, `mcp
 ## The Complete Specification
 
 Full conventions, the plugin contract, the migration engine, project modes, and the safety/commit policies
-live in [`solaris/spec/spec-v0.11.0.md`](solaris/spec/spec-v0.11.0.md).
+live in [`solaris/spec/spec-v0.12.0.md`](solaris/spec/spec-v0.12.0.md).
 
 ## License and Copyright Notice
 
