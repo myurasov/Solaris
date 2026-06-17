@@ -1,6 +1,12 @@
 {
   "version": 1,
   "hooks": {
+    "sessionStart": [
+      {
+        "command": "uv run -m solaris.tools.read_first",
+        "timeout": 10
+      }
+    ],
     "beforeSubmitPrompt": [
       {
         "command": "uv run -m solaris.tools.log_interaction",

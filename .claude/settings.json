@@ -4,12 +4,28 @@
     "ask": []
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run -m solaris.tools.read_first",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
     "UserPromptSubmit": [
       {
         "hooks": [
           {
             "type": "command",
             "command": "uv run -m solaris.tools.log_interaction",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "uv run -m solaris.tools.read_first --remind",
             "timeout": 5
           }
         ]
