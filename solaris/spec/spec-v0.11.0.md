@@ -53,7 +53,7 @@ natively, Claude Code via a one-line `CLAUDE.md` (`@AGENTS.md`) shim. Its own to
   CLAUDE.md                     # one-line @AGENTS.md shim so Claude Code loads AGENTS.md
   mcp.json.example              # MCP template (playwright); copied to runtime configs
   pyproject.toml  uv.lock       # python >=3.14; runtime stdlib only; pytest for tests
-  .cursor/hooks.json  .claude/settings.json   # interaction-log hook (both IDEs)
+  .cursor/hooks.json  .claude/settings.json   # interaction-log + read-first loader hooks (both IDEs)
   .githooks/commit-msg          # commit-policy enforcement (opt-in)
   solaris/                      # the framework (python package: solaris, solaris.tools)
     solaris.agent.md            # orchestrator role
@@ -77,8 +77,8 @@ a fresh clone; the first time a skill writes real content into one, it deletes t
 one-line `CLAUDE.md` shim (`@AGENTS.md`) that imports it - only `AGENTS.md` is authored, and both load it
 every turn. MCP is configured by a committed `mcp.json.example` (default server: `playwright`); the user copies it
 to `.mcp.json` (Claude Code) and `.cursor/mcp.json` (Cursor), and `solaris.tools.mcp_sync` keeps the two in
-sync. `context7` is used via its CLI (`ctx7`), not as an MCP server. Interaction-logging hooks live in
-`.cursor/hooks.json` and `.claude/settings.json`.
+sync. `context7` is used via its CLI (`ctx7`), not as an MCP server. The interaction-log and read-first
+loader hooks live in `.cursor/hooks.json` and `.claude/settings.json`.
 
 ## Execution model
 
@@ -280,6 +280,10 @@ Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
   `classify --dir`, `ff --dir`, `baseline --dir`.
 - `mcp_sync` - detect/sync drift between `.mcp.json` and `.cursor/mcp.json`.
 - `log_interaction` - the fail-safe prompt-submit hook (not called by hand).
+- `read_first` - the fail-safe read-first loader hook (not called by hand): with no args it injects the
+  AGENTS.md read-first set at session start (Claude `SessionStart` / Cursor `sessionStart`); `--remind`
+  prints a one-line per-turn nudge (Claude `UserPromptSubmit` only). IDE-aware output (Cursor JSON vs Claude
+  plain stdout).
 - `toc` - generate/verify Markdown tables of contents (`--check`/`--write`, `--all`).
 
 All have unit tests under `solaris/tests/` (`uv run pytest`).
