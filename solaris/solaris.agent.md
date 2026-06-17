@@ -49,7 +49,7 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Orient + report** with `health-check`. Run the overview to orient **before working on a project** (the
   first `develop-project` of a session); otherwise only on request (`--deep` for full health checks). Do not
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.
-- **Keep memory.** Framework `memory/`: `resources.md` (hosts/hardware), `credentials.md` (secrets,
+- **Keep memory.** Framework `memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets,
   gitignored), `interactions.jsonl` (log), and `instructions.md` (**operating memory** - terse, timestamped
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
@@ -117,5 +117,10 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
   `ai/engineer.instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
   `ai/memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
   change to the core framework files.
+- **`ai/memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
+  GPUs, API endpoints, hosts, paths, account names). Everything about *how* - build/run/deploy/restart
+  procedures, model/runtime details, performance notes, and gotchas - belongs in `ai/engineer.instructions.md`
+  (as generic patterns that reference `resources.md` for concrete values). Per-turn narrative goes in
+  `context.md`; secrets in `credentials.md`.
 - `self-reflect` is the only path by which the orchestrator edits framework files for self-improvement, and
   it shows the diff and follows the commit policy.

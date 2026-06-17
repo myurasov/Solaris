@@ -1,17 +1,20 @@
 # Resources - {{NAME}} <!-- omit in toc -->
 
-- [Deploy / run target](#deploy--run-target)
-- [Hardware / APIs](#hardware--apis)
+- [Hardware](#hardware)
+- [Hosts \& accounts](#hosts--accounts)
 
-Hosts, hardware, and APIs this project uses. Populated on init/update (copied from the framework
-`memory/resources.md` as needed). Secrets do NOT go here - use `credentials.md` (gitignored).
+**Inventory only: hardware and accounts/hosts this project uses.** This file is a flat list of *what exists*,
+not *how to use it*. Procedures (build/run/deploy/restart), model/runtime details, and gotchas live in
+[`../engineer.instructions.md`](../engineer.instructions.md); per-turn narrative lives in `context.md`; secrets
+live in `credentials.md` (gitignored). Keep entries terse. Populated on init/update.
 
-## Deploy / run target
+## Hardware
 
-- host: (SSH alias, or n/a for local-only)
-- path: (remote path, if any)
-- run command: (fill in)
+- (machines / GPUs / CPU / memory, and external API endpoints this project depends on - e.g. "NVIDIA L40,
+  48 GB VRAM, CUDA 12.4, 32 cores" or "OpenAI API, gpt-4o". Specs and endpoints only - no setup steps.)
 
-## Hardware / APIs
+## Hosts & accounts
 
-- (fill in)
+- host: (SSH alias/host, user, OS - or n/a for local-only)
+- path: (remote working path, if any)
+- accounts / services: (registries, dashboards, API accounts - names/IDs only; secrets go in `credentials.md`)
