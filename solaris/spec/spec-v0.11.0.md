@@ -219,7 +219,7 @@ scratch. No ai-pack, no versioning. A task that turns durable can graduate into 
 
 ## Memory and interaction logging
 
-Framework `memory/`: `resources.md` (hosts/hardware), `credentials.md` (secrets; gitignored),
+Framework `memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets; gitignored),
 `interactions.jsonl` (log), and `instructions.md` (operating memory; see below). ai-packs never read it; needed values are copied into a project's own
 `ai/memory/` at init/update. **These two stores - the framework `memory/` and each project's `ai/memory/` -
 are the only authoritative memory in Solaris.** Agents never read, write, or create memory outside them: not
@@ -229,7 +229,10 @@ credentials, the preserved `spec-v0.md`, the context log, interaction log); the 
 level up in `ai/engineer.instructions.md`, and any host/secret/internal-URL detail that surfaces there is
 relocated down into `ai/memory/` rather than dropped. Host/deploy targets, hardware, APIs, and secrets live
 only in `ai/memory/` (`resources.md` / `credentials.md`), never in `ai/manifest.json` (which holds project
-metadata, versions, plugins, and revisions only). When an ai-pack is shared without its private layer
+metadata, versions, plugins, and revisions only). **`resources.md` is inventory only** - hardware and
+hosts/accounts (*what exists*); all procedures (build/run/deploy/restart), model/runtime details, and gotchas
+(*how*) live in `ai/engineer.instructions.md` as generic patterns that reference `resources.md` for concrete
+values. When an ai-pack is shared without its private layer
 (`ai/memory/` dropped), the engineer detects the missing or empty `ai/memory/` on first run and **bootstraps
 it interactively** - asking the user for hosts / deploy target / APIs / secrets and writing `resources.md`,
 `credentials.md`, and a fresh `context.md` - before doing project work.

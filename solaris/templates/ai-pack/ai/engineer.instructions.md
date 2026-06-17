@@ -1,18 +1,24 @@
 # Engineer instructions - {{NAME}} <!-- omit in toc -->
 
 - [Build / run / test](#build--run--test)
+- [Deploy](#deploy)
+- [Runtime notes \& gotchas](#runtime-notes--gotchas)
 - [Conventions](#conventions)
 
 Editable, project-specific notes on how to develop this project. Rewrite freely to keep the best version
 (not append-only). The commit and safety policies live in `engineer.agent.md`.
 
+**This is the "how" layer.** All procedures and project knowledge live here: build/run/test, **deploy &
+restart procedures**, **model/runtime details**, architecture/layers, and **gotchas**. The only things that do
+*not* live here are the inventory of *what exists* (hardware + hosts/accounts -> `ai/memory/resources.md`),
+secrets (`credentials.md`), and the per-turn narrative (`context.md`).
+
 **Shareable layer.** This file sits in `ai/` alongside `engineer.agent.md` and `spec.md` - the portable,
-shareable "how to develop this project" layer. Keep it free of anything environment-specific or sensitive:
-**no** hostnames, IPs, internal/corporate URLs, deploy targets, remote paths, or secrets. Those live in the
-private `ai/memory/` layer (`resources.md`, `credentials.md`, and the project context log `context.md`). When such a detail
-would otherwise land here, **relocate it into the right `ai/memory/` file and reference it - never drop it**
-(losslessly). Write commands as generic patterns (e.g. `--host <host> --port <port>`) and point at
-`ai/memory/resources.md` for the concrete values.
+shareable layer. Keep it free of anything environment-specific or sensitive: **no** hostnames, IPs,
+internal/corporate URLs, concrete deploy targets, remote paths, or secrets - those are inventory and live in
+`ai/memory/resources.md` / `credentials.md`. Procedures still belong here, written as generic patterns
+(e.g. `rsync source/ <host>:<path>`, `--host <host> --port <port>`) that **reference** `resources.md` for the
+concrete values - never drop the procedure, just keep the values out of it.
 
 ## Build / run / test
 
@@ -20,6 +26,14 @@ would otherwise land here, **relocate it into the right `ai/memory/` file and re
 - run: (fill in)
 - test: (fill in)
 - lint: (fill in)
+
+## Deploy
+
+- (deploy + restart procedure as generic patterns; reference `ai/memory/resources.md` for host/path/port)
+
+## Runtime notes & gotchas
+
+- (model/runtime details, performance notes, and gotchas worth never relearning)
 
 ## Conventions
 
