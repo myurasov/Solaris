@@ -36,3 +36,5 @@ memory/*
 
 # Claude Code: keep project settings tracked, ignore per-user local overrides
 .claude/settings.local.json
+
+.playwright*

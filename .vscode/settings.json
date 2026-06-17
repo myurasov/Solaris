@@ -15,7 +15,9 @@
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
     "**/.venv*": false,
-    "*.*": false
+    "*.*": true,
+    "NOTICE": true,
+    "LICENSE": true
   },
   "workbench.colorCustomizations": {
     "gitDecoration.ignoredResourceForeground": "#e3d9ff",
