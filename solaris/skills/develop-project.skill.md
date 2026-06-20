@@ -1,6 +1,7 @@
 ---
 name: develop-project
 triggers: ["work on <project>", "develop <project>", "open <project>", "plan <project>", "implement X in <project>"]
+antitriggers: ["tasks/<slug>"]
 summary: Hand off to a project's engineer agent (plan or implement) by loading its ai-pack + plugin overlays.
 ---
 
