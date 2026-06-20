@@ -1,6 +1,6 @@
 ---
 name: ad-hoc-task
-triggers: ["new task", "start a task", "research X", "set up <host/thing>", "ad-hoc: X"]
+triggers: ["new task", "start a task", "work on tasks/<slug>", "resume task", "open tasks/<slug>", "research X", "set up <host/thing>", "ad-hoc: X"]
 summary: Start/resume an ad-hoc engineering/system-setup/research task under tasks/<date>-<slug>/.
 ---
 
@@ -21,6 +21,9 @@ exists, resume it; else create it with a `notes.md`:
 
 ```
 # <title>
+
+<!-- Agent: this is an ad-hoc task. Load and follow the `ad-hoc-task` skill
+     (solaris/skills/ad-hoc-task.skill.md) before working in this folder. -->
 
 What / why: <one or two lines>
 

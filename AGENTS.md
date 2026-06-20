@@ -39,7 +39,7 @@ One running agent adopts a **persona** by reading the active context:
 
 ## Skills
 
-Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the trigger phrases below (no slash commands). Open the matching file and follow it in full.
+Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the trigger phrases below (no slash commands). A prompt-submit hook (`solaris.tools.skill_loader`, wired in `.claude/settings.json` -> `UserPromptSubmit`) matches each prompt against every skill's declared `triggers` (and optional `antitriggers`, which suppress a match — e.g. `develop-project` excludes `tasks/<slug>` paths) and auto-injects the full body of any match (once per session, then a one-line reminder), so the right procedure is in context without being opened by hand. Cursor's `beforeSubmitPrompt` cannot inject context, so there the auto-load is Claude-only; either way, open the matching file and follow it in full.
 
 | Skill | Trigger (examples) | Does |
 |---|---|---|
@@ -65,5 +65,5 @@ Framework state lives in `memory/` (`resources.md`, `credentials.md` (gitignored
 
 ## Conventions (pointers)
 
-- Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit) and `read_first` (session-start read-first loader) are hooks - never run them by hand.
+- Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
 - Versioning (per-file revisions vs release-only semver), blocked-command wrappers, and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.12.0.md`](solaris/spec/spec-v0.12.0.md).

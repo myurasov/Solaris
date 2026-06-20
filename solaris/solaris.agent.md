@@ -64,6 +64,7 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
 - `uv run -m solaris.tools.read_first [--remind]` (the read-first loader hook; not called by hand)
+- `uv run -m solaris.tools.skill_loader` (the prompt-submit skill auto-loader hook; matches the prompt against each skill's `triggers` minus `antitriggers` and injects matching skill bodies; not called by hand)
 - `uv run -m solaris.tools.toc [--check|--write] <file>... | --all` (maintain Markdown tables of contents)
 
 **Blocked-command wrappers (`/tmp`).** When a command-line tool is blocked - by the sandbox, the
