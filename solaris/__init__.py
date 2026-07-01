@@ -8,4 +8,4 @@ The framework's behavior lives in markdown (agents, skills, rules, templates) un
 the only Python is in ``solaris.tools`` (and its tests).
 """
 
-__version__ = "0.12.1"
+__version__ = "0.13.0"
