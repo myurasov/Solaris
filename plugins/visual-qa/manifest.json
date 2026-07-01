@@ -1,0 +1,26 @@
+{
+  "_comment": "Plugin manifest (authored by the plugin author). 'version' is the plugin semver (release-only); install-plugin reads 'setup'.",
+  "schema_version": 1,
+  "name": "visual-qa",
+  "version": "0.1.0",
+  "description": "Visual end-to-end testing 'eyes': a pluggable vision-language model (VLM) behind an OpenAI-compatible endpoint on any NVIDIA GPU system, plus look/assert_visual tools, a GPU-aware model recommender (pick by VRAM + architecture + task, user chooses from a shortlist), and a capture->assert verify workflow for web, native/TUI, and mobile UIs. UI-strong VLMs (Qwen3-VL / Holo1.5) for stills/OCR; NVIDIA Cosmos (Reason2 / Cosmos 3) for temporal/physical video.",
+  "applies_to": {
+    "markers": ["playwright.config.ts", "playwright.config.js", "package.json", "*.xcodeproj", "*.xcworkspace", "android/", "electron.vite.config.*", "tauri.conf.json"]
+  },
+  "setup": {
+    "notes": [
+      "Works on any NVIDIA GPU system (DGX Spark, workstation RTX, datacenter A100/H100, or a cloud endpoint). Needs a reachable OpenAI-compatible VLM endpoint - see serving/README.md.",
+      "Choose the model per system: run `eyes.py recommend --vram <GB> --arch <arch> --task <task>` (or `--detect`), present the shortlist, and let the user pick. Don't hard-code a model. Catalog is editable in shared/models.json.",
+      "Quant follows the GPU arch: Blackwell -> NVFP4, Hopper/Ada -> FP8, Ampere/older -> AWQ int4.",
+      "The eyes client (shared/eyes.py) runs via `uv run` and pulls the `mcp` SDK on first run (PEP 723 inline deps); it talks plain HTTP+JSON, no vendor SDK.",
+      "On memory-bandwidth-bound boxes (e.g. DGX Spark, ~273 GB/s) keep concurrent vision streams <= 2 at high vision-token budgets.",
+      "Web capture reuses the Playwright MCP (already in the framework MCP template). Native/TUI capture uses screen-capture/ffmpeg; mobile uses simulator/device screen recording."
+    ],
+    "resources": [
+      {"key": "vlm_endpoint", "prompt": "OpenAI-compatible VLM endpoint base URL (the GPU box serving the model)", "default": "http://localhost:8000/v1"},
+      {"key": "vlm_model", "prompt": "default VLM model id for stills/UI (pick via `eyes.py recommend`)", "default": "Qwen/Qwen3-VL-8B-Instruct"},
+      {"key": "vlm_video_model", "prompt": "model id for temporal/flow video (e.g. nvidia/Cosmos3-Nano reasoner or nvidia/Cosmos-Reason2-8B)", "default": "nvidia/Cosmos-Reason2-8B"},
+      {"key": "capture_mode", "prompt": "primary capture mode (web | native | mobile)", "default": "web"}
+    ]
+  }
+}
