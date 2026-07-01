@@ -26,10 +26,6 @@ projects/
 tasks/
 solaris/spec/references/
 
-# Plugins are user-private overlays: ignore everything except the committed placeholder.
-plugins/*
-!plugins/.empty
-
 # Framework-level secrets + runtime log
 memory/*
 !memory/.empty
