@@ -1,121 +1,95 @@
 # Solaris <!-- omit in toc -->
 
-- [Why](#why)
-- [Benefits](#benefits)
-- [Key Concepts](#key-concepts)
-- [Getting Started](#getting-started)
-- [Skills and Triggers](#skills-and-triggers)
-- [Development and Testing](#development-and-testing)
-- [The Complete Specification](#the-complete-specification)
-- [License and Copyright Notice](#license-and-copyright-notice)
+- [Architecture](#architecture)
+- [AI-Packs](#ai-packs)
+- [Skills](#skills)
+- [Plugins](#plugins)
+- [Memory \& Versioning](#memory--versioning)
+- [Install \& Tools](#install--tools)
+- [Specification](#specification)
 
-**Solaris manages your coding agents from one place.**
+Solaris:
 
-You run all your projects from a single home base instead of setting each one up from scratch. Solaris hands
-your AI assistant (Cursor or Claude Code) a ready-made kit for every project - what to build, how to work,
-and what it already knows - so it behaves consistently and remembers what it learned from one session to the
-next. Under the hood it's just Markdown instructions and a small Python toolset, with no service to run.
+- Runs many coding projects from one place, injecting a maintainable "ai-pack" that allows projects to also be detached for standalone development. Each "ai-pack" evolves with the project by remembering what it needs to know short and long-term.
 
-## Why
+- Supports plugins that add project-specific functionality and workflows.
 
-AI assistants are powerful per session but forgetful across them. Without structure you hit the same walls:
+- Can work in "ad-hoc" mode for tasks that don't warrant a complete project structure.
+  
+## Architecture
 
-- **Repeated setup** - conventions and build/run/test commands get retyped per project and drift apart.
-- **No durable memory** - hosts, decisions, and gotchas vanish when the context window rolls.
-- **Scattered context** - juggling many repos means re-establishing each one every time.
-- **Trapped workflows** - domain or employer conventions get reinvented instead of packaged and reused.
-- **IDE lock-in** - instructions for one assistant don't carry to another.
+- **One agent, persona by location.** At the root it is the **orchestrator** (routes prompts to skills;
+  manages `projects/`, `plugins/`, `tasks/`, memory). Inside `projects/<slug>/` it is that project's
+  **engineer** (plans, builds, runs). Hand-off = switch the active instruction set + working dir.
+- **Single instruction source.** `AGENTS.md` is canonical - Cursor reads it natively; Claude Code via a
+  one-line `CLAUDE.md` (`@AGENTS.md`) shim.
+- **Hooks inject context.** `read_first` (SessionStart) preloads the orchestrator role + commit/safety
+  rules + operating memory; `skill_loader` (UserPromptSubmit) matches prompt `triggers`/`antitriggers` and
+  injects the matching skill body; `log_interaction` appends a raw-prompt log backstop.
 
-## Benefits
+## AI-Packs
 
-- **One agent, both IDEs** - a single `AGENTS.md` drives Cursor and Claude Code; author once.
-- **Spec-driven** - every project plans and builds against a living `spec.md`.
-- **Persistent memory** - per-project resources/credentials/context plus cross-project lessons and
-  preferences the agent loads each session.
-- **Built-in workflows** - scope, implement, run/test locally, and deploy to a remote over SSH.
-- **Portable ai-packs** - work standalone, handed off, or driven from the command center.
-- **Reusable plugins** - package a domain workflow as its own repo and opt in per project.
-- **Versioned + migratable** - upgrades migrate existing projects forward, never stranding them.
-- **Safety + commit policies** - confirms destructive/outward actions; enforces commit-message rules.
+Per-project bundle at `projects/<slug>/ai/`:
 
-## Key Concepts
+- **Shareable** - `engineer.agent.md` (role), `engineer.instructions.md` (build/run/test), `spec.md`,
+  `manifest.json` (type, mode, framework version, plugins).
+- **Private** (`ai/memory/`, drop to share) - `resources.md`, `credentials.md`, `context.md`,
+  `interactions.jsonl`.
 
-- **Command Center** - the Solaris repo you run everything from; your `projects/` and `tasks/` stay
-  gitignored and separate from the framework.
-- **ai-pack** - the per-project bundle (`projects/<slug>/ai/`): a **shareable layer** (agent role,
-  build/run/test instructions, spec) and a **private layer** (`ai/memory/`: hosts, secrets, logs). Drop
-  `ai/memory/` to share it.
-- **Personas** - one agent, role by location: **orchestrator** at the root (routes to skills, manages
-  projects/plugins/tasks), **engineer** inside a project (plans, builds, runs).
-- **Project Types & Modes** - pick a type (`python-cli`, `web-service`, `ios-app`, or plugin-provided) and a
-  mode: **local**, **remote-code**, or **embedded** (ai-pack lives inside the source repo).
-- **Plugins** - each its own git repo of rules, skills, MCP servers, and project types; install from a git
-  URL, folder, or zip and attach per project.
-- **Memory Boundary** - the framework `memory/` and each project's `ai/memory/` are the only authoritative
-  stores; no external/global memory.
-- **Versioning & Migrations** - per-file revisions keep ai-packs in sync with masters; release-only semantic
-  versions gate migrations that upgrade `ai/` without touching your code.
+**Type**: `python-cli`, `web-service`, `ios-app`, or plugin-provided. **Mode**: `local` (code in
+`source/`), `remote-code` (code on an SSH host), or `embedded` (ai-pack inside the source repo).
 
-## Getting Started
+## Skills
 
-**Requirements**
+Natural-language triggers route to Markdown procedures in `solaris/skills/*.skill.md`:
 
-- [uv](https://docs.astral.sh/uv/) - manages Python 3.14 and the venv.
-- **Cursor** or **Claude Code**.
-- Node.js - only for the optional Playwright MCP server (`npx`).
-
-**Install**
-
-```bash
-# dependencies + venv (Python 3.14)
-uv sync
-
-# MCP config: copy the template to both runtime configs, then check sync
-cp mcp.json.example .mcp.json
-mkdir -p .cursor && cp mcp.json.example .cursor/mcp.json
-uv run -m solaris.tools.mcp_sync --check
-
-# (optional) enable the commit-policy git hook
-git config core.hooksPath .githooks
-```
-
-**Use** - open the repo root in Cursor or Claude Code and talk to the agent - e.g. *"create a new python-cli
-project called pingpong"*. `AGENTS.md` drives both IDEs (Claude Code via a one-line `CLAUDE.md` that imports
-it). `.venv/`, `.tmp/`, and runtime MCP configs are created lazily and gitignored.
-
-## Skills and Triggers
-
-The agent routes natural-language requests to a skill:
-
-| Ask for | Skill | What it does |
+| Trigger | Skill | Action |
 |---|---|---|
-| "create / new project" | `create-project` | Scaffold a new project + ai-pack (pick type / mode / plugins). |
-| "import / adopt `<path>`" | `import-project` | Adopt an existing codebase and derive its ai-pack. |
-| "create / update a plugin" | `import-plugin` | Author a plugin from a project, or fold edits back in. |
-| "install / repair a plugin" | `install-plugin` | Acquire, validate, and attach a plugin to a project. |
-| "work on / develop `<project>`" | `develop-project` | Hand off to the project's engineer to plan or implement. |
-| "update / migrate `<project>`" | `update-project` | Migrate an ai-pack and its plugins to the current version. |
-| "self-reflect / improve Solaris" | `self-reflect` | Review logs and propose framework improvements. |
-| "do a release" | `release` | Bump version, author the migration, update docs, tag and publish. |
-| "new task / research X" | `ad-hoc-task` | Start or resume ad-hoc work under `tasks/<date>-<slug>/`. |
-| "health-check / status" | `health-check` | Command-center overview; `--deep` for full checks. |
+| "create / new project" | `create-project` | Scaffold a project + ai-pack (type / mode / plugins). |
+| "import / adopt `<path>`" | `import-project` | Adopt an existing codebase; derive its ai-pack. |
+| "work on / develop `<project>`" | `develop-project` | Hand off to the engineer to plan/implement. |
+| "update / migrate `<project>`" | `update-project` | Migrate an ai-pack + plugins to the current version. |
+| "create / install / repair a plugin" | `import-plugin`, `install-plugin` | Author, acquire, validate, attach plugins. |
+| "do a release" | `release` | Bump version, author migration, update docs, tag + publish. |
+| "self-reflect", "new task / research X", "health-check" | `self-reflect`, `ad-hoc-task`, `health-check` | Improve the framework; ad-hoc work under `tasks/`; status overview. |
 
-## Development and Testing
+## Plugins
+
+A plugin packages a domain/employer workflow - `*.rule.md` (always-on), `*.skill.md` (trigger-invoked),
+`mcps.json` (MCP servers), optional project types - opted into per project (`manifest.json` `plugins[]`) and
+materialized into `ai/<name>/`. It is either **its own git repo** (acquired via `install-plugin` from a git
+URL / folder / zip; ignored via `plugins/.gitignore`) or **bundled** under `plugins/`. Bundled:
+`nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing).
+
+## Memory & Versioning
+
+- **Memory boundary.** Only framework `memory/` and each project's `ai/memory/` are authoritative (no
+  global/harness store). `memory/instructions.md` is operating memory - terse timestamped cross-project
+  lessons + preferences, loaded each session; turns log to `interactions.jsonl`.
+- **Revisions** (`solaris.tools.revs`) keep materialized ai-pack files in sync with framework masters via
+  `_Rev. N_` markers + a ledger. **Release-only semver** gates **migrations**
+  (`solaris/migrations/<version>.md`) that upgrade a project's `ai/` without touching its code; plugins
+  carry their own.
+
+## Install & Tools
+
+Requires [uv](https://docs.astral.sh/uv/) (manages Python 3.14) + Cursor or Claude Code; Node.js only for
+the optional Playwright MCP.
 
 ```bash
-uv run pytest                              # run the tool tests
-uv run -m solaris.tools.version current    # -> 0.11.0
-uv run -m solaris.tools.revs status        # framework files vs the revision ledger
-uv run -m solaris.tools.toc --check --all  # verify every Markdown TOC
+uv sync                                                    # deps + venv (Python 3.14)
+cp mcp.json.example .mcp.json                              # runtime MCP (Claude Code)
+mkdir -p .cursor && cp mcp.json.example .cursor/mcp.json   # runtime MCP (Cursor)
+uv run -m solaris.tools.mcp_sync --check                   # configs match?
+git config core.hooksPath .githooks                        # optional commit-policy hook
 ```
 
-Tools run as modules (`uv run -m solaris.tools.<name>`): `version`, `revs`, `mcp_sync`, `toc`.
+Open the repo root in Cursor or Claude Code and talk to the agent (e.g. *"create a new python-cli project
+called pingpong"*). Stdlib-only tools run as modules - `version`, `revs`, `mcp_sync`, `toc` (+ `uv run
+pytest`); `read_first`, `skill_loader`, `log_interaction` are hooks, never run by hand.
 
-## The Complete Specification
+## Specification
 
-Full conventions, the plugin contract, the migration engine, project modes, and the safety/commit policies
-live in [`solaris/spec/spec-v0.13.0.md`](solaris/spec/spec-v0.13.0.md).
-
-## License and Copyright Notice
-
-Licensed under the [Apache License 2.0](LICENSE). Copyright 2026 Mihail Yurasov <me@yurasov.me>.
+Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
+[`solaris/spec/spec-v0.13.0.md`](solaris/spec/spec-v0.13.0.md). [Apache 2.0](LICENSE); Copyright 2026
+Mihail Yurasov <me@yurasov.me>.
