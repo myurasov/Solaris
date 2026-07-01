@@ -23,5 +23,12 @@
     "gitDecoration.ignoredResourceForeground": "#e3d9ff",
   },
   "markdown.preview.fontSize": 13,
-  "problems.visibility": false
+  "problems.visibility": false,
+  "git.autoRepositoryDetection": "subFolders",
+  "git.repositoryScanMaxDepth": 4,
+  "git.repositoryScanIgnoredFolders": [
+    "node_modules",
+    ".venv",
+    ".tools"
+  ]
 }
