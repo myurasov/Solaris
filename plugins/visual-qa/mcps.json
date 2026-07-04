@@ -5,7 +5,7 @@
     "'visual-qa' is the local 'eyes' server: shared/eyes.py materializes into ai/visual-qa/eyes.py on install,",
     "so the command path is project-root-relative. It reads VISUAL_QA_ENDPOINT / VISUAL_QA_MODEL from env;",
     "install-plugin writes the chosen endpoint/model into ai/memory/resources.md - set the env to match the",
-    "GPU box serving the model (default http://localhost:8000/v1, Qwen/Qwen3-VL-8B-Instruct)."
+    "GPU box serving the model (default http://localhost:random/v1, Qwen/Qwen3-VL-8B-Instruct)."
   ],
   "mcpServers": {
     "playwright": {
@@ -16,7 +16,7 @@
       "command": "uv",
       "args": ["run", "--no-project", "ai/visual-qa/eyes.py", "mcp"],
       "env": {
-        "VISUAL_QA_ENDPOINT": "http://localhost:8000/v1",
+        "VISUAL_QA_ENDPOINT": "http://localhost:random/v1",
         "VISUAL_QA_MODEL": "Qwen/Qwen3-VL-8B-Instruct",
         "VISUAL_QA_VIDEO_MODEL": "nvidia/Cosmos-Reason2-8B"
       }

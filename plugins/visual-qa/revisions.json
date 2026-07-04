@@ -17,13 +17,9 @@
       ]
     },
     "shared/visual-qa.skill.md": {
-      "rev": 1,
-      "hash": "54d4134232f16086e3d57338afb6b7dc7ce5c228f385bfc890d98aa1aa0c2fcc",
+      "rev": 9,
+      "hash": "58ce91ab7adccdff17eed9eaf1d653bf4cfbf13f5a7300cdf4bce9082547584b",
       "history": [
-        {
-          "rev": 1,
-          "hash": "f3cdfd60413fc074f9e2b9b10a2fa3e36c64275ab663edc159c7b4d8590c00cd"
-        },
         {
           "rev": 1,
           "hash": "8be435bcc35f5ac58a3872eec5dfb6c6b63cd3b0b50920368a745119226b88de"
@@ -31,6 +27,38 @@
         {
           "rev": 1,
           "hash": "54d4134232f16086e3d57338afb6b7dc7ce5c228f385bfc890d98aa1aa0c2fcc"
+        },
+        {
+          "rev": 2,
+          "hash": "14a40737659d2c854721773065a31cb4a7f84a7464700950f4bd848553eb6d4d"
+        },
+        {
+          "rev": 3,
+          "hash": "c3db5efba70262b5f693adc955d28f0cf360fa3ab03aa67a92f1d215869e91d5"
+        },
+        {
+          "rev": 4,
+          "hash": "a86d01020b77140bc31a5993c01c91e4357d5055345993e9d31c1e8c48a6edf6"
+        },
+        {
+          "rev": 5,
+          "hash": "58c30091ec0628bfd6d5d841eeb809fd7f8c2e19d63fe51e71120dc70a00dbcd"
+        },
+        {
+          "rev": 6,
+          "hash": "8c977a04edc706c2d801e5ee6756a5d012a5b7ee3ce822cbfbee6c2c88693c44"
+        },
+        {
+          "rev": 7,
+          "hash": "60b69a6ded0316444463188540b3848c573d0d453b486c8077e1788006276ff8"
+        },
+        {
+          "rev": 8,
+          "hash": "bf3c1a6e2607e3a6ba14405f7cc803d17447f8008cc145eff758a4a95d6c4038"
+        },
+        {
+          "rev": 9,
+          "hash": "58ce91ab7adccdff17eed9eaf1d653bf4cfbf13f5a7300cdf4bce9082547584b"
         }
       ]
     }

@@ -5,4 +5,4 @@ Plugin-scoped migrations adapt the materialized copy (`projects/<slug>/ai/visual
 target version with frontmatter; no registry file. Applied via `install-plugin` (migrate), driven by
 `update-project`.
 
-There are no plugin migrations yet - 0.1.0 is the base version.
+Migrations: `0.2.0.md` (instance registry, native video, watch tool, serving lifecycle scripts).
