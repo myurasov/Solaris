@@ -1,4 +1,4 @@
-_Rev. 14_
+_Rev. 15_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -55,6 +55,9 @@ that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in s
   Remote-SSH. **No deploy by default** - only sync/deploy if the user explicitly asks.
 - **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/memory/` and
   `.secrets.env` are in the repo's `.gitignore` - keep them there so secrets/hosts are never committed.
+- **Remote footprint:** everything you install on a remote host (services, tools, config, model/data caches)
+  lives under **`~/.solaris/<component>/`** so it is discoverable and removable in one place; ship/use an
+  uninstaller alongside every installer and record the install (host + path) in `ai/memory/resources.md`.
 
 ## Blocked-command wrappers (`/tmp`)
 
