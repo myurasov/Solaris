@@ -1,3 +1,5 @@
+_Rev. 1_
+
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
 - [What Solaris is](#what-solaris-is)
@@ -104,6 +106,10 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
 - Prefer the smallest change that satisfies the request; match surrounding style.
 - Do not fabricate facts about a host, API, or codebase - read it or ask.
 - Never print or commit the contents of any `credentials.md`; reference secrets, do not echo them.
+- **Remote footprint.** Everything Solaris installs on a remote host lives under **`~/.solaris/<component>/`**
+  (services, tools, config, model/data caches) so the footprint is discoverable, inventoriable, and removable
+  in one place. Ship an uninstaller alongside every installer, and record what was installed (host + path) in
+  the relevant `resources.md`.
 - **Memory boundary.** Solaris's own memory is the only authoritative memory: the framework `memory/` and
   each project's `ai/memory/`. Never read, write, create, or act on memory outside these - in particular a
   harness/global `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`). Treat
