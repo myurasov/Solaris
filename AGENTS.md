@@ -26,7 +26,7 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.14.0.md`](solaris/spec/spec-v0.14.0.md).
+Full specification: [`solaris/spec/spec-v0.15.0.md`](solaris/spec/spec-v0.15.0.md).
 
 ## Execution model
 
@@ -67,4 +67,4 @@ Framework state lives in `memory/` (`resources.md`, `credentials.md` (gitignored
 ## Conventions (pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions vs release-only semver), blocked-command wrappers, and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.14.0.md`](solaris/spec/spec-v0.14.0.md).
+- Versioning (per-file revisions vs release-only semver), blocked-command wrappers, and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.15.0.md`](solaris/spec/spec-v0.15.0.md).
