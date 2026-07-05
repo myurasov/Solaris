@@ -1,4 +1,4 @@
-_Rev. 15_
+_Rev. 16_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -22,8 +22,8 @@ command center. Edit this file to tune how this project is developed.
 3. `ai/engineer.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
    this file; portable, no host/secret/internal-URL specifics).
 4. `ai/memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
-   APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the verbose, model-facing context
-   log - read it first for prior context).
+   APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the session-context summary -
+   read it first for prior context).
 5. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
    trigger-invoked skill.
 6. local mode: `source/AGENTS.md` if present, as project rules. remote-code mode: `remote.json` (host/path) -
@@ -86,12 +86,13 @@ record of all work), identical schema in both. Write both files yourself, in the
 drift. `solaris.tools.log_interaction` is **only** the prompt-submit hook (it appends a raw-prompt backstop
 line to the master as a fail-safe); never invoke it by hand to log - it reads stdin and will hang.
 
-Also append a verbose entry to `ai/memory/context.md` (the model-facing context log) each meaningful turn:
-the same trigger as the interaction line, but in prose - what was asked, what you did and answered, the
-decisions, and the findings. Put the newest entry at the top of its `## Log`; keep that section under
-~100KB, compacting (summarizing, never deleting) the oldest entries into `## Previous History` when it grows
-past that. Keep the curated `## Standing context` current. Only the engineer and Solaris agents write this
-file; refresh its TOC with `uv run -m solaris.tools.toc --write` after structural edits.
+`ai/memory/context.md` holds a **detailed summary of the current session's context**: the task(s) and their
+state, decisions with reasons, findings, key file references, and next steps - everything needed to continue
+immediately. Rewrite its `## Session context` **in place** (replace, don't append) at two save points:
+(1) **before context compaction** - when the conversation context is about to be compacted, automatically or
+manually - save first so no detail is lost; (2) whenever the user says "save/remember/update/retain/keep
+context" or similar. Read it first at session start (and right after a compaction) to restore context.
+Only the engineer and Solaris agents write this file.
 
 ## Commit policy (embedded - keep even when detached)
 

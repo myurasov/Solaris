@@ -5,7 +5,7 @@
 
 **Inventory only: hardware and accounts/hosts this project uses.** This file is a flat list of *what exists*,
 not *how to use it*. Procedures (build/run/deploy/restart), model/runtime details, and gotchas live in
-[`../engineer.instructions.md`](../engineer.instructions.md); per-turn narrative lives in `context.md`; secrets
+[`../engineer.instructions.md`](../engineer.instructions.md); the session-context summary lives in `context.md`; secrets
 live in `credentials.md` (gitignored). Keep entries terse. Populated on init/update.
 
 ## Hardware

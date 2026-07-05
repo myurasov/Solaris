@@ -83,8 +83,8 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
 
 - Short spec dialogue (purpose, components, constraints) -> `ai/spec.md`; copy it verbatim to
   `ai/memory/spec-v0.md`.
-- The copied `ai/memory/` already includes a fresh `context.md` (the verbose, model-facing context log,
-  with `{{NAME}}` substituted); leave its `## Log` empty for the engineer to fill.
+- The copied `ai/memory/` already includes a fresh `context.md` (the session-context summary, with
+  `{{NAME}}` substituted); leave its `## Session context` empty for the engineer to fill at a save point.
 - Ensure `ai/manifest.json` has `project.{name,slug,type,mode}`, `framework_version`, and `plugins`.
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes
   the `revisions` map (per materialized file: rev + content hash), so future `update-project` runs can tell

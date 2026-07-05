@@ -59,8 +59,9 @@ into the generic `engineer.instructions.md`.
   plugins carry the domain-specific ones).
 - `ai/memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
   `ai/memory/credentials.md` - placeholders only; never copy real secrets out of the source.
-- `ai/memory/context.md` - seed its **Standing context** section from the codebase (what it is, the code
-  map, run/deploy, gotchas - the working context just gathered); leave `## Log` + `## Previous History` empty.
+- `ai/memory/context.md` - the session-context summary; seed its `## Session context` with the import
+  session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
+  gathered). Durable orientation also goes into `ai/engineer.instructions.md`, which survives future rewrites.
 - Seed `ai/memory/interactions.jsonl` (empty). Write `ai/manifest.json`
   (`project.{name,slug,type,mode}`, `framework_version` from `version current`, `plugins`). Write the
   minimal project root (`AGENTS.md` + a one-line `CLAUDE.md` `@AGENTS.md` shim; no `.cursor/` / `mcp.json.example` / `.gitignore`),

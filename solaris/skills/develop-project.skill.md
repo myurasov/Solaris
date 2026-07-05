@@ -56,8 +56,10 @@ Follow the engineer agent's workflows:
   (keep it shareable - put any host/secret/internal-URL specifics in `ai/memory/` instead, never dropped).
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) in **both** the project's
-  `ai/memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (all work), plus a
-  verbose prose entry in the project's `ai/memory/context.md` (the model-facing context log).
+  `ai/memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (all work).
+- **Save context:** keep the project's `ai/memory/context.md` (the detailed session-context summary,
+  rewritten in place) current at its save points: before context compaction (automatic or manual), and
+  whenever the user says "save/remember/update/retain/keep context" or similar.
 
 If a plugin edit emerges (the user changes how a domain workflow should behave), point them at
 `import-plugin` to fold it back into the plugin source.
