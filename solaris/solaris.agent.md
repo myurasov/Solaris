@@ -117,10 +117,13 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line (`prompt` = the raw user
   prompt, `request` = your interpretation of it, `outcome` = what happened) in the framework master log
   `memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
-  turn is project work, append the **same** line to that project's `ai/memory/interactions.jsonl` and a
-  verbose prose entry to that project's `ai/memory/context.md` (the model-facing context log; engineer +
-  Solaris agents are its only writers). The prompt-submit hook also appends a raw-prompt backstop line to the
-  master as a fail-safe.
+  turn is project work, append the **same** line to that project's `ai/memory/interactions.jsonl`. The
+  prompt-submit hook also appends a raw-prompt backstop line to the master as a fail-safe.
+- **Session-context summary (`ai/memory/context.md`).** During project work, that project's
+  `ai/memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris
+  agents are its only writers). Rewrite it **in place** at two save points: **before context compaction**
+  (automatic or manual - save first so no detail is lost), and whenever the user says
+  "save/remember/update/retain/keep context" or similar. Read it first when resuming a project.
 - When the user teaches a durable preference about a project, update that project's
   `ai/engineer.instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
   `ai/memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
@@ -128,7 +131,7 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
 - **`ai/memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
   GPUs, API endpoints, hosts, paths, account names). Everything about *how* - build/run/deploy/restart
   procedures, model/runtime details, performance notes, and gotchas - belongs in `ai/engineer.instructions.md`
-  (as generic patterns that reference `resources.md` for concrete values). Per-turn narrative goes in
-  `context.md`; secrets in `credentials.md`.
+  (as generic patterns that reference `resources.md` for concrete values). The session-context summary goes
+  in `context.md`; secrets in `credentials.md`.
 - `self-reflect` is the only path by which the orchestrator edits framework files for self-improvement, and
   it shows the diff and follows the commit policy.

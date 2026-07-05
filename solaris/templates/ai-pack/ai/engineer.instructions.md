@@ -11,7 +11,7 @@ Editable, project-specific notes on how to develop this project. Rewrite freely 
 **This is the "how" layer.** All procedures and project knowledge live here: build/run/test, **deploy &
 restart procedures**, **model/runtime details**, architecture/layers, and **gotchas**. The only things that do
 *not* live here are the inventory of *what exists* (hardware + hosts/accounts -> `ai/memory/resources.md`),
-secrets (`credentials.md`), and the per-turn narrative (`context.md`).
+secrets (`credentials.md`), and the session-context summary (`context.md`).
 
 **Shareable layer.** This file sits in `ai/` alongside `engineer.agent.md` and `spec.md` - the portable,
 shareable layer. Keep it free of anything environment-specific or sensitive: **no** hostnames, IPs,
