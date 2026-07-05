@@ -3,7 +3,9 @@ name = "solaris"
 version = "0.14.0"
 description = "Solaris - run many coding projects from one central point; generates standardized, portable ai-packs."
 requires-python = ">=3.14"
-dependencies = []
+dependencies = [
+    "ruff>=0.15.20",
+]
 
 [dependency-groups]
 dev = ["pytest>=8"]
