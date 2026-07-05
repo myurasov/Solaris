@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "solaris/templates/ai-pack/AGENTS.md": {
-      "rev": 5,
-      "hash": "70178e6d62a9a9f295745cac7508b18f1592d2bef0e6a5b32e96f9abff6fdb15",
+      "rev": 6,
+      "hash": "39cdc17ca4aaf70fa7dcaf07735300716058d53e7a1f663e6183891509b4e837",
       "history": [
         {
           "rev": 1,
@@ -25,6 +25,10 @@
         {
           "rev": 5,
           "hash": "70178e6d62a9a9f295745cac7508b18f1592d2bef0e6a5b32e96f9abff6fdb15"
+        },
+        {
+          "rev": 6,
+          "hash": "39cdc17ca4aaf70fa7dcaf07735300716058d53e7a1f663e6183891509b4e837"
         }
       ]
     },
