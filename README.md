@@ -91,5 +91,5 @@ pytest`); `read_first`, `skill_loader`, `log_interaction` are hooks, never run b
 ## Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.14.0.md`](solaris/spec/spec-v0.14.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.15.0.md`](solaris/spec/spec-v0.15.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mihail Yurasov <me@yurasov.me>.
