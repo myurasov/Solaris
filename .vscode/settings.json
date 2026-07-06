@@ -15,7 +15,7 @@
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
     "**/.venv*": false,
-    "*.*": true,
+    "*.*": false,
     "NOTICE": true,
     "LICENSE": true
   },
