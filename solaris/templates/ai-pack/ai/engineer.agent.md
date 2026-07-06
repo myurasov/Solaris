@@ -1,4 +1,4 @@
-_Rev. 16_
+_Rev. 17_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -25,7 +25,10 @@ command center. Edit this file to tune how this project is developed.
    APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the session-context summary -
    read it first for prior context).
 5. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
-   trigger-invoked skill.
+   trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked** plugin, attached in link mode
+   without a copy): load the plugin's `shared/` rules and skills from the path it names, the same way -
+   but only edit those files when deliberately developing the plugin (they are the live source for every
+   consumer).
 6. local mode: `source/AGENTS.md` if present, as project rules. remote-code mode: `remote.json` (host/path) -
    read, edit, and run the code there over Remote-SSH. embedded mode: there is no `source/` - the code is this
    repo (this `ai/` is a subdir of it); read project rules from the repo's own `README`/docs if present.

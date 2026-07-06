@@ -43,6 +43,10 @@ Step 1's revisions sync already reconciled each `ai/<plugin>/`. Additionally, fo
 minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to apply
 `plugins/<name>/migrations/` and record the new plugin version in `ai/manifest.json`.
 
+**Linked** plugins (`"mode": "link"` entries) need no sync or migration - they always run the live source;
+see `install-plugin` step 5 (the canonical link-mode definition). The revs tools skip them in step 1
+automatically.
+
 ## 4. Summary + revert
 
 Report what synced, what merged, and any versions set. `revs ff` is idempotent; migrations revert via their

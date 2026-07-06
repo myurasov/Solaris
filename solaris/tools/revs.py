@@ -240,6 +240,8 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     if manifest.exists():
         plugins = json.loads(manifest.read_text(encoding="utf-8")).get("plugins", [])
         for entry in plugins:
+            if isinstance(entry, dict) and entry.get("mode") == "link":
+                continue  # linked plugins are never materialized; nothing to track
             name = entry.get("name") if isinstance(entry, dict) else entry
             shared = plugins_dir / name / "shared"
             if shared.is_dir():

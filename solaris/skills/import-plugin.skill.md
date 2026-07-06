@@ -10,7 +10,9 @@ summary: Author a plugin from a project's domain specifics, or fold project-loca
 - [Mode B - create-from-aipack](#mode-b---create-from-aipack)
 
 Two modes. Both keep the source plugin at `plugins/<name>/` as the editing source of truth; the materialized
-copy in `ai/<name>/` is disposable (wholesale-overwritten on update).
+copy in `ai/<name>/` is disposable (wholesale-overwritten on update). Tip: while actively developing a
+plugin against a project, attach it in **link mode** instead (`install-plugin`: "link plugin <name> to
+<project>") - edits hit the plugin source directly and Mode A's fold-back becomes unnecessary.
 
 ## Mode A - update-from-project
 

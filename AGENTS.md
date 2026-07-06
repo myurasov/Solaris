@@ -46,7 +46,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `create-project` | "create / new project" | Scaffold a new project + ai-pack (pick type / mode / plugins). |
 | `import-project` | "import project", "adopt `<path or host:path>`" | Adopt an existing codebase; derive the ai-pack. |
 | `import-plugin` | "create / update plugin", "make a plugin from `<project>`" | Author a plugin from a project, or fold project-local edits back into a plugin. |
-| `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project. |
+| `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>`", "link plugin `<X>` to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project (copy, or link mode for plugin development). |
 | `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's engineer agent (plan or implement). |
 | `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
@@ -54,7 +54,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<date>-<slug>/`. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 
-When a project has plugins attached, also load and obey every `ai/<plugin>/*.rule.md` (always-on) and treat each `ai/<plugin>/*.skill.md` as an additional, trigger-invoked skill.
+When a project has plugins attached, also load and obey every `ai/<plugin>/*.rule.md` (always-on) and treat each `ai/<plugin>/*.skill.md` as an additional, trigger-invoked skill. A plugin attached in **link mode** has a self-describing pointer file `ai/<name>.link.md` instead of `ai/<name>/` - follow it (canonical definition: `install-plugin` step 5).
 
 ## Memory + logging
 

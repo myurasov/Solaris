@@ -43,9 +43,11 @@ Everything above, plus:
 - **Docs** - `uv run -m solaris.tools.toc --check --all` (every Markdown file has a current TOC).
 - **Per project** - `revs classify --dir projects/<slug>` (sync/merge drift); `mcp_sync --check --dir
   projects/<slug>`; `version check-plugins --dir projects/<slug>` (recorded vs source plugin semver);
-  confirm `AGENTS.md` exists and `ai/<plugin>/` is present for each attached plugin. (A project root carries
-  only `AGENTS.md` plus the runtime `.mcp.json`/`.cursor/mcp.json`.)
-- **Plugins** - each attached plugin has a source under `plugins/<name>/` (else it cannot be updated).
+  confirm `AGENTS.md` exists and, for each attached plugin, `ai/<plugin>/` is present - or, for a
+  **linked** plugin (`"mode": "link"`), `ai/<name>.link.md` exists and its path resolves to
+  `plugins/<name>/`. (A project root carries only `AGENTS.md` plus the runtime `.mcp.json`/`.cursor/mcp.json`.)
+- **Plugins** - each attached plugin has a source under `plugins/<name>/` (else it cannot be updated;
+  for a linked plugin a missing source is a hard break - it has no materialized copy to fall back on).
 - **gitignore sanity** - `.mcp.json`, `.cursor/mcp.json`, `projects/`, `tasks/`, `memory/*`,
   `plugins/*` (the last two except `.empty`) are ignored; confirm no `credentials.md` is tracked.
 

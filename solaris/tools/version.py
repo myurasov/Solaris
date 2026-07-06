@@ -255,11 +255,20 @@ def _cmd_check_plugins(args: argparse.Namespace) -> int:
     rc = 0
     for entry in plugins:
         name, recorded = entry.get("name"), entry.get("version")
+        linked = entry.get("mode") == "link"
         try:
             source = plugin_source_version(name)
         except FileNotFoundError:
-            print(f"{name}: recorded {recorded}, source MISSING")
+            if linked:
+                # a linked plugin has no materialized fallback - losing the source is a hard break
+                print(f"{name}: linked, source MISSING (hard break: no materialized copy)")
+            else:
+                print(f"{name}: recorded {recorded}, source MISSING")
             rc = 1
+            continue
+        if linked:
+            # link mode always runs the live source; no recorded version to drift
+            print(f"{name}: linked, source {source} (live)")
             continue
         cmp = compare(recorded, source)
         status = "ok" if cmp == 0 else ("behind" if cmp < 0 else "ahead")

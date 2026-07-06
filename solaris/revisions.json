@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "solaris/templates/ai-pack/AGENTS.md": {
-      "rev": 6,
-      "hash": "39cdc17ca4aaf70fa7dcaf07735300716058d53e7a1f663e6183891509b4e837",
+      "rev": 8,
+      "hash": "0d86418e308f75a40078ed7750d42e3a0c74614c141b12222deaea73c2c3f1e6",
       "history": [
         {
           "rev": 1,
@@ -29,17 +29,21 @@
         {
           "rev": 6,
           "hash": "39cdc17ca4aaf70fa7dcaf07735300716058d53e7a1f663e6183891509b4e837"
+        },
+        {
+          "rev": 7,
+          "hash": "47768a2853fe3bf8384cabf10ee601e287817fa5490bd4d8c7ff1775ec741bb1"
+        },
+        {
+          "rev": 8,
+          "hash": "0d86418e308f75a40078ed7750d42e3a0c74614c141b12222deaea73c2c3f1e6"
         }
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 16,
-      "hash": "0bbda5ae38880352800178531925313a42708c8724c7b27b350dd88b50107414",
+      "rev": 17,
+      "hash": "bf5e1301d271cbcd9d33d8d4c00435ad5b72e709af78ebe998687d3cf20fc784",
       "history": [
-        {
-          "rev": 7,
-          "hash": "818a69c579cf9653fdde46ea8265a21406a0cae83e3e718b1e4b4458525517b4"
-        },
         {
           "rev": 8,
           "hash": "c950e9b20eaebef081e05ab789d9797bc74e319f46a49d2a512d0e718afd48ef"
@@ -75,6 +79,10 @@
         {
           "rev": 16,
           "hash": "0bbda5ae38880352800178531925313a42708c8724c7b27b350dd88b50107414"
+        },
+        {
+          "rev": 17,
+          "hash": "bf5e1301d271cbcd9d33d8d4c00435ad5b72e709af78ebe998687d3cf20fc784"
         }
       ]
     }
