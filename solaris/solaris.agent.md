@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -19,7 +19,8 @@ Solaris is organized and what the orchestrator may and may not do.
 Solaris runs many coding projects from one place. For each project it generates a standardized, portable
 **ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
-project's `ai/`. Ad-hoc engineering / system-setup / research work that isn't a project lives under
+project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
+Ad-hoc engineering / system-setup / research work that isn't a project lives under
 `tasks/`. Full specification: [`spec/spec-v0.15.0.md`](spec/spec-v0.15.0.md).
 
 ## Persona model
@@ -44,7 +45,9 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Manage plugins.** Each plugin is its **own repository**; sources live (cloned) in `plugins/<name>/`
   (gitignored). Acquire one with `install-plugin` (git URL / local folder / source zip), which
   validates/repairs it and can attach it to a project. `shared/` is the only part copied into a project's
-  `ai/<name>/`. `install-plugin` also does the per-project install/update/migrate/repair (there is no
+  `ai/<name>/`; in **link mode** nothing is copied - a pointer file `ai/<name>.link.md` names the live
+  plugin source instead (a swap-in-place development convenience while authoring a plugin).
+  `install-plugin` also does the per-project install/update/migrate/repair (there is no
   per-plugin install skill); `import-plugin` authors a new plugin or folds project edits back. Plugins are
   consumed per project, never globally.
 - **Run tasks.** Start/resume ad-hoc work under `tasks/<YYYY-MM-DD>-<slug>/` via the `ad-hoc-task` skill.

@@ -1,5 +1,5 @@
 {
-  "_comment": "Managed by Solaris; do not edit by hand. Versions live here (no .version files). No host/deploy/secret specifics - those live in ai/memory/.",
+  "_comment": "Managed by Solaris; do not edit by hand. Versions live here (no .version files). No host/deploy/secret specifics - those live in ai/memory/. plugins[] entries are {name, version} for copied plugins, {name, \"mode\": \"link\"} (no version - always live) for linked ones.",
   "schema_version": 1,
   "project": {
     "name": "{{NAME}}",
