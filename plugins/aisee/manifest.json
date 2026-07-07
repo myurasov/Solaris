@@ -1,0 +1,23 @@
+{
+  "_comment": "Plugin manifest (authored by the plugin author). 'version' is the plugin semver (release-only); install-plugin reads 'setup'.",
+  "schema_version": 1,
+  "name": "aisee",
+  "version": "0.1.0",
+  "description": "Gives AI agents eyes via AISee (github.com/myurasov/AISee): vision-language models served on a GPU host, queried as look (free-form/OCR), assert_visual (pass/fail verdicts), and watch (chunked whole-video analysis). Preferred access is MCP over streamable HTTP at <server>/mcp with local media uploaded via POST /v1/blobs and referenced as sha256:<hex>; REST and the aisee CLI are fallbacks. For visual verification of UIs, screenshots, and recordings during development.",
+  "applies_to": {
+    "markers": ["playwright.config.ts", "playwright.config.js", "package.json", "*.xcodeproj", "*.xcworkspace", "android/", "electron.vite.config.*", "tauri.conf.json"]
+  },
+  "setup": {
+    "notes": [
+      "Needs a reachable AISee server on a GPU host. To stand one up, follow aisee.admin.agent.md (or README.md) in github.com/myurasov/AISee: clone to ~/aisee, `uv sync`, `./aisee install`, `./aisee creds set HF_TOKEN`, `./aisee model install qwen3-vl-30b-a3b-instruct`, `./aisee api start`.",
+      "AFTER merging mcps.json: in the merged 'aisee' entry, replace the placeholder URL with the answered aisee_server value + '/mcp'; if a consumer token was given (not 'none'), add \"headers\": {\"Authorization\": \"Bearer <token>\"}; then verify with `uv run -m solaris.tools.mcp_sync --check`.",
+      "Auth is optional and two-tier: a consumer token (AISEE_API_TOKEN) guards queries, an admin token (AISEE_ADMIN_TOKEN) guards model management. The MCP endpoint carries consumer capabilities only - model management needs the CLI/REST admin path on the server operator's side.",
+      "On first contact with a server, read GET <server>/v1/describe?flavor=mcp (no auth needed) - it is the server's self-description for agents: tools, installed models with strengths/weaknesses/pitfalls, and the media upload recipe.",
+      "Media files local to this machine are uploaded once via POST <server>/v1/blobs (content-addressed by sha256, ~24h TTL refreshed on reuse) and then referenced in queries as sha256:<hex>. Paths already on the AISee host pass as-is."
+    ],
+    "resources": [
+      {"key": "aisee_server", "prompt": "AISee server base URL (the GPU host running `aisee api`)", "default": "http://localhost:8484"},
+      {"key": "aisee_consumer_token", "prompt": "AISee consumer bearer token (or 'none' if the server runs open)", "default": "none", "secret": true}
+    ]
+  }
+}
