@@ -1,0 +1,26 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/aisee.rule.md": {
+      "rev": 1,
+      "hash": "dad580f68d00711d87759c26ebf986c1cccedd1aabc4c106abecf517302ea7a5",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "dad580f68d00711d87759c26ebf986c1cccedd1aabc4c106abecf517302ea7a5"
+        }
+      ]
+    },
+    "shared/aisee.skill.md": {
+      "rev": 1,
+      "hash": "b4c7ddca9be59f8446d6b9cddb279c9ad9b9061f35c7ab7a02fe9c74b0d933ee",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "b4c7ddca9be59f8446d6b9cddb279c9ad9b9061f35c7ab7a02fe9c74b0d933ee"
+        }
+      ]
+    }
+  }
+}

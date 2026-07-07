@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "MCP servers this plugin needs; install-plugin merges these into the project's MCP config.",
+    "'aisee' is the AISee server's own MCP endpoint (streamable HTTP, consumer capabilities only).",
+    "The URL below is a PLACEHOLDER: at install time, replace it with the answered aisee_server",
+    "resource + '/mcp' (e.g. http://gpu-host:8484/mcp). If a consumer token was answered (not 'none'),",
+    "also add: \"headers\": {\"Authorization\": \"Bearer <token>\"}. See manifest.json setup.notes.",
+    "'playwright' is the web capture driver (also shipped in the framework MCP template; merge is idempotent)."
+  ],
+  "mcpServers": {
+    "aisee": {
+      "type": "http",
+      "url": "http://AISEE_HOST:PORT/mcp"
+    },
+    "playwright": {
+      "command": "npx",
+      "args": ["@playwright/mcp@latest"]
+    }
+  }
+}
