@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -21,7 +21,7 @@ Solaris runs many coding projects from one place. For each project it generates 
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.16.0.md`](spec/spec-v0.16.0.md).
+`tasks/`. Full specification: [`spec/spec-v0.17.0.md`](spec/spec-v0.17.0.md).
 
 ## Persona model
 
