@@ -7,12 +7,12 @@ summary: Adopt an existing codebase; derive the ai-pack (and offer to factor dom
 # import-project <!-- omit in toc -->
 
 - [1. Inputs](#1-inputs)
-- [2. Land the code](#2-land-the-code)
-- [3. Detect type + toolchain (read-only)](#3-detect-type--toolchain-read-only)
-- [4. Detect + attach plugins (uses import-plugin)](#4-detect--attach-plugins-uses-import-plugin)
-- [5. Derive the ai-pack (best effort)](#5-derive-the-ai-pack-best-effort)
-- [6. Ask on ambiguity](#6-ask-on-ambiguity)
-- [7. Confirm + summary](#7-confirm--summary)
+- [2. Land the Code](#2-land-the-code)
+- [3. Detect Type + Toolchain (Read-Only)](#3-detect-type--toolchain-read-only)
+- [4. Detect + Attach Plugins (Uses import-plugin)](#4-detect--attach-plugins-uses-import-plugin)
+- [5. Derive the ai-pack (Best Effort)](#5-derive-the-ai-pack-best-effort)
+- [6. Ask on Ambiguity](#6-ask-on-ambiguity)
+- [7. Confirm + Summary](#7-confirm--summary)
 
 Reverse of `create-project`: ingest existing code, then derive the ai-pack. Import never modifies the code
 - it only creates `ai/` + a minimal project root (+ `remote.json` in remote-code mode).
@@ -21,7 +21,7 @@ Reverse of `create-project`: ingest existing code, then derive the ai-pack. Impo
 
 `source` (local path or `host:path`), target `slug`, and `mode`. Ask for whatever is missing.
 
-## 2. Land the code
+## 2. Land the Code
 
 Create `projects/` if it does not exist (gitignored, lazily created). Ask the user the **mode** - `local`
 (default), `remote-code`, or `embedded` (ai-pack inside the repo) - then:
@@ -36,14 +36,14 @@ Create `projects/` if it does not exist (gitignored, lazily created). Ask the us
   and embed the ai-pack **inside** it - `ai/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `ai/memory/`
   added to the repo's `.gitignore`. No separate `source/`. Use only when the user wants the pack committed with their repo.
 
-## 3. Detect type + toolchain (read-only)
+## 3. Detect Type + Toolchain (Read-Only)
 
 Match a `templates/projects/<type>.md` from signals: `pyproject.toml`/`setup.py` -> python;
 `package.json` -> node; `*.xcodeproj` -> ios; FastAPI imports -> web-service; a console entry point ->
 python-cli. Read README, dependency manifests, entry points, test/build config, Dockerfile/compose, and any
 committed `AGENTS.md` (or `CLAUDE.md`) in the source - treat it as project rules and leave it in place.
 
-## 4. Detect + attach plugins (uses import-plugin)
+## 4. Detect + Attach Plugins (Uses import-plugin)
 
 Scan for domain markers and propose plugins. Examples: NVBugs / `isaaclab.sh` / `__nvbugs/` / a NVBugs MCP
 -> suggest `nvidia-isaac-lab`. If markers clearly indicate a domain that no existing plugin covers (e.g. a
@@ -51,7 +51,7 @@ bespoke `__ai/` setup), offer `import-plugin` (create mode) to factor it into a 
 confirmed plugin, run `install-plugin` (install). Domain-specific knowledge maps into the plugin, **not**
 into the generic `engineer.instructions.md`.
 
-## 5. Derive the ai-pack (best effort)
+## 5. Derive the ai-pack (Best Effort)
 
 - `ai/spec.md` + `ai/memory/spec-v0.md` - reconstruct the spec from code + README.
 - `ai/engineer.instructions.md` - inferred **generic, shareable** build/run/test/lint commands +
@@ -59,7 +59,7 @@ into the generic `engineer.instructions.md`.
   plugins carry the domain-specific ones).
 - `ai/memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
   `ai/memory/credentials.md` - placeholders only; never copy real secrets out of the source.
-- `ai/memory/context.md` - the session-context summary; seed its `## Session context` with the import
+- `ai/memory/context.md` - the session-context summary; seed its `## Session Context` with the import
   session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
   gathered). Durable orientation also goes into `ai/engineer.instructions.md`, which survives future rewrites.
 - Seed `ai/memory/interactions.jsonl` (empty). Write `ai/manifest.json`
@@ -69,13 +69,13 @@ into the generic `engineer.instructions.md`.
   plus any plugin servers), and the revisions baseline
   (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
 
-## 6. Ask on ambiguity
+## 6. Ask on Ambiguity
 
 Batch questions wherever inference is uncertain: type, mode, primary entry point, exact run/test commands,
 in/out-of-scope dirs, remote host, plugins to attach, whether to keep existing git history. Never guess
 load-bearing details.
 
-## 7. Confirm + summary
+## 7. Confirm + Summary
 
 Report detected vs assumed vs needs-your-eyes; point at `ai/engineer.agent.md`; suggest
 `develop-project <slug>`. Log one line to `memory/interactions.jsonl`.

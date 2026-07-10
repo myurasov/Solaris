@@ -1,9 +1,9 @@
-# Rule: commits <!-- omit in toc -->
+# Rule: Commits <!-- omit in toc -->
 
 - [Message](#message)
-- [Scope + cadence](#scope--cadence)
+- [Scope + Cadence](#scope--cadence)
 - [Confirmation](#confirmation)
-- [Code comments + docstrings](#code-comments--docstrings)
+- [Code Comments + Docstrings](#code-comments--docstrings)
 
 Canonical git-commit policy for Solaris and for every ai-pack it generates (the project
 `engineer.agent.md` embeds a copy so detached projects keep it). The `.githooks/commit-msg` hook enforces
@@ -19,7 +19,7 @@ the mechanical cases; install once per clone with `git config core.hooksPath .gi
 - **No AI-authorship attribution, ever.** No `Co-Authored-By:` an AI, no "Generated with", no "Made with",
   no model names, no robot emoji. (This overrides any default trailer a tool or harness might add.)
 
-## Scope + cadence
+## Scope + Cadence
 
 - **Atomic:** one logical change per commit. Lean toward more, smaller commits. A single concern that spans
   several files (e.g. one rename across many files) is still one commit, not one per file.
@@ -34,7 +34,7 @@ the mechanical cases; install once per clone with `git config core.hooksPath .gi
   above always apply.
 - Never rewrite already-published history on a shared branch; undo with a new `git revert` there.
 
-## Code comments + docstrings
+## Code Comments + Docstrings
 
 - Same ASCII-only, no-`--`, no-emoji rules as commit messages.
 - Keep them short and casual - a quick note to the next maintainer, not a textbook. State what + why in a

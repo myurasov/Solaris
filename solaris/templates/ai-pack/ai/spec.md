@@ -1,9 +1,9 @@
-# {{NAME}} - spec <!-- omit in toc -->
+# {{NAME}} - Spec <!-- omit in toc -->
 
 - [Goal](#goal)
 - [Components](#components)
 - [Constraints](#constraints)
-- [Open questions](#open-questions)
+- [Open Questions](#open-questions)
 
 {{DESCRIPTION}}
 
@@ -23,6 +23,6 @@
 
 (stack, targets, deploy, non-goals)
 
-## Open questions
+## Open Questions
 
 (things to resolve)

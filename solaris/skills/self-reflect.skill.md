@@ -6,22 +6,22 @@ summary: Review interaction logs, surface ranked framework improvements, and (on
 
 # self-reflect <!-- omit in toc -->
 
-- [1. Gather signal](#1-gather-signal)
-- [2. Propose (ranked)](#2-propose-ranked)
-- [3. Apply on approval](#3-apply-on-approval)
+- [1. Gather Signal](#1-gather-signal)
+- [2. Propose (Ranked)](#2-propose-ranked)
+- [3. Apply on Approval](#3-apply-on-approval)
 - [4. Record](#4-record)
 
 Lightweight, propose-only review of the framework itself. The only path by which the orchestrator edits core
 framework files for self-improvement. No separate tailor/coder split.
 
-## 1. Gather signal
+## 1. Gather Signal
 
 Read `memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
 and `memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/ai/memory/interactions.jsonl`
 and `tasks/*/notes.md`. Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 
-## 2. Propose (ranked)
+## 2. Propose (Ranked)
 
 Present a short ranked list. For each: the observation (with evidence - which interactions), the suggested
 change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
@@ -36,7 +36,7 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 and reusable should be **promoted into the core framework** (spec / skills / rules / templates / tools). For
 each, name the target file and the `memory/instructions.md` entry it would retire.
 
-## 3. Apply on approval
+## 3. Apply on Approval
 
 For approved framework changes: make the edit, show the diff, and follow `rules/commits.rule.md`. Keep
 changes minimal and consistent with surrounding style. After editing a revisioned framework/plugin file,

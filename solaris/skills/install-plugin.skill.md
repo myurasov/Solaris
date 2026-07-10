@@ -7,11 +7,11 @@ summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/f
 # install-plugin <!-- omit in toc -->
 
 - [1. Inputs](#1-inputs)
-- [2. Acquire the source into plugins/](#2-acquire-the-source-into-plugins)
-- [3. Validate and repair the plugin source](#3-validate-and-repair-the-plugin-source)
-- [4. Scope: plugins-only, or attach to a project](#4-scope-plugins-only-or-attach-to-a-project)
-- [5. Link mode (development installs)](#5-link-mode-development-installs)
-- [6. Update, migrate, repair an attached plugin](#6-update-migrate-repair-an-attached-plugin)
+- [2. Acquire the Source into plugins/](#2-acquire-the-source-into-plugins)
+- [3. Validate and Repair the Plugin Source](#3-validate-and-repair-the-plugin-source)
+- [4. Scope: Plugins-Only, or Attach to a Project](#4-scope-plugins-only-or-attach-to-a-project)
+- [5. Link Mode (Development Installs)](#5-link-mode-development-installs)
+- [6. Update, Migrate, Repair an Attached Plugin](#6-update-migrate-repair-an-attached-plugin)
 - [7. Report](#7-report)
 
 The single **plugin lifecycle** skill. It acquires a plugin (each plugin is its **own repository**) from a
@@ -33,7 +33,7 @@ generic skill drives every plugin, reading plugin-specific setup from the plugin
 - **mode** (optional): `copy` (default) or `link` ("link plugin X to Y" / "link the X plugin"). Link mode
   attaches the live plugin source instead of copying it - see step 5.
 
-## 2. Acquire the source into plugins/
+## 2. Acquire the Source into plugins/
 
 If `plugins/<name>/` does **not** exist, create `plugins/` if needed and materialize the source there (then
 delete the `plugins/.empty` placeholder, since the directory now has real content):
@@ -47,7 +47,7 @@ delete the `plugins/.empty` placeholder, since the directory now has real conten
 If `plugins/<name>/` **already exists**, do not clobber it: go to step 3, and for a git source offer
 `git -C plugins/<name> pull`.
 
-## 3. Validate and repair the plugin source
+## 3. Validate and Repair the Plugin Source
 
 A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json` (valid JSON, `name` +
 `version`, optional `setup`), optional `mcps.json`, `shared/` with `*.skill.md` / `*.rule.md`, optional
@@ -59,7 +59,7 @@ A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json
 - Fix missing `manifest.json` fields (ask for `name`/`version` if unknown).
 - Ensure every `*.md` has a TOC: `uv run -m solaris.tools.toc --write plugins/<name>/**/*.md`.
 
-## 4. Scope: plugins-only, or attach to a project
+## 4. Scope: Plugins-Only, or Attach to a Project
 
 - **No project named:** stop after step 3 - the plugin source is in `plugins/<name>/`, available to attach
   later.
@@ -79,7 +79,7 @@ A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json
      stale), then `uv run -m solaris.tools.revs baseline --dir projects/<slug>` (safe in both modes - the
      revs tools skip linked plugins).
 
-## 5. Link mode (development installs)
+## 5. Link Mode (Development Installs)
 
 Link mode attaches a plugin **without copying it**: instead of `ai/<name>/`, the project gets a single
 pointer file `ai/<name>.link.md` that tells the engineer agent to load the plugin's `shared/` files
@@ -97,7 +97,7 @@ say so):
 ```markdown
 <!-- Linked plugin: managed by install-plugin (link mode). Machine-local development pointer. -->
 
-# Linked plugin: <name>
+# Linked Plugin: <name>
 
 This project uses the **<name>** plugin in **link mode**: nothing is copied into `ai/<name>/`; the live
 plugin source is loaded directly. On every turn, treat the plugin as if it were materialized here:
@@ -138,7 +138,7 @@ are unless noted):
   provides them); keep any `setup` answers already in `ai/memory/`. Confirm first (destructive). If the
   user instead wants the plugin kept but copied, that is **link -> copy** above - ask when ambiguous.
 
-## 6. Update, migrate, repair an attached plugin
+## 6. Update, Migrate, Repair an Attached Plugin
 
 For a plugin already attached to a project (driven here or by `update-project`). **Linked** plugins (step
 5) need none of this - they always run the live source, record no version, and migrations against

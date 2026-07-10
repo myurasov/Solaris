@@ -6,15 +6,15 @@ summary: Command-center overview (default) + deeper health checks (--deep). Read
 
 # health-check <!-- omit in toc -->
 
-- [Default (status overview)](#default-status-overview)
-- [--deep (health checks)](#--deep-health-checks)
+- [Default (Status Overview)](#default-status-overview)
+- [--deep (Health Checks)](#--deep-health-checks)
 
 Read-only. The default run is the **status summary**; `--deep` adds full health checks. Never applies a fix
 itself - it prints the exact command to run. The orchestrator runs the overview to orient **before working
 on a project** (the first `develop-project` of a session, per `AGENTS.md`); it is also available any time on
 demand.
 
-## Default (status overview)
+## Default (Status Overview)
 
 1. **Projects** - for each `projects/<slug>/`: read `ai/manifest.json` and show `name`, `type`, `mode`,
    `framework_version`, attached plugins. (An **embedded**-mode project keeps its ai-pack one level deeper at
@@ -35,7 +35,7 @@ demand.
 
 Print a compact table; end with any recommended actions.
 
-## --deep (health checks)
+## --deep (Health Checks)
 
 Everything above, plus:
 

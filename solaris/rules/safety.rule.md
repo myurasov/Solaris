@@ -1,16 +1,16 @@
-# Rule: safety <!-- omit in toc -->
+# Rule: Safety <!-- omit in toc -->
 
-- [Confirm before these](#confirm-before-these)
-- [rsync / deploy specifics](#rsync--deploy-specifics)
-- [Read before you overwrite](#read-before-you-overwrite)
+- [Confirm Before These](#confirm-before-these)
+- [rsync / Deploy Specifics](#rsync--deploy-specifics)
+- [Read Before You Overwrite](#read-before-you-overwrite)
 - [Secrets](#secrets)
-- [Autonomy waiver](#autonomy-waiver)
+- [Autonomy Waiver](#autonomy-waiver)
 
 Confirm before doing something that is hard to reverse or reaches outside the local machine. Solaris drives
 remote hosts (`ssh`, `rsync`, deploy) and git, so this is the most important operational guardrail. It is
 baked into each project's `engineer.agent.md` too.
 
-## Confirm before these
+## Confirm Before These
 
 - **Destructive (local):** `rm -rf`, deleting or overwriting files you did not create, `git reset --hard`,
   `git clean -fd`, force-overwrites, dropping databases.
@@ -23,14 +23,14 @@ baked into each project's `engineer.agent.md` too.
 Show the exact command (or diff) first, then ask once, concisely. Approval for one action does not extend to
 the next.
 
-## rsync / deploy specifics
+## rsync / Deploy Specifics
 
 - Exclude `.venv`, `.git`, secrets, and build artifacts.
 - **No `--delete` by default** - do not clobber remote-generated outputs (logs, checkpoints, trained
   models). Pulling artifacts back from the remote is an explicit, separate action.
 - In remote-code mode the code already lives on the remote; there is no deploy by default.
 
-## Read before you overwrite
+## Read Before You Overwrite
 
 Inspect a target before deleting or overwriting it. If what you find contradicts how it was described, or
 you did not create it, stop and surface that instead of proceeding.
@@ -40,7 +40,7 @@ you did not create it, stop and surface that instead of proceeding.
 Never print, paste, or commit the contents of any `credentials.md`. In any outward content (commits, PRs,
 messages) reference a secret by name/location, never by value.
 
-## Autonomy waiver
+## Autonomy Waiver
 
 A durable "work autonomously until X" instruction (or `commit!`) waives the per-step confirmation for that
 task's duration - the format and safety conventions still apply, and genuinely irreversible or outward
