@@ -6,16 +6,16 @@ summary: Sync an ai-pack with framework/plugin master copies by per-file revisio
 
 # update-project <!-- omit in toc -->
 
-- [1. Classify + sync files by revision](#1-classify--sync-files-by-revision)
-- [2. Apply minor/major migrations](#2-apply-minormajor-migrations)
-- [3. Update plugins](#3-update-plugins)
-- [4. Summary + revert](#4-summary--revert)
+- [1. Classify + Sync Files by Revision](#1-classify--sync-files-by-revision)
+- [2. Apply Minor/Major Migrations](#2-apply-minormajor-migrations)
+- [3. Update Plugins](#3-update-plugins)
+- [4. Summary + Revert](#4-summary--revert)
 
 Bring a project's ai-pack in sync with the current framework + plugin master copies. **Routine sync is
 per-file (revisions); semantic-version migrations run only for minor/major framework bumps.** Never touches
 the project's `source/` code.
 
-## 1. Classify + sync files by revision
+## 1. Classify + Sync Files by Revision
 
 `uv run -m solaris.tools.revs classify --dir projects/<slug>` gives a per-materialized-file verdict:
 
@@ -29,7 +29,7 @@ the project's `source/` code.
 
 Finish by re-recording the baseline: `uv run -m solaris.tools.revs baseline --dir projects/<slug>`.
 
-## 2. Apply minor/major migrations
+## 2. Apply Minor/Major Migrations
 
 `uv run -m solaris.tools.version check --dir projects/<slug>` (0 = up to date, 1 = migrate, 2 = downgrade).
 A migration exists only when a **minor/major** framework bump needed one (patch never does). If so,
@@ -37,7 +37,7 @@ A migration exists only when a **minor/major** framework bump needed one (patch 
 Migrate / Validate), then `version set --dir projects/<slug> <to_version>`. On failure, stop at the last
 good step and surface its Revert.
 
-## 3. Update plugins
+## 3. Update Plugins
 
 Step 1's revisions sync already reconciled each `ai/<plugin>/`. Additionally, for any plugin with a
 minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to apply
@@ -47,7 +47,7 @@ minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to a
 see `install-plugin` step 5 (the canonical link-mode definition). The revs tools skip them in step 1
 automatically.
 
-## 4. Summary + revert
+## 4. Summary + Revert
 
 Report what synced, what merged, and any versions set. `revs ff` is idempotent; migrations revert via their
 Revert section. Log one line to `memory/interactions.jsonl`.

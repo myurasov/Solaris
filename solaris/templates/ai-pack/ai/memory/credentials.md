@@ -1,4 +1,4 @@
-# Credentials - {{NAME}} (gitignored)
+# Credentials - {{NAME}} (Gitignored)
 
 Secrets for this project. Gitignored - never commit or echo, and reference (do not paste) them in any
 outward content (commits, PRs, messages).

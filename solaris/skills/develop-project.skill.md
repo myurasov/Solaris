@@ -7,8 +7,8 @@ summary: Hand off to a project's engineer agent (plan or implement) by loading i
 
 # develop-project <!-- omit in toc -->
 
-- [1. Locate the project](#1-locate-the-project)
-- [2. Load the engineer context](#2-load-the-engineer-context)
+- [1. Locate the Project](#1-locate-the-project)
+- [2. Load the Engineer Context](#2-load-the-engineer-context)
 - [3. Act](#3-act)
 
 Thin shim: switch the active persona to a project's **engineer** and carry out the user's request there.
@@ -17,13 +17,13 @@ This skill has no logic of its own beyond locating the project and loading its c
 On the first `develop-project` of a session, run the `health-check` overview first to orient (skip if it
 already ran this session, or if the user says to skip), then proceed.
 
-## 1. Locate the project
+## 1. Locate the Project
 
 Resolve `<slug>` to `projects/<slug>/`. If absent, list `projects/*` and ask. (If the user described an
 existing codebase that is not yet a project, suggest `import-project`; for something brand new, suggest
 `create-project`.)
 
-## 2. Load the engineer context
+## 2. Load the Engineer Context
 
 Read, in this order, and then obey them:
 

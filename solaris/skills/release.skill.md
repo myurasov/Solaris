@@ -6,15 +6,15 @@ summary: Cut a Solaris framework release end-to-end: commit pending changes, bum
 
 # release <!-- omit in toc -->
 
-- [When to use](#when-to-use)
+- [When to Use](#when-to-use)
 - [Steps](#steps)
-- [Choosing the version bump](#choosing-the-version-bump)
-- [Backfilling missing GitHub releases](#backfilling-missing-github-releases)
-- [Verify the end state](#verify-the-end-state)
+- [Choosing the Version Bump](#choosing-the-version-bump)
+- [Backfilling Missing GitHub Releases](#backfilling-missing-github-releases)
+- [Verify the End State](#verify-the-end-state)
 - [Guardrails](#guardrails)
-- [Reference paths](#reference-paths)
+- [Reference Paths](#reference-paths)
 
-## When to use
+## When to Use
 
 The user says **"do a release"**, **"cut a release"**, **"publish a release"**, or similar. Run the full sequence below end-to-end — autonomous multi-step flow; don't stop to confirm each step, surface a consolidated summary at the end. Follows `rules/commits.rule.md` throughout.
 
@@ -58,7 +58,7 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
     ```
     Release notes: 1-3 sentences summarising what changed (from the spec "What changed" blurb and migration title).
 
-## Choosing the version bump
+## Choosing the Version Bump
 
 - **MINOR** (`0.X.0`) — new skill, new feature, behavior change, new template/tool, significant doc restructure. The common case. Requires a migration (marker is fine).
 - **PATCH** (`0.X.Y`) — bug fix, doc tweak, internal refactor only. No migration.
@@ -66,7 +66,7 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
 
 When unsure between MINOR and PATCH, prefer **MINOR** for anything a user or project migration would notice — PATCH skips migrations entirely.
 
-## Backfilling missing GitHub releases
+## Backfilling Missing GitHub Releases
 
 Before (or right after) publishing the new release, ensure **every prior semver tag has a GitHub release**. Compute the gap reliably:
 
@@ -85,7 +85,7 @@ For each missing tag, derive notes from the spec "What changed" paragraph or the
 gh release create v<x> --title "Solaris <x>" --notes "<notes>"
 ```
 
-## Verify the end state
+## Verify the End State
 
 - `uv run -m solaris.tools.version current` matches the new version.
 - `git status -sb` shows the branch clean and in sync with origin.
@@ -100,7 +100,7 @@ gh release create v<x> --title "Solaris <x>" --notes "<notes>"
 - Re-run `git log -1 --format=%B` after committing to confirm no AI-attribution trailer slipped in; strip it with `git commit --amend` before pushing if it did.
 - If `uv run -m solaris.tools.revs status` reports unbumped files, bump them before the release commit.
 
-## Reference paths
+## Reference Paths
 
 | File | Action |
 |------|--------|
