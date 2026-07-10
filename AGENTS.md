@@ -1,24 +1,26 @@
+_Rev. 1_
+
 <!-- Canonical, always-on agent instructions for the Solaris framework. Minimal by design: pointers, not a manual. -->
 
 # Solaris - Agent Instructions <!-- omit in toc -->
 
-- [Read first (every session, and when starting a task)](#read-first-every-session-and-when-starting-a-task)
-- [Execution model](#execution-model)
+- [Read First (Every Session, and When Starting a Task)](#read-first-every-session-and-when-starting-a-task)
+- [Execution Model](#execution-model)
 - [Skills](#skills)
-- [Memory + logging](#memory--logging)
-- [Conventions (pointers)](#conventions-pointers)
+- [Memory + Logging](#memory--logging)
+- [Conventions (Pointers)](#conventions-pointers)
 
 This is the **canonical, IDE-agnostic** instruction file, read on every turn by both Cursor and Claude
 Code. Cursor reads `AGENTS.md` natively; Claude Code reads a one-line `CLAUDE.md` (`@AGENTS.md`) that imports
 it (there is no `.cursor/rules` shim). Keep it minimal: it
 is a set of pointers. The detail lives in the files it points to.
 
-## Read first (every session, and when starting a task)
+## Read First (Every Session, and When Starting a Task)
 
 1. [`solaris/solaris.agent.md`](solaris/solaris.agent.md) - the framework agent role (orchestrator) and how Solaris is organized.
 2. [`solaris/rules/commits.rule.md`](solaris/rules/commits.rule.md) - git commit policy (always applies).
 3. [`solaris/rules/safety.rule.md`](solaris/rules/safety.rule.md) - confirm before destructive / remote-mutating / outward actions (always applies).
-4. [`memory/instructions.md`](memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + logging).
+4. [`memory/instructions.md`](memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
 
 A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`) auto-injects these four files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
 
@@ -28,7 +30,7 @@ it only on request; do **not** auto-run it for `ad-hoc-task` work or other promp
 
 Full specification: [`solaris/spec/spec-v0.17.0.md`](solaris/spec/spec-v0.17.0.md).
 
-## Execution model
+## Execution Model
 
 One running agent adopts a **persona** by reading the active context:
 
@@ -56,7 +58,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 
 When a project has plugins attached, also load and obey every `ai/<plugin>/*.rule.md` (always-on) and treat each `ai/<plugin>/*.skill.md` as an additional, trigger-invoked skill. A plugin attached in **link mode** has a self-describing pointer file `ai/<name>.link.md` instead of `ai/<name>/` - follow it (canonical definition: `install-plugin` step 5).
 
-## Memory + logging
+## Memory + Logging
 
 Framework state lives in `memory/` (`resources.md`, `credentials.md` (gitignored), `interactions.jsonl`, and `instructions.md` - operating memory: terse, timestamped cross-project lessons + durable preferences, loaded every session, updated **in place**; **always** update it on "remember it/this", "note this", "don't forget", or similar). Project state lives in each `projects/<slug>/ai/memory/`. ai-packs never read the framework `memory/`. Full memory model, compaction, and logging schema: [`solaris/solaris.agent.md`](solaris/solaris.agent.md).
 
@@ -64,7 +66,7 @@ Framework state lives in `memory/` (`resources.md`, `credentials.md` (gitignored
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line in `memory/interactions.jsonl` (and, for project work, the same line in the project's `interactions.jsonl`). A prompt-submit hook appends a raw-prompt backstop.
 - A project's `ai/memory/context.md` is a **detailed summary of the current session's context**, rewritten in place at two save points: **before context compaction** (automatic or manual), and whenever the user says "save/remember/update/retain/keep context" or similar.
 
-## Conventions (pointers)
+## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions vs release-only semver), blocked-command wrappers, and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.17.0.md`](solaris/spec/spec-v0.17.0.md).
+- Versioning (per-file revisions vs release-only semver) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.17.0.md`](solaris/spec/spec-v0.17.0.md).
