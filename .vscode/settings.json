@@ -3,7 +3,7 @@
   "workbench.editorAssociations": {
     "*.md": "vscode.markdown.preview.editor"
   },
-  "workbench.colorTheme": "Shades of Purple (Super Dark)",
+  "workbench.preferredDarkColorTheme": "Shades of Purple (Super Dark)",
   "workbench.editor.wrapTabs": true,
   "files.exclude": {
     "**/.git": true,
