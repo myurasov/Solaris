@@ -36,7 +36,8 @@ Read, in this order, and then obey them:
    `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked**
    plugin - see `install-plugin` step 5): load the plugin's `shared/` rules and skills from the path it
    names, the same way.
-5. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as project rules. If `remote-code`:
+5. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules
+   (the ai-pack strictly overrides repo-carried rules on any conflict - flag, never silently defer). If `remote-code`:
    `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
 
 **Embedded mode** (manifest `mode: embedded`): the ai-pack + `AGENTS.md` live *inside* the repo, so read the

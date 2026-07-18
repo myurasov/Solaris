@@ -1,4 +1,4 @@
-_Rev. 8_
+_Rev. 9_
 
 <!-- Minimal pointer. Edit ai/engineer.agent.md, not this file. -->
 
@@ -12,7 +12,8 @@ On every turn, load and follow:
 2. [`ai/engineer.instructions.md`](ai/engineer.instructions.md) (shareable build/run/test + conventions), [`ai/spec.md`](ai/spec.md), and `ai/memory/*` (private: resources, credentials, logs).
 3. Every `ai/<plugin>/` overlay: each `*.rule.md` (always-on) and `*.skill.md` (trigger-invoked). Follow
    every `ai/<name>.link.md` (a linked plugin - the file describes itself).
-4. `source/AGENTS.md` if present (local mode) as project rules; in remote-code mode the code lives at the host
+4. `source/AGENTS.md` if present (local mode) as gap-filling project rules - the ai-pack strictly
+   overrides it (and any other in-repo conventions) on conflict; in remote-code mode the code lives at the host
    in `remote.json`; in embedded mode the code is this same repo (this `ai/` is a subdir, no separate `source/`).
 
 When working under a Solaris checkout, framework tools are available as `uv run -m solaris.tools.<name>`.

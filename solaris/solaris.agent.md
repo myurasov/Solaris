@@ -1,4 +1,4 @@
-_Rev. 6_
+_Rev. 7_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -31,7 +31,8 @@ There is one running agent. It adopts a persona by reading the active context:
   registry, plugins, and tasks; keeps framework memory. It does **not** write project source code itself;
   project work is handed to the project's engineer agent via `develop-project`.
 - **Engineer** - inside a project (`projects/<slug>/ai/engineer.agent.md`), with the ai-pack and every
-  `ai/<plugin>/` overlay loaded, plus `source/AGENTS.md` (if present) as project rules.
+  `ai/<plugin>/` overlay loaded, plus `source/AGENTS.md` (if present) as gap-filling project rules
+  (the ai-pack strictly overrides repo-carried rules on conflict).
 
 ## Responsibilities
 
