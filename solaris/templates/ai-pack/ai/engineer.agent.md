@@ -1,4 +1,4 @@
-_Rev. 18_
+_Rev. 19_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -28,9 +28,13 @@ command center. Edit this file to tune how this project is developed.
    without a copy): load the plugin's `shared/` rules and skills from the path it names, the same way -
    but only edit those files when deliberately developing the plugin (they are the live source for every
    consumer).
-6. local mode: `source/AGENTS.md` if present, as project rules. remote-code mode: `remote.json` (host/path) -
-   read, edit, and run the code there over Remote-SSH. embedded mode: there is no `source/` - the code is this
-   repo (this `ai/` is a subdir of it); read project rules from the repo's own `README`/docs if present.
+6. local mode: `source/AGENTS.md` if present, as **gap-filling** project rules. The ai-pack (this file,
+   `ai/*` rules and instructions, plugin overlays) **strictly overrides** anything the codebase carries
+   (`source/AGENTS.md`, `CLAUDE.md`, CONTRIBUTING, repo conventions): repo rules fill gaps only, and on
+   any conflict - commit style included - the ai-pack wins; never silently defer, flag the conflict
+   instead. remote-code mode: `remote.json` (host/path) - read, edit, and run the code there over
+   Remote-SSH. embedded mode: there is no `source/` - the code is this repo (this `ai/` is a subdir of
+   it); read project rules from the repo's own `README`/docs if present.
 
 **If `ai/memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
 invent host/deploy/credential values. First **bootstrap it interactively** - ask the user for the deploy/run
