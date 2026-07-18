@@ -28,7 +28,14 @@ _FENCE = re.compile(r"^\s*(```|~~~)")
 _ATX = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _TOC_LINE = re.compile(r"^\s*- \[.*\]\(#.*\)\s*$")
 _REV = re.compile(r"^_Rev\.\s+\d+_\s*$")  # leading revision marker (solaris.tools.revs), kept above the TOC
-_SKIP_DIRS = {".venv", ".git", ".tmp", ".tools", "node_modules", "__pycache__", "references"}
+# Framework docs only: skip venv variants (e.g. .venv.noSync) and the content trees
+# (projects/plugins/tasks/memory hold user or third-party markdown, not framework docs).
+_SKIP_DIRS = {".git", ".tmp", ".tools", "node_modules", "__pycache__", "references",
+              "projects", "plugins", "tasks", "memory"}
+
+
+def _skip(part: str) -> bool:
+    return part in _SKIP_DIRS or part.startswith(".venv")
 
 
 def slug(text: str) -> str:
@@ -147,7 +154,7 @@ def process(path: Path, write: bool) -> str:
 def iter_all_md() -> list[Path]:
     out: list[Path] = []
     for p in REPO_ROOT.rglob("*.md"):
-        if any(part in _SKIP_DIRS for part in p.relative_to(REPO_ROOT).parts):
+        if any(_skip(part) for part in p.relative_to(REPO_ROOT).parts):
             continue
         out.append(p)
     return sorted(out)
