@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 <!-- Minimal pointer. Edit ai/engineer.agent.md, not this file. -->
 
@@ -10,7 +10,8 @@ On every turn, load and follow:
 
 1. [`ai/engineer.agent.md`](ai/engineer.agent.md) - the engineer persona (with embedded commit + safety policies).
 2. [`ai/engineer.instructions.md`](ai/engineer.instructions.md) (shareable build/run/test + conventions), [`ai/spec.md`](ai/spec.md), and `ai/memory/*` (private: resources, credentials, logs).
-3. Every `ai/<plugin>/` overlay: each `*.rule.md` (always-on) and `*.skill.md` (trigger-invoked). Follow
+3. Every plugin overlay: each `ai/*.rule.md` or `ai/<plugin>/*.rule.md` (always-on) and `ai/*.skill.md` or
+   `ai/<plugin>/*.skill.md` (trigger-invoked). Follow
    every `ai/<name>.link.md` (a linked plugin - the file describes itself).
 4. `source/AGENTS.md` if present (local mode) as gap-filling project rules - the ai-pack strictly
    overrides it (and any other in-repo conventions) on conflict; in remote-code mode the code lives at the host

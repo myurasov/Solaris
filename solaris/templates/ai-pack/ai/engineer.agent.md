@@ -1,4 +1,4 @@
-_Rev. 19_
+_Rev. 20_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -17,7 +17,8 @@ command center. Edit this file to tune how this project is developed.
 ## Context to Load (Every Turn)
 
 1. This file.
-2. `ai/spec.md` - the current spec (the contract). `ai/memory/spec-v0.md` is the preserved initial spec.
+2. `ai/spec.md` - the current spec (the contract). `ai/memory/spec-v0.md`, if the project keeps one, is
+   the preserved initial spec.
 3. `ai/engineer.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
    this file; portable, no host/secret/internal-URL specifics).
 4. `ai/memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
@@ -45,7 +46,8 @@ before doing project work.
 ## Planning Workflow
 
 When the user wants to scope work first: update `ai/spec.md` through dialogue (goal, components,
-constraints, open questions). Never edit `ai/memory/spec-v0.md`. Move to implementation only on approval.
+constraints, open questions). Never edit `ai/memory/spec-v0.md` if present (it is an immutable archive).
+Move to implementation only on approval.
 
 ## Coding Workflow
 
