@@ -14,3 +14,5 @@ identical command re-run in the foreground created the instance normally.
 Watch item. If a backgrounded/no-tty create fails silently again, file upstream with both
 occurrences. Workaround already in `shared/brev-run.skill.md`: verify with `brev ls` after
 every create rather than trusting the create call.
+
+**Filed:** https://github.com/brevdev/brev-cli/issues/432 (2026-07-26, after second occurrence)
