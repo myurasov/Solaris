@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 ---
 name: brev-run
@@ -103,7 +103,9 @@ until their rows land at teardown.
 
 ## 5. Collect + ALWAYS tear down
 
-1. Pull results (metrics, best checkpoint, logs) to their canonical project location.
+1. Pull results to their canonical project location - metrics, logs, and **always both
+   trained checkpoints (`best.pt` and `last.pt`)**: weights enable re-evaluation and reuse
+   later; once the instance is deleted they are gone.
 2. `brev delete <name>` - **unconditional**, also on failure/abort paths. Verify with
    `brev ls` that nothing from this job lingers (also check stopped instances and any
    launchables created along the way - stopped is not free on all providers).
