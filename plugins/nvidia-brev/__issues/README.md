@@ -14,10 +14,12 @@ verda, T4 GCP, L40S massedcompute). `filed/` holds items already submitted upstr
 | [filed/cli-exec-multiline-hang.md](filed/cli-exec-multiline-hang.md) | [#429](https://github.com/brevdev/brev-cli/issues/429) | `brev exec` hangs, never executes multi-line/heredoc payloads |
 | [filed/cli-installer-rate-limit.md](filed/cli-installer-rate-limit.md) | [#430](https://github.com/brevdev/brev-cli/issues/430) | install-latest.sh fails on GitHub API rate limits |
 | [filed/cli-dry-run-output.md](filed/cli-dry-run-output.md) | [#431](https://github.com/brevdev/brev-cli/issues/431) | `brev create --dry-run` prints only the type name |
+| [filed/cli-silent-create-failure.md](filed/cli-silent-create-failure.md) | [#432](https://github.com/brevdev/brev-cli/issues/432) | `brev create` fails silently without a tty |
 
-Round-3 additions: stop/start IP-change behavior folded into PR #428 (second commit);
-[cli-silent-create-failure.md](cli-silent-create-failure.md) is a watch item (single
-occurrence, needs a second repro before filing).
+Round-3 additions: stop/start IP-change behavior folded into PR #428 (second commit).
+The silent-create failure reproduced a second time on 2026-07-26 and is now filed as
+[#432](https://github.com/brevdev/brev-cli/issues/432)
+([filed/cli-silent-create-failure.md](filed/cli-silent-create-failure.md)).
 
 ## Awaiting a channel (Brev platform - not repo-addressable; route via NVIDIA-internal / Brev support)
 
