@@ -1,0 +1,58 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/brev-run.skill.md": {
+      "rev": 7,
+      "hash": "6cb2f26c51ae512183f764125da4ec2187b29fcc533b41d769bdaff6f7ceda5f",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "b5bb024e3aed3713b403eeaf43b821c06d211254a8bca10018bde9c0c0128275"
+        },
+        {
+          "rev": 2,
+          "hash": "2ec056d600f2d6b2294802ded028909f6988a8c4c8c2c141b285a7943f6b24b3"
+        },
+        {
+          "rev": 3,
+          "hash": "8d60b08393eadf9995cf2bcc0591bf91ba7c182725aebf2542d9128e1a82c286"
+        },
+        {
+          "rev": 4,
+          "hash": "c77daa80dceda62874e7ee8936ec83c4e323fc0006959a7b1ec8a091ad65fbe6"
+        },
+        {
+          "rev": 5,
+          "hash": "b731980a701fef4c2621e6f823c2a7d4985640f0cd756987e2fafe68c8be418c"
+        },
+        {
+          "rev": 6,
+          "hash": "47da1160b3a8ff4136accfe8de8919255001169f52b6c3d78d662206cc64686e"
+        },
+        {
+          "rev": 7,
+          "hash": "6cb2f26c51ae512183f764125da4ec2187b29fcc533b41d769bdaff6f7ceda5f"
+        }
+      ]
+    },
+    "shared/brev-setup.skill.md": {
+      "rev": 3,
+      "hash": "3ce595480f29f53512ae8e45ebb91232545fa369e49629adc422288e76c26196",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "458c0e5bfed5008e5c9ed6bfb2a9cf97e5f37a6391fafb14f0633a095b6f289b"
+        },
+        {
+          "rev": 2,
+          "hash": "4f5fd385e798f00c36ec9ecdc84cb8729378c65f7b35b9e5d157b81410d4c9ed"
+        },
+        {
+          "rev": 3,
+          "hash": "3ce595480f29f53512ae8e45ebb91232545fa369e49629adc422288e76c26196"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "_comment": "Plugin manifest (authored by the plugin author). 'version' is the plugin semver (release-only); install-plugin reads 'setup'. Layout note: brev-cli/ (top-level) is a pristine mirror of the upstream NVIDIA agent files (see brev-cli/UPSTREAM.md) - a deliberate deviation from the flat-plugin rule, like visual-qa's serving/.",
+  "schema_version": 1,
+  "name": "nvidia-brev",
+  "version": "0.1.0",
+  "description": "Run project workloads on NVIDIA Brev cloud GPU instances with a fully autonomous lifecycle: brev-setup installs the CLI and guides account registration/login; brev-run sizes, creates, provisions, uses, monitors, and ALWAYS tears down instances, with mandatory per-instance cost ledgering in ai/.memory/brev-costs.md. Carries a pristine mirror of the upstream brev-cli agent reference (brev-cli/).",
+  "applies_to": {
+    "markers": []
+  },
+  "setup": {
+    "notes": [
+      "Requires the `brev` CLI and an NVIDIA Brev account (console.brev.nvidia.com). The brev-setup skill drives installation and login - it never asks for passwords/tokens in chat; login happens in the user's browser.",
+      "Record the Brev account/org used in the project's ai/.memory/credentials.md (gitignored). Never store credentials in the repo.",
+      "Create ai/.memory/brev-costs.md from the template in brev-run.skill.md on first use - every instance ever created gets a row there at teardown, including aborted attempts."
+    ],
+    "resources": [
+      {
+        "key": "brev_org",
+        "prompt": "Brev organization to bill instances to (shown by `brev org ls`)",
+        "default": "personal"
+      }
+    ]
+  }
+}
