@@ -1,4 +1,4 @@
-# rev. 10
+# rev. 11
 
 #!/usr/bin/env -S uv run --no-project --script
 # /// script
@@ -48,7 +48,8 @@ TIMEOUT = float(os.environ.get("VISUAL_QA_TIMEOUT", "120"))
 # ------------------------------------------------------------------- multi-model registry
 def _registry_path() -> str | None:
     cands = [os.environ.get("VISUAL_QA_REGISTRY", ""),
-             os.path.join("ai", "memory", "visual-qa-endpoints.json"),
+             os.path.join("ai", ".memory", "visual-qa-endpoints.json"),
+             os.path.join("ai", "memory", "visual-qa-endpoints.json"),  # pre-0.18 layout
              os.path.join(os.path.dirname(os.path.abspath(__file__)), "endpoints.json")]
     for c in cands:
         if c and os.path.isfile(c):
@@ -59,7 +60,7 @@ def _registry_path() -> str | None:
 def _registry() -> list[dict]:
     """Registered serving instances: [{name, model, endpoint, tasks, default?, note?}, ...].
 
-    Read from VISUAL_QA_REGISTRY (path), else ai/memory/visual-qa-endpoints.json (the private
+    Read from VISUAL_QA_REGISTRY (path), else ai/.memory/visual-qa-endpoints.json (ai/memory/ pre-0.18) (the private
     layer - endpoints carry internal hosts), else an endpoints.json next to this file (standalone
     use). Empty list = single-endpoint mode (env defaults only).
     """
@@ -98,7 +99,7 @@ def use(name: str) -> dict:
     """Persistently select the active instance: sets default: true on `name` in the registry."""
     p = _registry_path()
     if not p:
-        raise RuntimeError("no registry file found (ai/memory/visual-qa-endpoints.json)")
+        raise RuntimeError("no registry file found (ai/.memory/visual-qa-endpoints.json)")
     with open(p, encoding="utf-8") as f:
         doc = json.load(f)
     names = [i.get("name") for i in doc.get("instances", [])]

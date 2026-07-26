@@ -4,7 +4,7 @@
     "'playwright' is the web capture driver (also shipped in the framework MCP template; merge is idempotent).",
     "'visual-qa' is the local 'eyes' server: shared/eyes.py materializes into ai/visual-qa/eyes.py on install,",
     "so the command path is project-root-relative. It reads VISUAL_QA_ENDPOINT / VISUAL_QA_MODEL from env;",
-    "install-plugin writes the chosen endpoint/model into ai/memory/resources.md - set the env to match the",
+    "install-plugin writes the chosen endpoint/model into ai/.memory/resources.md - set the env to match the",
     "GPU box serving the model (default http://localhost:random/v1, Qwen/Qwen3-VL-8B-Instruct)."
   ],
   "mcpServers": {

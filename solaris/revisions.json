@@ -3,13 +3,9 @@
   "schema_version": 1,
   "files": {
     "solaris/templates/ai-pack/AGENTS.md": {
-      "rev": 9,
-      "hash": "129bd42d17b449a2db9d0a87c68ae234462bba827e9f8413402b6d29aef0774b",
+      "rev": 11,
+      "hash": "e116c7e9bc927b928426c637da0a43fbedec3e6279dc4763d2a1dbe3d8b271ea",
       "history": [
-        {
-          "rev": 1,
-          "hash": "3aae4509e0d34e23aba83405390b23d3d161656c6917775b7c282a9bc68b7a33"
-        },
         {
           "rev": 2,
           "hash": "6ccf61877fae87b0c3cdb9311e6f0c7ce389f9d31974a2afad51a55b48b87303"
@@ -41,21 +37,21 @@
         {
           "rev": 9,
           "hash": "129bd42d17b449a2db9d0a87c68ae234462bba827e9f8413402b6d29aef0774b"
+        },
+        {
+          "rev": 10,
+          "hash": "8ce47f6f74e35b58a4b2ce03f3cc1882e706234547c63982c05a239438e8833e"
+        },
+        {
+          "rev": 11,
+          "hash": "e116c7e9bc927b928426c637da0a43fbedec3e6279dc4763d2a1dbe3d8b271ea"
         }
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 19,
-      "hash": "c6469dc4cad6dee9bf3f498eead51792f5a2453d876ee02c6b32c9fdef6338b4",
+      "rev": 21,
+      "hash": "4e938455177cd76afb5a70de3dd3dafb6cd2b9904d6f85022dd3ecdbfa0dbf97",
       "history": [
-        {
-          "rev": 12,
-          "hash": "de0772d9603acb954b22b03ab53367ff4f3ccf07cb491341c1decc6751a02e3d"
-        },
-        {
-          "rev": 13,
-          "hash": "e37fa559ecf7c2a9f06cbf3001a0a9584b3eb97b861d6fea8d3273f6b9a45aaa"
-        },
         {
           "rev": 14,
           "hash": "15e8d1fdc8a2ebd3b16bae3fba1a822e7fd73318ea18bb5ee5d77222cb9a23d4"
@@ -87,6 +83,14 @@
         {
           "rev": 19,
           "hash": "c6469dc4cad6dee9bf3f498eead51792f5a2453d876ee02c6b32c9fdef6338b4"
+        },
+        {
+          "rev": 20,
+          "hash": "37f1987d8450855da3b399c95625d147de973625267d65c6c5ab750553a13b23"
+        },
+        {
+          "rev": 21,
+          "hash": "4e938455177cd76afb5a70de3dd3dafb6cd2b9904d6f85022dd3ecdbfa0dbf97"
         }
       ]
     }

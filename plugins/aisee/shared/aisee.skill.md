@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: aisee
@@ -36,8 +36,8 @@ choice, evidence, media rules) are in [`aisee.rule.md`](aisee.rule.md) - they al
 
 ## 0. Reach the server
 
-1. Read `aisee_server` from `ai/memory/resources.md` and the consumer token (if any) from
-   `ai/memory/credentials.md`.
+1. Read `aisee_server` from `ai/.memory/resources.md` and the consumer token (if any) from
+   `ai/.memory/credentials.md`.
 2. Confirm liveness: the MCP `health` tool if the `aisee` MCP server is connected, else
    `GET <server>/v1/health` (open endpoint).
 3. On the **first contact** with a server, read `GET <server>/v1/describe?flavor=mcp` - the
@@ -58,7 +58,7 @@ Skip if the user already provided media.
   screen recording for video.
 - **Mobile:** simulator/device screen recording.
 
-Save per the evidence rule: `ai/memory/visual/<area>-<state>-<YYYYMMDD>.png` (or the active
+Save per the evidence rule: `ai/.memory/visual/<area>-<state>-<YYYYMMDD>.png` (or the active
 task folder).
 
 ## 2. Query
@@ -131,8 +131,8 @@ uv sync && ./aisee install            # checks docker/NVIDIA toolkit/ffmpeg, cre
 ./aisee api start                     # REST + MCP on 0.0.0.0:8484
 ```
 
-Then record the URL in `ai/memory/resources.md` (`aisee_server`), the consumer token (if
-enabled) in `ai/memory/credentials.md`, update the `aisee` MCP entry, and re-run
+Then record the URL in `ai/.memory/resources.md` (`aisee_server`), the consumer token (if
+enabled) in `ai/.memory/credentials.md`, update the `aisee` MCP entry, and re-run
 `uv run -m solaris.tools.mcp_sync --check`.
 
 ## Troubleshooting

@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: self-reflect
 triggers: ["self-reflect", "improve Solaris", "what should we improve", "tailor Solaris"]
@@ -17,7 +19,7 @@ framework files for self-improvement. No separate tailor/coder split.
 ## 1. Gather Signal
 
 Read `memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
-and `memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/ai/memory/interactions.jsonl`
+and `memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/ai/.memory/interactions.jsonl`
 and `tasks/*/notes.md`. Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 

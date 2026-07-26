@@ -3,22 +3,30 @@
   "schema_version": 1,
   "files": {
     "shared/aisee.rule.md": {
-      "rev": 1,
-      "hash": "dad580f68d00711d87759c26ebf986c1cccedd1aabc4c106abecf517302ea7a5",
+      "rev": 2,
+      "hash": "4ed835cc2134570a986dd8cfd521a8bbcae62c183513633a0dade1cb33b8daed",
       "history": [
         {
           "rev": 1,
           "hash": "dad580f68d00711d87759c26ebf986c1cccedd1aabc4c106abecf517302ea7a5"
+        },
+        {
+          "rev": 2,
+          "hash": "4ed835cc2134570a986dd8cfd521a8bbcae62c183513633a0dade1cb33b8daed"
         }
       ]
     },
     "shared/aisee.skill.md": {
-      "rev": 1,
-      "hash": "b4c7ddca9be59f8446d6b9cddb279c9ad9b9061f35c7ab7a02fe9c74b0d933ee",
+      "rev": 2,
+      "hash": "237ab098f3c705be2036d4014b29a1158f600bea289e1a330a6029d48c0b9c3d",
       "history": [
         {
           "rev": 1,
           "hash": "b4c7ddca9be59f8446d6b9cddb279c9ad9b9061f35c7ab7a02fe9c74b0d933ee"
+        },
+        {
+          "rev": 2,
+          "hash": "237ab098f3c705be2036d4014b29a1158f600bea289e1a330a6029d48c0b9c3d"
         }
       ]
     }

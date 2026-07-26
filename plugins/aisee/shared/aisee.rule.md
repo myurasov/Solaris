@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -31,8 +31,8 @@ on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
 
 ## Server, tokens, and media
 
-- The server URL comes from `ai/memory/resources.md` (`aisee_server`); the consumer token, if
-  any, from `ai/memory/credentials.md`. Never hardcode hosts, ports, or tokens in shared or
+- The server URL comes from `ai/.memory/resources.md` (`aisee_server`); the consumer token, if
+  any, from `ai/.memory/credentials.md`. Never hardcode hosts, ports, or tokens in shared or
   committed files.
 - Media entries resolve **on the AISee host**. A file local to this machine goes up once via
   the blob store - sha256 the bytes, probe `GET /v1/blobs/{sha}`, `POST /v1/blobs` if missing -
@@ -41,7 +41,7 @@ on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
 
 ## Evidence
 
-- Captures live under `ai/memory/visual/` in the project (or inside the active task folder for
+- Captures live under `ai/.memory/visual/` in the project (or inside the active task folder for
   ad-hoc work), named `<area>-<state>-<YYYYMMDD>.png` / `.mov`.
 - **Never auto-commit captures or recordings.** Reference them by path in reports; commit only
   a curated baseline when the user asks.

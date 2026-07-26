@@ -1,3 +1,5 @@
+_Rev. 1_
+
 # aisee - Solaris plugin <!-- omit in toc -->
 
 - [What it is](#what-it-is)
@@ -29,7 +31,7 @@ CLI**. The plugin ships knowledge only - AISee itself runs as an external servic
 
 At the Solaris root: `install plugin aisee to <project>` (or `link plugin aisee to <project>`
 while developing the plugin). Setup prompts for the AISee server URL and an optional consumer
-token; answers land in the project's `ai/memory/resources.md` / `credentials.md`, and the
+token; answers land in the project's `ai/.memory/resources.md` / `credentials.md`, and the
 merged MCP entry gets the real URL.
 
 ## Requirements
