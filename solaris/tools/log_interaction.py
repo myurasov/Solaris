@@ -1,3 +1,5 @@
+# rev. 1
+
 # Copyright 2026 Mihail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
@@ -16,7 +18,7 @@ as a ``{ts, cwd, ide, prompt}`` backstop line, and always to the **framework mas
 ``memory/interactions.jsonl`` - the complete prompt stream, including project (handed-off) work, because
 "hand off" does not change the cwd. The agent additionally authors the full ``{ts, project, prompt, request,
 outcome}`` entry (``prompt`` the raw prompt, ``request`` its interpretation) into this master log and into
-each touched project's ``ai/memory/interactions.jsonl``; so the master mixes these backstop lines with the
+each touched project's ``ai/.memory/interactions.jsonl``; so the master mixes these backstop lines with the
 agent's full entries, and this hook guarantees a prompt is never lost.
 """
 
@@ -86,7 +88,7 @@ _NOT_A_CLI = (
     "it is not a command-line tool and takes no arguments.\n"
     "Do not call it by hand. To record an interaction, append the authoritative "
     "{ts, project, prompt, request, outcome} line yourself to BOTH the project's "
-    "ai/memory/interactions.jsonl and the framework master memory/interactions.jsonl."
+    "ai/.memory/interactions.jsonl and the framework master memory/interactions.jsonl."
 )
 
 

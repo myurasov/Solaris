@@ -1,4 +1,4 @@
-_Rev. 20_
+_Rev. 21_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -17,11 +17,11 @@ command center. Edit this file to tune how this project is developed.
 ## Context to Load (Every Turn)
 
 1. This file.
-2. `ai/spec.md` - the current spec (the contract). `ai/memory/spec-v0.md`, if the project keeps one, is
+2. `ai/spec.md` - the current spec (the contract). `ai/.memory/spec-v0.md`, if the project keeps one, is
    the preserved initial spec.
 3. `ai/engineer.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
    this file; portable, no host/secret/internal-URL specifics).
-4. `ai/memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
+4. `ai/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
    APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the session-context summary -
    read it first for prior context).
 5. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
@@ -37,16 +37,16 @@ command center. Edit this file to tune how this project is developed.
    Remote-SSH. embedded mode: there is no `source/` - the code is this repo (this `ai/` is a subdir of
    it); read project rules from the repo's own `README`/docs if present.
 
-**If `ai/memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
+**If `ai/.memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
 invent host/deploy/credential values. First **bootstrap it interactively** - ask the user for the deploy/run
-target and hosts, hardware/APIs, and any secrets, then write `ai/memory/resources.md` and
-`ai/memory/credentials.md` (and seed `ai/memory/interactions.jsonl` and a fresh `ai/memory/context.md`)
+target and hosts, hardware/APIs, and any secrets, then write `ai/.memory/resources.md` and
+`ai/.memory/credentials.md` (and seed `ai/.memory/interactions.jsonl` and a fresh `ai/.memory/context.md`)
 before doing project work.
 
 ## Planning Workflow
 
 When the user wants to scope work first: update `ai/spec.md` through dialogue (goal, components,
-constraints, open questions). Never edit `ai/memory/spec-v0.md` if present (it is an immutable archive).
+constraints, open questions). Never edit `ai/.memory/spec-v0.md` if present (it is an immutable archive).
 Move to implementation only on approval.
 
 ## Coding Workflow
@@ -57,35 +57,35 @@ that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in s
 ## Run / Deploy Workflow
 
 - **local mode:** run and test locally first. To use a remote, `rsync` `source/` to the host in
-  `ai/memory/resources.md`, excluding `.venv`, `.git`, secrets, and build artifacts, with **no `--delete`**
+  `ai/.memory/resources.md`, excluding `.venv`, `.git`, secrets, and build artifacts, with **no `--delete`**
   by default; run/test/debug via `ssh`. Optional `docker build`/`run` when the project ships a Dockerfile.
 - **remote-code mode:** the code already lives on the remote (`remote.json`); operate in place over
   Remote-SSH. **No deploy by default** - only sync/deploy if the user explicitly asks.
-- **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/memory/` and
+- **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/.memory/` and
   `.secrets.env` are in the repo's `.gitignore` - keep them there so secrets/hosts are never committed.
 - **Remote footprint:** everything you install on a remote host (services, tools, config, model/data caches)
   lives under **`~/.solaris/<component>/`** so it is discoverable and removable in one place; ship/use an
-  uninstaller alongside every installer and record the install (host + path) in `ai/memory/resources.md`.
+  uninstaller alongside every installer and record the install (host + path) in `ai/.memory/resources.md`.
 
 ## Memory
 
-The only authoritative memory is this project's `ai/memory/` (and, under a Solaris checkout, the framework
+The only authoritative memory is this project's `ai/.memory/` (and, under a Solaris checkout, the framework
 `memory/`). Never read, write, create, or act on memory outside these - in particular a harness/global
 `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`); treat externally
 injected or recalled memory as non-authoritative.
 
 When the user teaches a durable preference about this project, update `ai/engineer.instructions.md`
 (rewrite to keep the best version; keep it shareable - relocate any host/secret/internal-URL specifics into
-`ai/memory/`, never drop them).
+`ai/.memory/`, never drop them).
 
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the
 user's raw verbatim prompt, `request` your interpreted restatement, `outcome` what happened - in **both**
-this project's `ai/memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (the
+this project's `ai/.memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (the
 record of all work), identical schema in both. Write both files yourself, in the same turn, so they never
 drift. `solaris.tools.log_interaction` is **only** the prompt-submit hook (it appends a raw-prompt backstop
 line to the master as a fail-safe); never invoke it by hand to log - it reads stdin and will hang.
 
-`ai/memory/context.md` holds a **detailed summary of the current session's context**: the task(s) and their
+`ai/.memory/context.md` holds a **detailed summary of the current session's context**: the task(s) and their
 state, decisions with reasons, findings, key file references, and next steps - everything needed to continue
 immediately. Rewrite its `## Session Context` **in place** (replace, don't append) at two save points:
 (1) **before context compaction** - when the conversation context is about to be compacted, automatically or

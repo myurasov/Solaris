@@ -1,3 +1,5 @@
+_Rev. 1_
+
 # visual-qa — VLM "eyes" for end-to-end visual testing <!-- omit in toc -->
 
 - [What this is](#what-this-is)
@@ -19,7 +21,7 @@ any NVIDIA GPU (DGX Spark, workstation RTX, datacenter, cloud).
 
 - **Client** — [`shared/eyes.py`](shared/eyes.py): zero-dependency HTTP client (PEP 723 script), usable as
   a CLI or as an **MCP stdio server**. Materialized into each project at `ai/visual-qa/eyes.py`.
-- **Instance registry** — `ai/memory/visual-qa-endpoints.json` (project private layer): the installed
+- **Instance registry** — `ai/.memory/visual-qa-endpoints.json` (project private layer): the installed
   serving instances. **One ACTIVE instance at a time**; every call routes to it unless `--model` overrides.
 - **Serving** — [`serving/`](serving/): lifecycle scripts that run models as memory-capped docker/vLLM
   instances under `~/.solaris/visual-qa/` on the GPU host (Solaris remote-footprint convention).
@@ -135,7 +137,7 @@ _Cosmos3-Nano runs on the GB10 via **`vllm/vllm-omni:cosmos3-aarch64`** (the nvc
 
 **Default model: `qwen3-vl-30b-a3b-instruct`** (MoE — 32B-class quality at ~5-7 s). Full 7-model matrix (adds Nemotron-NVFP4, Cosmos3-Nano, Qwen3-VL-30B-A3B, UI-TARS): see the project's `res/report-7-model-comparison.md`.
 
-Earlier measured runs: `ai/memory/visual/dual-model-*` + `res/report-4-dual-model-visual-qa.md`
+Earlier measured runs: `ai/.memory/visual/dual-model-*` + `res/report-4-dual-model-visual-qa.md`
 and `res/report-5-*` (Holo + system/browser scenarios).
 
 ## Gotchas (learned in production)

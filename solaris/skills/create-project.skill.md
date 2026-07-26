@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: create-project
 triggers: ["create project", "new project", "start a project named X", "scaffold a project"]
@@ -69,21 +71,21 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
   you `git init` there) and holds the **whole** project - code, `ai/`, `AGENTS.md` + `CLAUDE.md`, `README`,
   dotfiles. Materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at that repo's root (not at `projects/<slug>/`);
   keep any non-repo local aux (`references/`, `screenshots/`) at `projects/<slug>/` *outside* `<repo>`. Add
-  `ai/memory/` **and `.secrets.env`** to the repo's `.gitignore` so no secrets/hosts are committed. Record
+  `ai/.memory/` **and `.secrets.env`** to the repo's `.gitignore` so no secrets/hosts are committed. Record
   `project.mode` `embedded` in `ai/manifest.json`; tools take `--dir projects/<slug>/<repo>/`.
 
 ## 5. Attach Plugins
 
 For each chosen plugin (including any implied by a plugin-provided type), run `install-plugin` (install):
 it copies the plugin's `shared/` into `ai/<name>/`, merges its `mcps.json` servers into the project runtime
-MCP (step 7), runs the plugin's `setup` from `manifest.json` (prompts for resources -> `ai/memory/`), and
+MCP (step 7), runs the plugin's `setup` from `manifest.json` (prompts for resources -> `ai/.memory/`), and
 records `{name, version}` in `ai/manifest.json` -> `plugins`.
 
 ## 6. Seed Spec, Manifest, Revisions Baseline
 
 - Short spec dialogue (purpose, components, constraints) -> `ai/spec.md`; copy it verbatim to
-  `ai/memory/spec-v0.md`.
-- The copied `ai/memory/` already includes a fresh `context.md` (the session-context summary, with
+  `ai/.memory/spec-v0.md`.
+- The copied `ai/.memory/` already includes a fresh `context.md` (the session-context summary, with
   `{{NAME}}` substituted); leave its `## Session Context` empty for the engineer to fill at a save point.
 - Ensure `ai/manifest.json` has `project.{name,slug,type,mode}`, `framework_version`, and `plugins`.
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes

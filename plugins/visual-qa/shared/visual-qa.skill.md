@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 ---
 name: visual-qa
@@ -63,7 +63,7 @@ Procedure:
    (or `--detect` to read the local GPU). It returns a ranked shortlist with estimated VRAM, the quant,
    serving backend, and license. The catalog is editable data in [`models.json`](models.json).
 3. **Ask the user to choose.** Present the top few options (name, size, est. VRAM, why) and let them pick -
-   do not silently auto-select. Record the choice into `ai/memory/resources.md` and set
+   do not silently auto-select. Record the choice into `ai/.memory/resources.md` and set
    `VISUAL_QA_MODEL` / `VISUAL_QA_VIDEO_MODEL` (and the serving command) accordingly.
 
 ## 1. Capture
@@ -138,7 +138,7 @@ MCP: `watch_tool(media, question|expectation, fps, ...)`; `look`/`assert` also a
 (`look`/`assert`/`watch`) run on. There is **no implicit per-task model switching**. More instances may be
 *installed* (weights cached, container stopped) and swapped in when needed.
 
-- **Registry** — `ai/memory/visual-qa-endpoints.json` (private layer; or `VISUAL_QA_REGISTRY=<path>`):
+- **Registry** — `ai/.memory/visual-qa-endpoints.json` (private layer; or `VISUAL_QA_REGISTRY=<path>`):
   installed instances `{name, model, endpoint, tasks, note, default?}`; **`name` is the slug of the full model id** (e.g. `Qwen/Qwen3-VL-32B-Instruct` → `qwen3-vl-32b-instruct`), matching the serving container/config names. `default: true` marks the active one.
 - **Select the active instance:** `eyes.py use <name>` / MCP `use_model_tool(name)` (persists), or
   `VISUAL_QA_ACTIVE=<name>` env for a session-only override. Make sure that instance is *started*

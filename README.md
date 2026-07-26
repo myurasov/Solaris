@@ -1,3 +1,5 @@
+_Rev. 1_
+
 # Solaris <!-- omit in toc -->
 
 - [Architecture](#architecture)
@@ -33,7 +35,7 @@ Per-project bundle at `projects/<slug>/ai/`:
 
 - **Shareable** - `engineer.agent.md` (role), `engineer.instructions.md` (build/run/test), `spec.md`,
   `manifest.json` (type, mode, framework version, plugins).
-- **Private** (`ai/memory/`, drop to share) - `resources.md`, `credentials.md`, `context.md`,
+- **Private** (`ai/.memory/`, drop to share) - `resources.md`, `credentials.md`, `context.md`,
   `interactions.jsonl`.
 
 **Type**: `python-cli`, `web-service`, `ios-app`, or plugin-provided. **Mode**: `local` (code in
@@ -63,7 +65,7 @@ URL / folder / zip; ignored via `plugins/.gitignore`) or **bundled** under `plug
 
 ## Memory & Versioning
 
-- **Memory boundary.** Only framework `memory/` and each project's `ai/memory/` are authoritative (no
+- **Memory boundary.** Only framework `memory/` and each project's `ai/.memory/` are authoritative (no
   global/harness store). `memory/instructions.md` is operating memory - terse timestamped cross-project
   lessons + preferences, loaded each session; turns log to `interactions.jsonl`.
 - **Revisions** (`solaris.tools.revs`) keep materialized ai-pack files in sync with framework masters via
@@ -91,5 +93,5 @@ pytest`); `read_first`, `skill_loader`, `log_interaction` are hooks, never run b
 ## Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.17.0.md`](solaris/spec/spec-v0.17.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.18.0.md`](solaris/spec/spec-v0.18.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mihail Yurasov <me@yurasov.me>.

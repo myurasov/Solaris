@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: install-plugin
 triggers: ["install plugin <git url|folder|zip>", "install the <name> plugin", "repair plugin <name>", "add plugin <X> to <project>", "update plugin <X> in <project>", "link plugin <X> to <project>", "link the <name> plugin", "unlink plugin <X>", "detach plugin <X> from <project>"]
@@ -73,7 +75,7 @@ A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json
      `.cursor/mcp.json`); verify `mcp_sync --check`.
   3. Run the plugin's **`setup`** (from `manifest.json`): surface each `setup.notes` line; for each
      `setup.resources` entry, prompt (`prompt`, with `default`) and write the answer into
-     `ai/memory/resources.md` (or `credentials.md` if `secret: true`).
+     `ai/.memory/resources.md` (or `credentials.md` if `secret: true`).
   4. Record `{name, version}` in `ai/manifest.json` -> `plugins` (link mode: `{name, "mode": "link"}` -
      **no** `version`: a linked plugin always runs the live source, so a recorded version would only go
      stale), then `uv run -m solaris.tools.revs baseline --dir projects/<slug>` (safe in both modes - the
@@ -135,7 +137,7 @@ are unless noted):
 - **unlink / detach** ("unlink plugin <name>", "detach plugin <name> from <project>"): fully remove the
   attachment - delete `ai/<name>.link.md`, remove the plugin's entry from `ai/manifest.json` -> `plugins`,
   and remove its `mcps.json` servers from the project runtime MCP (unless another attached plugin also
-  provides them); keep any `setup` answers already in `ai/memory/`. Confirm first (destructive). If the
+  provides them); keep any `setup` answers already in `ai/.memory/`. Confirm first (destructive). If the
   user instead wants the plugin kept but copied, that is **link -> copy** above - ask when ambiguous.
 
 ## 6. Update, Migrate, Repair an Attached Plugin

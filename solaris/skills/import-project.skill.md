@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: import-project
 triggers: ["import project", "adopt <path>", "adopt <host:path>", "bring <repo> into Solaris"]
@@ -33,7 +35,7 @@ Create `projects/` if it does not exist (gitignored, lazily created). Ask the us
 - **remote-code:** do **not** copy. Write `remote.json` (`host`, `path`, `deploy: false`). Read the remote
   tree over SSH (`ssh <host> 'ls / cat ...'`) for the detection steps.
 - **embedded:** adopt the repo at `projects/<slug>/<repo>/` (copy/rsync it there, or in place if already there)
-  and embed the ai-pack **inside** it - `ai/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `ai/memory/`
+  and embed the ai-pack **inside** it - `ai/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `ai/.memory/`
   added to the repo's `.gitignore`. No separate `source/`. Use only when the user wants the pack committed with their repo.
 
 ## 3. Detect Type + Toolchain (Read-Only)
@@ -53,16 +55,16 @@ into the generic `engineer.instructions.md`.
 
 ## 5. Derive the ai-pack (Best Effort)
 
-- `ai/spec.md` + `ai/memory/spec-v0.md` - reconstruct the spec from code + README.
+- `ai/spec.md` + `ai/.memory/spec-v0.md` - reconstruct the spec from code + README.
 - `ai/engineer.instructions.md` - inferred **generic, shareable** build/run/test/lint commands +
-  conventions (host/secret/internal-URL specifics go in `ai/memory/resources.md`/`credentials.md`, not here;
+  conventions (host/secret/internal-URL specifics go in `ai/.memory/resources.md`/`credentials.md`, not here;
   plugins carry the domain-specific ones).
-- `ai/memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
-  `ai/memory/credentials.md` - placeholders only; never copy real secrets out of the source.
-- `ai/memory/context.md` - the session-context summary; seed its `## Session Context` with the import
+- `ai/.memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
+  `ai/.memory/credentials.md` - placeholders only; never copy real secrets out of the source.
+- `ai/.memory/context.md` - the session-context summary; seed its `## Session Context` with the import
   session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
   gathered). Durable orientation also goes into `ai/engineer.instructions.md`, which survives future rewrites.
-- Seed `ai/memory/interactions.jsonl` (empty). Write `ai/manifest.json`
+- Seed `ai/.memory/interactions.jsonl` (empty). Write `ai/manifest.json`
   (`project.{name,slug,type,mode}`, `framework_version` from `version current`, `plugins`). Write the
   minimal project root (`AGENTS.md` + a one-line `CLAUDE.md` `@AGENTS.md` shim; no `.cursor/` / `mcp.json.example` / `.gitignore`),
   the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root `mcp.json.example`

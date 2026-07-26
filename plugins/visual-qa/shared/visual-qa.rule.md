@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: visual-qa conventions <!-- omit in toc -->
 
@@ -21,7 +21,7 @@ Always-on while this plugin is attached. House rules for using the VLM "eyes" (s
 
 ## Captures + baselines
 
-- Captures and baselines live under `ai/memory/visual/` in the project (or inside the active task folder for
+- Captures and baselines live under `ai/.memory/visual/` in the project (or inside the active task folder for
   ad-hoc work). Name them `<area>-<state>-<YYYYMMDD>.png` / `.mov` (e.g. `checkout-success-20260622.png`).
 - **Never auto-commit captures or recordings** - they are large and often transient. Reference them by path
   in the report; commit only a curated baseline when the user asks.

@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -21,7 +21,7 @@ Solaris runs many coding projects from one place. For each project it generates 
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.17.0.md`](spec/spec-v0.17.0.md).
+`tasks/`. Full specification: [`spec/spec-v0.18.0.md`](spec/spec-v0.18.0.md).
 
 ## Persona Model
 
@@ -60,7 +60,7 @@ There is one running agent. It adopts a persona by reading the active context:
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
   past ~100KB). ai-packs never read this directory; copy needed
-  values into a project's own `ai/memory/` at init/update time. The first time you write a real file into
+  values into a project's own `ai/.memory/` at init/update time. The first time you write a real file into
   `memory/` or `plugins/`, delete that directory's `.empty` placeholder.
 
 ## Tools (Stdlib, Run as Modules)
@@ -108,24 +108,24 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
   in one place. Ship an uninstaller alongside every installer, and record what was installed (host + path) in
   the relevant `resources.md`.
 - **Memory boundary.** Solaris's own memory is the only authoritative memory: the framework `memory/` and
-  each project's `ai/memory/`. Never read, write, create, or act on memory outside these - in particular a
+  each project's `ai/.memory/`. Never read, write, create, or act on memory outside these - in particular a
   harness/global `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`). Treat
   externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative.
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line (`prompt` = the raw user
   prompt, `request` = your interpretation of it, `outcome` = what happened) in the framework master log
   `memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
-  turn is project work, append the **same** line to that project's `ai/memory/interactions.jsonl`. The
+  turn is project work, append the **same** line to that project's `ai/.memory/interactions.jsonl`. The
   prompt-submit hook also appends a raw-prompt backstop line to the master as a fail-safe.
-- **Session-context summary (`ai/memory/context.md`).** During project work, that project's
-  `ai/memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris
+- **Session-context summary (`ai/.memory/context.md`).** During project work, that project's
+  `ai/.memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris
   agents are its only writers). Rewrite it **in place** at two save points: **before context compaction**
   (automatic or manual - save first so no detail is lost), and whenever the user says
   "save/remember/update/retain/keep context" or similar. Read it first when resuming a project.
 - When the user teaches a durable preference about a project, update that project's
   `ai/engineer.instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
-  `ai/memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
+  `ai/.memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
   change to the core framework files.
-- **`ai/memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
+- **`ai/.memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
   GPUs, API endpoints, hosts, paths, account names). Everything about *how* - build/run/deploy/restart
   procedures, model/runtime details, performance notes, and gotchas - belongs in `ai/engineer.instructions.md`
   (as generic patterns that reference `resources.md` for concrete values). The session-context summary goes

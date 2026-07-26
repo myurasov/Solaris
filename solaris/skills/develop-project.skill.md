@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: develop-project
 triggers: ["work on <project>", "develop <project>", "open <project>", "plan <project>", "implement X in <project>"]
@@ -31,7 +33,7 @@ Read, in this order, and then obey them:
    (includes the embedded commit + safety policies).
 2. `projects/<slug>/ai/manifest.json` - name/type/mode + attached plugins.
 3. `projects/<slug>/ai/engineer.instructions.md` (shareable build/run/test + conventions),
-   `ai/spec.md`, and `ai/memory/*` (private: `resources.md`, `credentials.md`).
+   `ai/spec.md`, and `ai/.memory/*` (private: `resources.md`, `credentials.md`).
 4. Every `projects/<slug>/ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
    `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked**
    plugin - see `install-plugin` step 5): load the plugin's `shared/` rules and skills from the path it
@@ -52,15 +54,15 @@ operate over Remote-SSH against `remote.json` (remote-code).
 Follow the engineer agent's workflows:
 
 - **Plan** (user wants design/changes scoped first): update `ai/spec.md` through dialogue; keep
-  `ai/memory/spec-v0.md` untouched. Hand to implementation only when the user approves.
+  `ai/.memory/spec-v0.md` untouched. Hand to implementation only when the user approves.
 - **Implement:** write code against the spec; run/test (locally or on the remote per mode); honor the
   embedded safety policy before any remote-mutating or outward action.
 - **Learn:** when the user teaches a durable project preference, update `ai/engineer.instructions.md`
-  (keep it shareable - put any host/secret/internal-URL specifics in `ai/memory/` instead, never dropped).
+  (keep it shareable - put any host/secret/internal-URL specifics in `ai/.memory/` instead, never dropped).
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) in **both** the project's
-  `ai/memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (all work).
-- **Save context:** keep the project's `ai/memory/context.md` (the detailed session-context summary,
+  `ai/.memory/interactions.jsonl` and the framework master `memory/interactions.jsonl` (all work).
+- **Save context:** keep the project's `ai/.memory/context.md` (the detailed session-context summary,
   rewritten in place) current at its save points: before context compaction (automatic or manual), and
   whenever the user says "save/remember/update/retain/keep context" or similar.
 
