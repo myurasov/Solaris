@@ -1,4 +1,4 @@
-_Rev. 8_
+_Rev. 9_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -95,6 +95,9 @@ Two independent mechanisms:
 - Commits: [`rules/commits.rule.md`](rules/commits.rule.md).
 - Safety: [`rules/safety.rule.md`](rules/safety.rule.md) - confirm before destructive, remote-mutating, or
   outward actions.
+- Markdown docs (framework and project alike): headings in **Title Case**; reader-facing docs
+  (READMEs, specs, guides) carry a TOC listing **h2 and deeper only** - the h1 title stays out
+  (`solaris.tools.toc` does both: it marks the h1 `omit in toc` and maintains the list).
 
 Both are also baked into each project's `engineer.agent.md` so a detached ai-pack keeps them.
 
