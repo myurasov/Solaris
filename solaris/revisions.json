@@ -49,13 +49,9 @@
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 21,
-      "hash": "4e938455177cd76afb5a70de3dd3dafb6cd2b9904d6f85022dd3ecdbfa0dbf97",
+      "rev": 22,
+      "hash": "11e7a3beebe6bf038f63c3e30b1eb7c06d7ac72b8768b7436ebf647a81f5dede",
       "history": [
-        {
-          "rev": 14,
-          "hash": "15e8d1fdc8a2ebd3b16bae3fba1a822e7fd73318ea18bb5ee5d77222cb9a23d4"
-        },
         {
           "rev": 15,
           "hash": "6103b5ffe63d3440800301825f6cc828d9024ef4961b91f2cf0899301b10a7a5"
@@ -91,6 +87,10 @@
         {
           "rev": 21,
           "hash": "4e938455177cd76afb5a70de3dd3dafb6cd2b9904d6f85022dd3ecdbfa0dbf97"
+        },
+        {
+          "rev": 22,
+          "hash": "11e7a3beebe6bf038f63c3e30b1eb7c06d7ac72b8768b7436ebf647a81f5dede"
         }
       ]
     }

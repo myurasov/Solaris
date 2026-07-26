@@ -1,4 +1,4 @@
-_Rev. 21_
+_Rev. 22_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -36,6 +36,9 @@ command center. Edit this file to tune how this project is developed.
    instead. remote-code mode: `remote.json` (host/path) - read, edit, and run the code there over
    Remote-SSH. embedded mode: there is no `source/` - the code is this repo (this `ai/` is a subdir of
    it); read project rules from the repo's own `README`/docs if present.
+
+**If `ai/.memory/` is missing but a legacy `ai/memory/` exists** (checkout predates Solaris 0.18.0):
+`mv ai/memory ai/.memory` and continue - a pure rename, private files untouched.
 
 **If `ai/.memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
 invent host/deploy/credential values. First **bootstrap it interactively** - ask the user for the deploy/run
