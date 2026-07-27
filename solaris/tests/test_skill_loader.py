@@ -1,4 +1,4 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Tests for solaris.tools.skill_loader (the fail-safe trigger-based skill-loader hook)."""
@@ -28,6 +28,11 @@ def test_parse_skill_extracts_name_triggers_body():
     assert "Do the thing." in sk["body"]
 
 
+def test_parse_skill_tolerates_rev_marker():
+    sk = S.parse_skill("_Rev. 3_\n\n" + SAMPLE)
+    assert sk is not None and sk["name"] == "ad-hoc-task"
+
+
 def test_parse_skill_rejects_non_frontmatter():
     assert S.parse_skill("# just markdown\n") is None
     assert S.parse_skill("---\nname: x\n---\nbody") is None  # no triggers
@@ -55,6 +60,23 @@ def test_match_skills_returns_matching_only():
     assert [s["name"] for s in m] == ["ad-hoc-task"]
     assert S.match_skills("please do a release now", skills)[0]["name"] == "release"
     assert S.match_skills("refactor this function", skills) == []
+
+
+def test_synthetic_prompts_never_match():
+    skills = [
+        {"name": "health-check", "triggers": ["health-check", "status"], "antitriggers": [], "body": "H"},
+        {"name": "ad-hoc-task", "triggers": ["new task"], "antitriggers": [], "body": "A"},
+    ]
+    # a task-notification quoting skill names is not a request to run them
+    synthetic = (
+        "[SYSTEM NOTIFICATION - NOT USER INPUT]\n<task-notification>\n"
+        "Agent finished: ran health-check and started a new task.\n</task-notification>"
+    )
+    assert S.match_skills(synthetic, skills) == []
+    assert S.match_skills("<system-reminder>status update</system-reminder>", skills) == []
+    assert S.match_skills("<command-name>/model</command-name> status", skills) == []
+    # the same words typed by a human still match
+    assert [s["name"] for s in S.match_skills("run a health-check please", skills)] == ["health-check"]
 
 
 def test_antitriggers_suppress_match():
