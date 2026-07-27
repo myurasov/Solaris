@@ -1,6 +1,7 @@
 # Rule: Safety <!-- omit in toc -->
 
 - [Confirm Before These](#confirm-before-these)
+- [Identity Preflight (git + gh)](#identity-preflight-git--gh)
 - [rsync / Deploy Specifics](#rsync--deploy-specifics)
 - [Read Before You Overwrite](#read-before-you-overwrite)
 - [Secrets](#secrets)
@@ -22,6 +23,21 @@ baked into each project's `engineer.agent.md` too.
 
 Show the exact command (or diff) first, then ask once, concisely. Approval for one action does not extend to
 the next.
+
+## Identity Preflight (git + gh)
+
+When more than one git/GitHub identity exists on the machine, the active one drifts (the `gh` active
+account can silently flip between sessions and even between turns). So, **immediately before every outward
+git/gh action** - commit, push, PR, issue, comment - verify the identity, not just once per session:
+
+- **Which identity:** the project's `ai/manifest.json` may record it (`"identity": {"gh_account": ...,
+  "git_email": ..., "git_name": ...}`); else the operating memory (`.memory/instructions.md` /
+  `ai/.memory/`) or the remote owner decides. When neither says, ask once and record the answer.
+- **Check + fix:** `gh auth status` and switch if wrong (`gh auth switch -h <host> -u <account>`); author
+  commits with per-command overrides (`git -c user.name=... -c user.email=... commit`), never by editing
+  git config.
+- A wrong identity on a published commit/PR is expensive to fix (history rewrite, force-push) - the
+  preflight is cheaper, every time.
 
 ## rsync / Deploy Specifics
 
