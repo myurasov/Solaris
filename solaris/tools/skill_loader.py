@@ -1,4 +1,6 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# rev. 1
+
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Prompt-submit hook: auto-load matching skill procedures into the agent's context. Stdlib only.
@@ -21,7 +23,9 @@ OS temp dir; a missing/unwritable marker just means the full body may load more 
 Trigger matching is data-driven (no per-skill code). Each trigger string becomes a regex: ``<...>`` spans and
 bare ``X`` placeholders match one argument word (``\\S+``); literal words match on word boundaries. So
 ``"work on <project>"`` matches "work on auth", and ``"new task"`` matches "start a new task". Broad triggers
-match broadly - tighten the phrase in the skill's frontmatter if a skill over-fires.
+match broadly - tighten the phrase in the skill's frontmatter if a skill over-fires. Synthetic turns (task
+notifications, command transcripts, system reminders) are skipped entirely: they quote skill names without
+requesting them, and the harness fires this hook on them too.
 
 Output is IDE-aware (Cursor JSON ``additional_context`` vs plain stdout), but injection is effectively
 Claude-only: Cursor's ``beforeSubmitPrompt`` cannot add context (its output is only ``{continue,
@@ -91,6 +95,9 @@ def parse_skill(text: str) -> "dict | None":
     the prompt the skill is suppressed even when a trigger also matched (e.g. ``develop-project`` excludes
     ``tasks/<slug>`` paths so "work on tasks/x" loads ``ad-hoc-task`` only).
     """
+    # Tolerate the framework rev marker above the frontmatter ("_Rev. N_" is the first line of every
+    # revisioned skill file); without this, rev-stamped skills silently never auto-load.
+    text = re.sub(r"\A_Rev\.\s*\d+_\s*\n+", "", text)
     if not text.startswith("---"):
         return None
     parts = text.split("---", 2)
@@ -164,9 +171,26 @@ def _any_match(phrases: list, prompt: str) -> bool:
     return False
 
 
+# Markers that identify a synthetic (harness-generated) turn rather than a human prompt: task
+# notifications, command transcripts, and system reminders. Such turns freely quote skill names (an agent
+# report saying "health-check" is not a request to run it), so matching them over-fires; skip them whole.
+_SYNTHETIC_MARKERS = (
+    "[SYSTEM NOTIFICATION",
+    "<task-notification>",
+    "<system-reminder>",
+    "<command-name>",
+    "<local-command-stdout>",
+)
+
+
+def is_synthetic_prompt(prompt: str) -> bool:
+    """True when the payload is a harness-generated turn, not something the user typed."""
+    return any(m in prompt for m in _SYNTHETIC_MARKERS)
+
+
 def match_skills(prompt: str, skills: list) -> list:
     """Skills whose any trigger matches ``prompt`` and no antitrigger matches (order preserved, de-duped)."""
-    if not prompt:
+    if not prompt or is_synthetic_prompt(prompt):
         return []
     matched = []
     for skill in skills:
