@@ -1,4 +1,4 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Tests for solaris.tools.log_interaction (the fail-safe prompt-submit hook)."""
@@ -28,17 +28,31 @@ def test_build_entry_truncates_and_detects_ide():
     assert L.build_entry({}, env={})["ide"] == "unknown"
 
 
-def test_log_path_is_always_framework(tmp_path):
+def test_migrate_legacy_memory_renames_once(tmp_path):
+    from solaris.tools import read_first as R
+
     (tmp_path / "memory").mkdir()
+    (tmp_path / "memory" / "instructions.md").write_text("x", encoding="utf-8")
+    R.migrate_legacy_memory(tmp_path)
+    assert not (tmp_path / "memory").exists()
+    assert (tmp_path / ".memory" / "instructions.md").read_text(encoding="utf-8") == "x"
+    # idempotent, and never clobbers an existing .memory/
+    (tmp_path / "memory").mkdir()
+    R.migrate_legacy_memory(tmp_path)
+    assert (tmp_path / "memory").exists()  # left alone: .memory/ already present
+
+
+def test_log_path_is_always_framework(tmp_path):
+    (tmp_path / ".memory").mkdir()
     # the hook always targets the framework master log (cwd is irrelevant - "hand off" never changes it)
-    assert L.log_path(repo_root=tmp_path) == tmp_path / "memory" / "interactions.jsonl"
+    assert L.log_path(repo_root=tmp_path) == tmp_path / ".memory" / "interactions.jsonl"
     # even with a project present, it still routes to the framework master (the agent writes project logs)
     (tmp_path / "projects" / "todo" / "ai").mkdir(parents=True)
-    assert L.log_path(repo_root=tmp_path) == tmp_path / "memory" / "interactions.jsonl"
+    assert L.log_path(repo_root=tmp_path) == tmp_path / ".memory" / "interactions.jsonl"
 
 
 def test_append_creates_parent_and_writes_jsonl(tmp_path):
-    log = tmp_path / "memory" / "interactions.jsonl"
+    log = tmp_path / ".memory" / "interactions.jsonl"
     L.append(log, {"ts": "t", "prompt": "a"})
     L.append(log, {"ts": "t", "prompt": "b"})
     lines = log.read_text(encoding="utf-8").splitlines()

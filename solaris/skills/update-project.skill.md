@@ -50,4 +50,4 @@ automatically.
 ## 4. Summary + Revert
 
 Report what synced, what merged, and any versions set. `revs ff` is idempotent; migrations revert via their
-Revert section. Log one line to `memory/interactions.jsonl`.
+Revert section. Log one line to `.memory/interactions.jsonl`.

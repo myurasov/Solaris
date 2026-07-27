@@ -1,4 +1,6 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# rev. 1
+
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Session hook: auto-load the framework "read-first" set into the agent's context. Stdlib only.
@@ -40,7 +42,7 @@ READ_FIRST = (
     "solaris/solaris.agent.md",
     "solaris/rules/commits.rule.md",
     "solaris/rules/safety.rule.md",
-    "memory/instructions.md",
+    ".memory/instructions.md",
 )
 
 _HEADER = (
@@ -52,10 +54,25 @@ _HEADER = (
 
 _REMINDER = (
     "[Solaris read-first] The authoritative set (solaris.agent.md + the commit & safety rules + "
-    "memory/instructions.md) was loaded at session start - follow it. Quick reminders: bare `ssh`/`open` "
+    ".memory/instructions.md) was loaded at session start - follow it. Quick reminders: bare `ssh`/`open` "
     "are blocked, use the /tmp wrappers (`hss`, `nepo`); confirm before destructive / remote-mutating / "
-    "outward actions; log the turn to memory/interactions.jsonl."
+    "outward actions; log the turn to .memory/interactions.jsonl."
 )
+
+
+def migrate_legacy_memory(repo_root: Path = REPO_ROOT) -> None:
+    """Auto-rename a legacy framework ``memory/`` to ``.memory/`` on first access (Solaris 0.19).
+
+    Mirrors the 0.18.0 ai-pack ``ai/memory`` -> ``ai/.memory`` move: a pure rename, private files
+    untouched. Fail-safe - any problem is ignored and the old path simply keeps working until fixed by
+    hand.
+    """
+    try:
+        legacy, new = repo_root / "memory", repo_root / ".memory"
+        if legacy.is_dir() and not new.exists():
+            legacy.rename(new)
+    except Exception:
+        pass
 
 
 def detect_ide(env: "dict | None" = None) -> str:
@@ -105,6 +122,8 @@ def main(argv: "list[str] | None" = None) -> int:
     argv = sys.argv[1:] if argv is None else argv
     try:
         remind = "--remind" in argv
+        if not remind:
+            migrate_legacy_memory()  # session start: pick up a pre-0.19 checkout's memory/ folder
         text = _REMINDER if remind else render_full()
         emit(text, detect_ide())
     except Exception:

@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: ad-hoc-task
 triggers: ["new task", "start a task", "work on tasks/<slug>", "resume task", "open tasks/<slug>", "research X", "set up <host/thing>", "ad-hoc: X"]
@@ -32,11 +34,14 @@ What / why: <one or two lines>
 ## Outcome
 ```
 
+`notes.md` carries **no** `_Rev. N_` marker (it is per-task scratch, not a versioned framework file); once
+it grows real content, keep a TOC per the docs convention (`uv run -m solaris.tools.toc --write <file>`).
+
 ## 2. Do the Work
 
 - **Engineering / scratch:** write throwaway scripts and outputs inside the task folder. For Python scratch,
   a quick `uv run --no-project python ...` or a tiny local venv is fine - keep it inside the folder.
-- **System setup:** when acting on a host, read it from `memory/resources.md` (hosts table). Apply the
+- **System setup:** when acting on a host, read it from `.memory/resources.md` (hosts table). Apply the
   safety rule: confirm before remote-mutating or destructive commands; show the command first.
 - **Research:** use the `ctx7` CLI for up-to-date library docs (`ctx7 ...`); if it is not installed,
   suggest installing it (e.g. `npm i -g @upstash/context7`) and fall back to web/docs. Capture key
@@ -45,7 +50,7 @@ What / why: <one or two lines>
 ## 3. Capture + Close
 
 Keep `notes.md` current (steps tried, findings, outcome) - it is the durable record. Append a line to
-`memory/interactions.jsonl`.
+`.memory/interactions.jsonl`.
 
 ## 4. Graduate (Optional)
 

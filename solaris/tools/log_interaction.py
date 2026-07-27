@@ -1,6 +1,6 @@
-# rev. 1
+# rev. 2
 
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Prompt-submit hook: append the raw user prompt to the framework interaction log. Stdlib only.
@@ -15,7 +15,7 @@ interactively with no piped payload) it prints a one-line notice and exits non-z
 
 The hook records only the raw *prompt* (the interpreted request and the outcome are unknown at submit time)
 as a ``{ts, cwd, ide, prompt}`` backstop line, and always to the **framework master log**
-``memory/interactions.jsonl`` - the complete prompt stream, including project (handed-off) work, because
+``.memory/interactions.jsonl`` - the complete prompt stream, including project (handed-off) work, because
 "hand off" does not change the cwd. The agent additionally authors the full ``{ts, project, prompt, request,
 outcome}`` entry (``prompt`` the raw prompt, ``request`` its interpretation) into this master log and into
 each touched project's ``ai/.memory/interactions.jsonl``; so the master mixes these backstop lines with the
@@ -74,7 +74,7 @@ def log_path(repo_root: Path = REPO_ROOT) -> Path:
     cwd-based rule would both miss handed-off turns and split the master stream. This log is the complete
     prompt stream; the full {ts, project, prompt, request, outcome} entries are authored by the agent.
     """
-    return Path(repo_root) / "memory" / "interactions.jsonl"
+    return Path(repo_root) / ".memory" / "interactions.jsonl"
 
 
 def append(log: Path, entry: dict) -> None:
@@ -88,7 +88,7 @@ _NOT_A_CLI = (
     "it is not a command-line tool and takes no arguments.\n"
     "Do not call it by hand. To record an interaction, append the authoritative "
     "{ts, project, prompt, request, outcome} line yourself to BOTH the project's "
-    "ai/.memory/interactions.jsonl and the framework master memory/interactions.jsonl."
+    "ai/.memory/interactions.jsonl and the framework master .memory/interactions.jsonl."
 )
 
 
@@ -107,6 +107,10 @@ def main(argv: "list[str] | None" = None) -> int:
     except Exception:
         pass
     try:
+        # a legacy pre-0.19 memory/ must be renamed before this hook mkdirs a fresh .memory/
+        # (which would orphan the old folder forever); read_first owns the migration logic
+        from solaris.tools.read_first import migrate_legacy_memory
+        migrate_legacy_memory()
         payload = read_payload(sys.stdin)
         entry = build_entry(payload)
         append(log_path(), entry)

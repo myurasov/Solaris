@@ -27,8 +27,8 @@ tasks/
 solaris/spec/references/
 
 # Framework-level secrets + runtime log
-memory/*
-!memory/.empty
+.memory/*
+!.memory/.empty
 
 # Claude Code: keep project settings tracked, ignore per-user local overrides
 .claude/settings.local.json
