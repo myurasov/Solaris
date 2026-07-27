@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: import-project
@@ -80,4 +80,4 @@ load-bearing details.
 ## 7. Confirm + Summary
 
 Report detected vs assumed vs needs-your-eyes; point at `ai/engineer.agent.md`; suggest
-`develop-project <slug>`. Log one line to `memory/interactions.jsonl`.
+`develop-project <slug>`. Log one line to `.memory/interactions.jsonl`.

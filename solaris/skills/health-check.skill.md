@@ -27,10 +27,10 @@ demand.
 4. **Tasks** - the most recent `tasks/<date>-<slug>/` folders, with the first line of each `notes.md`.
 5. **MCP** - `uv run -m solaris.tools.mcp_sync --check` at the root (fix: `mcp_sync --sync`).
 6. **Framework** - `uv run -m solaris.tools.version current`.
-7. **Interaction log** - spot-check the tail of `memory/interactions.jsonl`: recent meaningful turns should
+7. **Interaction log** - spot-check the tail of `.memory/interactions.jsonl`: recent meaningful turns should
    carry agent-authored `{ts, project, prompt, request, outcome}` entries, not just the hook's
    `{ts, cwd, ide, prompt}` backstop lines. If full entries are missing for substantive turns, flag it and
-   author them by hand (never run `log_interaction` as a CLI). Likewise nudge if `memory/instructions.md`
+   author them by hand (never run `log_interaction` as a CLI). Likewise nudge if `.memory/instructions.md`
    looks stale given recent lessons.
 
 Print a compact table; end with any recommended actions.
@@ -48,7 +48,7 @@ Everything above, plus:
   `plugins/<name>/`. (A project root carries only `AGENTS.md` plus the runtime `.mcp.json`/`.cursor/mcp.json`.)
 - **Plugins** - each attached plugin has a source under `plugins/<name>/` (else it cannot be updated;
   for a linked plugin a missing source is a hard break - it has no materialized copy to fall back on).
-- **gitignore sanity** - `.mcp.json`, `.cursor/mcp.json`, `projects/`, `tasks/`, `memory/*`,
+- **gitignore sanity** - `.mcp.json`, `.cursor/mcp.json`, `projects/`, `tasks/`, `.memory/*`,
   `plugins/*` (the last two except `.empty`) are ignored; confirm no `credentials.md` is tracked.
 
 Report findings grouped as OK / warnings / suggested fixes. Apply nothing without the user asking.

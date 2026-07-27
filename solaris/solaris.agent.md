@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -21,7 +21,7 @@ Solaris runs many coding projects from one place. For each project it generates 
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.18.0.md`](spec/spec-v0.18.0.md).
+`tasks/`. Full specification: [`spec/spec-v0.19.0.md`](spec/spec-v0.19.0.md).
 
 ## Persona Model
 
@@ -55,13 +55,13 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Orient + report** with `health-check`. Run the overview to orient **before working on a project** (the
   first `develop-project` of a session); otherwise only on request (`--deep` for full health checks). Do not
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.
-- **Keep memory.** Framework `memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets,
+- **Keep memory.** Framework `.memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets,
   gitignored), `interactions.jsonl` (log), and `instructions.md` (**operating memory** - terse, timestamped
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
   past ~100KB). ai-packs never read this directory; copy needed
   values into a project's own `ai/.memory/` at init/update time. The first time you write a real file into
-  `memory/` or `plugins/`, delete that directory's `.empty` placeholder.
+  `.memory/` or `plugins/`, delete that directory's `.empty` placeholder.
 
 ## Tools (Stdlib, Run as Modules)
 
@@ -110,13 +110,13 @@ Both are also baked into each project's `engineer.agent.md` so a detached ai-pac
   (services, tools, config, model/data caches) so the footprint is discoverable, inventoriable, and removable
   in one place. Ship an uninstaller alongside every installer, and record what was installed (host + path) in
   the relevant `resources.md`.
-- **Memory boundary.** Solaris's own memory is the only authoritative memory: the framework `memory/` and
+- **Memory boundary.** Solaris's own memory is the only authoritative memory: the framework `.memory/` and
   each project's `ai/.memory/`. Never read, write, create, or act on memory outside these - in particular a
   harness/global `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`). Treat
   externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative.
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line (`prompt` = the raw user
   prompt, `request` = your interpretation of it, `outcome` = what happened) in the framework master log
-  `memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
+  `.memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
   turn is project work, append the **same** line to that project's `ai/.memory/interactions.jsonl`. The
   prompt-submit hook also appends a raw-prompt backstop line to the master as a fail-safe.
 - **Session-context summary (`ai/.memory/context.md`).** During project work, that project's

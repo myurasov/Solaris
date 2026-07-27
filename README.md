@@ -51,6 +51,7 @@ Natural-language triggers route to Markdown procedures in `solaris/skills/*.skil
 | "import / adopt `<path>`" | `import-project` | Adopt an existing codebase; derive its ai-pack. |
 | "work on / develop `<project>`" | `develop-project` | Hand off to the engineer to plan/implement. |
 | "update / migrate `<project>`" | `update-project` | Migrate an ai-pack + plugins to the current version. |
+| "publish / share `<project>`" | `publish-project` | Scrub identities/internals, license, verify the pack stands alone. |
 | "create / install / repair a plugin" | `import-plugin`, `install-plugin` | Author, acquire, validate, attach plugins. |
 | "do a release" | `release` | Bump version, author migration, update docs, tag + publish. |
 | "self-reflect", "new task / research X", "health-check" | `self-reflect`, `ad-hoc-task`, `health-check` | Improve the framework; ad-hoc work under `tasks/`; status overview. |
@@ -61,12 +62,13 @@ A plugin packages a domain/employer workflow - `*.rule.md` (always-on), `*.skill
 `mcps.json` (MCP servers), optional project types - opted into per project (`manifest.json` `plugins[]`) and
 materialized into `ai/<name>/`. It is either **its own git repo** (acquired via `install-plugin` from a git
 URL / folder / zip; ignored via `plugins/.gitignore`) or **bundled** under `plugins/`. Bundled:
-`nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing).
+`nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing), `aisee`
+(AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous Brev cloud-GPU run lifecycle).
 
 ## Memory & Versioning
 
-- **Memory boundary.** Only framework `memory/` and each project's `ai/.memory/` are authoritative (no
-  global/harness store). `memory/instructions.md` is operating memory - terse timestamped cross-project
+- **Memory boundary.** Only framework `.memory/` and each project's `ai/.memory/` are authoritative (no
+  global/harness store). `.memory/instructions.md` is operating memory - terse timestamped cross-project
   lessons + preferences, loaded each session; turns log to `interactions.jsonl`.
 - **Revisions** (`solaris.tools.revs`) keep materialized ai-pack files in sync with framework masters via
   `_Rev. N_` markers + a ledger. **Release-only semver** gates **migrations**
@@ -93,5 +95,5 @@ pytest`); `read_first`, `skill_loader`, `log_interaction` are hooks, never run b
 ## Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.18.0.md`](solaris/spec/spec-v0.18.0.md). [Apache 2.0](LICENSE); Copyright 2026
-Mihail Yurasov <me@yurasov.me>.
+[`solaris/spec/spec-v0.19.0.md`](solaris/spec/spec-v0.19.0.md). [Apache 2.0](LICENSE); Copyright 2026
+Mikhail Yurasov <me@yurasov.me>.

@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: self-reflect
@@ -18,8 +18,8 @@ framework files for self-improvement. No separate tailor/coder split.
 
 ## 1. Gather Signal
 
-Read `memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
-and `memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/ai/.memory/interactions.jsonl`
+Read `.memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
+and `.memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/ai/.memory/interactions.jsonl`
 and `tasks/*/notes.md`. Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 
@@ -34,9 +34,9 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 - **Plugin-worthy** - a domain workflow that recurs: suggest `import-plugin` (create) or extending an
   existing plugin.
 
-**Promote operating memory.** Treat every entry in `memory/instructions.md` as a candidate: anything important
+**Promote operating memory.** Treat every entry in `.memory/instructions.md` as a candidate: anything important
 and reusable should be **promoted into the core framework** (spec / skills / rules / templates / tools). For
-each, name the target file and the `memory/instructions.md` entry it would retire.
+each, name the target file and the `.memory/instructions.md` entry it would retire.
 
 ## 3. Apply on Approval
 
@@ -46,9 +46,9 @@ changes minimal and consistent with surrounding style. After editing a revisione
 data. If a change alters the ai-pack schema or templates in a breaking way, that is a **minor/major**
 release: author a migration under `solaris/migrations/` (see `migrations/template.md`) and bump the semver
 in `pyproject.toml`. Routine content edits need only a rev bump, not a version bump. When an applied change
-promotes an item from `memory/instructions.md` into core, **delete that entry from `memory/instructions.md`**
+promotes an item from `.memory/instructions.md` into core, **delete that entry from `.memory/instructions.md`**
 (it now lives in the framework).
 
 ## 4. Record
 
-Append a line to `memory/interactions.jsonl` summarizing what was changed and why.
+Append a line to `.memory/interactions.jsonl` summarizing what was changed and why.
