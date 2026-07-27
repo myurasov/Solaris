@@ -1,4 +1,6 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# rev. 1
+
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Solaris versioning + migration-chain engine (stdlib only).
@@ -25,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -137,6 +140,9 @@ def migration_frontmatter(path: "str | Path") -> dict:
     (e.g. ``touches:``) are ignored - the chain logic does not need them.
     """
     text = Path(path).read_text(encoding="utf-8")
+    # tolerate a leading "_Rev. N_" marker above the frontmatter (same as the skill loader; without
+    # this, a rev-stamped migration silently drops out of the migration chain)
+    text = re.sub(r"\A_Rev\.\s*\d+_\s*\n+", "", text)
     if not text.startswith("---"):
         return {}
     body = text[3:]

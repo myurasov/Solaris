@@ -1,4 +1,4 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Tests for solaris.tools.version."""
@@ -102,6 +102,15 @@ def test_frontmatter_parsing(tmp_path):
     assert fm["title"] == "rename thing"
     assert fm["breaking"] is True
     assert fm["revertible"] is True
+
+
+def test_frontmatter_tolerates_rev_marker(tmp_path):
+    # a rev-stamped migration (e.g. 0.18.0.md) must not drop out of the chain
+    _write_migration(tmp_path, "0.2.0", "0.1.0")
+    raw = (tmp_path / "0.2.0.md").read_text(encoding="utf-8")
+    (tmp_path / "0.2.0.md").write_text("_Rev. 1_\n\n" + raw, encoding="utf-8")
+    fm = V.migration_frontmatter(tmp_path / "0.2.0.md")
+    assert fm["to_version"] == "0.2.0"
 
 
 def test_scan_and_find_chain(tmp_path):
