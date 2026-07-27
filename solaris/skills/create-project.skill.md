@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: create-project
@@ -60,7 +60,8 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
 ## 4. Wire the Code Location by Mode
 
 - **local:** keep `source/`; `git init -b main` inside `source/` is deferred to the engineer agent (never commit
-  yet).
+  yet; when it happens, seed the repo's `.gitignore` with `__*/` - the local-only-folders convention in
+  `ai/engineer.instructions.md`).
 - **remote-code:** delete `source/`; write `projects/<slug>/remote.json`:
   ```json
   { "_comment": "do not edit by hand", "mode": "remote-code", "host": "<HOST>", "path": "<REMOTE_PATH>",
@@ -71,7 +72,8 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
   you `git init` there) and holds the **whole** project - code, `ai/`, `AGENTS.md` + `CLAUDE.md`, `README`,
   dotfiles. Materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at that repo's root (not at `projects/<slug>/`);
   keep any non-repo local aux (`references/`, `screenshots/`) at `projects/<slug>/` *outside* `<repo>`. Add
-  `ai/.memory/` **and `.secrets.env`** to the repo's `.gitignore` so no secrets/hosts are committed. Record
+  `ai/.memory/`, **`.secrets.env`**, and `__*/` (local-only folders) to the repo's `.gitignore` so no
+  secrets/hosts or scratch are committed. Record
   `project.mode` `embedded` in `ai/manifest.json`; tools take `--dir projects/<slug>/<repo>/`.
 
 ## 5. Attach Plugins
@@ -101,4 +103,4 @@ Write the project's `.mcp.json` and `.cursor/mcp.json` from the framework root `
 ## 8. Stop + Hand Off
 
 Print what was created. **Do not** generate source or enter planning. Tell the user:
-"Run `develop-project <slug>` to plan and build." Append one line to `memory/interactions.jsonl`.
+"Run `develop-project <slug>` to plan and build." Append one line to `.memory/interactions.jsonl`.

@@ -1,9 +1,11 @@
-_Rev. 2_
+_Rev. 3_
 
 # Engineer Instructions - {{NAME}} <!-- omit in toc -->
 
 - [Build / Run / Test](#build--run--test)
 - [Deploy](#deploy)
+- [Local-Only Folders](#local-only-folders)
+- [Remote Host Discipline](#remote-host-discipline)
 - [Runtime Notes \& Gotchas](#runtime-notes--gotchas)
 - [Conventions](#conventions)
 
@@ -32,6 +34,25 @@ concrete values - never drop the procedure, just keep the values out of it.
 ## Deploy
 
 - (deploy + restart procedure as generic patterns; reference `ai/.memory/resources.md` for host/path/port)
+
+## Local-Only Folders
+
+Scratch that should never be tracked lives in `__`-prefixed folders, gitignored as one pattern (`__*/`):
+`__research/` (working reports/visuals), `__history/` (archived/superseded content), `__out/` (pipeline
+outputs) - add others as needed. **Durable conclusions get folded into this file or `ai/spec.md` before a
+`__research/` report is considered done** - the folders are disposable, the lessons are not.
+
+## Remote Host Discipline
+
+(Delete this section if the project touches no remote hosts.)
+
+- Concrete hosts/paths/ports live in `ai/.memory/resources.md`; procedures here reference them generically.
+- Deploy with `rsync` (excludes per the safety policy: `.venv`, `.git`, secrets, build artifacts; no
+  `--delete` by default). Create the remote parent first (`ssh <host> mkdir -p <parent>`) - some rsync
+  builds (macOS openrsync) do not create nested remote dirs.
+- **Stream remote output live** (run in a tmux session and read the screen with `capture-pane`, or stream
+  to the terminal) rather than redirecting to a file and polling it.
+- Leave the host as you found it: stop what you started, and keep any footprint under one project dir.
 
 ## Runtime Notes & Gotchas
 
