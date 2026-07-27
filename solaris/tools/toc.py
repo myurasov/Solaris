@@ -1,4 +1,4 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Generate/maintain a Markdown table of contents (stdlib only).
@@ -29,9 +29,10 @@ _ATX = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
 _TOC_LINE = re.compile(r"^\s*- \[.*\]\(#.*\)\s*$")
 _REV = re.compile(r"^_Rev\.\s+\d+_\s*$")  # leading revision marker (solaris.tools.revs), kept above the TOC
 # Framework docs only: skip venv variants (e.g. .venv.noSync) and the content trees
-# (projects/plugins/tasks/memory hold user or third-party markdown, not framework docs).
+# (projects/plugins/tasks/.memory hold user or third-party markdown, not framework docs;
+# "memory" kept for pre-0.19 checkouts).
 _SKIP_DIRS = {".git", ".tmp", ".tools", "node_modules", "__pycache__", "references",
-              "projects", "plugins", "tasks", "memory"}
+              "projects", "plugins", "tasks", "memory", ".memory"}
 
 
 def _skip(part: str) -> bool:
@@ -53,13 +54,35 @@ def _display(text: str) -> str:
     return re.sub(r"<!--.*?-->", "", text).strip().replace("&", "\\&")
 
 
-def split_frontmatter(lines: list[str]) -> tuple[int, int]:
-    """Return (frontmatter_end_index_exclusive, body_start). Body starts after a leading --- ... --- block."""
-    if lines and lines[0].strip() == "---":
-        for i in range(1, len(lines)):
+def split_frontmatter(lines: list[str], start: int = 0) -> int:
+    """Index just past a --- ... --- frontmatter block starting at ``start`` (or ``start`` if none)."""
+    if start < len(lines) and lines[start].strip() == "---":
+        for i in range(start + 1, len(lines)):
             if lines[i].strip() == "---":
-                return i + 1, i + 1
-    return 0, 0
+                return i + 1
+    return start
+
+
+def _preamble_end(lines: list[str]) -> int:
+    """Index where the TOC-able body starts: past any leading rev marker and/or YAML frontmatter.
+
+    Both orders occur in the wild ("_Rev. N_" above the frontmatter in migration files, frontmatter first
+    in skills) - handle either, plus surrounding blank lines. Everything before this index is preamble the
+    TOC must never be inserted into.
+    """
+    i = 0
+    for _ in range(2):  # at most one rev marker and one frontmatter block, in either order
+        while i < len(lines) and lines[i].strip() == "":
+            i += 1
+        if i < len(lines) and _REV.match(lines[i]):
+            i += 1
+            continue
+        j = split_frontmatter(lines, i)
+        if j != i:
+            i = j
+            continue
+        break
+    return i
 
 
 def parse_headers(body: list[str]) -> list[tuple[int, str]]:
@@ -97,12 +120,9 @@ def render(text: str) -> str:
     """Return the file content with an up-to-date TOC (or unchanged if no level-2 headers)."""
     newline = "\n"
     lines = text.split("\n")
-    fm_end, body_start = split_frontmatter(lines)
-    # keep a leading rev marker (e.g. "_Rev. 3_") as preamble, above the TOC
-    if body_start < len(lines) and _REV.match(lines[body_start]):
+    body_start = _preamble_end(lines)
+    if body_start < len(lines) and lines[body_start].strip() == "":
         body_start += 1
-        if body_start < len(lines) and lines[body_start].strip() == "":
-            body_start += 1
     body = lines[body_start:]
 
     toc = build_toc(parse_headers(body))
@@ -135,7 +155,8 @@ def render(text: str) -> str:
     else:
         tail = tail[j:]
 
-    new_body = head + [""] + toc + [""] + tail
+    # head is empty when there is no H1: the preamble (incl. its trailing blank) already precedes the TOC
+    new_body = head + ([""] if head else []) + toc + [""] + tail
     return newline.join(lines[:body_start] + new_body)
 
 
