@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: release
 triggers: ["do a release", "release cycle", "cut a release", "ship a release", "publish a release", "new release", "bump the version and release"]
@@ -22,7 +24,7 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
 
 1. **Commit pending changes.** Stage and commit every uncommitted change with policy-compliant messages (imperative, ≤72 chars, ASCII only, no AI-attribution trailers). Group unrelated changes into separate atomic commits.
 
-2. **Decide the version bump.** See [Choosing the version bump](#choosing-the-version-bump). Edit `pyproject.toml` `[project].version`.
+2. **Decide the version bump.** See [Choosing the version bump](#choosing-the-version-bump). Edit `pyproject.toml` `[project].version` **and** `solaris/__init__.py` `__version__` (they must match - `test_framework_version_reads_real_pyproject` asserts it; the 0.14-0.18 releases missed the `__init__.py` half for five versions straight).
 
 3. **Author the migration.** Every **MINOR / MAJOR** bump needs a migration at `solaris/migrations/<to_version>.md` (copy `solaris/migrations/template.md`). Fill all frontmatter fields (`to_version`, `from_version`, `title`, `breaking`, `touches`). A **marker migration** (no file edits, just records the version step) is valid when only framework internals changed. **PATCH** bumps get **no** migration.
 
@@ -39,7 +41,8 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
    uv run -m solaris.tools.revs ledger
    ```
 
-6. **Run `uv sync`** so `uv.lock` reflects any dependency changes; stage `uv.lock`.
+6. **Run `uv sync`** so `uv.lock` reflects any dependency changes; stage `uv.lock`. Then run the test
+   suite (`uv run -m pytest solaris/tests -q`) - a release never ships with failing framework tests.
 
 7. **Commit the release.** Message: `Release Solaris <version>` (version bump + migration + spec + doc refresh + revisions all in one commit, or preceded by a `... (<vX.Y.Z>)` feature commit — match recent history).
 
@@ -105,6 +108,7 @@ gh release create v<x> --title "Solaris <x>" --notes "<notes>"
 | File | Action |
 |------|--------|
 | `pyproject.toml` | Bump `[project].version` |
+| `solaris/__init__.py` | Bump `__version__` (must match pyproject) |
 | `solaris/migrations/<to_version>.md` | Create (copy `template.md`) for MINOR/MAJOR |
 | `solaris/revisions.json` | Rebuilt by `revs ledger` |
 | `solaris/spec/spec-v<current>.md` | Add "What changed in vX.Y.Z" blurb |
