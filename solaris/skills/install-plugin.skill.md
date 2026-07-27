@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: install-plugin
@@ -33,7 +33,15 @@ generic skill drives every plugin, reading plugin-specific setup from the plugin
 - **name** (optional): derive from the git repo / folder / zip top-level dir, then confirm against the
   plugin's `manifest.json` `name`.
 - **mode** (optional): `copy` (default) or `link` ("link plugin X to Y" / "link the X plugin"). Link mode
-  attaches the live plugin source instead of copying it - see step 5.
+  attaches the live plugin source instead of copying it - see step 5. **Choosing:** `link` only while
+  actively developing the plugin itself; `copy` for everything else, and always before a project is
+  shared or detached (a link cannot resolve outside the Solaris tree).
+
+**Canonical overlay layout:** a copy install always materializes into the directory form
+`ai/<name>/<file>` - never flat `ai/<name>.rule.md` / `ai/<name>.skill.md` at the top of `ai/`. (The
+ai-pack `AGENTS.md` tolerates flat overlay files when *reading*, for hand-rolled project-local skills;
+plugin installs and the revs classifier use the directory form only. Do not move files between the two
+layouts - it churns revisions for no gain.)
 
 ## 2. Acquire the Source into plugins/
 
@@ -158,4 +166,4 @@ For a plugin already attached to a project (driven here or by `update-project`).
 ## 7. Report
 
 Summarize: source, name + version, what was repaired, and (if a project was named) the install mode
-(copy / link) and the install / update / health-check result. Log one line to `memory/interactions.jsonl`.
+(copy / link) and the install / update / health-check result. Log one line to `.memory/interactions.jsonl`.
