@@ -1,4 +1,4 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Per-file revisions + content hashing for Solaris (stdlib only).

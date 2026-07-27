@@ -1,4 +1,4 @@
-# Copyright 2026 Mihail Yurasov <me@yurasov.me>
+# Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
 """Solaris - a minimal framework to run many coding projects from one central point.
@@ -8,4 +8,4 @@ The framework's behavior lives in markdown (agents, skills, rules, templates) un
 the only Python is in ``solaris.tools`` (and its tests).
 """
 
-__version__ = "0.13.0"
+__version__ = "0.19.0"
