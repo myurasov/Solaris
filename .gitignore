@@ -34,3 +34,5 @@ solaris/spec/references/
 .claude/settings.local.json
 
 .playwright*
+# Local-only scratch folders (the __*/ convention), including inside bundled plugins
+__*/
