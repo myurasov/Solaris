@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -51,6 +51,10 @@ on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
 
 - Do not hardcode a model: omit it for the server default, or choose from `list_models` and the
   per-model strengths/weaknesses/pitfalls in `GET /v1/describe?flavor=mcp`.
+- Mind each model's `Thinking:` line in describe: reasoning models always think (slower,
+  deeper; cannot be disabled), thinking-toggle models think by default but take
+  `thinking: false` for fast direct answers, and plain models never think. Thinking counts
+  against the answer budget (`max_tokens`) - give thinking calls headroom.
 - A cold or idle-unloaded model takes minutes to load; query tools block through it. Do not
   resubmit - that only queues more work. For long `watch` jobs pass `wait=false` and poll
   `get_task`.

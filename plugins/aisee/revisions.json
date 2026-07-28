@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/aisee.rule.md": {
-      "rev": 2,
-      "hash": "4ed835cc2134570a986dd8cfd521a8bbcae62c183513633a0dade1cb33b8daed",
+      "rev": 3,
+      "hash": "7a9d0678db579b2e58e9889f8f5a8977ad2a6cd6f2806fee21970ca8c3b7c94f",
       "history": [
         {
           "rev": 1,
@@ -13,12 +13,16 @@
         {
           "rev": 2,
           "hash": "4ed835cc2134570a986dd8cfd521a8bbcae62c183513633a0dade1cb33b8daed"
+        },
+        {
+          "rev": 3,
+          "hash": "7a9d0678db579b2e58e9889f8f5a8977ad2a6cd6f2806fee21970ca8c3b7c94f"
         }
       ]
     },
     "shared/aisee.skill.md": {
-      "rev": 2,
-      "hash": "237ab098f3c705be2036d4014b29a1158f600bea289e1a330a6029d48c0b9c3d",
+      "rev": 3,
+      "hash": "1369c83af0b6482cec81251f58fcf5d5cf2a1775a6eae4efa9f00577e959a37e",
       "history": [
         {
           "rev": 1,
@@ -27,6 +31,10 @@
         {
           "rev": 2,
           "hash": "237ab098f3c705be2036d4014b29a1158f600bea289e1a330a6029d48c0b9c3d"
+        },
+        {
+          "rev": 3,
+          "hash": "1369c83af0b6482cec81251f58fcf5d5cf2a1775a6eae4efa9f00577e959a37e"
         }
       ]
     }
