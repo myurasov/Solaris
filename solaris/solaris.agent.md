@@ -21,7 +21,7 @@ shared across all of them; canonical rules in the template `ai/engineer.agent.md
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.20.0.md`](spec/spec-v0.20.0.md).
+`tasks/`. Full specification: [`spec/spec-v0.21.0.md`](spec/spec-v0.21.0.md).
 
 ## Persona Model
 
