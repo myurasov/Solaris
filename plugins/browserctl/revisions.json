@@ -1,0 +1,40 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/browserctl.rule.md": {
+      "rev": 1,
+      "hash": "a3af84524253a133f29e5a5407f6de30a50b13e991925c94ab8eec1fa225a823",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "a3af84524253a133f29e5a5407f6de30a50b13e991925c94ab8eec1fa225a823"
+        }
+      ]
+    },
+    "shared/browserctl.skill.md": {
+      "rev": 2,
+      "hash": "fd1ffa5f370387c4a259ffd9343913ce98b4df5e476a0e4c63d61f1c4e9705dc",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "b36efb74f17e406f175ce9895b19f103b32f72269b24ff4ece4a7845284edb8b"
+        },
+        {
+          "rev": 2,
+          "hash": "fd1ffa5f370387c4a259ffd9343913ce98b4df5e476a0e4c63d61f1c4e9705dc"
+        }
+      ]
+    },
+    "shared/slack-web.skill.md": {
+      "rev": 1,
+      "hash": "cd7a7ca0c2e3d5585fca1f261f4125b3706ac80c6be27cd70b3c2b4f04122c59",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "cd7a7ca0c2e3d5585fca1f261f4125b3706ac80c6be27cd70b3c2b4f04122c59"
+        }
+      ]
+    }
+  }
+}
