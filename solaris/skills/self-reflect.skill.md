@@ -6,10 +6,10 @@ summary: Review interaction logs, surface ranked framework improvements, and (on
 
 # self-reflect <!-- omit in toc -->
 
-- [1. Gather Signal](#1-gather-signal)
-- [2. Propose (Ranked)](#2-propose-ranked)
-- [3. Apply on Approval](#3-apply-on-approval)
-- [4. Record](#4-record)
+1. [Gather Signal](#1-gather-signal)
+2. [Propose (Ranked)](#2-propose-ranked)
+3. [Apply on Approval](#3-apply-on-approval)
+4. [Record](#4-record)
 
 Lightweight, propose-only review of the framework itself. The only path by which the orchestrator edits core
 framework files for self-improvement. No separate tailor/coder split.

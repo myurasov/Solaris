@@ -1,13 +1,13 @@
 # Solaris v0 — Implementation Plan <!-- omit in toc -->
 
-- [1. Goal](#1-goal)
-- [2. Decisions locked (from Q\&A)](#2-decisions-locked-from-qa)
-- [3. Directory layout](#3-directory-layout)
+1. [Goal](#1-goal)
+2. [Decisions locked (from Q\&A)](#2-decisions-locked-from-qa)
+3. [Directory layout](#3-directory-layout)
   - [3.1 Framework repo (`<root>/`, this is the Solaris `.git` root)](#31-framework-repo-root-this-is-the-solaris-git-root)
   - [3.2 Generated project (`projects/<p>/`, e.g. `todo`)](#32-generated-project-projectsp-eg-todo)
   - [3.3 Project modes of operation](#33-project-modes-of-operation)
   - [3.4 Tasks area (ad-hoc command center)](#34-tasks-area-ad-hoc-command-center)
-- [4. Components](#4-components)
+4. [Components](#4-components)
   - [4.1 Dual-IDE wiring (root + every project)](#41-dual-ide-wiring-root--every-project)
   - [4.2 `mcp_sync.py` tool](#42-mcp_syncpy-tool)
   - [4.3 Framework agent — `solaris.agent.md`](#43-framework-agent--solarisagentmd)
@@ -20,11 +20,11 @@
   - [4.8 Memory, interaction logging, commit policy](#48-memory-interaction-logging-commit-policy)
   - [4.9 Plugin system](#49-plugin-system)
     - [4.9.1 The `nvidia-isaac-lab` plugin](#491-the-nvidia-isaac-lab-plugin)
-- [5. Project-type templates (`solaris/templates/projects/`)](#5-project-type-templates-solaristemplatesprojects)
-- [6. Validation (v0 acceptance)](#6-validation-v0-acceptance)
-- [7. Build order (milestones)](#7-build-order-milestones)
-- [8. Conventions](#8-conventions)
-- [9. Open questions (to confirm next iteration)](#9-open-questions-to-confirm-next-iteration)
+5. [Project-type templates (`solaris/templates/projects/`)](#5-project-type-templates-solaristemplatesprojects)
+6. [Validation (v0 acceptance)](#6-validation-v0-acceptance)
+7. [Build order (milestones)](#7-build-order-milestones)
+8. [Conventions](#8-conventions)
+9. [Open questions (to confirm next iteration)](#9-open-questions-to-confirm-next-iteration)
 
 Status: draft, iterating. Source spec: [spec-v0.txt](spec-v0.txt). References (gitignored): [references/](references/).
 

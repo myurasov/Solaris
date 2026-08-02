@@ -6,13 +6,13 @@ summary: Adopt an existing codebase; derive the ai-pack (and offer to factor dom
 
 # import-project <!-- omit in toc -->
 
-- [1. Inputs](#1-inputs)
-- [2. Land the Code](#2-land-the-code)
-- [3. Detect Type + Toolchain (Read-Only)](#3-detect-type--toolchain-read-only)
-- [4. Detect + Attach Plugins (Uses import-plugin)](#4-detect--attach-plugins-uses-import-plugin)
-- [5. Derive the ai-pack (Best Effort)](#5-derive-the-ai-pack-best-effort)
-- [6. Ask on Ambiguity](#6-ask-on-ambiguity)
-- [7. Confirm + Summary](#7-confirm--summary)
+1. [Inputs](#1-inputs)
+2. [Land the Code](#2-land-the-code)
+3. [Detect Type + Toolchain (Read-Only)](#3-detect-type--toolchain-read-only)
+4. [Detect + Attach Plugins (Uses import-plugin)](#4-detect--attach-plugins-uses-import-plugin)
+5. [Derive the ai-pack (Best Effort)](#5-derive-the-ai-pack-best-effort)
+6. [Ask on Ambiguity](#6-ask-on-ambiguity)
+7. [Confirm + Summary](#7-confirm--summary)
 
 Reverse of `create-project`: ingest existing code, then derive the ai-pack. Import never modifies the code
 - it only creates `ai/` + a minimal project root (+ `remote.json` in remote-code mode).

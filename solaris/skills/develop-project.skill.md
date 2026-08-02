@@ -7,9 +7,9 @@ summary: Hand off to a project's engineer agent (plan or implement) by loading i
 
 # develop-project <!-- omit in toc -->
 
-- [1. Locate the Project](#1-locate-the-project)
-- [2. Load the Engineer Context](#2-load-the-engineer-context)
-- [3. Act](#3-act)
+1. [Locate the Project](#1-locate-the-project)
+2. [Load the Engineer Context](#2-load-the-engineer-context)
+3. [Act](#3-act)
 
 Thin shim: switch the active persona to a project's **engineer** and carry out the user's request there.
 This skill has no logic of its own beyond locating the project and loading its context.

@@ -1,14 +1,14 @@
 # Solaris <!-- omit in toc -->
 
-- [1. Architecture](#1-architecture)
-- [2. AI-Packs](#2-ai-packs)
-- [3. Workspaces](#3-workspaces)
-- [4. Collaboration](#4-collaboration)
-- [5. Skills](#5-skills)
-- [6. Plugins](#6-plugins)
-- [7. Memory \& Versioning](#7-memory--versioning)
-- [8. Install \& Tools](#8-install--tools)
-- [9. Specification](#9-specification)
+1. [Architecture](#1-architecture)
+2. [AI-Packs](#2-ai-packs)
+3. [Workspaces](#3-workspaces)
+4. [Collaboration](#4-collaboration)
+5. [Skills](#5-skills)
+6. [Plugins](#6-plugins)
+7. [Memory \& Versioning](#7-memory--versioning)
+8. [Install \& Tools](#8-install--tools)
+9. [Specification](#9-specification)
 
 Solaris:
 

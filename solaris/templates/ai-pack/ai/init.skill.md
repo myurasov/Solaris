@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 ---
 name: init
@@ -8,11 +8,11 @@ summary: One-time onboarding for a fresh checkout of {{NAME}} - collect environm
 
 # Skill: init - Environment Onboarding <!-- omit in toc -->
 
-- [1. Preconditions](#1-preconditions)
-- [2. Collect Resources](#2-collect-resources)
-- [3. Write the Private Layer](#3-write-the-private-layer)
-- [4. Bring Up + Verify](#4-bring-up--verify)
-- [5. Hand Off](#5-hand-off)
+1. [Preconditions](#1-preconditions)
+2. [Collect Resources](#2-collect-resources)
+3. [Write the Private Layer](#3-write-the-private-layer)
+4. [Bring Up + Verify](#4-bring-up--verify)
+5. [Hand Off](#5-hand-off)
 
 Run when a new engineer starts with this project (or an existing one moves machines). Everything this
 skill writes is **private and gitignored** (`ai/.memory/*`, `.mcp.json`, `.cursor/`) - the repo itself

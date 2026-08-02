@@ -6,14 +6,14 @@ summary: Scaffold a new project + portable ai-pack (type, mode, plugins) from te
 
 # create-project <!-- omit in toc -->
 
-- [1. Gather Inputs](#1-gather-inputs)
-- [2. Confirm the Plan](#2-confirm-the-plan)
-- [3. Materialize the ai-pack Template](#3-materialize-the-ai-pack-template)
-- [4. Wire the Code Location by Mode](#4-wire-the-code-location-by-mode)
-- [5. Attach Plugins](#5-attach-plugins)
-- [6. Seed Spec, Manifest, Revisions Baseline](#6-seed-spec-manifest-revisions-baseline)
-- [7. Runtime MCP (Gitignored)](#7-runtime-mcp-gitignored)
-- [8. Stop + Hand Off](#8-stop--hand-off)
+1. [Gather Inputs](#1-gather-inputs)
+2. [Confirm the Plan](#2-confirm-the-plan)
+3. [Materialize the ai-pack Template](#3-materialize-the-ai-pack-template)
+4. [Wire the Code Location by Mode](#4-wire-the-code-location-by-mode)
+5. [Attach Plugins](#5-attach-plugins)
+6. [Seed Spec, Manifest, Revisions Baseline](#6-seed-spec-manifest-revisions-baseline)
+7. [Runtime MCP (Gitignored)](#7-runtime-mcp-gitignored)
+8. [Stop + Hand Off](#8-stop--hand-off)
 
 Scaffold a new project under `projects/<slug>/` with a standardized ai-pack, then stop so the user starts
 planning via `develop-project`. This skill does **not** write application source code.

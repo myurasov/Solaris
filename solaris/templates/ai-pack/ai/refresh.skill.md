@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 ---
 name: refresh
@@ -8,10 +8,10 @@ summary: Bring a team member's existing checkout of {{NAME}} up to date - pull f
 
 # Skill: refresh - Update and Migrate a Local Checkout <!-- omit in toc -->
 
-- [1. Pre-Flight](#1-pre-flight)
-- [2. Pull](#2-pull)
-- [3. Migrate the Local Copy](#3-migrate-the-local-copy)
-- [4. Verify + Report](#4-verify--report)
+1. [Pre-Flight](#1-pre-flight)
+2. [Pull](#2-pull)
+3. [Migrate the Local Copy](#3-migrate-the-local-copy)
+4. [Verify + Report](#4-verify--report)
 
 Run when a team member wants an existing clone brought up to date. Everything is local: the skill never
 pushes, and never touches private `ai/.memory/` content beyond layout migrations (pure renames/moves).
