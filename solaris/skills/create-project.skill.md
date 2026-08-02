@@ -1,5 +1,3 @@
-_Rev. 3_
-
 ---
 name: create-project
 triggers: ["create project", "new project", "start a project named X", "scaffold a project"]

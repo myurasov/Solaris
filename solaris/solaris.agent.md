@@ -1,5 +1,3 @@
-_Rev. 11_
-
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
 - [What Solaris Is](#what-solaris-is)
@@ -86,7 +84,10 @@ Two independent mechanisms:
   plugins); both changed -> smart merge, asking the user per conflict. This is how master copies and
   ai-packs stay in sync - not version numbers. Plugin revs live in the plugin's own
   `plugins/<name>/revisions.json`, not the framework ledger. After editing a revisioned file,
-  `revs bump <file>` it and `revs ledger`.
+  `revs bump <file>` it and `revs ledger`. **Scope:** rev markers belong ONLY on files that materialize
+  into ai-packs - `templates/ai-pack/**`, `templates/workspace/**`, and plugin `shared/**`. Everything
+  else (README, AGENTS.md, this file, skills, rules, spec, migrations, tools) carries no marker - git +
+  semver version those; do not add markers to them.
 - **Semantic versions** (framework `pyproject.toml`; plugin `manifest.json`): release-only. Bump on
   explicit request or when publishing to a public git remote. Migrations (`solaris/migrations/`) are
   authored only for **minor/major** bumps; **patch** never requires one.

@@ -1,5 +1,3 @@
-_Rev. 1_
-
 # Solaris <!-- omit in toc -->
 
 - [Architecture](#architecture)

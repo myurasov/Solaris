@@ -1,5 +1,3 @@
-_Rev. 3_
-
 ---
 name: import-project
 triggers: ["import project", "adopt <path>", "adopt <host:path>", "bring <repo> into Solaris"]

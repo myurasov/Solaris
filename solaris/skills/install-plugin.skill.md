@@ -1,5 +1,3 @@
-_Rev. 2_
-
 ---
 name: install-plugin
 triggers: ["install plugin <git url|folder|zip>", "install the <name> plugin", "repair plugin <name>", "add plugin <X> to <project>", "update plugin <X> in <project>", "link plugin <X> to <project>", "link the <name> plugin", "unlink plugin <X>", "detach plugin <X> from <project>"]
