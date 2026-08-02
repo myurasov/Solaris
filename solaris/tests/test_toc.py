@@ -26,6 +26,16 @@ def test_build_toc_nesting_and_dedupe():
     ]
 
 
+def test_numbered_headings_make_an_ordered_toc():
+    headers = [(1, "Title"), (2, "1. Architecture"), (3, "Detail"), (2, "2. AI-Packs")]
+    toc = T.build_toc(headers)
+    assert toc == [
+        "1. [Architecture](#1-architecture)",
+        "  - [Detail](#detail)",
+        "2. [AI-Packs](#2-ai-packs)",
+    ]
+
+
 def test_headers_in_code_fence_and_omit_are_ignored():
     body = [
         "# Title",

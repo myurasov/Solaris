@@ -6,11 +6,11 @@ summary: Prepare a project for external eyes - scrub identities/internals, add l
 
 # publish-project <!-- omit in toc -->
 
-- [1. Scope the Handoff](#1-scope-the-handoff)
-- [2. Scrub Sweep](#2-scrub-sweep)
-- [3. Legal + Framing](#3-legal--framing)
-- [4. Containment Check (Detached ai-pack)](#4-containment-check-detached-ai-pack)
-- [5. Final Pass + Record](#5-final-pass--record)
+1. [Scope the Handoff](#1-scope-the-handoff)
+2. [Scrub Sweep](#2-scrub-sweep)
+3. [Legal + Framing](#3-legal--framing)
+4. [Containment Check (Detached ai-pack)](#4-containment-check-detached-ai-pack)
+5. [Final Pass + Record](#5-final-pass--record)
 
 Prepare a project (or any repo produced here) to be shared outside: with a customer, a third party, or the
 public. Everything below is a checklist against the **tracked** content only - the local-only layers

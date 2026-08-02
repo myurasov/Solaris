@@ -26,7 +26,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 OMIT = "<!-- omit in toc -->"
 _FENCE = re.compile(r"^\s*(```|~~~)")
 _ATX = re.compile(r"^(#{1,6})\s+(.*?)\s*#*\s*$")
-_TOC_LINE = re.compile(r"^\s*- \[.*\]\(#.*\)\s*$")
+_TOC_LINE = re.compile(r"^\s*(?:-|\d+\.) \[.*\]\(#.*\)\s*$")
+_NUMBERED = re.compile(r"^(\d+)\.\s+(.*)$")  # "3. Workspaces" -> ordered TOC item "3."
 _REV = re.compile(r"^_Rev\.\s+\d+_\s*$")  # leading revision marker (solaris.tools.revs), kept above the TOC
 # Framework docs only: skip venv variants (e.g. .venv.noSync) and the content trees
 # (projects/plugins/tasks/.memory hold user or third-party markdown, not framework docs;
@@ -112,7 +113,12 @@ def build_toc(headers: list[tuple[int, str]]) -> list[str]:
         n = seen.get(base, 0)
         seen[base] = n + 1
         anchor = base if n == 0 else f"{base}-{n}"
-        out.append(f"{'  ' * (lvl - minlvl)}- [{_display(txt)}](#{anchor})")
+        # numbered headings ("3. Workspaces") become an ordered list item, with the number as the
+        # marker (the anchor still uses the full heading text); unnumbered headings stay bullets
+        display = _display(txt)
+        m = _NUMBERED.match(display)
+        marker, display = (f"{m.group(1)}.", m.group(2)) if m else ("-", display)
+        out.append(f"{'  ' * (lvl - minlvl)}{marker} [{display}](#{anchor})")
     return out
 
 

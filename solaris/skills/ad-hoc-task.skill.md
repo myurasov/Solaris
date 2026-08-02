@@ -6,10 +6,10 @@ summary: Start/resume an ad-hoc engineering/system-setup/research task under tas
 
 # ad-hoc-task <!-- omit in toc -->
 
-- [1. Start or Resume](#1-start-or-resume)
-- [2. Do the Work](#2-do-the-work)
-- [3. Capture + Close](#3-capture--close)
-- [4. Graduate (Optional)](#4-graduate-optional)
+1. [Start or Resume](#1-start-or-resume)
+2. [Do the Work](#2-do-the-work)
+3. [Capture + Close](#3-capture--close)
+4. [Graduate (Optional)](#4-graduate-optional)
 
 The command-center catch-all for work that is not a project. No ai-pack, no versioning - just a dated
 folder with notes and scratch.

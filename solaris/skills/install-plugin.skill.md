@@ -6,13 +6,13 @@ summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/f
 
 # install-plugin <!-- omit in toc -->
 
-- [1. Inputs](#1-inputs)
-- [2. Acquire the Source into plugins/](#2-acquire-the-source-into-plugins)
-- [3. Validate and Repair the Plugin Source](#3-validate-and-repair-the-plugin-source)
-- [4. Scope: Plugins-Only, or Attach to a Project](#4-scope-plugins-only-or-attach-to-a-project)
-- [5. Link Mode (Development Installs)](#5-link-mode-development-installs)
-- [6. Update, Migrate, Repair an Attached Plugin](#6-update-migrate-repair-an-attached-plugin)
-- [7. Report](#7-report)
+1. [Inputs](#1-inputs)
+2. [Acquire the Source into plugins/](#2-acquire-the-source-into-plugins)
+3. [Validate and Repair the Plugin Source](#3-validate-and-repair-the-plugin-source)
+4. [Scope: Plugins-Only, or Attach to a Project](#4-scope-plugins-only-or-attach-to-a-project)
+5. [Link Mode (Development Installs)](#5-link-mode-development-installs)
+6. [Update, Migrate, Repair an Attached Plugin](#6-update-migrate-repair-an-attached-plugin)
+7. [Report](#7-report)
 
 The single **plugin lifecycle** skill. It acquires a plugin (each plugin is its **own repository**) from a
 git URL, a local folder, or a source zip into `plugins/<name>/`, validates/repairs it, and - for a named

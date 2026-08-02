@@ -6,10 +6,10 @@ summary: Sync an ai-pack with framework/plugin master copies by per-file revisio
 
 # update-project <!-- omit in toc -->
 
-- [1. Classify + Sync Files by Revision](#1-classify--sync-files-by-revision)
-- [2. Apply Minor/Major Migrations](#2-apply-minormajor-migrations)
-- [3. Update Plugins](#3-update-plugins)
-- [4. Summary + Revert](#4-summary--revert)
+1. [Classify + Sync Files by Revision](#1-classify--sync-files-by-revision)
+2. [Apply Minor/Major Migrations](#2-apply-minormajor-migrations)
+3. [Update Plugins](#3-update-plugins)
+4. [Summary + Revert](#4-summary--revert)
 
 Bring a project's ai-pack in sync with the current framework + plugin master copies. **Routine sync is
 per-file (revisions); semantic-version migrations run only for minor/major framework bumps.** Never touches
