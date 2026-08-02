@@ -30,5 +30,54 @@
     "node_modules",
     ".venv",
     ".tools"
-  ]
+  ],
+  // --- Pyright (anysphere.cursorpyright) fully disabled ---------------------
+  // Its settings live under `cursorpyright.*`, NOT `python.analysis.*`
+  // (that namespace belongs to Pylance, which is not installed here).
+  "cursorpyright.disableLanguageServices": true,
+  "cursorpyright.disablePullDiagnostics": true,
+  "cursorpyright.disableOrganizeImports": true,
+  "cursorpyright.disableTaggedHints": true,
+  "cursorpyright.analysis.typeCheckingMode": "off",
+  "cursorpyright.analysis.diagnosticMode": "openFilesOnly",
+  "cursorpyright.analysis.disableWorkspaceSymbol": true,
+  "cursorpyright.analysis.autoImportCompletions": false,
+  "cursorpyright.analysis.useLibraryCodeForTypes": false,
+  "cursorpyright.analysis.logLevel": "Error",
+  "cursorpyright.analysis.exclude": [
+    "**"
+  ],
+  "cursorpyright.analysis.ignore": [
+    "**"
+  ],
+  // Pyrefly (meta.pyrefly) remains the sole Python checker; keep it off the
+  // whole tree so it only ever analyses open files.
+  "python.pyrefly.diagnosticMode": "openFilesOnly",
+  "pyrefly.trace.server": "off",
+  // --- File watcher: 117k of the 182k files here are .venv / node_modules ---
+  "files.watcherExclude": {
+    "**/.git/objects/**": true,
+    "**/.git/subtree-cache/**": true,
+    "**/.venv/**": true,
+    "**/.venv*/**": true,
+    "**/node_modules/**": true,
+    "**/__pycache__/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/.tools/**": true,
+    "**/*.egg-info/**": true
+  },
+  "search.exclude": {
+    "**/.venv/**": true,
+    "**/.venv*/**": true,
+    "**/node_modules/**": true,
+    "**/__pycache__/**": true,
+    "**/.mypy_cache/**": true,
+    "**/.pytest_cache/**": true,
+    "**/.ruff_cache/**": true,
+    "**/.tools/**": true,
+    "**/*.egg-info/**": true
+  },
+  "search.followSymlinks": false
 }
