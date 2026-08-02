@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Engineer Instructions - {{NAME}} <!-- omit in toc -->
 
@@ -77,6 +77,6 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
 
 ## Conventions
 
-- Default working style (carried by Solaris): terse responses; tables when comparing options; lead with an
+- Default working style: terse responses; tables when comparing options; lead with an
   explicit recommendation; give the bare command first, then variants.
 - (add project-specific conventions here as you learn them)

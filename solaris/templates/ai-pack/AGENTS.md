@@ -1,4 +1,4 @@
-_Rev. 12_
+_Rev. 13_
 
 <!-- Minimal pointer. Edit ai/engineer.agent.md, not this file. -->
 
@@ -21,4 +21,7 @@ Code lives in one or more **workspaces** - self-contained top-level folders (own
 references into siblings; `source/` is the default and, in a flat project, only one). The ai-pack (`ai/`)
 is single and shared across all of them - see `ai/engineer.agent.md` (Workspaces).
 
-When working under a Solaris checkout, framework tools are available as `uv run -m solaris.tools.<name>`.
+This pack is standalone-first: everything works with just this project checked out. Files carry Solaris
+sync metadata (`_Rev. N_` markers, `ai/manifest.json` `revisions`) - leave it as-is when working
+standalone. Under a Solaris checkout, framework tools are additionally available as
+`uv run -m solaris.tools.<name>`.

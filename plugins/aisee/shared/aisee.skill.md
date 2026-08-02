@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 ---
 name: aisee
@@ -136,8 +136,9 @@ uv sync && ./aisee install            # checks docker/NVIDIA toolkit/ffmpeg, cre
 ```
 
 Then record the URL in `ai/.memory/resources.md` (`aisee_server`), the consumer token (if
-enabled) in `ai/.memory/credentials.md`, update the `aisee` MCP entry, and re-run
-`uv run -m solaris.tools.mcp_sync --check`.
+enabled) in `ai/.memory/credentials.md`, and update the `aisee` MCP entry in both `.mcp.json` and
+`.cursor/mcp.json` (keep the two identical; under a Solaris checkout,
+`uv run -m solaris.tools.mcp_sync --check` verifies).
 
 ## Troubleshooting
 
@@ -148,5 +149,5 @@ enabled) in `ai/.memory/credentials.md`, update the `aisee` MCP entry, and re-ru
 | `unknown blob sha256:...` | blob expired (~24 h TTL) or never uploaded - re-upload via `POST /v1/blobs` |
 | task stuck in `model_loading` | cold model load (first-ever use downloads tens of GB); keep polling `progress`, never resubmit |
 | task `failed` with memory error | another model holds the GPU - `list_models`, ask operator to stop it, retry |
-| MCP tools missing from session | project MCP config lacks the `aisee` entry or session predates it - fix entry, `mcp_sync --check`, reload; use REST meanwhile |
+| MCP tools missing from session | project MCP config lacks the `aisee` entry or session predates it - fix the entry in both MCP configs, reload; use REST meanwhile |
 | verdict looks wrong | read `reason`/`evidence`, tighten the expectation, add `context`, or retry with a stronger model from `describe` |
