@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 ---
 name: import-project
@@ -28,6 +28,10 @@ Reverse of `create-project`: ingest existing code, then derive the ai-pack. Impo
 Create `projects/` if it does not exist (gitignored, lazily created). Ask the user the **mode** - `local`
 (default), `remote-code`, or `embedded` (ai-pack inside the repo) - then:
 
+- **workspace detection (any mode):** if the codebase already contains multiple self-contained top-level
+  tracks (sibling dirs each with their own setup/build entry point), record them as workspaces
+  (`project.workspaces` in the manifest + the `engineer.instructions.md` workspace table) instead of
+  forcing everything under one `source/`.
 - **local:** if `source` already is `projects/<slug>/source/`, adopt in place. Otherwise copy/rsync `source`
   -> `projects/<slug>/source/`, excluding `.venv`, `.git` caches, `__pycache__`, `node_modules`, build
   artifacts. Preserve an existing `.git` only after confirming with the user. Never move or delete the

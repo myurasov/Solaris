@@ -1,4 +1,4 @@
-_Rev. 10_
+_Rev. 11_
 
 # Solaris - Framework Agent (Orchestrator) <!-- omit in toc -->
 
@@ -17,11 +17,13 @@ Solaris is organized and what the orchestrator may and may not do.
 ## What Solaris Is
 
 Solaris runs many coding projects from one place. For each project it generates a standardized, portable
-**ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. Employer/domain-specific ways
+**ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. A project's code lives in one
+or more **workspaces** - self-contained top-level folders (`source/` is the default; the single ai-pack is
+shared across all of them; canonical rules in the template `ai/engineer.agent.md`). Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.19.0.md`](spec/spec-v0.19.0.md).
+`tasks/`. Full specification: [`spec/spec-v0.20.0.md`](spec/spec-v0.20.0.md).
 
 ## Persona Model
 

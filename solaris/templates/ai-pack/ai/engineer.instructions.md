@@ -1,7 +1,8 @@
-_Rev. 3_
+_Rev. 4_
 
 # Engineer Instructions - {{NAME}} <!-- omit in toc -->
 
+- [Workspaces](#workspaces)
 - [Build / Run / Test](#build--run--test)
 - [Deploy](#deploy)
 - [Local-Only Folders](#local-only-folders)
@@ -23,6 +24,16 @@ internal/corporate URLs, concrete deploy targets, remote paths, or secrets - tho
 `ai/.memory/resources.md` / `credentials.md`. Procedures still belong here, written as generic patterns
 (e.g. `rsync source/ <host>:<path>`, `--host <host> --port <port>`) that **reference** `resources.md` for the
 concrete values - never drop the procedure, just keep the values out of it.
+
+## Workspaces
+
+(Delete this section in a flat single-workspace project.) Each workspace is a self-contained top-level
+folder - own `setup.md` (from-scratch bring-up ending in verification), no file references into siblings;
+shared inputs live outside workspaces. New workspaces must ship a `setup.md` and be added here:
+
+| Workspace | Purpose | Setup |
+|---|---|---|
+| `source/` | (default workspace) | `source/setup.md` |
 
 ## Build / Run / Test
 

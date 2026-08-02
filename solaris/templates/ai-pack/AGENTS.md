@@ -1,4 +1,4 @@
-_Rev. 11_
+_Rev. 12_
 
 <!-- Minimal pointer. Edit ai/engineer.agent.md, not this file. -->
 
@@ -16,5 +16,9 @@ On every turn, load and follow:
 4. `source/AGENTS.md` if present (local mode) as gap-filling project rules - the ai-pack strictly
    overrides it (and any other in-repo conventions) on conflict; in remote-code mode the code lives at the host
    in `remote.json`; in embedded mode the code is this same repo (this `ai/` is a subdir, no separate `source/`).
+
+Code lives in one or more **workspaces** - self-contained top-level folders (own `setup.md`, no file
+references into siblings; `source/` is the default and, in a flat project, only one). The ai-pack (`ai/`)
+is single and shared across all of them - see `ai/engineer.agent.md` (Workspaces).
 
 When working under a Solaris checkout, framework tools are available as `uv run -m solaris.tools.<name>`.
