@@ -1,5 +1,3 @@
-# rev. 2
-
 # Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 

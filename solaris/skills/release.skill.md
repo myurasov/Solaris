@@ -1,5 +1,3 @@
-_Rev. 1_
-
 ---
 name: release
 triggers: ["do a release", "release cycle", "cut a release", "ship a release", "publish a release", "new release", "bump the version and release"]
@@ -32,7 +30,9 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
    - **Spec file** — add a "What changed in vX.Y.Z" sentence to the opening paragraph of the current spec (e.g. `solaris/spec/spec-v0.8.0.md`). For a **MINOR** bump, also create a new spec snapshot `solaris/spec/spec-v<version>.md` as a copy of the updated current spec, then update every spec link across the repo (`AGENTS.md`, `README.md`, `solaris/solaris.agent.md`) to point to the new file. Keep the old spec file in place (it is referenced by git history and migration notes).
    - Any skill, rule, template, or tools-reference doc that the change touched — keep them accurate.
 
-5. **Bump revisions for every framework file you edited.** For each changed tracked file:
+5. **Bump revisions for every materialized master you edited** - files under `templates/ai-pack/`,
+   `templates/workspace/`, or a plugin's `shared/` only (nothing else carries rev markers; README, skills,
+   spec, migrations, and tools are versioned by git + semver alone). For each changed tracked file:
    ```bash
    uv run -m solaris.tools.revs bump <file>
    ```

@@ -1,5 +1,3 @@
-_Rev. 1_
-
 ---
 name: health-check
 triggers: ["health-check", "health", "status", "doctor", "what's the state", "health-check --deep"]

@@ -1,5 +1,3 @@
-_Rev. 3_
-
 <!-- Canonical, always-on agent instructions for the Solaris framework. Minimal by design: pointers, not a manual. -->
 
 # Solaris - Agent Instructions <!-- omit in toc -->

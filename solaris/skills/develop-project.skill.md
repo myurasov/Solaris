@@ -1,5 +1,3 @@
-_Rev. 3_
-
 ---
 name: develop-project
 triggers: ["work on <project>", "develop <project>", "open <project>", "plan <project>", "implement X in <project>"]

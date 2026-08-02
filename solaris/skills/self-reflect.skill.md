@@ -1,5 +1,3 @@
-_Rev. 2_
-
 ---
 name: self-reflect
 triggers: ["self-reflect", "improve Solaris", "what should we improve", "tailor Solaris"]

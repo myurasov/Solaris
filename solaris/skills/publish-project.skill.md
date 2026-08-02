@@ -1,5 +1,3 @@
-_Rev. 1_
-
 ---
 name: publish-project
 triggers: ["publish project", "share project", "publish <project>", "share <project>", "make <project> shareable", "prepare <project> for handoff", "hand off <project>", "de-personalize <project>", "publish-safety audit"]

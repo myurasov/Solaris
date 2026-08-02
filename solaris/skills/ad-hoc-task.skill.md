@@ -1,5 +1,3 @@
-_Rev. 1_
-
 ---
 name: ad-hoc-task
 triggers: ["new task", "start a task", "work on tasks/<slug>", "resume task", "open tasks/<slug>", "research X", "set up <host/thing>", "ad-hoc: X"]
