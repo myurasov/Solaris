@@ -1,15 +1,20 @@
 # Solaris <!-- omit in toc -->
 
-1. [Getting Started](#1-getting-started)
-2. [How Solaris Works](#2-how-solaris-works)
-3. [Ways to Use Solaris](#3-ways-to-use-solaris)
-4. [Start a Project](#4-start-a-project)
-5. [Develop](#5-develop)
-6. [Collaborate and Share](#6-collaborate-and-share)
-7. [Extend with Plugins](#7-extend-with-plugins)
-8. [Keep Projects Current](#8-keep-projects-current)
-9. [Skills Reference](#9-skills-reference)
-10. [Specification](#10-specification)
+- [1. Getting Started](#1-getting-started)
+- [2. How Solaris Works](#2-how-solaris-works)
+- [3. Ways to Use Solaris](#3-ways-to-use-solaris)
+- [4. Start a Project](#4-start-a-project)
+- [5. Develop](#5-develop)
+- [6. Collaborate and Share](#6-collaborate-and-share)
+- [7. Extend with Plugins](#7-extend-with-plugins)
+- [8. Keep Projects Current](#8-keep-projects-current)
+- [9. Skills Reference](#9-skills-reference)
+- [10. Specification](#10-specification)
+- *Ad-Hoc Tasks* are supported for one-off work such as research, system setup, and quick prototyping.
+
+## 1. Getting Started
+
+You need [uv](https://docs.astral.sh/uv/) (it manages Python 3.14) and Cursor or Claude Code.
 
 Featues:
 
@@ -18,13 +23,7 @@ Featues:
 - A project can be completely detached for standalone development and sharing with customer or public if needed.
 - Solaris *AI-Packs* are compatible with collaboration through git-based workflows. Long-term memories such as instructions, specs, and conventions can be committed/reviewed through PRs and shared.
 - Above makes Solaris *AI-Packs* and plugins evolving over time: improvements from one project flow back into Solaris, and from there into all the other Solaris-based projects.
-- Solaris *Plugins* contain domain-specific skills/tools/etc and can also evolve from collaboration and project-specific developments.
-- *Ad-Hoc Tasks* are supported for one-off work such as research, system setup, and quick prototyping.
-
-## 1. Getting Started
-
-You need [uv](https://docs.astral.sh/uv/) (it manages Python 3.14) and Cursor or Claude Code;
-Node.js only if you want the optional Playwright MCP.
+- Solaris *Plugins* contain domain-specific skills/tools/etc and can also evolve from collaboration.
 
 ```bash
 git clone https://github.com/myurasov/Solaris && cd Solaris
@@ -156,9 +155,11 @@ servers, optional project types - so any project can opt into it.
   a pointer to the live source instead of a copy.
 - **Author one:** *"make a plugin from `<project>`"* factors that project's ways of working into a
   reusable plugin; the same skill folds later project-local edits back into the plugin source.
-- **Bundled plugins:** `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual
-  E2E testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous
-  Brev cloud-GPU run lifecycle).
+- **Bundled plugins:** `browserctl` (CLI browser automation on per-project Chromium profiles -
+  the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill),
+  `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing),
+  `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous Brev
+  cloud-GPU run lifecycle).
 
 ## 8. Keep Projects Current
 
@@ -199,5 +200,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 10. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.20.0.md`](solaris/spec/spec-v0.20.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.22.0.md`](solaris/spec/spec-v0.22.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
