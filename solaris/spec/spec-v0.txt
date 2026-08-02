@@ -24,7 +24,7 @@ The directory structure will look like this:
             - create-project.md <- used to create a new project
             - update-project.md <- used to update project's ai-setup to latest version
             - develop-project.md <- used to work on the specific project
-            - self-reflect.md <- similar to Co-SA's tailor skill
+            - self-reflect.md
         - migrations/
         - templates/
             - ai-setup/
@@ -105,7 +105,7 @@ When working on the project, the process will be as follows:
 
 Look into Solaris/solaris/spec/references folder for ideas of what i asked from coding agents. Make sure not to pick up anything Nvidia-specific.
 
-Also look at Co-SA (/Users/misha/icloud/NV-Co-SA-MY) and Superagent (/Users/misha/icloud/MY-Superagent) for ideas. But I want Solaris to be VERY minimal in the beginning, so do not bring over features that are not critiucal for its basic job - support my engineering projects.
+Also look at my earlier agent frameworks for ideas. But I want Solaris to be VERY minimal in the beginning, so do not bring over features that are not critiucal for its basic job - support my engineering projects.
 
 
 Misc important notes:
