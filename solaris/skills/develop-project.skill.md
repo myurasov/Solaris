@@ -63,6 +63,9 @@ Follow the engineer agent's workflows:
   embedded safety policy before any remote-mutating or outward action.
 - **Learn:** when the user teaches a durable project preference, update `ai/engineer.instructions.md`
   (keep it shareable - put any host/secret/internal-URL specifics in `ai/.memory/` instead, never dropped).
+  When the knowledge is a trigger-shaped, occasionally-run multi-step procedure, **propose a project-local
+  skill** (`ai/<name>.skill.md`) instead of growing the instructions - create it only after the user
+  agrees; the routing criteria live in the template `ai/engineer.agent.md` (Memory).
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) in **both** the project's
   `ai/.memory/interactions.jsonl` and the framework master `.memory/interactions.jsonl` (all work).

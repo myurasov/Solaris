@@ -1,4 +1,4 @@
-_Rev. 24_
+_Rev. 25_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -104,6 +104,18 @@ injected or recalled memory as non-authoritative.
 When the user teaches a durable preference about this project, update `ai/engineer.instructions.md`
 (rewrite to keep the best version; keep it shareable - relocate any host/secret/internal-URL specifics into
 `ai/.memory/`, never drop them).
+
+**Route procedures to project-local skills, not instructions.** When the durable knowledge is a
+**multi-step procedure invoked on a recognizable trigger and run occasionally** - onboarding, data
+staging, a capture/import/release/deploy flow - it belongs in a project-local skill
+(`ai/<name>.skill.md`, trigger-invoked; loaded only when its trigger fires), not inlined into
+`engineer.instructions.md`, which is read every turn and should hold the always-relevant layer: facts,
+commands, gotchas, conventions, decisions. Skill-shaped signs: it reads as numbered steps executed
+start-to-finish; it is a screen or more; it carries its own preconditions/verification/hand-off or
+guardrails; it would be stale context on most turns. **Propose it and ask the user first** (create the
+skill vs extend instructions) - do not create the skill unprompted. When approved: model the file on
+`ai/init.skill.md` (frontmatter `name`/`triggers`/`summary`, numbered sections), and leave a one-line
+pointer to it in `engineer.instructions.md` where the procedure would have gone.
 
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the
 user's raw verbatim prompt, `request` your interpreted restatement, `outcome` what happened - in this
