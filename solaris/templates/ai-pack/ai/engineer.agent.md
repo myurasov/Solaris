@@ -1,4 +1,4 @@
-_Rev. 22_
+_Rev. 23_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -6,7 +6,9 @@ _Rev. 22_
 - [Planning Workflow](#planning-workflow)
 - [Coding Workflow](#coding-workflow)
 - [Run / Deploy Workflow](#run--deploy-workflow)
+- [Workspaces](#workspaces)
 - [Memory](#memory)
+- [Authoring ai Files (Diff-Friendly)](#authoring-ai-files-diff-friendly)
 - [Commit Policy](#commit-policy)
 - [Safety Policy](#safety-policy)
 
@@ -70,6 +72,23 @@ that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in s
   lives under **`~/.solaris/<component>/`** so it is discoverable and removable in one place; ship/use an
   uninstaller alongside every installer and record the install (host + path) in `ai/.memory/resources.md`.
 
+## Workspaces
+
+A project holds one or more **workspaces** - top-level folders, each a self-contained track of work
+(`source/` is the default; a flat project has just that one). Rules:
+
+- **Self-contained:** a workspace must bring up and run without files from sibling workspaces - its own
+  `setup.md` (from-scratch bring-up ending in an end-to-end verification), its own deps/venv, its own
+  scratch (`__research/`, `__out/`). Shared inputs (datasets, common assets) live **outside** workspaces
+  (e.g. `data/`), never inside another workspace.
+- **One shared ai-pack:** `ai/` stays at the project root - never per workspace. A workspace may keep its
+  own `spec.md` for its track; `ai/spec.md` stays the project-level spec and points to them.
+- **Never reference across:** no imports, relative paths, or symlinks into a sibling workspace. If two
+  workspaces need the same thing, promote it to a shared location outside both.
+- Adding a workspace: create the folder with `setup.md` + `spec.md` (under a Solaris checkout,
+  `solaris/templates/workspace/` has the stubs), and register it in `ai/engineer.instructions.md`'s
+  workspace table (and `ai/manifest.json` `project.workspaces` when present).
+
 ## Memory
 
 The only authoritative memory is this project's `ai/.memory/` (and, under a Solaris checkout, the framework
@@ -95,6 +114,21 @@ immediately. Rewrite its `## Session Context` **in place** (replace, don't appen
 manually - save first so no detail is lost; (2) whenever the user says "save/remember/update/retain/keep
 context" or similar. Read it first at session start (and right after a compaction) to restore context.
 Only the engineer and Solaris agents write this file.
+
+## Authoring ai Files (Diff-Friendly)
+
+The committed ai files (`engineer.instructions.md`, `spec.md`, workspace `setup.md`/`spec.md`) are
+collaborated on through normal git review (GitHub PRs, diffs) - write them so diffs stay small and local:
+
+- **Hard-wrap prose at ~100-120 columns** (match the file's existing wrap); never put a whole paragraph on
+  one line - a one-word edit then diffs as the entire paragraph.
+- Prefer **bullets and tables** over long paragraphs; keep headings and section order **stable** so
+  hunks anchor well; when rewriting a section, touch only the lines that actually change (no reflowing or
+  reordering of untouched text).
+- TOCs are regenerated deterministically (`uv run -m solaris.tools.toc --write <file>`) - never hand-edit.
+- Merge conflicts in `ai/manifest.json` `revisions` are mechanical: take either side, then re-run
+  `uv run -m solaris.tools.revs baseline --dir <project>`. For committed append-only `*.jsonl` logs, add
+  `*.jsonl merge=union` to the repo's `.gitattributes` so parallel appends merge cleanly.
 
 ## Commit Policy
 

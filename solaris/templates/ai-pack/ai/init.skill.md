@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: init
@@ -44,6 +44,9 @@ blocking. Do **not** ask for secrets here - collect each secret the first time a
 
 - (install / build steps from `engineer.instructions.md` - reference, do not duplicate)
 - (an end-to-end verification the user can see: a health URL, a smoke test)
+- Multi-workspace projects: ask which workspace(s) the user will work on, then follow each one's
+  `setup.md` in full (the workspace table in `engineer.instructions.md` lists them) - a workspace can be
+  skipped now and set up later from its own `setup.md`.
 
 ## 5. Hand Off
 

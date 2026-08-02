@@ -1,3 +1,5 @@
+_Rev. 1_
+
 ---
 name: health-check
 triggers: ["health-check", "health", "status", "doctor", "what's the state", "health-check --deep"]
@@ -17,7 +19,7 @@ demand.
 ## Default (Status Overview)
 
 1. **Projects** - for each `projects/<slug>/`: read `ai/manifest.json` and show `name`, `type`, `mode`,
-   `framework_version`, attached plugins. (An **embedded**-mode project keeps its ai-pack one level deeper at
+   `framework_version`, attached plugins, and workspaces (`project.workspaces` when present). (An **embedded**-mode project keeps its ai-pack one level deeper at
    `projects/<slug>/<repo>/ai/` - use that path as `--dir` in the checks below.)
 2. **Revisions** - `uv run -m solaris.tools.revs status` (framework files changed without a rev bump); per
    project, `uv run -m solaris.tools.revs classify --dir projects/<slug>` flags files needing sync/merge

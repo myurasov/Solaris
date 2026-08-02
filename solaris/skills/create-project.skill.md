@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 ---
 name: create-project
@@ -35,6 +35,9 @@ Use the question tool (one batch) for anything not already given:
   or `embedded` (opt-in: the ai-pack lives **inside** the source repo at `projects/<slug>/<repo>/`, no separate
   `source/`, so it commits with the repo). Offer `embedded` only when the user wants the pack to travel inside their repo.
 - **plugins** - any additional plugins to attach (names under `plugins/`).
+- **workspaces** (optional) - names of additional self-contained work tracks beyond the default
+  (`source/`). Most projects start flat (just `source/`, the default workspace) and add workspaces later;
+  offer this only when the user describes multiple parallel tracks.
 
 Read the chosen `templates/projects/<type>.md` for how that type is structured (it guides planning later).
 
@@ -62,6 +65,13 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
 - **local:** keep `source/`; `git init -b main` inside `source/` is deferred to the engineer agent (never commit
   yet; when it happens, seed the repo's `.gitignore` with `__*/` - the local-only-folders convention in
   `ai/engineer.instructions.md`).
+- **workspaces** (any mode): `source/` is the **default workspace**. For each additional workspace named in
+  step 1, create `<name>/` beside it (embedded: at the repo root) and materialize
+  `solaris/templates/workspace/{setup.md,spec.md}` into it, substituting `{{WORKSPACE}}` (the folder name)
+  and `{{NAME}}`; register each in the manifest `project.workspaces` array and in the
+  `engineer.instructions.md` workspace table. Workspaces are self-contained (own setup/deps, no file
+  references into siblings; shared inputs live outside) - the canonical rules are in the template
+  `ai/engineer.agent.md` (Workspaces).
 - **remote-code:** delete `source/`; write `projects/<slug>/remote.json`:
   ```json
   { "_comment": "do not edit by hand", "mode": "remote-code", "host": "<HOST>", "path": "<REMOTE_PATH>",
@@ -73,7 +83,8 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
   dotfiles. Materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at that repo's root (not at `projects/<slug>/`);
   keep any non-repo local aux (`references/`, `screenshots/`) at `projects/<slug>/` *outside* `<repo>`. Add
   `ai/.memory/`, **`.secrets.env`**, and `__*/` (local-only folders) to the repo's `.gitignore` so no
-  secrets/hosts or scratch are committed. Record
+  secrets/hosts or scratch are committed, and seed a `.gitattributes` with `*.jsonl merge=union` (committed
+  append-only logs then merge cleanly across collaborators). Record
   `project.mode` `embedded` in `ai/manifest.json`; tools take `--dir projects/<slug>/<repo>/`.
 
 ## 5. Attach Plugins
@@ -89,7 +100,9 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
   `ai/.memory/spec-v0.md`.
 - The copied `ai/.memory/` already includes a fresh `context.md` (the session-context summary, with
   `{{NAME}}` substituted); leave its `## Session Context` empty for the engineer to fill at a save point.
-- Ensure `ai/manifest.json` has `project.{name,slug,type,mode}`, `framework_version`, and `plugins`.
+- Ensure `ai/manifest.json` has `project.{name,slug,type,mode}`, `framework_version`, and `plugins`; when
+  the project has workspaces beyond the default, also `project.workspaces` (array of folder names,
+  `source` included).
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes
   the `revisions` map (per materialized file: rev + content hash), so future `update-project` runs can tell
   whether the user edited a file.

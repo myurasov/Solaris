@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 ---
 name: develop-project
@@ -48,6 +48,12 @@ separate `source/`.
 
 Set the working directory to `projects/<slug>/source/` (local), `projects/<slug>/<repo>/` (embedded), or
 operate over Remote-SSH against `remote.json` (remote-code).
+
+**Workspaces:** when the project has more than one workspace (manifest `project.workspaces`, or the
+workspace table in `ai/engineer.instructions.md`), determine which one the request targets - from the
+prompt, or ask when ambiguous - and work inside that folder, honoring the self-containment rules in
+`ai/engineer.agent.md` (Workspaces): no file references into sibling workspaces; that workspace's
+`setup.md`/`spec.md` are part of the deliverable.
 
 ## 3. Act
 
