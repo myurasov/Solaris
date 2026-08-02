@@ -1,5 +1,3 @@
-_Rev. 1_
-
 # Solaris v0.20.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
@@ -19,7 +17,7 @@ _Rev. 1_
 
 Authoritative description of Solaris v0.20.0. Supersedes the 0.1.0-0.19.0 specs (in git history; the latest prior snapshot is
 [`spec-v0.19.0.md`](spec-v0.19.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
-build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.20.1 (patch): the ai-pack is now
+build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.20.2 (patch): rev markers are scoped to materialized masters only (templates/ai-pack, templates/workspace, plugin shared/) - stripped from README, AGENTS.md, the orchestrator file, skills, the 0.18.0 migration, the current spec, and the Python tools, where they were inert metadata that had already caused two parser bugs; the scope rule is codified in solaris.agent.md, the release skill, and the spec. What changed in 0.20.1 (patch): the ai-pack is now
 explicitly **standalone-first** - a shared/detached pack must work with no Solaris framework around it, so
 every `solaris.tools` / framework-path reference in the templates (and bundled plugin overlays) is either
 removed, given a tool-free alternative, or marked "under a Solaris checkout" (safely ignored standalone);
@@ -227,7 +225,10 @@ Two independent mechanisms.
 **Per-file revisions** keep ai-packs in sync with framework/plugin master copies - this is the primary
 sync mechanism (not version numbers). Every materialized framework/plugin file carries an integer rev
 marker, bumped +1 per edit, and a **content hash that excludes the marker** (a pure rev bump never changes
-the hash). Markers at the top of the file: `_Rev. N_` (md/mdc), `# rev. N` (py), a leading `"_rev": N` field (json). The
+the hash). Markers at the top of the file: `_Rev. N_` (md/mdc), `# rev. N` (py), a leading `"_rev": N` field (json).
+Markers appear ONLY on files that materialize into ai-packs (`templates/ai-pack/**`,
+`templates/workspace/**`, plugin `shared/**`); all other framework files (README, agent files, skills,
+rules, spec, migrations, tools) carry none - git + semver version those. The
 framework ledger `solaris/revisions.json` records current rev+hash + short history per tracked **framework**
 file; each **plugin keeps its own** ledger at `plugins/<name>/revisions.json` (keys relative to the plugin),
 so a plugin's rev history travels inside its own repo - never in the framework ledger. A project records its
