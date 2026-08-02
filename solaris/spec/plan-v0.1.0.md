@@ -36,7 +36,7 @@ Projects run in one of two **modes**: *local* (code lives locally in `src/`, sou
 
 Validate v0 with: a **todo app** (FastAPI + vanilla JS/HTML, local mode), a **python-cli** (standalone trivial CLI, uv-based), and **Isaac Lab** (remote-code mode) using a `nvidia-isaac-lab` plugin that carries the NVIDIA/Isaac-specific parts of the current `__ai` setup.
 
-Keep it lean. Port only what's load-bearing from Co-SA / Superagent.
+Keep it lean. Port only what's load-bearing from my earlier agent frameworks.
 
 ## 2. Decisions locked (from Q&A)
 
@@ -44,7 +44,7 @@ Keep it lean. Port only what's load-bearing from Co-SA / Superagent.
 |---|---|
 | Remote deploy | SSH + rsync; optional Docker when a project ships a Dockerfile. |
 | Todo stack | FastAPI JSON API + single-page vanilla HTML/JS UI. |
-| python-cli toy | Standalone trivial CLI, uv-based (own `pyproject.toml`); modeled on Co-SA's `bootstrap-ext-project`. |
+| python-cli toy | Standalone trivial CLI, uv-based (own `pyproject.toml`); modeled on a prior framework's project-bootstrap tool. |
 | Project layout | `ai/` sibling to `src/`; IDE wiring at project root; `src/` is the code `.git` root; IDE opens `projects/<p>/`. |
 | Project modes | **local** (code in `src/`, deploy to remote) and **remote-code** (no `src/`; `remote.json` points at code on a remote; edited/run in place via IDE Remote-SSH; not deployed by default). |
 | File formats | Human-facing docs = Markdown (`.md`, user-editable, format-tolerant). Machine state = JSON (`manifest.json`, `remote.json`, `mcps.json`) with a top `"_comment": "do not edit"`. Append-only logs = JSON Lines (`.jsonl`). **No YAML.** |
@@ -59,14 +59,14 @@ Keep it lean. Port only what's load-bearing from Co-SA / Superagent.
 | create-project handoff | After scaffold, **stop**; user starts planning via `develop-project`. |
 | Command center | Lightweight `tasks/` area (gitignored, dated folders) for ad-hoc engineering/system-setup/research; framework skills `task` and `doctor` (default output is the status summary; `--deep` for full health). Deferred (considered, not v0): hosts registry, `run-remote`, `research`, `capture`/`recall`, `provision`. |
 | Safety | `solaris/rules/safety.rule.md` (baked into `developer.agent.md` too): confirm before destructive, remote-mutating, or outward actions — `ssh` writes, `rsync --delete`, deploy, `git push`. Show the command/diff first. |
-| Credentials | Raw secrets in gitignored `credentials.md` (framework + per-project); simplest, matches Co-SA/Superagent. The gitignore entry is the only protection. |
+| Credentials | Raw secrets in gitignored `credentials.md` (framework + per-project); simplest, matches the prior frameworks. The gitignore entry is the only protection. |
 | Robustness | `solaris/tests/` (version/mcp_sync/manifest); interaction hook is fail-safe (timeout, swallows errors, never blocks a turn); `rsync` deploy excludes `.venv`/`.git`/secrets/artifacts and uses no `--delete` by default. |
 | `ai/` in git | Left outside git by default (user may VC separately). |
 | Skills | Listed inline in `AGENTS.md` (no skills manifest). Framework skills/rules use `*.skill.md` / `*.rule.md` (same as plugins). |
 | Setup | No setup skill. `AGENTS.md`/`CLAUDE.md`/`plugins/` ship committed (obtained on clone). `.venv`/`.tmp`/`.tools` created lazily. README documents `mcp.json.example`. |
 | MCP servers | `playwright` (npx stdio) is the only default MCP. `context7` is used via its **CLI** (`ctx7`), not MCP — the agent suggests installing it if absent. NVBugs MCP ships in the `nvidia-isaac-lab` plugin only. |
 | MCP config | Single committed `mcp.json.example`; user copies to `.mcp.json` (Claude) and `.cursor/mcp.json` (Cursor). `mcp_sync.py` detects divergence and offers to sync. |
-| Migration engine | In v0; ported from Co-SA, simplified; migrates project ai-setups; `update-project` is the entry point. No migration registry file — `version.py` scans `migrations/*.md` directly. |
+| Migration engine | In v0; ported from a prior framework, simplified; migrates project ai-setups; `update-project` is the entry point. No migration registry file — `version.py` scans `migrations/*.md` directly. |
 | Python | `requires-python = ">=3.14"`. `solaris/` is a package; tools run as modules: `uv run -m solaris.tools.<name>`. |
 
 ## 3. Directory layout
@@ -188,7 +188,7 @@ The `task` skill starts/resumes a dated folder and logs the run to `memory/inter
 
 ### 4.1 Dual-IDE wiring (root + every project)
 
-Pattern from Co-SA/Superagent: `AGENTS.md` is the single canonical instruction file; per-IDE shims delegate to it.
+Pattern from the prior frameworks: `AGENTS.md` is the single canonical instruction file; per-IDE shims delegate to it.
 
 - **`AGENTS.md`** — **minimal** and canonical: short pointers only — to `solaris/solaris.agent.md` (role), `solaris/rules/*.rule.md` (commit policy etc.), the inline skill catalog (name + trigger + one-liner), the memory read order, and the plugin-overlay scan. No duplicated content; the pointed-to files hold the detail.
 - **`CLAUDE.md`** — one line, `@AGENTS.md` (plus a one-line header). Nothing else.
@@ -270,7 +270,7 @@ The shipped `developer.agent.md` + `developer.instructions.md` **seed the user's
 
 ### 4.6 Migration engine
 
-Ported from Co-SA versioning contract, simplified to operate on **project ai-setups**.
+Ported from a prior framework's versioning contract, simplified to operate on **project ai-setups**.
 - Framework version = `pyproject.toml [project].version` (semver).
 - The ai-setup records the framework version it was written/updated at in `ai/manifest.json` (`framework_version`) — no `.version` files anywhere.
 - `solaris/migrations/`: `template.md` (authoring template), `README.md`, `<to_version>.md` files (frontmatter: `to_version`, `from_version`, `title`, `breaking`, `revertible`, `estimated_duration`, `touches`; body: Summary / Pre-flight / Migrate / Validate / Revert), optional `<to_version>/migrate.py|revert.py|validate.py`. **No registry file** — `version.py` builds the chain by scanning `*.md` frontmatter directly.
@@ -326,7 +326,7 @@ plugins/nvidia-isaac-lab/
   manifest.json         # version + descriptor (NOT copied)
   mcps.json             # NVBugs MCP entry (merged at install; NOT copied):
                         #   { "nvbugs": { "type": "http",
-                        #     "url": "https://maas.prd.astra.nvidia.com/maas/nvbugs/mcp" } }  (per Co-SA; NVIDIA-internal)
+                        #     "url": "https://maas.prd.astra.nvidia.com/maas/nvbugs/mcp" } }  (NVIDIA-internal)
   install.skill.md      # install/update/migrate/repair; asks for GPU host / fork remote / paths -> ai/memory/{resources,credentials}.md
   shared/               # copied into ai/nvidia-isaac-lab/
     nvbugs.skill.md       # merged prep / triage / try-and-fix / handoff + __nvbugs/ folder + info.txt/resolution.txt formats
@@ -348,7 +348,7 @@ Descriptions (guide create-project), not literal scaffolds.
 | Type | Content |
 |---|---|
 | `web-service.md` | FastAPI JSON API + vanilla HTML/JS UI; uvicorn; `src/` layout with `app/`, `static/`, `tests/`; uv project (own venv, separate from Solaris's). Deploy: rsync + ssh run, optional Docker. |
-| `python-cli.md` | Standalone trivial CLI, uv-based; modeled on Co-SA's `bootstrap-ext-project` python-cli: `src/`-layout package, single-entry helper script, Result+ExitCode+JSON envelope, pytest + ruff clean, Apache-2.0 + headers, `.gitignore`. |
+| `python-cli.md` | Standalone trivial CLI, uv-based; modeled on a prior framework's project-bootstrap tool python-cli: `src/`-layout package, single-entry helper script, Result+ExitCode+JSON envelope, pytest + ruff clean, Apache-2.0 + headers, `.gitignore`. |
 | `ios-app.md` | Description-only stub for v0 (not exercised). |
 
 Types come from two places: **core** (`solaris/templates/projects/*.md`) and **plugins** (`plugins/<name>/<type>.project.md`). `create-project` merges both lists; on a name collision core wins and the plugin's is shown as `<plugin>:<type>`. Choosing a plugin-provided type auto-attaches that plugin.
