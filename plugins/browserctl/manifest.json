@@ -1,0 +1,19 @@
+{
+  "_comment": "Plugin manifest (authored by the plugin author). 'version' is the plugin semver (release-only); install-plugin reads 'setup'.",
+  "schema_version": 1,
+  "name": "browserctl",
+  "version": "0.1.0",
+  "description": "CLI-based browser automation replacing the Playwright MCP: browserctl.py launches Playwright-managed Chromium directly, one persistent profile per purpose on a stable CDP port. Profiles are namespaced per project and created clean on first use / project init; ephemeral profiles on demand (--ephemeral / --fresh, pruned when stopped). Drive commands (tabs/navigate/snapshot/screenshot/eval) cover the common MCP tools; attach() gives full Playwright-Python for everything else. Includes use-case skills built on the tool (slack-web: operating the Slack web client). No MCP servers.",
+  "applies_to": {
+    "markers": ["playwright.config.ts", "playwright.config.js", "package.json", "*.html"]
+  },
+  "setup": {
+    "notes": [
+      "Requires uv (dependencies are inline PEP 723 metadata in browserctl.py - no project dep changes) and Playwright's Chromium once per machine: `uv run --with playwright playwright install chromium`.",
+      "Create the project's clean standing browser profile now (idempotent, no launch): `uv run <overlay>/browserctl.py init` from the project root - the project id is auto-derived from ai/manifest.json.",
+      "Browser state lives under ~/.browserctl/ (override with $BROWSERCTL_HOME) - machine-local and disposable, never inside the repo.",
+      "This plugin ships no MCP servers by design; if the project has a Playwright MCP configured, it can be removed once flows use browserctl."
+    ],
+    "resources": []
+  }
+}

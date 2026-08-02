@@ -5,12 +5,7 @@
     "Keep the two copies identical:  uv run -m solaris.tools.mcp_sync --sync   (check drift: --check).",
     "context7 is used via its CLI (ctx7), NOT as an MCP server - the agent suggests installing it if missing.",
     "When a plugin is installed into a project, its mcps.json entries are merged into that project's MCP config.",
-    "Playwright's first run downloads Chromium (~150MB); remove the entry if you do not want browser automation."
+    "No servers ship by default. Browser automation is CLI-based via the browserctl plugin (plugins/browserctl/), which replaced the former default Playwright MCP server."
   ],
-  "mcpServers": {
-    "playwright": {
-      "command": "npx",
-      "args": ["@playwright/mcp@latest"]
-    }
-  }
+  "mcpServers": {}
 }
