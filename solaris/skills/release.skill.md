@@ -29,6 +29,12 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
 4. **Update docs to reflect the changes.** Always:
    - **Spec file** — add a "What changed in vX.Y.Z" sentence to the opening paragraph of the current spec (e.g. `solaris/spec/spec-v0.8.0.md`). For a **MINOR** bump, also create a new spec snapshot `solaris/spec/spec-v<version>.md` as a copy of the updated current spec, then update every spec link across the repo (`AGENTS.md`, `README.md`, `solaris/solaris.agent.md`) to point to the new file. Keep the old spec file in place (it is referenced by git history and migration notes).
    - Any skill, rule, template, or tools-reference doc that the change touched — keep them accurate.
+   - **README content** the release makes stale: the bundled-plugins list (new/renamed plugin), the
+     Getting Started setup lines, and any feature the release adds/retires (e.g. a retired default
+     MCP server). The doc refresh is **mandatory even when `README.md` carries unrelated
+     uncommitted edits** - never skip it because the file is dirty; make the release edits, tell
+     the user the file also holds their WIP, and commit it (or have them finish it) rather than
+     shipping a stale published README.
 
 5. **Bump revisions for every materialized master you edited** - files under `templates/ai-pack/`,
    `templates/workspace/`, or a plugin's `shared/` only (nothing else carries rev markers; README, skills,
@@ -91,6 +97,9 @@ gh release create v<x> --title "Solaris <x>" --notes "<notes>"
 ## Verify the End State
 
 - `uv run -m solaris.tools.version current` matches the new version.
+- **Docs currency:** `grep -rn "spec-v" README.md AGENTS.md solaris/solaris.agent.md` shows only the
+  new spec version (older `spec-v*` links = a missed update); the README bundled-plugins list names
+  every directory under `plugins/` that ships with the repo.
 - `git status -sb` shows the branch clean and in sync with origin.
 - The new tag points at HEAD and exists on origin (`git ls-remote --tags origin v<version>`).
 - The GitHub release is live; the backfill diff (`comm -23` above) is empty for semver tags.
