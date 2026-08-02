@@ -1,4 +1,4 @@
-_Rev. 8_
+_Rev. 9_
 
 ---
 name: brev-run
@@ -124,7 +124,12 @@ until their rows land at teardown.
 
 - `brev create` may end its readiness poll with a benign `ErrorForbidden` - the instance
   still provisions; watch `brev ls` instead. RUNNING != usable: wait for SHELL `READY`,
-  and even then ssh may refuse for another minute - retry-loop the first connection.
+  and even then the first ssh can fail for **minutes, as a connect timeout** (port 22
+  unreachable, not just a refusal; seen on aws g5 well after "Ready") - retry-loop the
+  first connection with a generous window rather than treating timeouts as fatal.
+- `brev copy` right after readiness hangs silently past 120s (no output, no fast-fail)
+  while the instance's sshd is still coming up - gate the first copy on an ssh
+  `echo OK` retry-loop succeeding, then copy.
 - Advertised boot times and disk sizes in `brev search` can be wrong (a "1m boot / 56TB"
   launchpad 2xH100 was ~25 min and 1.8 TB) - verify with `df -h` / `nvidia-smi` on arrival.
 - Fresh Ubuntu images lack `python3.X-venv` (ensurepip) - `sudo apt-get install -y
