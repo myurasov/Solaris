@@ -1,20 +1,15 @@
 # Solaris <!-- omit in toc -->
 
-- [1. Getting Started](#1-getting-started)
-- [2. How Solaris Works](#2-how-solaris-works)
-- [3. Ways to Use Solaris](#3-ways-to-use-solaris)
-- [4. Start a Project](#4-start-a-project)
-- [5. Develop](#5-develop)
-- [6. Collaborate and Share](#6-collaborate-and-share)
-- [7. Extend with Plugins](#7-extend-with-plugins)
-- [8. Keep Projects Current](#8-keep-projects-current)
-- [9. Skills Reference](#9-skills-reference)
-- [10. Specification](#10-specification)
-- *Ad-Hoc Tasks* are supported for one-off work such as research, system setup, and quick prototyping.
-
-## 1. Getting Started
-
-You need [uv](https://docs.astral.sh/uv/) (it manages Python 3.14) and Cursor or Claude Code.
+1. [Getting Started](#1-getting-started)
+2. [How Solaris Works](#2-how-solaris-works)
+3. [Ways to Use Solaris](#3-ways-to-use-solaris)
+4. [Start a Project](#4-start-a-project)
+5. [Develop](#5-develop)
+6. [Collaborate and Share](#6-collaborate-and-share)
+7. [Extend with Plugins](#7-extend-with-plugins)
+8. [Keep Projects Current](#8-keep-projects-current)
+9. [Skills Reference](#9-skills-reference)
+10. [Specification](#10-specification)
 
 Featues:
 
@@ -23,7 +18,12 @@ Featues:
 - A project can be completely detached for standalone development and sharing with customer or public if needed.
 - Solaris *AI-Packs* are compatible with collaboration through git-based workflows. Long-term memories such as instructions, specs, and conventions can be committed/reviewed through PRs and shared.
 - Above makes Solaris *AI-Packs* and plugins evolving over time: improvements from one project flow back into Solaris, and from there into all the other Solaris-based projects.
-- Solaris *Plugins* contain domain-specific skills/tools/etc and can also evolve from collaboration.
+- Solaris *Plugins* contain domain-specific skills/tools/etc and can also evolve from collaboration and project-specific developments.
+- *Ad-Hoc Tasks* are supported for one-off work such as research, system setup, and quick prototyping.
+
+## 1. Getting Started
+
+You need [uv](https://docs.astral.sh/uv/) (it manages Python 3.14) and Cursor or Claude Code.
 
 ```bash
 git clone https://github.com/myurasov/Solaris && cd Solaris
