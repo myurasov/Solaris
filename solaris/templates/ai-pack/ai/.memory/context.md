@@ -1,3 +1,5 @@
+_Rev. 1_
+
 # {{NAME}} - Context <!-- omit in toc -->
 
 - [How to Use This File](#how-to-use-this-file)
@@ -23,7 +25,8 @@ compaction) needs to continue immediately. Complements `interactions.jsonl` (the
   cross-session knowledge does not live here - route it to `../engineer.instructions.md` (how),
   `resources.md` (what exists), or `../spec.md` (the contract).
 - **Read:** at session start (and right after a compaction), read this file first to restore context.
-- **TOC:** after structural edits, regenerate with `uv run -m solaris.tools.toc --write` on this file.
+- **TOC:** after structural edits, regenerate with any Markdown TOC generator (under a Solaris checkout:
+  `uv run -m solaris.tools.toc --write` on this file).
 
 ## Session Context
 

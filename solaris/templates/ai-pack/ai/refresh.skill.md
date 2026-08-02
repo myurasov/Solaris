@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 ---
 name: refresh
@@ -27,9 +27,9 @@ pushes, and never touches private `ai/.memory/` content beyond layout migrations
 
 `git pull --ff-only` from the main remote. On failure (diverged history), stop and show the situation -
 resolving a divergence is a user decision, not a refresh step. When resolving merges later: a conflict in
-`ai/manifest.json` `revisions` is mechanical - take either side, then (under a Solaris checkout) re-run
-`uv run -m solaris.tools.revs baseline`; conflicts in committed `*.jsonl` logs are avoided by
-`*.jsonl merge=union` in `.gitattributes` (add it if missing).
+`ai/manifest.json` `revisions` is mechanical - take either side and move on (it is Solaris sync metadata;
+the Solaris-side maintainer re-records it on their next sync); conflicts in committed `*.jsonl` logs are
+avoided by `*.jsonl merge=union` in `.gitattributes` (add it if missing).
 
 ## 3. Migrate the Local Copy
 
