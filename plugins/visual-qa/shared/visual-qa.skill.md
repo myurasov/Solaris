@@ -1,5 +1,3 @@
-_Rev. 10_
-
 ---
 name: visual-qa
 triggers:
@@ -13,6 +11,7 @@ antitriggers:
   - "work on tasks/"
 summary: Capture the running UI (web / native / mobile), then have the VLM 'eyes' answer or assert against it - the visual leg of verification.
 ---
+_Rev. 10_
 
 # visual-qa <!-- omit in toc -->
 

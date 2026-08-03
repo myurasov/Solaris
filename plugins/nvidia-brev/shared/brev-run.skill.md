@@ -1,5 +1,3 @@
-_Rev. 9_
-
 ---
 name: brev-run
 triggers:
@@ -11,6 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
+_Rev. 9_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 

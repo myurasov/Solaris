@@ -55,7 +55,7 @@ The project root is intentionally minimal: `AGENTS.md` + a one-line `CLAUDE.md` 
 the template) plus `ai/` and (local mode) `source/`. There is no `.cursor/`, no `mcp.json.example`, and no
 `.gitignore` - the folder is not committed. Cursor reads `AGENTS.md` natively; Claude Code reads the
 `CLAUDE.md` shim. If a project type adds a `source/AGENTS.md`, drop a sibling `source/CLAUDE.md` (`@AGENTS.md`) too.
-Copied files keep their `_Rev. N_` rev markers (first line). For **embedded** mode the destination is the
+Copied files keep their `_Rev. N_` rev markers (line 1; in files with YAML frontmatter, right after the closing ---). For **embedded** mode the destination is the
 repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is dropped) - see step 4.
 
 ## 4. Wire the Code Location by Mode

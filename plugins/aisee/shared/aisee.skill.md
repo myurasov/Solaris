@@ -1,5 +1,3 @@
-_Rev. 4_
-
 ---
 name: aisee
 triggers:
@@ -17,6 +15,7 @@ antitriggers:
 summary: Capture the UI (or take provided media), then have AISee's VLM eyes answer a question,
   assert an expectation, or watch a recording - MCP first, REST/CLI fallback.
 ---
+_Rev. 4_
 
 # Skill: aisee - visual verification with AISee <!-- omit in toc -->
 

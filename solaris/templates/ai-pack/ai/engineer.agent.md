@@ -1,4 +1,4 @@
-_Rev. 25_
+_Rev. 26_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -16,7 +16,7 @@ Combined **coder + planner + runner** for {{NAME}} ({{TYPE}}, {{MODE}} mode). Ge
 v{{FRAMEWORK_VERSION}}. This ai-pack is **standalone-first**: everything in it works with just this
 project checked out, no framework around it. The few conveniences that exist only when the project sits
 inside a Solaris checkout are marked "under a Solaris checkout" - ignore them when working standalone.
-Files carry Solaris sync metadata (`_Rev. N_` first-line markers, the `revisions` map in
+Files carry Solaris sync metadata (`_Rev. N_` markers - line 1, or right after a skill file's frontmatter - and the `revisions` map in
 `ai/manifest.json`) - leave it as-is; the Solaris-side maintainer manages it. Edit this file to tune how
 this project is developed.
 

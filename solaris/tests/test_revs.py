@@ -165,3 +165,20 @@ def test_plugin_ledger_is_separate_from_framework(tmp_path):
     # ...and flags a plugin shared file edited without a rev bump (reported repo-relative)
     (plug / "shared" / "a.rule.md").write_text(R.set_rev("# a\n\nrule a EDITED\n", ".md", 1), encoding="utf-8")
     assert R.status(repo_root=tmp_path, path=fw_ledger) == ["plugins/myplug/shared/a.rule.md"]
+
+
+def test_set_rev_places_marker_after_frontmatter():
+    # GitHub only renders YAML frontmatter when it opens the file - the rev
+    # marker must land after the closing ---, hash-neutral and idempotent.
+    src = "---\nname: x\ntriggers: [\"y\"]\n---\n\n# T\n\nbody\n"
+    stamped = R.set_rev(src, ".md", 3)
+    assert stamped.startswith("---\n")
+    assert "---\n_Rev. 3_\n\n# T" in stamped
+    assert R.read_rev(stamped, ".md") == 3
+    assert R.content_hash(stamped, ".md") == R.content_hash(src, ".md")
+    assert R.set_rev(stamped, ".md", 3) == stamped
+    # migrating a legacy marker-on-line-1 file keeps the hash too
+    legacy = "_Rev. 3_\n\n" + src
+    assert R.set_rev(legacy, ".md", 3) == stamped
+    # no frontmatter: marker stays on line 1
+    assert R.set_rev("# T\n\nbody\n", ".md", 1).startswith("_Rev. 1_\n")

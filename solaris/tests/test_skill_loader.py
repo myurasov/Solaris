@@ -158,3 +158,11 @@ def test_real_skills_discover_and_match():
     assert "ad-hoc-task" in names
     matched = S.match_skills("lets work on tasks/2026-06-20-myspark2-install-chrome-arm64", skills)
     assert any(s["name"] == "develop-project" or s["name"] == "ad-hoc-task" for s in matched)
+
+
+def test_parse_skill_tolerates_marker_after_frontmatter():
+    # insert the marker right after the closing --- of the frontmatter
+    parts = SAMPLE.split("---", 2)
+    text = "---" + parts[1] + "---\n_Rev. 4_\n" + parts[2]
+    sk = S.parse_skill(text)
+    assert sk is not None and sk["name"] == "ad-hoc-task"

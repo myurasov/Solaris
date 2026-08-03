@@ -9,7 +9,8 @@ they drive sync/merge between the framework master copies and the materialized c
 independent of semantic versions (which are release-only; see version.py).
 
 Marker by file type (placed at the top of the file):
-  .md / .mdc : first line      ``_Rev. N_``
+  .md / .mdc : first line      ``_Rev. N_``  (with YAML frontmatter: right after the closing ---,
+               so GitHub still renders the frontmatter as metadata instead of a broken rule+blob)
   .py        : first line      ``# rev. N``
   .json      : first field     ``"_rev": N``
 
@@ -109,7 +110,19 @@ def set_rev(text: str, ext: str, rev: int) -> str:
         obj.pop("_rev", None)
         return json.dumps({"_rev": rev, **obj}, indent=2) + "\n"  # _rev first
     body = canonical(text, ext).strip("\n")
-    return f"{_marker(ext, rev)}\n\n{body}\n"
+    marker = _marker(ext, rev)
+    if ext in (".md", ".mdc") and body.startswith("---\n"):
+        # YAML frontmatter must stay the first bytes of the file or GitHub
+        # renders it as a horizontal rule + text blob - place the marker
+        # right after the closing --- instead of on line 1.
+        m = re.search(r"\n---[ \t]*(?:\n|\Z)", body)
+        if m:
+            # The marker line sits snug under the closing --- (no surrounding
+            # blank-line changes), so the canonical content hash is identical
+            # to the marker-on-line-1 form.
+            fm, rest = body[:m.end()].rstrip("\n"), body[m.end():]
+            return f"{fm}\n{marker}\n{rest}" if rest else f"{fm}\n{marker}\n"
+    return f"{marker}\n\n{body}\n"
 
 
 def bump_text(text: str, ext: str) -> "tuple[str, int]":

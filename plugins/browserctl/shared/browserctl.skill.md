@@ -1,10 +1,9 @@
-_Rev. 2_
-
 ---
 name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
+_Rev. 2_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
