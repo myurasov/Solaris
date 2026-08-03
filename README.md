@@ -1,6 +1,6 @@
 # Solaris <!-- omit in toc -->
 
-1. [Features](#1-features)
+1. [What is Solaris](#1-what-is-solaris)
 2. [Getting Started](#2-getting-started)
 3. [How Solaris Works](#3-how-solaris-works)
 4. [Ways to Use Solaris](#4-ways-to-use-solaris)
@@ -12,7 +12,7 @@
 10. [Skills Reference](#10-skills-reference)
 11. [Specification](#11-specification)
 
-## 1. Features
+## 1. What is Solaris
 
 - Solaris serves as command center that runs many projects from one place, injecting an *AP-Pack* that can be updated from master version at any time with fresh improvements.
 - Memory system on Solaris projects is split into short- (local-specific) and long-term (what can be shared).
