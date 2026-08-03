@@ -27,12 +27,16 @@
       ]
     },
     "shared/slack-web.skill.md": {
-      "rev": 1,
-      "hash": "cd7a7ca0c2e3d5585fca1f261f4125b3706ac80c6be27cd70b3c2b4f04122c59",
+      "rev": 2,
+      "hash": "3f47ecbd4860cb2f15936021ab9061bcd79dec23705d0cc76ddaffd728cab3fb",
       "history": [
         {
           "rev": 1,
           "hash": "cd7a7ca0c2e3d5585fca1f261f4125b3706ac80c6be27cd70b3c2b4f04122c59"
+        },
+        {
+          "rev": 2,
+          "hash": "3f47ecbd4860cb2f15936021ab9061bcd79dec23705d0cc76ddaffd728cab3fb"
         }
       ]
     }
