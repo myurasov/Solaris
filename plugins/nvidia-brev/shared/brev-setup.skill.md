@@ -1,5 +1,3 @@
-_Rev. 3_
-
 ---
 name: brev-setup
 triggers:
@@ -9,6 +7,7 @@ summary: Install the Brev CLI, guide the user through account registration and l
   (browser flow - never secrets in chat), select the org, and verify access. Run this
   before the first brev-run in any environment.
 ---
+_Rev. 3_
 
 # Skill: brev-setup - CLI installation + account onboarding <!-- omit in toc -->
 

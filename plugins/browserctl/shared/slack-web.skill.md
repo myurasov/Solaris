@@ -1,10 +1,9 @@
-_Rev. 2_
-
 ---
 name: slack-web
 triggers: ["slack web", "sweep slack in the browser", "capture slack channel", "read slack via browser", "post to slack via browser", "react to slack messages", "slack thread capture", "download slack attachments"]
 summary: Operate the Slack web client through browserctl - capture channels and threads (scroll-and-snapshot), search, download attachments, and (on explicit request) react or post - with the field-tested selectors, composer techniques, and pitfalls.
 ---
+_Rev. 2_
 
 # Skill: slack-web - Operating Slack Through the Browser <!-- omit in toc -->
 
