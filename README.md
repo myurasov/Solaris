@@ -14,7 +14,7 @@
 
 ## 1. What is Solaris
 
-- Solaris serves as command center that runs many projects from one place, injecting an *AP-Pack* that can be updated from master version at any time with fresh improvements.
+- Solaris serves as command center that runs many projects from one place, injecting an *AI-Pack* that can be updated from master version at any time with fresh improvements.
 - Memory system on Solaris projects is split into short- (local-specific) and long-term (what can be shared).
 - A project can be completely detached for standalone development and sharing with customer or public if needed.
 - Solaris *AI-Packs* are compatible with collaboration through git-based workflows. Long-term memories such as instructions, specs, and conventions can be committed/reviewed through PRs and shared.
