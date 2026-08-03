@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -131,6 +131,13 @@ until their rows land at teardown.
   `echo OK` retry-loop succeeding, then copy.
 - Advertised boot times and disk sizes in `brev search` can be wrong (a "1m boot / 56TB"
   launchpad 2xH100 was ~25 min and 1.8 TB) - verify with `df -h` / `nvidia-smi` on arrival.
+- `brev create --min-disk <GB>` is a **search filter, not a provisioning request** - an aws
+  g5 created with `--min-disk 200` arrived with a 117 GB root, of which the AMI itself ate
+  61 GB. Budget disk as: AMI overhead (~60 GB on aws images) + dataset + **2x dataset for
+  any sharded/cache-building workload** + checkpoints; `df -h` after boot and free space
+  (docker system prune -af often reclaims ~30 GB on brev AMIs) BEFORE launching a long job -
+  a disk-full at the final checkpoint save wastes the whole run (torch.save dies with
+  "inline_container.cc unexpected pos").
 - Fresh Ubuntu images lack `python3.X-venv` (ensurepip) - `sudo apt-get install -y
   python3.$(minor)-venv` first; sudo is passwordless on the default user.
 - `brev exec` holds the session even for `nohup ... &` children - detach long jobs with
