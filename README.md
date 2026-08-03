@@ -1,16 +1,16 @@
 # Solaris <!-- omit in toc -->
 
-- [1. What is Solaris](#1-what-is-solaris)
-- [2. Quick Start](#2-quick-start)
-- [3. How Solaris Works](#3-how-solaris-works)
-- [4. Modes of Solaris Operation](#4-modes-of-solaris-operation)
-- [5. Starting a Solaris Project](#5-starting-a-solaris-project)
-- [6. Developing a Solaris Project](#6-developing-a-solaris-project)
-- [7. Sharing and Collaborating on a Solaris Project](#7-sharing-and-collaborating-on-a-solaris-project)
-- [8. Extending Solaris with Plugins](#8-extending-solaris-with-plugins)
-- [9. Keeping Solaris Projects Current](#9-keeping-solaris-projects-current)
-- [10. Skills Reference](#10-skills-reference)
-- [11. Specification](#11-specification)
+1. [What is Solaris](#1-what-is-solaris)
+2. [Quick Start](#2-quick-start)
+3. [How Solaris Works](#3-how-solaris-works)
+4. [Modes of Solaris Operation](#4-modes-of-solaris-operation)
+5. [Starting a Solaris Project](#5-starting-a-solaris-project)
+6. [Developing a Solaris Project](#6-developing-a-solaris-project)
+7. [Sharing and Collaborating on a Solaris Project](#7-sharing-and-collaborating-on-a-solaris-project)
+8. [Extending Solaris with Plugins](#8-extending-solaris-with-plugins)
+9. [Keeping Solaris Projects Current](#9-keeping-solaris-projects-current)
+10. [Skills Reference](#10-skills-reference)
+11. [Specification](#11-specification)
 
 ## 1. What is Solaris
 
