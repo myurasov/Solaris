@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 ---
 name: slack-web
@@ -144,6 +144,27 @@ with bctl.attach("slack") as (pw, browser):
   (`application/vnd.google-apps.*`) are documents, not downloadable files - skip them.
 - Downloaded filenames can carry invisible Unicode (e.g. U+202F from macOS screenshot names) -
   locate the saved file with a case-insensitive prefix glob, not a literal path.
+
+**Thread-reply attachments (invisible to fetch tools).** Slack's search/fetch layers return
+thread-reply messages **without their `files` array**, so a file shared in a thread never
+surfaces outside the browser. The working path is the logged-in session's own client-side Web
+API (works on Enterprise Grid external workspaces too):
+
+1. `attach()` and open the **client URL** (`https://app.slack.com/client/<team_id>/<channel_id>`),
+   then wait ~15-20 s for the client to boot. Do **not** use the message permalink - the
+   workspace-subdomain permalink page never boots the web client headless, leaving
+   `localStorage` empty.
+2. In `page.evaluate`, read the session token from `localStorage.localConfig_v2` -
+   `JSON.parse(...).teams[...]`, picking the team whose `id` matches the target workspace -
+   and POST `token`/`channel`/`ts` as FormData to
+   `https://app.slack.com/api/conversations.replies` with `credentials: 'include'`. The
+   **app.slack.com** API host is the one that accepts the token; the workspace-subdomain host
+   fails (CORS / `invalid_auth`) even with credentials.
+3. Collect `url_private_download` (fallback `url_private`) from each reply's `files`, fetch
+   with `ctx.request.get(url)` - the browser context carries the session cookies - and write
+   `resp.body()` to the destination.
+
+The same pattern generalizes to any Slack Web API method the client itself may call.
 
 ## Write Actions: React and Post (On Request Only)
 
