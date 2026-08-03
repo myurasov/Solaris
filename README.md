@@ -14,13 +14,13 @@
 
 ## 1. What is Solaris
 
-- Solaris serves as command center that runs many projects from one place, injecting an *AI-Pack* that can be updated from master version at any time with fresh improvements.
-- Memory system on Solaris projects is split into short- (local-specific) and long-term (what can be shared).
-- A project can be completely detached for standalone development and sharing with customer or public if needed.
-- Solaris *AI-Packs* are compatible with collaboration through git-based workflows. Long-term memories such as instructions, specs, and conventions can be committed/reviewed through PRs and shared.
-- Above makes Solaris *AI-Packs* and plugins evolving over time: improvements from one project flow back into Solaris, and from there into all the other Solaris-based projects.
-- Solaris *Plugins* contain domain-specific skills/tools/etc and can also evolve from collaboration and project-specific developments.
-- *Ad-Hoc Tasks* are supported for one-off work such as research, system setup, and quick prototyping.
+- Solaris serves as command center that runs many projects from one place, injecting an *AI-Pack* that can be updated from master version at any time, bringing improvements with it.
+- Memory system in Solaris projects has a short- and long-term layers. Sort-term is specific to current installation, long term memories can be shared with the team.
+- A Solaris project can be completely detached for standalone development or deployment and shared with customers or public.
+- Solaris *AI-Packs* are collaboration-compatible through git-based workflow. Long-term memories can go through PRs or standard git processes.
+- Solaris *AI-Packs* and plugins are evolving over time: improvements from one project flow back into Solaris master version, and from there into all the other Solaris projects.
+- *Plugins* are supported for quickly adding skills, tools, domain or company-specific workflows, etc) and are designed to be compatible with collaborative process too.
+- *Ad-Hoc Tasks* allow quick one-off work such as research, system setup, and quick prototyping.
 
 ## 2. Getting Started
 
