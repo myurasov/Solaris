@@ -1,16 +1,16 @@
 # Solaris <!-- omit in toc -->
 
-1. [What is Solaris](#1-what-is-solaris)
-2. [Getting Started](#2-getting-started)
-3. [How Solaris Works](#3-how-solaris-works)
-4. [Ways to Use Solaris](#4-ways-to-use-solaris)
-5. [Start a Project](#5-start-a-project)
-6. [Develop](#6-develop)
-7. [Collaborate and Share](#7-collaborate-and-share)
-8. [Extend with Plugins](#8-extend-with-plugins)
-9. [Keep Projects Current](#9-keep-projects-current)
-10. [Skills Reference](#10-skills-reference)
-11. [Specification](#11-specification)
+- [1. What is Solaris](#1-what-is-solaris)
+- [2. Quick Start](#2-quick-start)
+- [3. How Solaris Works](#3-how-solaris-works)
+- [4. Modes of Solaris Operation](#4-modes-of-solaris-operation)
+- [5. Starting a Solaris Project](#5-starting-a-solaris-project)
+- [6. Developing a Solaris Project](#6-developing-a-solaris-project)
+- [7. Sharing and Collaborating on a Solaris Project](#7-sharing-and-collaborating-on-a-solaris-project)
+- [8. Extending Solaris with Plugins](#8-extending-solaris-with-plugins)
+- [9. Keeping Solaris Projects Current](#9-keeping-solaris-projects-current)
+- [10. Skills Reference](#10-skills-reference)
+- [11. Specification](#11-specification)
 
 ## 1. What is Solaris
 
@@ -22,7 +22,7 @@
 - *Plugins* are supported for quickly adding skills, tools, domain or company-specific workflows, etc) and are designed to be compatible with collaborative process too.
 - *Ad-Hoc Tasks* allow quick one-off work such as research, system setup, and quick prototyping.
 
-## 2. Getting Started
+## 2. Quick Start
 
 You need [uv](https://docs.astral.sh/uv/) (it manages Python 3.14) and Cursor or Claude Code.
 
@@ -62,7 +62,7 @@ triggers one, and `log_interaction` keeps a backstop log of every prompt. Instru
 canonical `AGENTS.md` per scope (Cursor reads it natively; Claude Code through a one-line
 `CLAUDE.md` shim).
 
-## 4. Ways to Use Solaris
+## 4. Modes of Solaris Operation
 
 Solaris supports several modes of use; each has its own workflow, and they mix freely.
 
@@ -80,7 +80,7 @@ Solaris supports several modes of use; each has its own workflow, and they mix f
   plugin source. Workflow: *"link plugin `<name>` to `<project>`"* -> iterate in place -> version
   the plugin -> consumers pick it up on their next update.
 
-## 5. Start a Project
+## 5. Starting a Solaris Project
 
 Say *"create a new project"* (the agent will ask for what it needs) or *"import project
 `<path>`"* to adopt an existing codebase. Either way you get an *ai-pack* at
@@ -107,7 +107,7 @@ What lands in the pack:
 The pack is **standalone-first**: it works with no Solaris around it, and can be refreshed from
 the framework master at any time (*"update `<project>`"*) to pick up the latest improvements.
 
-## 6. Develop
+## 6. Developing a Solaris Project
 
 Say *"work on `<project>`"* and make requests; the engineer plans against `ai/spec.md`,
 implements, runs, and remembers what it learns in the pack.
@@ -125,7 +125,7 @@ prototyping - say *"new task: ..."*. You get a dated folder under `tasks/` whose
 findings, outcome) is the durable record. If a task turns into something real, it graduates into a
 project or plugin.
 
-## 7. Collaborate and Share
+## 7. Sharing and Collaborating on a Solaris Project
 
 An *ai-pack* is built for teamwork through ordinary git hosting - most collaborators never run
 Solaris at all.
@@ -145,7 +145,7 @@ Solaris at all.
   scrubs identities and internals, adds license/disclaimer, and verifies the detached pack stands
   alone - ready for a customer or the public.
 
-## 8. Extend with Plugins
+## 8. Extending Solaris with Plugins
 
 A *plugin* packages a domain or employer workflow - always-on rules, trigger-invoked skills, MCP
 servers, optional project types - so any project can opt into it.
@@ -162,7 +162,7 @@ servers, optional project types - so any project can opt into it.
   `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous Brev
   cloud-GPU run lifecycle).
 
-## 9. Keep Projects Current
+## 9. Keeping Solaris Projects Current
 
 Say *"update `<project>`"* whenever you want a pack to catch up with the framework. Two mechanisms
 work together:
