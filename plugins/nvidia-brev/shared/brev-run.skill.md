@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -138,6 +138,15 @@ until their rows land at teardown.
   (docker system prune -af often reclaims ~30 GB on brev AMIs) BEFORE launching a long job -
   a disk-full at the final checkpoint save wastes the whole run (torch.save dies with
   "inline_container.cc unexpected pos").
+- **When disk space is a concern, put the data on the instance's ephemeral NVMe store.**
+  Many GPU instance types ship a large locally-attached NVMe beyond the root volume (aws
+  g5.4xlarge: ~560 GB, pre-mounted at /opt/dlami/nvme on DLAMI images; check `lsblk` on
+  arrival - it may need mounting on other images). Point datasets/caches there from the
+  START (move + symlink into the workload's expected path) rather than after a disk-full:
+  it is bigger than the root EBS volume and usually faster, being locally attached (network
+  EBS can also throttle to a crawl once burst credits drain, which makes late migration
+  painfully slow). Ephemeral = wiped on stop/restart; keep only regenerable data there and
+  pull results off before teardown.
 - Fresh Ubuntu images lack `python3.X-venv` (ensurepip) - `sudo apt-get install -y
   python3.$(minor)-venv` first; sudo is passwordless on the default user.
 - `brev exec` holds the session even for `nohup ... &` children - detach long jobs with
