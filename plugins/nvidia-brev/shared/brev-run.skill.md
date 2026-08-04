@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 11_
+_Rev. 12_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -187,6 +187,10 @@ until their rows land at teardown.
 - `brev create` launched non-interactively (no tty, backgrounded) can fail silently - it
   printed nothing and no instance appeared; the identical foreground retry worked. Verify
   with `brev ls` after every create rather than trusting the create call.
+- A `brev delete` can be lost without a trace when the agent session/harness restarts around
+  the call (field incident: a lost delete billed ~50 extra minutes). Verify every delete with
+  `brev ls` in the SAME turn it is issued, and make the stray-instance check the first action
+  after any session restart - the same discipline as the end-of-session teardown check.
 - Provider switch mid-job is cheap before the payload lands: `brev delete` the laggard,
   `brev create` the alternative - ledger both.
 
