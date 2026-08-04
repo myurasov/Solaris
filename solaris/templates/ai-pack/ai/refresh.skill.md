@@ -3,7 +3,7 @@ name: refresh
 triggers: ["refresh", "refresh project", "update my checkout", "pull latest", "sync with upstream", "get the new version"]
 summary: Bring a team member's existing checkout of {{NAME}} up to date - pull from git, migrate the private layer and environment to any new layout/conventions, and report what changed.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: refresh - Update and Migrate a Local Checkout <!-- omit in toc -->
 

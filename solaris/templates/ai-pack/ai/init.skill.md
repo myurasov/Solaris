@@ -3,7 +3,7 @@ name: init
 triggers: ["init project", "initialize the project", "initialize this project", "set up my environment", "onboard me", "getting started", "register resources"]
 summary: One-time onboarding for a fresh checkout of {{NAME}} - collect environment resources, verify reachability, write the private ai/.memory layer, and bring the environment up.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: init - Environment Onboarding <!-- omit in toc -->
 
