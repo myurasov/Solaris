@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 12_
+_Rev. 13_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -184,6 +184,12 @@ until their rows land at teardown.
   changes** - re-run `brev refresh` and re-resolve the direct endpoint after every restart,
   and re-authorize nothing (keys ride the disk). Restart back to SHELL READY took ~12 min;
   multi-GPU DDP (`torch.distributed.run --nproc_per_node=N`) works stock on the brev images.
+- Long-lived watchers must survive endpoint changes: `brev refresh` (run for any reason
+  mid-run) can re-point `~/.brev/ssh_config` (host/port), after which a watcher's ssh fails
+  every poll. Treat the FIRST unreadable-state warning as a page - re-run `brev refresh` and
+  re-test, don't let WARNs accumulate: on one real run a broken watcher hid the driver's DONE
+  for ~1.9 h of idle billing (~$5). Watchers should ideally re-refresh before declaring the
+  host unreachable.
 - `brev create` launched non-interactively (no tty, backgrounded) can fail silently - it
   printed nothing and no instance appeared; the identical foreground retry worked. Verify
   with `brev ls` after every create rather than trusting the create call.
