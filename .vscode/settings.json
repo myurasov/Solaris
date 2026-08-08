@@ -4,6 +4,7 @@
     "*.md": "vscode.markdown.preview.editor"
   },
   "workbench.preferredDarkColorTheme": "Shades of Purple (Super Dark)",
+  "workbench.iconTheme": "catppuccin-mocha",
   "workbench.editor.wrapTabs": true,
   "files.exclude": {
     "**/.git": true,
@@ -15,12 +16,29 @@
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
     "**/.venv*": false,
-    "*.*": false,
+    "*.*": true,
     "NOTICE": true,
     "LICENSE": true
   },
   "workbench.colorCustomizations": {
     "gitDecoration.ignoredResourceForeground": "#e3d9ff",
+    "[Shades of Purple (Super Dark)]": {
+      "foreground": "#fffae3",
+      "descriptionForeground": "#d5ceb3",
+      // "textPreformat.foreground": "#ffe680",
+      // "editor.background": "#0f0f22",
+      // "sideBar.background": "#11111e",
+      "panel.background": "#0d0d1f",
+      "terminal.background": "#0d0d1f",
+      // "tab.activeBackground": "#0f0f22",
+      "tab.activeForeground": "#ffe100",
+      "sideBar.foreground": "#e9e4ff",
+      "sideBarSectionHeader.foreground": "#ceb9dc",
+      // "list.activeSelectionForeground": "#f4d406",
+      // "list.activeSelectionBackground": "#645d2a",
+      // "list.inactiveSelectionBackground": "#423d2b",
+      // "list.hoverBackground": "#0c0ca7"
+    },
   },
   "markdown.preview.fontSize": 13,
   "problems.visibility": false,
