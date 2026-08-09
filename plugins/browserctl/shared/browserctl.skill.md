@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -148,5 +148,8 @@ out.
    - `uv` dies on `~/.cache/uv` permission errors before browserctl even starts → rerun with
      `UV_CACHE_DIR=<writable scratch>/uv-cache`.
    Both variables compose: `UV_CACHE_DIR=... BROWSERCTL_HOME=... uv run <path>/browserctl.py ...`.
+   - No shell network AND a pre-warmed cache available → also set `UV_OFFLINE=1`: uv's
+     resolver otherwise contacts the package index even on a full cache hit, and the DNS
+     failure looks like a missing package.
    A sandbox may still block the Chromium process itself - that is a hard denial, not fixable
    by relocation.

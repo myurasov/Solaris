@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Rule: browserctl conventions <!-- omit in toc -->
 
@@ -41,5 +41,6 @@ full command reference live in [`browserctl.skill.md`](browserctl.skill.md).
   on `~/.browserctl/` (e.g. `.state.lock`), retry once with the state root moved into writable
   scratch - `BROWSERCTL_HOME=<harness scratch dir or workspace>/__browserctl/` - and say you
   did. If `uv` itself fails on a home-cache permission error first, also set
-  `UV_CACHE_DIR=<same scratch>/uv-cache`. Profiles created this way are machine-and-session
-  local; treat them as ephemeral.
+  `UV_CACHE_DIR=<same scratch>/uv-cache`; if that cache is pre-warmed and the shell has no
+  network, add `UV_OFFLINE=1` (the resolver otherwise still dials the index). Profiles created
+  this way are machine-and-session local; treat them as ephemeral.
