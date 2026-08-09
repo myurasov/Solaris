@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: browserctl conventions <!-- omit in toc -->
 
@@ -43,4 +43,7 @@ full command reference live in [`browserctl.skill.md`](browserctl.skill.md).
   did. If `uv` itself fails on a home-cache permission error first, also set
   `UV_CACHE_DIR=<same scratch>/uv-cache`; if that cache is pre-warmed and the shell has no
   network, add `UV_OFFLINE=1` (the resolver otherwise still dials the index). Profiles created
-  this way are machine-and-session local; treat them as ephemeral.
+  this way are machine-and-session local; treat them as ephemeral. **Every command in the flow
+  must use the same `BROWSERCTL_HOME`** - a `stop` against a different state root reports
+  "no profiles" while the browser lives on; after stopping, verify the process is gone
+  (`status`, or `ps` on the user-data-dir) before calling the job done.

@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/browserctl.rule.md": {
-      "rev": 3,
-      "hash": "efe8e4d2bcbcce7319e5e0bc6ad47eda9495c8e0ade97948b8ecfc432a39a27b",
+      "rev": 4,
+      "hash": "f5ff55890a90747cc46ece6060e98f8a03e4f9cf8e97900968afea904a4dfbed",
       "history": [
         {
           "rev": 1,
@@ -17,6 +17,10 @@
         {
           "rev": 3,
           "hash": "efe8e4d2bcbcce7319e5e0bc6ad47eda9495c8e0ade97948b8ecfc432a39a27b"
+        },
+        {
+          "rev": 4,
+          "hash": "f5ff55890a90747cc46ece6060e98f8a03e4f9cf8e97900968afea904a4dfbed"
         }
       ]
     },

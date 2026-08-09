@@ -152,11 +152,14 @@ def resolve_project(explicit: str | None) -> str:
 
 
 def key(project: str, profile: str) -> str:
-    return f"{project}/{profile}"
+    # Normalize here so every lookup (launch, drive, stop, status) resolves a
+    # raw name like "gpt-5.6-sol" to the same registry entry it was created
+    # under; sanitize_id is idempotent, so pre-sanitized callers are unchanged.
+    return f"{sanitize_id(project)}/{sanitize_id(profile)}"
 
 
 def profile_dir(project: str, profile: str) -> Path:
-    return home() / "profiles" / project / profile
+    return home() / "profiles" / sanitize_id(project) / sanitize_id(profile)
 
 
 def state_path() -> Path:
@@ -215,7 +218,10 @@ def register_profile(state: dict, project: str, profile: str,
     if k not in profs:
         used = {e.get("port") for e in profs.values()}
         port = BASE_PORT
-        while port in used:
+        # port_free guards against browsers this registry cannot see - e.g. a
+        # parallel run with its own BROWSERCTL_HOME, whose fresh registry
+        # would otherwise also start handing out 9400.
+        while port in used or not port_free(port):
             port += 1
         profs[k] = {
             "port": port,
@@ -386,9 +392,19 @@ def launch(project: str, profile: str, *, headless: bool,
         return {**entry, "profile": profile, "project": project,
                 "already_running": True}
     if not port_free(entry["port"]):
-        raise RuntimeError(
-            f"port {entry['port']} is in use by another process; "
-            f"free it or remove the profile entry from {state_path()}")
+        # A foreign process holds our registered port (typically a browser
+        # under a different BROWSERCTL_HOME). Nothing of ours answers there
+        # (is_running was false just above), so move to the next free port
+        # instead of failing the launch.
+        def _reassign(state: dict) -> dict:
+            e = state["profiles"][key(project, profile)]
+            used = {v.get("port") for v in state["profiles"].values()}
+            p = BASE_PORT
+            while p in used or not port_free(p):
+                p += 1
+            e["port"] = p
+            return dict(e)
+        entry = mutate_state(_reassign)
 
     # Stale locks from an unclean shutdown block relaunch; safe to clear
     # when nothing answers on the profile's CDP port.
