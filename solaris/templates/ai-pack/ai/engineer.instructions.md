@@ -1,4 +1,4 @@
-_Rev. 6_
+_Rev. 7_
 
 # Engineer Instructions - {{NAME}} <!-- omit in toc -->
 
@@ -77,6 +77,11 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
 - If `uv` fails with a permission error on its home cache (`~/.cache/uv` / `uv cache dir`), the harness
   sandbox is denying home-dir writes: rerun once with `UV_CACHE_DIR=<writable scratch>/uv-cache` and say
   you did (some sandboxes redirect the cache automatically; others hard-deny - this is the portable fix).
+- Sandbox ladder (full version: `solaris.agent.md` "Sandboxed Harnesses"): native tools over shell ->
+  relocate into scratch (absolute paths!) -> request per-command escalation in interactive sessions
+  (Codex on-request approvals; Cursor classifier approval / user-editable network allowlist) -> report a
+  surviving denial, never work around it. Escalation grants capability, not permission - confirm-first
+  still applies.
 
 ## Conventions
 

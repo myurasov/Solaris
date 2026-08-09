@@ -6,6 +6,7 @@
 - [Tools (Stdlib, Run as Modules)](#tools-stdlib-run-as-modules)
 - [Versioning and Sync](#versioning-and-sync)
 - [Always-On Rules](#always-on-rules)
+- [Sandboxed Harnesses](#sandboxed-harnesses)
 - [Boundaries](#boundaries)
 
 This file defines the **orchestrator** persona: the agent operating at the Solaris root (the command
@@ -103,6 +104,27 @@ Two independent mechanisms:
   (`solaris.tools.toc` does both: it marks the h1 `omit in toc` and maintains the list).
 
 Both are also baked into each project's `engineer.agent.md` so a detached ai-pack keeps them.
+
+## Sandboxed Harnesses
+
+Not every harness runs commands with full access (evidence: the agent-bench runs of 2026-08-08,
+`projects/tmp/agent-bench/`). When a command fails with a permission / network error, do not
+grind against the sandbox - climb this ladder and **disclose each step**:
+
+1. **Prefer harness-native tools** where they bypass the shell sandbox (web fetch/search over
+   `curl`; MCP tools run outside it).
+2. **Relocate into writable scratch** (documented fallbacks: `UV_CACHE_DIR`, `BROWSERCTL_HOME`;
+   add `UV_OFFLINE=1` when a pre-warmed cache exists but the shell has no network). Always
+   hand sandboxed agents **absolute paths** - their cwd varies.
+3. **Request per-command escalation** in interactive sessions where the harness supports it
+   (Codex `approval_policy = "on-request"`: ask with a one-line justification, the user
+   approves, the command runs unsandboxed; Cursor: the auto-review classifier can route a
+   full-access command to user approval, and its **network allowlist is user-configurable** -
+   adding a domain unblocks shell access to it without any escalation).
+4. A denial that survives all three is a real limit - report it, never work around it.
+
+Escalation grants capability, not permission: the safety rule's confirm-first duty for
+destructive / remote-mutating / outward actions applies unchanged on top.
 
 ## Boundaries
 
