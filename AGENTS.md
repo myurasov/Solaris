@@ -55,7 +55,7 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.22.0.md`](solaris/spec/spec-v0.22.0.md).
+Full specification: [`solaris/spec/spec-v0.23.0.md`](solaris/spec/spec-v0.23.0.md).
 
 ## Execution Model
 
@@ -81,7 +81,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `publish-project` | "publish / share `<project>`", "prepare `<project>` for handoff" | Scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
 | `release` | "do a release", "cut a release", "publish a release" | Bump version, author migration, update spec + docs, tag + push, publish GitHub release. |
-| `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<date>-<slug>/`. |
+| `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 
 When a project has plugins attached, also load and obey every `ai/<plugin>/*.rule.md` (always-on) and treat each `ai/<plugin>/*.skill.md` as an additional, trigger-invoked skill. A plugin attached in **link mode** has a self-describing pointer file `ai/<name>.link.md` instead of `ai/<name>/` - follow it (canonical definition: `install-plugin` step 5).
@@ -97,4 +97,4 @@ Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignore
 ## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions vs release-only semver) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.22.0.md`](solaris/spec/spec-v0.22.0.md).
+- Versioning (per-file revisions vs release-only semver) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.23.0.md`](solaris/spec/spec-v0.23.0.md).

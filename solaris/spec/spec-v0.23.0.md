@@ -1,4 +1,4 @@
-# Solaris v0.22.0 - Specification <!-- omit in toc -->
+# Solaris v0.23.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -42,6 +42,8 @@ changed in 0.3.0: `engineer.instructions.md` moved out of `ai/.memory/` up to `a
 private/local layer; see [`../migrations/0.3.0.md`](../migrations/0.3.0.md).
 
 ## Overview
+
+**What changed in v0.23.0:** grouped project folders (`projects/<group>/<slug>/`, two-depth slug resolution, `projects/<slug>/` stays the shorthand) and month-filed tasks (`tasks/<YYYY>/<MM>/<date>-<slug>/`); a new always-on interaction rule (answer-the-question-first + writing style, embedded in the engineer template); Long-Running Remote Work duties in the safety rule; UTC `Z` interaction-log timestamps; per-project overlay-index injection by the skill loader; overflow-proof read-first packing (9.5KB budget); browserctl invocation-path fixes and computed link-file depth.
 
 **What changed in v0.22.0:** the engineer routes **trigger-shaped, occasionally-run procedures** to **project-local skills** (`ai/<name>.skill.md`) instead of growing the every-turn `engineer.instructions.md` - proposed to the user and created only on approval, with a pointer line left in the instructions; facts, commands, gotchas, and conventions stay in the instructions file.
 
@@ -102,7 +104,7 @@ working directory.
 
 ## Projects and the ai-pack
 
-A project lives at `projects/<slug>/`. Its root carries `AGENTS.md` (Cursor) + a one-line `CLAUDE.md`
+A project lives at `projects/<group>/<slug>/` - projects are grouped one level below `projects/` (current groups: `nv/` NVIDIA work, `my/` personal, `tmp/` throwaway). A slug resolves by scanning `projects/*/` then `projects/*/*/` for a folder holding an ai-pack; `projects/<slug>/` throughout the docs is shorthand for the resolved path. The project root carries `AGENTS.md` (Cursor) + a one-line `CLAUDE.md`
 (`@AGENTS.md`, Claude Code) plus `ai/` and, in local mode, `source/` (which carries the same `AGENTS.md` +
 `CLAUDE.md` pair when it has project rules). There is no `.cursor/`, `mcp.json.example`, or `.gitignore` - the
 folder is not committed. Runtime `.mcp.json` and `.cursor/mcp.json` are generated (gitignored) so the IDE has MCP
@@ -255,7 +257,7 @@ scans `migrations/*.md` to compute the chain (no registry file). Migrations adap
 
 ## Command center (tasks)
 
-Ad-hoc work that is not a project lives under `tasks/<YYYY-MM-DD>-<slug>/` (gitignored): a `notes.md` plus
+Ad-hoc work that is not a project lives under `tasks/<YYYY>/<MM>/<YYYY-MM-DD>-<slug>/` (gitignored; filed by year/month, the leaf folder keeps the full date prefix): a `notes.md` plus
 scratch. No ai-pack, no versioning. A task that turns durable can graduate into a project or a plugin.
 `health-check` gives the overview (default: projects, revisions, versions, tasks, MCP) and health checks
 (`--deep`); the orchestrator runs the overview to orient **before working on a project** (the first
@@ -328,11 +330,17 @@ Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
 - `log_interaction` - the fail-safe prompt-submit hook (not called by hand).
 - `read_first` - the fail-safe read-first loader hook (not called by hand): with no args it injects the
   AGENTS.md read-first set at session start (Claude `SessionStart` / Cursor `sessionStart`); `--remind`
-  prints a one-line per-turn nudge (Claude `UserPromptSubmit` only). IDE-aware output (Cursor JSON vs Claude
-  plain stdout).
+  prints a one-line per-turn nudge (Claude `UserPromptSubmit` only); `--check` reports per-file sizes vs
+  the inline budget. On Claude the payload is packed into a 9.5KB inline budget (large hook stdout is
+  otherwise spilled to a barely-previewed file): rules first and whole, then truncated-with-marker /
+  pointer degradation, with pointer space reserved so the budget can never overflow; Cursor gets the full
+  unbudgeted set. IDE-aware output (Cursor JSON vs Claude plain stdout).
 - `skill_loader` - the fail-safe prompt-submit skill auto-loader hook (not called by hand; Claude
   `UserPromptSubmit` only): matches the prompt against every skill's `triggers`/`antitriggers` and injects
-  the full body of any match (once per session, then a one-line reminder). Tolerates a leading `_Rev. N_`
+  the full body of any match (once per session, then a one-line reminder). When the prompt or session cwd
+  targets a project, it also injects that project's **overlay index** - one line per `ai/*.rule.md`,
+  `ai/<plugin>/*.rule.md`, and `ai/*.link.md` file, once per session per project (grouped, flat, and
+  embedded layouts). Tolerates a leading `_Rev. N_`
   marker above the skill frontmatter, and skips synthetic turns (task notifications, command transcripts,
   system reminders) entirely.
 - `toc` - generate/verify Markdown tables of contents (`--check`/`--write`, `--all`). Preserves a leading
@@ -363,7 +371,12 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
   imperative, no `--`, no emoji, no AI-authorship attribution, atomic; confirm via numbered list unless the
   user grants autonomy or uses `commit!`. The `.githooks/commit-msg` hook enforces the mechanical cases.
 - **Safety** (`rules/safety.rule.md`, embedded too): confirm before destructive, remote-mutating, or
-  outward actions; show the command/diff first; never print or commit secrets.
+  outward actions; show the command/diff first; never print or commit secrets. Long-running remote work
+  adds three duties: first-iteration pace check, post-restart external-state re-verify, same-turn
+  delete/stop verification.
+- **Interaction + writing** (`rules/interaction.rule.md`, embedded as the template's Interaction Policy):
+  a direct question gets its explicit answer in the reply's first line; requested word counts are honored;
+  brevity by default; no consultant buzzwords; jargon explained with a ~10-15-word parenthetical.
 - **Git collaboration on ai files:** committed ai files are written diff-friendly - prose hard-wrapped at
   ~100-120 columns, bullets/tables over paragraphs, stable heading order, tool-generated TOCs, no reflow of
   untouched text. `ai/manifest.json` `revisions` conflicts resolve mechanically (take either side, re-run
