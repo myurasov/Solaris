@@ -43,6 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 READ_FIRST = (
     "solaris/rules/commits.rule.md",
     "solaris/rules/safety.rule.md",
+    "solaris/rules/interaction.rule.md",
     ".memory/instructions.md",
     "solaris/solaris.agent.md",
 )
@@ -52,7 +53,7 @@ READ_FIRST = (
 # payload arrived as a preview; agents then failed rule-recall canaries in the agent-bench runs).
 # Stay comfortably under that: pack whole files first, truncate the first overflowing file at a
 # paragraph boundary, and reduce the rest to must-read pointers. Override via env for tuning.
-_DEFAULT_BUDGET = 9_000
+_DEFAULT_BUDGET = 9_500
 _BUDGET_ENV = "SOLARIS_READ_FIRST_BUDGET"
 
 _HEADER = (
@@ -65,10 +66,11 @@ _HEADER = (
 )
 
 _REMINDER = (
-    "[Solaris read-first] The authoritative set (solaris.agent.md + the commit & safety rules + "
-    ".memory/instructions.md) was loaded at session start - follow it. Quick reminders: bare `ssh`/`open` "
-    "are blocked, use the /tmp wrappers (`hss`, `nepo`); confirm before destructive / remote-mutating / "
-    "outward actions; log the turn to .memory/interactions.jsonl."
+    "[Solaris read-first] The authoritative set (solaris.agent.md + the commit, safety & interaction "
+    "rules + .memory/instructions.md) was loaded at session start - follow it. Quick reminders: bare "
+    "`ssh`/`open` are blocked, use the /tmp wrappers (`hss`, `nepo`); confirm before destructive / "
+    "remote-mutating / outward actions; answer a direct question in the reply's first line; log the "
+    "turn to .memory/interactions.jsonl (UTC ts)."
 )
 
 
@@ -134,21 +136,29 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None) -> str
     remaining = budget - len(_HEADER)
     parts = [_HEADER]
     truncated = False
-    for rel in READ_FIRST:
+
+    def _pointer(rel: str) -> str:
+        return "\n----- " + rel + " (POINTER - read this file yourself NOW) -----\n"
+
+    for i, rel in enumerate(READ_FIRST):
         delim = "\n----- " + rel + " -----\n"
         try:
             body = (Path(repo_root) / rel).read_text(encoding="utf-8")
         except Exception:
             body = "(could not read this file - open it directly)\n"
-        if truncated or len(delim) + len(body) > remaining:
-            if not truncated and remaining > len(delim) + 500:
-                head = _truncate_at_boundary(body, remaining - len(delim) - 120)
+        # Worst-case room the files after this one still need (each degrades to a pointer line);
+        # counting it here guarantees pointers can never push the payload past the budget.
+        reserve = sum(len(_pointer(r)) for r in READ_FIRST[i + 1:])
+        if truncated or len(delim) + len(body) + reserve > remaining:
+            if not truncated and remaining - reserve > len(delim) + 500:
+                head = _truncate_at_boundary(body, remaining - reserve - len(delim) - 120)
                 parts.append("\n----- " + rel + " (TRUNCATED - read the rest yourself) -----\n")
                 parts.append(head)
                 parts.append("\n[... truncated at inline budget - open " + rel + " for the rest]\n")
-                remaining = 0
+                remaining = reserve
             else:
-                parts.append("\n----- " + rel + " (POINTER - read this file yourself NOW) -----\n")
+                parts.append(_pointer(rel))
+                remaining -= len(_pointer(rel))
             truncated = True
             continue
         parts.append(delim)

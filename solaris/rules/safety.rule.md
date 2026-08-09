@@ -3,6 +3,7 @@
 - [Confirm Before These](#confirm-before-these)
 - [Identity Preflight (git + gh)](#identity-preflight-git--gh)
 - [rsync / Deploy Specifics](#rsync--deploy-specifics)
+- [Long-Running Remote Work](#long-running-remote-work)
 - [Read Before You Overwrite](#read-before-you-overwrite)
 - [Secrets](#secrets)
 - [Autonomy Waiver](#autonomy-waiver)
@@ -45,6 +46,16 @@ git/gh action** - commit, push, PR, issue, comment - verify the identity, not ju
 - **No `--delete` by default** - do not clobber remote-generated outputs (logs, checkpoints, trained
   models). Pulling artifacts back from the remote is an explicit, separate action.
 - In remote-code mode the code already lives on the remote; there is no deploy by default.
+
+## Long-Running Remote Work
+
+Remote jobs and cloud instances bill silently; three duties while one is in flight:
+
+- **Verify pace, not just liveness:** within the first iteration, check the measured rate (epoch/step
+  time) against expectation - a start/OK marker watch stays silent while a misconfigured run burns money.
+- **After any harness restart, re-verify external state** (instances, jobs) before resuming - restarts
+  kill watchers and can lose an in-flight CLI call.
+- **Verify every remote delete/stop with a same-turn list command**; sweep for strays periodically.
 
 ## Read Before You Overwrite
 

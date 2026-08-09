@@ -63,10 +63,14 @@ def test_main_remind_vs_full(capsys):
 
 
 def test_render_full_respects_inline_budget():
-    # Default (Claude-shaped) rendering fits the budget; both always-on rules arrive whole.
+    # Default (Claude-shaped) rendering fits the budget; all always-on rules arrive whole.
     out = R.render_full()
     assert len(out) <= R._budget()
-    for rel in ("solaris/rules/commits.rule.md", "solaris/rules/safety.rule.md"):
+    for rel in (
+        "solaris/rules/commits.rule.md",
+        "solaris/rules/safety.rule.md",
+        "solaris/rules/interaction.rule.md",
+    ):
         body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
         assert body in out, rel + " must be inlined whole"
     # Overflow degrades loudly, never silently.
