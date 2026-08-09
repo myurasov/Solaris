@@ -25,6 +25,11 @@ match broadly - tighten the phrase in the skill's frontmatter if a skill over-fi
 notifications, command transcripts, system reminders) are skipped entirely: they quote skill names without
 requesting them, and the harness fires this hook on them too.
 
+The hook also injects **project overlay indexes**: when the prompt (or session cwd) targets a project
+under ``projects/``, it emits a one-line-per-file index of that project's always-on overlay files
+(``ai/*.rule.md``, ``ai/<plugin>/*.rule.md``, ``ai/*.link.md``) once per session per project, so overlay
+compliance does not depend on the agent walking the project's AGENTS.md by hand.
+
 Output is IDE-aware (Cursor JSON ``additional_context`` vs plain stdout), but injection is effectively
 Claude-only: Cursor's ``beforeSubmitPrompt`` cannot add context (its output is only ``{continue,
 user_message}``), so this hook is wired to Claude Code's ``UserPromptSubmit`` alone; on Cursor the agent
@@ -200,6 +205,102 @@ def match_skills(prompt: str, skills: list) -> list:
     return matched
 
 
+# --- Project overlay injection -------------------------------------------------------------------
+#
+# Always-on project rules (ai/*.rule.md, ai/<plugin>/*.rule.md) and linked-plugin pointers
+# (ai/<name>.link.md) reach the agent only if it walks the project's AGENTS.md by hand - the exact
+# step that gets skipped (agent-bench 2026-08-08: an overlay canary rule was missed by default).
+# So when a prompt (or the session cwd) targets a project, name that project's overlay files
+# explicitly - names only, one line each, to stay far from any inline-size limit; full bodies are
+# the agent's job to open. Injected once per session per project via the same marker state.
+
+_PROJECT_PATH_RE = re.compile(r"\bprojects/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*")
+
+
+def _project_root(path: Path, repo_root: Path) -> "Path | None":
+    """Nearest ancestor of ``path`` (inclusive) that is a project folder under ``repo_root/projects``.
+
+    A project folder holds ``ai/manifest.json`` directly, or ``<repo>/ai/manifest.json`` (embedded
+    mode). Projects sit one or two levels below ``projects/`` (grouped layout).
+    """
+    try:
+        path = path.resolve()
+        projects = (repo_root / "projects").resolve()
+        rel = path.relative_to(projects)
+    except Exception:
+        return None
+    for depth in (2, 1):  # grouped projects/<group>/<slug> first, then flat legacy
+        parts = rel.parts[:depth]
+        if len(parts) < depth:
+            continue
+        cand = projects.joinpath(*parts)
+        if (cand / "ai" / "manifest.json").is_file():
+            return cand
+        try:  # embedded mode: the pack lives one level down, inside the repo
+            for sub in cand.iterdir():
+                if (sub / "ai" / "manifest.json").is_file():
+                    return sub
+        except Exception:
+            pass
+    return None
+
+
+def find_project_targets(prompt: str, cwd: str, repo_root: Path = REPO_ROOT) -> list:
+    """Project roots the turn targets: every ``projects/...`` path in the prompt, plus the cwd."""
+    roots, seen = [], set()
+    for m in _PROJECT_PATH_RE.finditer(prompt or ""):
+        root = _project_root(repo_root / m.group(0), repo_root)
+        if root and str(root) not in seen:
+            seen.add(str(root))
+            roots.append(root)
+    if cwd:
+        root = _project_root(Path(cwd), repo_root)
+        if root and str(root) not in seen:
+            roots.append(root)
+    return roots
+
+
+def overlay_files(project_root: Path) -> list:
+    """Relative paths (from the project root) of the always-on overlay files, sorted."""
+    ai = project_root / "ai"
+    out = []
+    try:
+        out += ai.glob("*.rule.md")
+        out += ai.glob("*/*.rule.md")
+        out += ai.glob("*.link.md")
+    except Exception:
+        return []
+    return sorted(str(p.relative_to(project_root)) for p in out)
+
+
+def render_overlays(roots: list, already: set, repo_root: Path = REPO_ROOT) -> "tuple[str, list]":
+    """One short block per first-seen project naming its overlay files; (text, new_marker_keys)."""
+    parts, fresh = [], []
+    for root in roots:
+        try:
+            rel = str(root.relative_to(repo_root))
+        except Exception:
+            rel = str(root)
+        key = "overlay:" + rel
+        if key in already:
+            continue
+        files = overlay_files(root)
+        if not files:
+            continue
+        lines = "".join(
+            "  - " + f + (" (linked plugin - follow the pointer)" if f.endswith(".link.md") else "")
+            + "\n"
+            for f in files
+        )
+        parts.append(
+            "\n[Solaris project overlays] " + rel + " has always-on overlay files - open and obey "
+            "each before working there (rule files apply always; this is just the index, not the "
+            "content):\n" + lines
+        )
+        fresh.append(key)
+    return "".join(parts), fresh
+
+
 def state_path(session_id: str) -> Path:
     """Per-session marker file recording which skills were already fully loaded this session."""
     sid = re.sub(r"[^A-Za-z0-9._-]", "_", session_id or "nosession")[:128]
@@ -283,13 +384,18 @@ def main(argv: "list[str] | None" = None) -> int:
             prompt = str(prompt)
         session_id = str(payload.get("session_id") or payload.get("sessionId") or "nosession")
         matched = match_skills(prompt, discover_skills())
-        if not matched:
+        # Overlay targeting shares the synthetic-turn guard: harness-generated turns quote project
+        # paths without working on them, exactly like they quote skill names.
+        roots = [] if is_synthetic_prompt(prompt) else find_project_targets(
+            prompt, str(payload.get("cwd") or payload.get("workspace_root") or ""))
+        if not matched and not roots:
             return 0
         already = load_injected(session_id)
         text, fresh = render(matched, already)
-        emit(text, detect_ide())
-        if fresh:
-            save_injected(session_id, already | set(fresh))
+        overlay_text, overlay_fresh = render_overlays(roots, already)
+        emit(text + overlay_text, detect_ide())
+        if fresh or overlay_fresh:
+            save_injected(session_id, already | set(fresh) | set(overlay_fresh))
     except Exception:
         pass  # fail-safe: a context-loading hook must never break the user's turn
     return 0

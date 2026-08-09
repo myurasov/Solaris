@@ -166,3 +166,55 @@ def test_parse_skill_tolerates_marker_after_frontmatter():
     text = "---" + parts[1] + "---\n_Rev. 4_\n" + parts[2]
     sk = S.parse_skill(text)
     assert sk is not None and sk["name"] == "ad-hoc-task"
+
+
+def _mk_project(tmp_path, rel, embedded_repo=None):
+    """Scaffold a fake project under tmp_path/projects/<rel> and return the repo root."""
+    root = tmp_path / "projects" / rel
+    pack = root / embedded_repo if embedded_repo else root
+    (pack / "ai" / "plug").mkdir(parents=True)
+    (pack / "ai" / "manifest.json").write_text("{}", encoding="utf-8")
+    (pack / "ai" / "canary.rule.md").write_text("# rule", encoding="utf-8")
+    (pack / "ai" / "plug" / "x.rule.md").write_text("# rule", encoding="utf-8")
+    (pack / "ai" / "other.link.md").write_text("# link", encoding="utf-8")
+    return tmp_path
+
+
+def test_project_root_resolves_grouped_flat_and_embedded(tmp_path):
+    repo = _mk_project(tmp_path, "nv/proj")
+    assert S._project_root(repo / "projects/nv/proj/deep/file.py", repo) == repo / "projects/nv/proj"
+    repo2 = _mk_project(tmp_path / "b", "flat")
+    assert S._project_root(repo2 / "projects/flat", repo2) == repo2 / "projects/flat"
+    repo3 = _mk_project(tmp_path / "c", "my/emb", embedded_repo="src")
+    assert S._project_root(repo3 / "projects/my/emb/src/lib", repo3) == repo3 / "projects/my/emb/src"
+    assert S._project_root(tmp_path / "elsewhere", repo) is None
+
+
+def test_find_project_targets_from_prompt_and_cwd(tmp_path):
+    repo = _mk_project(tmp_path, "nv/proj")
+    _mk_project(tmp_path, "my/other")
+    roots = S.find_project_targets("work on projects/nv/proj/source/app.py please", "", repo)
+    assert [r.name for r in roots] == ["proj"]
+    roots = S.find_project_targets("hello", str(repo / "projects/my/other/source"), repo)
+    assert [r.name for r in roots] == ["other"]
+    assert S.find_project_targets("no paths here", "", repo) == []
+
+
+def test_render_overlays_lists_files_once_per_session(tmp_path):
+    repo = _mk_project(tmp_path, "nv/proj")
+    roots = S.find_project_targets("projects/nv/proj", "", repo)
+    text, fresh = S.render_overlays(roots, set(), repo)
+    assert "projects/nv/proj" in text
+    assert "ai/canary.rule.md" in text and "ai/plug/x.rule.md" in text
+    assert "ai/other.link.md" in text and "linked plugin" in text
+    assert fresh == ["overlay:projects/nv/proj"]
+    text2, fresh2 = S.render_overlays(roots, set(fresh), repo)
+    assert text2 == "" and fresh2 == []
+
+
+def test_render_overlays_skips_projects_without_overlays(tmp_path):
+    root = tmp_path / "projects" / "nv" / "bare"
+    (root / "ai").mkdir(parents=True)
+    (root / "ai" / "manifest.json").write_text("{}", encoding="utf-8")
+    text, fresh = S.render_overlays([root], set(), tmp_path)
+    assert text == "" and fresh == []
