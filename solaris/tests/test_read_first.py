@@ -60,3 +60,27 @@ def test_main_remind_vs_full(capsys):
 
     assert R.main([]) == 0
     assert "SOLARIS READ-FIRST" in capsys.readouterr().out
+
+
+def test_render_full_respects_inline_budget():
+    # Default (Claude-shaped) rendering fits the budget; both always-on rules arrive whole.
+    out = R.render_full()
+    assert len(out) <= R._budget()
+    for rel in ("solaris/rules/commits.rule.md", "solaris/rules/safety.rule.md"):
+        body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert body in out, rel + " must be inlined whole"
+    # Overflow degrades loudly, never silently.
+    assert "TRUNCATED" in out or "POINTER" in out or len(out) < R._budget() // 2
+
+
+def test_render_full_unbudgeted_is_complete():
+    # Cursor path: a huge budget yields every file whole, no truncation markers in delimiters.
+    out = R.render_full(budget=1_000_000)
+    for rel in R.READ_FIRST:
+        assert "\n----- " + rel + " -----\n" in out
+
+
+def test_check_reports_budget(capsys):
+    assert R.main(["--check"]) == 0
+    out = capsys.readouterr().out
+    assert "rendered payload" in out and ("OK (inline)" in out or "OVER BUDGET" in out)
