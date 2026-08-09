@@ -102,6 +102,11 @@ Two independent mechanisms:
 - Markdown docs (framework and project alike): headings in **Title Case**; reader-facing docs
   (READMEs, specs, guides) carry a TOC listing **h2 and deeper only** - the h1 title stays out
   (`solaris.tools.toc` does both: it marks the h1 `omit in toc` and maintains the list).
+- Python environments: venvs are per-project/workspace (uv's default `./.venv`), never shared across
+  projects. Single-file scripts/tools with third-party deps use PEP 723 inline metadata + `uv run <path>`
+  (plugin CLIs like browserctl are the model) - but only where it fits; the full criteria (and the cases
+  it does NOT fit: `-m` package modules, stdlib-only, host-bound or remote-run scripts) are embedded in
+  the template `ai/engineer.agent.md` (Coding Workflow).
 
 Both are also baked into each project's `engineer.agent.md` so a detached ai-pack keeps them.
 

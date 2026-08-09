@@ -1,4 +1,4 @@
-_Rev. 28_
+_Rev. 29_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -63,6 +63,13 @@ Move to implementation only on approval.
 
 Implement against `ai/spec.md`. Match the surrounding code's style and structure. Prefer the smallest change
 that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in sync when behavior changes.
+
+**Python environments:** one venv per project/workspace (uv's default `./.venv`) - never a venv shared
+across projects. A **single-file** script or tool with third-party deps declares them inline with PEP 723
+(the `# /// script` comment block) and runs via `uv run <path>` - no venv to manage; uv caches the
+environment per script. Use PEP 723 only where it fits: NOT for package modules run with `-m` (the block
+is ignored there), stdlib-only scripts (they need nothing), code bound to a host application's bundled
+interpreter, or scripts that execute on a remote host (the environment must live where the code runs).
 
 ## Run / Deploy Workflow
 
