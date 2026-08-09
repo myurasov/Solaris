@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -8,8 +8,8 @@ _Rev. 3_
 - [Evidence](#evidence)
 - [Models and patience](#models-and-patience)
 
-Always-on while this plugin is attached. House rules for using AISee - the VLM "eyes" served
-on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
+Always-on while this plugin is attached. House rules for using AISee - the VLM "eyes" and
+audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
 
 ## When the visual leg runs
 
@@ -28,6 +28,14 @@ on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
 - `watch` for whole recordings (longer than ~1 minute) or time-localized checks: a question
   returns per-chunk findings + a synthesized answer; an expectation returns pass/fail plus the
   failing time ranges.
+- `transcribe` for speech: a speaker-attributed, word-timestamped transcript of an audio file
+  or a video's audio track(s); `diarize` for who-spoke-when only. Segment timestamps are
+  absolute seconds in the recording; rendered transcripts (`.txt/.srt/.vtt`, plus full-word
+  JSON) download from `GET /v1/tasks/{id}/artifacts/<name>`. Pass speaker-count hints
+  (`min/max/num_speakers`) when roughly known - long multi-party audio over-splits, and
+  `suspicious_speaker_count: true` means re-run with a `max_speakers` hint. Multi-track
+  recordings (per-participant tracks) get exact attribution automatically
+  (`speaker_source: "tracks"`).
 
 ## Server, tokens, and media
 
@@ -56,5 +64,5 @@ on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for the procedure).
   `thinking: false` for fast direct answers, and plain models never think. Thinking counts
   against the answer budget (`max_tokens`) - give thinking calls headroom.
 - A cold or idle-unloaded model takes minutes to load; query tools block through it. Do not
-  resubmit - that only queues more work. For long `watch` jobs pass `wait=false` and poll
-  `get_task`.
+  resubmit - that only queues more work. For long `watch`/`transcribe`/`diarize` jobs pass
+  `wait=false` and poll `get_task` (ASR runs at roughly realtime/30 or faster once loaded).
