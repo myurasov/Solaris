@@ -16,22 +16,22 @@
     "**/.pytest_cache": true,
     "**/.ruff_cache": true,
     "**/.venv*": false,
-    "*.*": true,
+    "*.*": false,
     "NOTICE": true,
     "LICENSE": true
   },
   "workbench.colorCustomizations": {
-    "gitDecoration.ignoredResourceForeground": "#e3d9ff",
+    // "gitDecoration.ignoredResourceForeground": "#e3d9ff",
     "[Shades of Purple (Super Dark)]": {
-      "foreground": "#fffae3",
-      "descriptionForeground": "#d5ceb3",
+      "foreground": "#ffffff",
+      // "descriptionForeground": "#d5ceb3",
       // "textPreformat.foreground": "#ffe680",
-      // "editor.background": "#0f0f22",
-      // "sideBar.background": "#11111e",
+      "editor.background": "#0f0f22",
+      "sideBar.background": "#11111e",
       "panel.background": "#0d0d1f",
       "terminal.background": "#0d0d1f",
       // "tab.activeBackground": "#0f0f22",
-      "tab.activeForeground": "#ffe100",
+      // "tab.activeForeground": "#ffe100",
       "sideBar.foreground": "#e9e4ff",
       "sideBarSectionHeader.foreground": "#ceb9dc",
       // "list.activeSelectionForeground": "#f4d406",
@@ -40,6 +40,43 @@
       // "list.hoverBackground": "#0c0ca7"
     },
   },
+  // --- No hovers / no auto-popup completions; on demand only -----------------
+  // Hover: Cmd+K Cmd+I. Completions: Ctrl+Space.
+  "editor.hover.enabled": false,
+  "editor.quickSuggestions": {
+    "other": "off",
+    "comments": "off",
+    "strings": "off"
+  },
+
+  "editor.suggestOnTriggerCharacters": false,
+  "editor.wordBasedSuggestions": "off",
+  "editor.parameterHints.enabled": false,
+  "editor.acceptSuggestionOnCommitCharacter": false,
+  "editor.inlineSuggest.enabled": false,
+  // Core ships language-scoped defaults (e.g. "[json]" re-enables string
+  // suggestions) that beat the generic settings above - re-assert per language.
+  "[json][jsonc][yaml][markdown][python][javascript][typescript][shellscript]": {
+    "editor.quickSuggestions": {
+      "other": "off",
+      "comments": "off",
+      "strings": "off"
+    },
+    "editor.suggestOnTriggerCharacters": false,
+    "editor.hover.enabled": false
+  },
+  // Cursor Tab (AI autocomplete) ignores editor.inlineSuggest - disable per language.
+  "cursor.cpp.disabledLanguages": [
+    "json",
+    "jsonc",
+    "yaml",
+    "markdown",
+    "python",
+    "javascript",
+    "typescript",
+    "shellscript",
+    "plaintext"
+  ],
   "markdown.preview.fontSize": 13,
   "problems.visibility": false,
   "git.autoRepositoryDetection": "subFolders",
@@ -63,6 +100,7 @@
   "cursorpyright.analysis.useLibraryCodeForTypes": false,
   "cursorpyright.analysis.logLevel": "Error",
   "cursorpyright.analysis.exclude": [
+
     "**"
   ],
   "cursorpyright.analysis.ignore": [
