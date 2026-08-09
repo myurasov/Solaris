@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # Engineer Instructions - {{NAME}} <!-- omit in toc -->
 
@@ -80,8 +80,9 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
 - Sandbox ladder (full version: `solaris.agent.md` "Sandboxed Harnesses"): native tools over shell ->
   relocate into scratch (absolute paths!) -> request per-command escalation in interactive sessions
   (Codex on-request approvals; Cursor classifier approval / user-editable network allowlist) -> report a
-  surviving denial, never work around it. Escalation grants capability, not permission - confirm-first
-  still applies.
+  surviving denial, never work around it. Escalation is allowed and ENCOURAGED by default when the user
+  is present - ask (once per command, one-line justification) rather than silently degrade. It grants
+  capability, not permission - confirm-first still applies.
 
 ## Conventions
 
