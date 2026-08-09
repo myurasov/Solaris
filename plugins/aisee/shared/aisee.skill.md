@@ -83,7 +83,7 @@ For long videos: `watch(..., wait=false)` returns a task id; poll `get_task` eve
 seconds until `status` is terminal. Useful parameters: `model` (omit for default), `frames`
 / `fps` (video sampling), `native` (send the video itself - temporal reasoning,
 video-capable models only), `context` (background the model cannot see in the pixels),
-`max_tokens` (answer budget; truncation is flagged, never silent), `speakers` /
+`max_tokens` (answer budget; truncation is flagged, never silent), `diarize` /
 `min_speakers` / `max_speakers` / `num_speakers` (transcribe/diarize), `thinking` (bool -
 enable/disable chain-of-thought on models whose describe entry says `Thinking: optional`;
 on by default there, and thinking counts against `max_tokens`; some models always think

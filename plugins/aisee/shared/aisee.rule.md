@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -28,14 +28,17 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
 - `watch` for whole recordings (longer than ~1 minute) or time-localized checks: a question
   returns per-chunk findings + a synthesized answer; an expectation returns pass/fail plus the
   failing time ranges.
-- `transcribe` for speech: a speaker-attributed, word-timestamped transcript of an audio file
-  or a video's audio track(s); `diarize` for who-spoke-when only. Segment timestamps are
-  absolute seconds in the recording; rendered transcripts (`.txt/.srt/.vtt`, plus full-word
-  JSON) download from `GET /v1/tasks/{id}/artifacts/<name>`. Pass speaker-count hints
-  (`min/max/num_speakers`) when roughly known - long multi-party audio over-splits, and
-  `suspicious_speaker_count: true` means re-run with a `max_speakers` hint. Multi-track
-  recordings (per-participant tracks) get exact attribution automatically
-  (`speaker_source: "tracks"`).
+- `transcribe` for speech: a word-timestamped transcript of EVERY audio lane of a recording
+  (a lane = one audio track, or one channel of a stereo/multi-channel track - stereo often
+  encodes two feeds); pass `diarize: true` for per-lane speaker attribution, or use the
+  `diarize` kind for who-spoke-when only. AISee never interprets or merges lanes - deciding
+  what mic/system/per-participant lanes mean and combining them is the CONSUMER'S job;
+  identical lanes come back marked `duplicate_of`. Segment timestamps are absolute seconds
+  in the recording; rendered per-lane transcripts (`transcript[-<lane>].txt/.srt/.vtt`, plus
+  full-word JSON) download from `GET /v1/tasks/{id}/artifacts/<name>`. Pass speaker-count
+  hints (`min/max/num_speakers`, applied per lane) when roughly known - long multi-party
+  audio over-splits, and `suspicious_speaker_count: true` means re-run with a `max_speakers`
+  hint.
 
 ## Server, tokens, and media
 
