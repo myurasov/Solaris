@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -151,5 +151,10 @@ out.
    - No shell network AND a pre-warmed cache available → also set `UV_OFFLINE=1`: uv's
      resolver otherwise contacts the package index even on a full cache hit, and the DNS
      failure looks like a missing package.
-   A sandbox may still block the Chromium process itself - that is a hard denial, not fixable
-   by relocation.
+   A sandbox may still block the Chromium process itself (e.g. Codex Seatbelt SIGABRTs
+   Chromium). Two remaining tiers, in order: **request per-command escalation** where the
+   harness supports it (Codex `approval_policy = "on-request"`: ask with a one-line
+   justification; the user approves each command and it runs outside the sandbox - validated
+   for the full launch/tabs/stop chain), or **split launch from drive**: have an unsandboxed
+   session launch the profile, then drive it from the sandboxed one over the CDP port
+   (`tabs`/`navigate`/`snapshot`/`eval` only need localhost).
