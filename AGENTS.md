@@ -2,6 +2,7 @@
 
 # Solaris - Agent Instructions <!-- omit in toc -->
 
+- [Non-Negotiables (Every Harness)](#non-negotiables-every-harness)
 - [Read First (Every Session, and When Starting a Task)](#read-first-every-session-and-when-starting-a-task)
 - [Execution Model](#execution-model)
 - [Skills](#skills)
@@ -12,6 +13,21 @@ This is the **canonical, IDE-agnostic** instruction file, read on every turn by 
 Code. Cursor reads `AGENTS.md` natively; Claude Code reads a one-line `CLAUDE.md` (`@AGENTS.md`) that imports
 it (there is no `.cursor/rules` shim). Keep it minimal: it
 is a set of pointers. The detail lives in the files it points to.
+
+## Non-Negotiables (Every Harness)
+
+These five apply even if no other rule file reached your context (not every harness auto-loads
+the rule files; this file is the floor):
+
+1. Bare `ssh` and `open` are blocked here - use the wrappers `/tmp/hss` (ssh) and `/tmp/nepo` (open).
+2. Confirm with the user before any destructive, remote-mutating, or outward-facing action.
+3. Log every meaningful turn as one `{ts, project, prompt, request, outcome}` JSON line to the
+   framework `.memory/interactions.jsonl` **and**, for project work, the project's
+   `ai/.memory/interactions.jsonl`.
+4. Commit messages are single-line, imperative; the first commit of a new repo is titled exactly
+   "Initial commit"; never commit or push without confirmation unless durably instructed.
+5. Only Solaris `.memory/` stores (framework and per-project `ai/.memory/`) are authoritative
+   memory - never read or write harness-global memory stores.
 
 ## Read First (Every Session, and When Starting a Task)
 
