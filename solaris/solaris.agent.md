@@ -113,10 +113,7 @@ grind against the sandbox - climb this ladder and **disclose each step**:
 
 1. **Prefer harness-native tools** where they bypass the shell sandbox (web fetch/search over
    `curl`; MCP tools run outside it).
-2. **Relocate into writable scratch** (documented fallbacks: `UV_CACHE_DIR`, `BROWSERCTL_HOME`;
-   add `UV_OFFLINE=1` when a pre-warmed cache exists but the shell has no network). Always
-   hand sandboxed agents **absolute paths** - their cwd varies.
-3. **Request per-command escalation** in interactive sessions where the harness supports it
+2. **Request per-command escalation** in interactive sessions where the harness supports it
    (Codex `approval_policy = "on-request"`: ask with a one-line justification, the user
    approves, the command runs unsandboxed; Cursor: the auto-review classifier can route a
    full-access command to user approval, and its **network allowlist is user-configurable** -
@@ -124,6 +121,10 @@ grind against the sandbox - climb this ladder and **disclose each step**:
    **allowed and encouraged by default** here: when a needed capability is sandbox-blocked and
    the user is present, asking beats silently degrading the result or giving up - ask
    promptly, once per command, with the justification.
+3. **Relocate into writable scratch** when escalation is unavailable (no user present, an
+   autonomous run, a harness without it) or declined (documented fallbacks: `UV_CACHE_DIR`,
+   `BROWSERCTL_HOME`; add `UV_OFFLINE=1` when a pre-warmed cache exists but the shell has no
+   network). Always hand sandboxed agents **absolute paths** - their cwd varies.
 4. A denial that survives all three is a real limit - report it, never work around it.
 
 **Skip tiers already proven futile for your harness.** The ladder is an order, not a ritual:
