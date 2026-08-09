@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: browserctl conventions <!-- omit in toc -->
 
@@ -37,3 +37,9 @@ full command reference live in [`browserctl.skill.md`](browserctl.skill.md).
 - Stop ephemeral profiles when their job ends (stop deletes them) and run `prune` at natural
   hygiene points; leave `default` (and other persistent profiles) running only when a standing
   task needs the session held open.
+- **Sandboxed harnesses (home dir not writable):** if a command fails with a permission error
+  on `~/.browserctl/` (e.g. `.state.lock`), retry once with the state root moved into writable
+  scratch - `BROWSERCTL_HOME=<harness scratch dir or workspace>/__browserctl/` - and say you
+  did. If `uv` itself fails on a home-cache permission error first, also set
+  `UV_CACHE_DIR=<same scratch>/uv-cache`. Profiles created this way are machine-and-session
+  local; treat them as ephemeral.

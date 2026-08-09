@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -141,3 +141,12 @@ out.
 6. `~/.browserctl/` is reconstructible (re-create + re-auth); nothing under it is a source of
    truth. A wedged registry entry (port shown busy, nothing running) can be fixed by deleting
    the entry from `state.json`.
+7. **Sandbox fallback.** In harnesses that deny home-dir writes, two known failure modes and
+   their one-retry fixes (disclose when used):
+   - `PermissionError` on `~/.browserctl/.state.lock` (or any `~/.browserctl/` path) → rerun
+     with `BROWSERCTL_HOME=<writable scratch>/__browserctl/`.
+   - `uv` dies on `~/.cache/uv` permission errors before browserctl even starts → rerun with
+     `UV_CACHE_DIR=<writable scratch>/uv-cache`.
+   Both variables compose: `UV_CACHE_DIR=... BROWSERCTL_HOME=... uv run <path>/browserctl.py ...`.
+   A sandbox may still block the Chromium process itself - that is a hard denial, not fixable
+   by relocation.

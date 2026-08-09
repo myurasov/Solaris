@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # Engineer Instructions - {{NAME}} <!-- omit in toc -->
 
@@ -74,6 +74,9 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
   it the tool name reversed (`open` -> `nepo`, `ssh` -> `hss`, `curl` -> `lruc`; on collision with a real
   tool, pick another short name), invoke as `/tmp/<name>`, and register it in `ai/.memory/` (e.g.
   `resources.md`). (Delete this bullet if this project shouldn't use the mechanism.)
+- If `uv` fails with a permission error on its home cache (`~/.cache/uv` / `uv cache dir`), the harness
+  sandbox is denying home-dir writes: rerun once with `UV_CACHE_DIR=<writable scratch>/uv-cache` and say
+  you did (some sandboxes redirect the cache automatically; others hard-deny - this is the portable fix).
 
 ## Conventions
 
