@@ -16,8 +16,11 @@ folder with notes and scratch.
 
 ## 1. Start or Resume
 
-Pick a `slug` (kebab) for the work. Folder: `tasks/<YYYY-MM-DD>-<slug>/`. If a recent matching folder
-exists, resume it; else create it with a `notes.md`:
+Pick a `slug` (kebab) for the work. Folder: `tasks/<YYYY>/<MM>/<YYYY-MM-DD>-<slug>/` - tasks are filed
+by year/month, and the leaf folder name keeps the full date prefix. When resuming or referencing, search
+`tasks/*/*/*<slug>*` (tolerate a legacy flat `tasks/<YYYY-MM-DD>-<slug>/` if one still exists - file it
+into its year/month on touch). If a recent matching folder exists, resume it; else create it (with the
+year/month parents) holding a `notes.md`:
 
 ```
 # <title>

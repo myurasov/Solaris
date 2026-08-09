@@ -19,7 +19,9 @@ already ran this session, or if the user says to skip), then proceed.
 
 ## 1. Locate the Project
 
-Resolve `<slug>` to `projects/<slug>/`. If absent, list `projects/*` and ask. (If the user described an
+Resolve `<slug>` to its project folder: search `projects/*/` then `projects/*/*/` (projects are grouped,
+e.g. `projects/nv/<slug>/`, `projects/my/<slug>/`; `projects/<slug>/` below is shorthand for the resolved
+path). If absent, list the projects from the same two-depth scan and ask. (If the user described an
 existing codebase that is not yet a project, suggest `import-project`; for something brand new, suggest
 `create-project`.)
 

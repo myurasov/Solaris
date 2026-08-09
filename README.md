@@ -51,7 +51,8 @@ One agent runs everything; it adopts a persona from wherever it is working:
 
 - At the repo root it is the **orchestrator** - it routes your prompts to *skills* (markdown
   procedures) and manages `projects/`, `plugins/`, and `tasks/`.
-- Inside `projects/<slug>/` it is that project's **engineer** - it plans, builds, and runs the
+- Inside a project folder (`projects/<group>/<slug>/`, grouped e.g. `projects/my/<slug>/`; written
+  `projects/<slug>/` for short) it is that project's **engineer** - it plans, builds, and runs the
   project against the project's *ai-pack*.
 
 You do not manage this switch; saying *"work on `<project>`"* hands off automatically.

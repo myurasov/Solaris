@@ -16,7 +16,9 @@ demand.
 
 ## Default (Status Overview)
 
-1. **Projects** - for each `projects/<slug>/`: read `ai/manifest.json` and show `name`, `type`, `mode`,
+1. **Projects** - enumerate with the two-depth scan (`projects/*/` and `projects/*/*/` - projects are
+   grouped, e.g. `projects/nv/<slug>/`; a project folder is one holding `ai/manifest.json`, or
+   `<repo>/ai/manifest.json` in embedded mode). For each: read `ai/manifest.json` and show `name`, `type`, `mode`,
    `framework_version`, attached plugins, and workspaces (`project.workspaces` when present). (An **embedded**-mode project keeps its ai-pack one level deeper at
    `projects/<slug>/<repo>/ai/` - use that path as `--dir` in the checks below.)
 2. **Revisions** - `uv run -m solaris.tools.revs status` (framework files changed without a rev bump); per
@@ -24,7 +26,8 @@ demand.
    (fix: `update-project <slug>`).
 3. **Versions** - `uv run -m solaris.tools.version check --dir projects/<slug>` flags any pending
    minor/major migration.
-4. **Tasks** - the most recent `tasks/<date>-<slug>/` folders, with the first line of each `notes.md`.
+4. **Tasks** - the most recent `tasks/<YYYY>/<MM>/<date>-<slug>/` folders, with the first line of each
+   `notes.md`.
 5. **MCP** - `uv run -m solaris.tools.mcp_sync --check` at the root (fix: `mcp_sync --sync`).
 6. **Framework** - `uv run -m solaris.tools.version current`.
 7. **Interaction log** - spot-check the tail of `.memory/interactions.jsonl`: recent meaningful turns should

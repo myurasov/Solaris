@@ -27,9 +27,9 @@ the rule files; this file is the floor):
    demand). If the wrapper hits the same wall, the block is a real sandbox, not a name-block -
    stop and follow the sandbox ladder in `solaris/solaris.agent.md` instead.
 2. Confirm with the user before any destructive, remote-mutating, or outward-facing action.
-3. Log every meaningful turn as one `{ts, project, prompt, request, outcome}` JSON line to the
-   framework `.memory/interactions.jsonl` **and**, for project work, the project's
-   `ai/.memory/interactions.jsonl`.
+3. Log every meaningful turn as one `{ts, project, prompt, request, outcome}` JSON line (`ts` in UTC
+   with a `Z` suffix, from a real clock) to the framework `.memory/interactions.jsonl` **and**, for
+   project work, the project's `ai/.memory/interactions.jsonl`.
 4. Commit messages are single-line, imperative; the first commit of a new repo is titled exactly
    "Initial commit"; never commit or push without confirmation unless durably instructed.
 5. Only Solaris `.memory/` stores (framework and per-project `ai/.memory/`) are authoritative
@@ -46,9 +46,10 @@ Escalation grants capability, not permission - rule 2 still applies on top.
 1. [`solaris/solaris.agent.md`](solaris/solaris.agent.md) - the framework agent role (orchestrator) and how Solaris is organized.
 2. [`solaris/rules/commits.rule.md`](solaris/rules/commits.rule.md) - git commit policy (always applies).
 3. [`solaris/rules/safety.rule.md`](solaris/rules/safety.rule.md) - confirm before destructive / remote-mutating / outward actions (always applies).
-4. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
+4. [`solaris/rules/interaction.rule.md`](solaris/rules/interaction.rule.md) - answer-the-question-first + writing style (always applies).
+5. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
 
-A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`) auto-injects these four files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
+A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`) auto-injects these five files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
 
 Run the `health-check` overview to orient **before you start working on a project** (the first
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
@@ -61,7 +62,7 @@ Full specification: [`solaris/spec/spec-v0.22.0.md`](solaris/spec/spec-v0.22.0.m
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<slug>/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
+- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 

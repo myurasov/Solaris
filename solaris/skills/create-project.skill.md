@@ -15,13 +15,16 @@ summary: Scaffold a new project + portable ai-pack (type, mode, plugins) from te
 7. [Runtime MCP (Gitignored)](#7-runtime-mcp-gitignored)
 8. [Stop + Hand Off](#8-stop--hand-off)
 
-Scaffold a new project under `projects/<slug>/` with a standardized ai-pack, then stop so the user starts
-planning via `develop-project`. This skill does **not** write application source code.
+Scaffold a new project under `projects/<group>/<slug>/` with a standardized ai-pack, then stop so the user
+starts planning via `develop-project`. This skill does **not** write application source code.
+(`projects/<slug>/` below is shorthand for the grouped destination.)
 
 ## 1. Gather Inputs
 
 Use the question tool (one batch) for anything not already given:
 
+- **group** - which `projects/` subfolder (current: `nv/` NVIDIA, `my/` personal, `tmp/` throwaway;
+  suggest from the request's context).
 - **slug** - kebab-case, `^[a-z][a-z0-9-]*[a-z0-9]$` (e.g. `todo`).
 - **name** - display name (default: Title Case of slug).
 - **description** - one sentence.

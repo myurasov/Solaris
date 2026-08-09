@@ -17,8 +17,9 @@ framework files for self-improvement. No separate tailor/coder split.
 ## 1. Gather Signal
 
 Read `.memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
-and `.memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/ai/.memory/interactions.jsonl`
-and `tasks/*/notes.md`. Look for: repeated friction, the same manual fix done more than once, skills that
+and `.memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/*/ai/.memory/interactions.jsonl`
+(projects are grouped one level below `projects/`) and `tasks/*/*/*/notes.md` (tasks live under
+`tasks/<YYYY>/<MM>/`). Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 
 ## 2. Propose (Ranked)

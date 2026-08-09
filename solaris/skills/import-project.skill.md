@@ -23,7 +23,9 @@ Reverse of `create-project`: ingest existing code, then derive the ai-pack. Impo
 
 ## 2. Land the Code
 
-Create `projects/` if it does not exist (gitignored, lazily created). Ask the user the **mode** - `local`
+Create `projects/` if it does not exist (gitignored, lazily created). Ask the user the **group**
+(which `projects/` subfolder - current: `nv/` NVIDIA, `my/` personal, `tmp/` throwaway; suggest from
+context; `projects/<slug>/` below is shorthand for the grouped destination) and the **mode** - `local`
 (default), `remote-code`, or `embedded` (ai-pack inside the repo) - then:
 
 - **workspace detection (any mode):** if the codebase already contains multiple self-contained top-level
