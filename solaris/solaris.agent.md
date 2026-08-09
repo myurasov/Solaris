@@ -126,6 +126,13 @@ grind against the sandbox - climb this ladder and **disclose each step**:
    promptly, once per command, with the justification.
 4. A denial that survives all three is a real limit - report it, never work around it.
 
+**Skip tiers already proven futile for your harness.** The ladder is an order, not a ritual:
+where a tier is a *known* hard denial, go straight to the next one. Current known-hard list:
+launching Chromium under a Codex-class Seatbelt sandbox (SIGABRT / exit `-6`, plus a macOS
+"quit unexpectedly" dialog) - escalate the launch directly; and escalated processes there do
+not persist between shell calls, so keep launch/drive/stop in one call. Add to this list as
+new hard denials are established (evidence: `projects/tmp/agent-bench/`).
+
 **Name-blocks are a different animal.** A permission layer that denies a command by *name*
 (e.g. bare `ssh`/`open` here) is not a sandbox: a `/tmp` pass-through wrapper is the fix, and
 this applies to **every** name-blocked command, not just those two - existing wrappers `hss`,
