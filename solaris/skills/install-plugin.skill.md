@@ -100,7 +100,11 @@ link mode - other skills and docs point here.
 
 Write `ai/<name>.link.md` from this template (fill `<name>` and the path; the path is **relative to the
 ai-pack root** - the directory holding `ai/`, one level **above** this file - and the rendered line must
-say so):
+say so). **Compute the depth, do not copy it:** count the levels from the ai-pack root up to the Solaris
+root - a grouped project `projects/<group>/<slug>/` needs `../../../plugins/<name>/` (embedded mode adds
+one more `../` for `<repo>/`); verify the rendered path resolves (`ls <ai-pack root>/<path>`) before
+finishing. A link file breaks silently if the project folder later moves - re-verify it on
+`update-project`:
 
 ```markdown
 <!-- Linked plugin: managed by install-plugin (link mode). Machine-local development pointer. -->

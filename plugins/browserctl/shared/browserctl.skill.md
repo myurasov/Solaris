@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -25,11 +25,18 @@ conflicts - and every command is an ordinary CLI call, far cheaper in context th
 round-trips.
 
 Run it with [uv](https://docs.astral.sh/uv/) (dependencies are inline PEP 723 metadata - no
-project dep changes needed):
+project dep changes needed). Resolve the script path by install mode - the file lives exactly
+where this skill was loaded from:
 
 ```bash
-uv run <path-to>/browserctl.py <cmd> ...
+# copy install (the usual case) - from the project root:
+uv run ai/browserctl/browserctl.py <cmd> ...
+# link install (plugin development) - from the Solaris root:
+uv run plugins/browserctl/shared/browserctl.py <cmd> ...
 ```
+
+(It is NOT at `plugins/browserctl/browserctl.py` - the script sits under `shared/`. From any
+other cwd, use the absolute path.)
 
 One-time on a machine: `uv run --with playwright playwright install chromium` (browserctl tells
 you when it is missing).
@@ -109,7 +116,7 @@ selectors), write a short Python script against the same live browser - full Pla
 
 ```python
 import importlib.util
-spec = importlib.util.spec_from_file_location("browserctl", "<path-to>/browserctl.py")
+spec = importlib.util.spec_from_file_location("browserctl", "ai/browserctl/browserctl.py")  # or the absolute path; same resolution as the CLI above
 bctl = importlib.util.module_from_spec(spec); spec.loader.exec_module(bctl)
 
 with bctl.attach("default") as (pw, browser):
