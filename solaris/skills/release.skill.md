@@ -65,7 +65,11 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
     ```bash
     gh release create v<version> --title "Solaris <version>" --notes "<release notes>"
     ```
-    Release notes: 1-3 sentences summarising what changed (from the spec "What changed" blurb and migration title).
+    Release notes cover the **full tag-to-tag diff** (`git log <prev-tag>..HEAD` - not just this session's
+    batch; work committed earlier without a release ships now and must appear) in the structured style:
+    ~200 words; a one-line focus statement, then `##` sections grouping related changes with bold-led
+    bullets; the migration pointer (or "no migration (patch)") leads or closes. **Backtick-quote every
+    path and placeholder** - GitHub strips unquoted angle-bracket tokens (`<group>`) as HTML tags.
 
 ## Choosing the Version Bump
 

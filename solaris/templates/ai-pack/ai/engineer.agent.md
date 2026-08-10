@@ -1,4 +1,4 @@
-_Rev. 30_
+_Rev. 31_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -198,6 +198,11 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
   wait for confirmation; never push without confirmation. A durable "work autonomously until X" instruction
   or `commit!` waives the per-message confirmation. The same ASCII / no-`--` rules apply to code comments
   (keep them short and casual).
+- **Release notes** (GitHub releases and changelogs): cover the full tag-to-tag diff (`git log
+  <prev-tag>..HEAD`), not just the latest session's work. Structured, ~200 words: a one-line focus
+  statement, `##` sections grouping related changes, bold-led bullets; the migration/upgrade note (or
+  "no migration") leads or closes. Backtick-quote every path and placeholder - GitHub strips unquoted
+  angle-bracket tokens (`<name>`) as HTML tags.
 
 ## Safety Policy
 
