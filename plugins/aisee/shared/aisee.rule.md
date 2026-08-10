@@ -1,4 +1,4 @@
-_Rev. 6_
+_Rev. 7_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -77,3 +77,10 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
   to `watch`. On unified-memory hosts avoid hour-scale transcriptions while a large VLM is
   resident - the audio engine is sacrificed by design and the task fails with a clear
   "engine connection failed" (retry after the VLM idle-unloads).
+- Contexts are large (256k tokens on the Qwen3-VL / Cosmos family, 128k elsewhere - see
+  `max_model_len` in describe) and image budgets are sized to fill them (`max_images`,
+  often ~100+ stills per request), so prefer one big batched call over many small ones.
+- Models state their GPU-memory need in GiB (`mem_gib` in describe/models). A start that
+  does not fit next to the running models is refused up front with a GiB-denominated
+  message - that is your cue to stop a resident model (admin) or use the default instead,
+  not to retry.
