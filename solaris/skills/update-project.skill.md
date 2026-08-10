@@ -1,6 +1,7 @@
 ---
 name: update-project
 triggers: ["update <project>", "sync <project>", "migrate <project>", "update-project <slug>"]
+antitriggers: ["update solaris", "sync solaris", "refresh solaris"]
 summary: Sync an ai-pack with framework/plugin master copies by per-file revision; run minor/major migrations.
 ---
 
