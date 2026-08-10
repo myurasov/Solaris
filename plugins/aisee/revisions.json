@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/aisee.rule.md": {
-      "rev": 6,
-      "hash": "b63a07b965ee502a147f194f374e5d9973bb1b8569f906604a126c838787f318",
+      "rev": 8,
+      "hash": "eeb3ef7afcfcf6ef683c70357e0989cf9d0ba44109f0d38b675babab1a164ab8",
       "history": [
         {
           "rev": 1,
@@ -29,6 +29,10 @@
         {
           "rev": 6,
           "hash": "b63a07b965ee502a147f194f374e5d9973bb1b8569f906604a126c838787f318"
+        },
+        {
+          "rev": 8,
+          "hash": "eeb3ef7afcfcf6ef683c70357e0989cf9d0ba44109f0d38b675babab1a164ab8"
         }
       ]
     },
