@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -83,4 +83,6 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
 - Models state their GPU-memory need in GiB (`mem_gib` in describe/models). A start that
   does not fit next to the running models is refused up front with a GiB-denominated
   message - that is your cue to stop a resident model (admin) or use the default instead,
-  not to retry.
+  not to retry. Two refusals ARE retry-later cases: "audio job(s) in progress" (a large
+  model is held back while transcription/diarization runs on a unified host - retry when
+  they finish) and a start right after a big job ends (memory takes a minute to settle).
