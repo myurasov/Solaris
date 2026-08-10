@@ -81,7 +81,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `publish-project` | "publish / share `<project>`", "prepare `<project>` for handoff" | Scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
 | `release` | "do a release", "cut a release", "publish a release" | Bump version, author migration, update spec + docs, tag + push, publish GitHub release. |
-| `refresh-solaris` | "refresh / update solaris", "pull latest solaris" | Update this framework checkout: pull (handles rewritten history), resync env, verify, flag stale projects. |
+| `refresh` | "refresh / update solaris", "pull latest solaris" | Update this framework checkout: pull (handles rewritten history), resync env, verify, flag stale projects. |
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 

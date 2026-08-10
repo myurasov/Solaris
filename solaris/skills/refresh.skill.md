@@ -1,10 +1,10 @@
 ---
-name: refresh-solaris
+name: refresh
 triggers: ["refresh solaris", "update solaris", "sync solaris", "pull latest solaris", "refresh the framework"]
 summary: Bring this Solaris checkout up to date - pull from git (handling rewritten upstream history), resync the environment, verify, and flag projects that now need update-project.
 ---
 
-# refresh-solaris <!-- omit in toc -->
+# refresh <!-- omit in toc -->
 
 1. [Pre-Flight](#1-pre-flight)
 2. [Pull](#2-pull)
