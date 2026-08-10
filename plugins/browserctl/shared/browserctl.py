@@ -1,9 +1,9 @@
-# rev. 2
+# rev. 3
 
 #!/usr/bin/env -S uv run --no-project --script
 # /// script
 # requires-python = ">=3.10"
-# dependencies = ["playwright>=1.45"]
+# dependencies = ["playwright>=1.45", "pillow>=10"]
 # ///
 """browserctl - per-project Chromium lifecycle + drive layer (CLI, no MCP).
 
@@ -12,7 +12,7 @@ the automation engine: browserctl launches the Playwright-managed Chromium
 binary directly, one persistent profile per purpose, each on a stable CDP
 port, so any number of clients (this CLI, Python scripts via
 ``connect_over_cdp``, another agent session) can drive the same browser
-without profile-lock conflicts.
+without profile-lock conflicts. Chromium is the only supported engine.
 
 Profile model (per project, clean by default):
 
@@ -31,7 +31,7 @@ Profile model (per project, clean by default):
   ``persist``/``persist --forget`` flips the flag on an existing profile.
 
 State lives outside any repo (never in an iCloud-synced checkout):
-``~/.browserctl/`` ($BROWSERCTL_HOME aware) - ``profiles/<project>/<name>/``
+``~/.solaris/browserctl/`` ($BROWSERCTL_HOME aware) - ``profiles/<project>/<name>/``
 user-data dirs, ``state.json`` registry (profile -> port/color/pid),
 ``logs/``, and ``out/<project>/`` for bare-filename snapshots/screenshots.
 Ports are assigned once per profile (starting at 9400) and never change.
@@ -51,6 +51,8 @@ Lifecycle commands (all take ``--project P``; omitted = auto-derived):
     prune   [--all]                             # delete stopped ephemeral profiles
     remove  --profile <name>                    # delete a profile (must be stopped)
     cdp-url --profile <name>                    # print http://localhost:<port> for attaching
+    icon    [--png F | --icns F] [--color C] [--name "Solaris Browser"]
+                                                # dedicated app bundle: own Dock icon/name
 
 Drive commands (replace the Playwright MCP tools; attach over CDP to a
 running profile and leave the browser open):
@@ -96,7 +98,7 @@ from pathlib import Path
 BASE_PORT = 9400
 DEFAULT_PROFILE = "default"
 # Rotating defaults for new profiles so headed windows are distinguishable.
-PALETTE = ["#2E7D32", "#1565C0", "#6A1B9A", "#E65100", "#00838F", "#AD1457"]
+PALETTE = ["#6A1B9A", "#1565C0", "#2E7D32", "#E65100", "#00838F", "#AD1457"]
 # The slim state set a `clone` carries over so logins survive (cookie
 # encryption uses the mock keychain's fixed key, so copies decrypt fine).
 # Everything else - caches, Service Worker state, GPU state - is rebuilt.
@@ -112,8 +114,15 @@ CLONE_ITEMS = [
 
 
 def home() -> Path:
+    """Solaris's private browserctl root: ~/.solaris/browserctl.
+    NOT the machine-shared ~/.browserctl -- sharing state.json across
+    frameworks let one framework's app_bundle hijack another's launches.
+    $BROWSERCTL_HOME stays the explicit override (e.g. point it at legacy
+    ~/.browserctl to keep old profiles/logins)."""
     env = os.environ.get("BROWSERCTL_HOME")
-    return Path(env).expanduser() if env else Path.home() / ".browserctl"
+    if env:
+        return Path(env).expanduser()
+    return Path("~/.solaris").expanduser() / "browserctl"
 
 
 def sanitize_id(raw: str) -> str:
@@ -261,6 +270,45 @@ def is_running(entry: dict) -> bool:
     return pid_alive(entry.get("pid")) and cdp_alive(entry["port"]) is not None
 
 
+def _cdp_pages(port: int) -> list[dict]:
+    try:
+        with urllib.request.urlopen(
+                f"http://localhost:{port}/json/list", timeout=3) as r:
+            return [t for t in json.loads(r.read()) if t.get("type") == "page"]
+    except Exception:
+        return []
+
+
+def _cdp_close_target(port: int, target_id: str) -> None:
+    with contextlib.suppress(Exception):
+        urllib.request.urlopen(
+            f"http://localhost:{port}/json/close/{target_id}", timeout=3).read()
+
+
+def _close_extra_tabs(port: int, keep_url: str | None) -> int:
+    """Tab hygiene on launch: keep exactly one page (the requested URL when
+    it can be identified, else the first listed) and close everything else a
+    boot may have auto-opened (restored session, crash restore, stray
+    about:blank). Returns the number of tabs closed."""
+    pages = _cdp_pages(port)
+    if len(pages) <= 1:
+        return 0
+    keep = None
+    if keep_url:
+        for t in pages:
+            if t.get("url", "").rstrip("/") == keep_url.rstrip("/"):
+                keep = t
+                break
+    if keep is None:
+        keep = pages[0]
+    closed = 0
+    for t in pages:
+        if t["id"] != keep["id"]:
+            _cdp_close_target(port, t["id"])
+            closed += 1
+    return closed
+
+
 def get_entry(project: str, profile: str) -> dict:
     entry = load_state()["profiles"].get(key(project, profile))
     if not entry:
@@ -297,28 +345,81 @@ def argb_signed(hex_color: str) -> int:
     return val - 0x100000000 if val > 0x7FFFFFFF else val
 
 
-def write_theme(project: str, profile: str, hex_color: str) -> None:
-    """Write the theme color into Default/Preferences. Browser must be closed."""
+def _write_prefs(project: str, profile: str, mutate) -> None:
+    """Locked-file-free read-modify-write of Default/Preferences (browser
+    must be closed)."""
     prefs_path = profile_dir(project, profile) / "Default" / "Preferences"
     prefs = {}
     if prefs_path.exists():
         prefs = json.loads(prefs_path.read_text() or "{}")
-    prefs.setdefault("autogenerated", {}).setdefault("theme", {})["color"] = argb_signed(hex_color)
-    prefs.setdefault("browser", {}).setdefault("theme", {})["user_color2"] = argb_signed(hex_color)
+    mutate(prefs)
     prefs_path.parent.mkdir(parents=True, exist_ok=True)
     tmp = prefs_path.with_name(f".prefs.{os.getpid()}.tmp")
     tmp.write_text(json.dumps(prefs))
     os.replace(tmp, prefs_path)
 
 
+def write_theme(project: str, profile: str, hex_color: str) -> None:
+    """Write the theme color into Default/Preferences. Browser must be closed."""
+    def _mutate(prefs: dict) -> None:
+        prefs.setdefault("autogenerated", {}).setdefault("theme", {})["color"] = argb_signed(hex_color)
+        prefs.setdefault("browser", {}).setdefault("theme", {})["user_color2"] = argb_signed(hex_color)
+
+    _write_prefs(project, profile, _mutate)
+
+
+def sanitize_session_prefs(project: str, profile: str) -> None:
+    """Pre-launch tab hygiene: mark the previous exit clean and set startup
+    to a single new-tab page, so a relaunch never restores a pile of old
+    tabs (session restore or crash restore). Browser must be closed."""
+    def _mutate(prefs: dict) -> None:
+        prof = prefs.setdefault("profile", {})
+        prof["exit_type"] = "Normal"
+        prof["exited_cleanly"] = True
+        prefs.setdefault("session", {})["restore_on_startup"] = 5  # NTP only
+
+    _write_prefs(project, profile, _mutate)
+
+
 # ---------------------------------------------------------------- launch/stop
 
 
+def _playwright_chromium_bundle() -> Path:
+    """The Playwright Chromium .app bundle (resolved via the same child-process
+    trick as chromium_executable, bypassing any app_bundle preference)."""
+    r = subprocess.run(
+        [sys.executable, "-c",
+         "from playwright.sync_api import sync_playwright\n"
+         "with sync_playwright() as pw: print(pw.chromium.executable_path)"],
+        capture_output=True, text=True)
+    exe = Path(r.stdout.strip()) if r.returncode == 0 and r.stdout.strip() else None
+    if exe is None or not exe.exists():
+        raise RuntimeError(
+            "Playwright's Chromium is not installed - run: "
+            "uv run --with playwright playwright install chromium")
+    bundle = exe.parents[2]
+    if bundle.suffix != ".app":
+        raise RuntimeError(f"unexpected Chromium layout: {bundle}")
+    return bundle
+
+
 def chromium_executable() -> str:
-    """Playwright's Chromium binary, cached in the registry after the first
-    resolution (spinning up the Playwright driver just to read the path is
-    slow and noisy on teardown, so it runs once, in a child process)."""
-    cached = load_state().get("chromium_exe")
+    """The launch binary: the custom app bundle when one was built with the
+    ``icon`` command (distinct Dock icon/name vs the user's main Chrome), else
+    Playwright's Chromium - cached in the registry after the first resolution
+    (spinning up the Playwright driver just to read the path is slow and noisy
+    on teardown, so it runs once, in a child process)."""
+    state = load_state()
+    bundle = state.get("app_bundle")
+    if bundle:
+        exe_dir = Path(bundle) / "Contents" / "MacOS"
+        if exe_dir.is_dir():
+            # The binary name varies by Playwright build (Chromium /
+            # Google Chrome for Testing) - take the bundle's executable.
+            for p in sorted(exe_dir.iterdir()):
+                if p.is_file() and os.access(p, os.X_OK):
+                    return str(p)
+    cached = state.get("chromium_exe")
     if cached and Path(cached).exists():
         return cached
     r = subprocess.run(
@@ -339,6 +440,170 @@ def chromium_executable() -> str:
 
     mutate_state(_cache)
     return str(exe)
+
+
+def _tinted_chrome_png(color: str) -> Path | None:
+    """The stock Chromium icon, desaturated and tinted `color` (luminance
+    preserved: shadows go to a dark shade of the tint, highlights stay
+    near-white). Returns None when the source icon can't be extracted."""
+    import tempfile
+
+    from PIL import Image, ImageOps
+
+    # Prefer the user's real Chrome icon (no "TEST" ribbon) over the
+    # Playwright Chrome-for-Testing artwork; both top out at 256 px.
+    candidates = [
+        Path("/Applications/Google Chrome.app/Contents/Resources/app.icns"),
+        _playwright_chromium_bundle() / "Contents" / "Resources" / "app.icns",
+    ]
+    src_icns = next((p for p in candidates if p.exists()), None)
+    if src_icns is None:
+        return None
+    with tempfile.TemporaryDirectory() as td:
+        src_png = Path(td) / "src.png"
+        r = subprocess.run(["sips", "-s", "format", "png", str(src_icns),
+                            "--out", str(src_png)], capture_output=True)
+        if r.returncode != 0 or not src_png.exists():
+            return None
+        img = Image.open(src_png).convert("RGBA")
+        alpha = img.getchannel("A")
+        # Dark/light endpoints tuned for the Solaris purple (#6A1B9A).
+        tinted = ImageOps.colorize(ImageOps.grayscale(img),
+                                   black="#1a0d26", mid=color,
+                                   white="#f3e8ff").convert("RGBA")
+        tinted.putalpha(alpha)
+    out = home() / "app" / "icon-src.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tinted.save(out)
+    return out
+
+
+def _generate_icon_png(color: str) -> Path:
+    from PIL import Image, ImageDraw
+
+    # The COLOR goes into the glyph, not a background plate: macOS 26+ icon
+    # theming (dark / tinted styles) strips a full-bleed background and
+    # re-plates the glyph on its own squircle, so color baked into the plate
+    # renders gray. A colored glyph on transparency survives every style
+    # (macOS supplies a light plate in the default style, dark otherwise).
+    size = 1024
+    img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    # A simple browser cue: a globe (ring + horizon + meridian), no text
+    # (crisp at 16 px). Thick strokes so the glyph carries the color.
+    cx, cy, r = size // 2, size // 2, int(size * 0.34)
+    w = size // 14
+    d.ellipse([cx - r, cy - r, cx + r, cy + r], outline=color, width=w)
+    d.line([cx - r + w // 2, cy, cx + r - w // 2, cy], fill=color, width=w)
+    d.ellipse([cx - r // 2, cy - r, cx + r // 2, cy + r], outline=color,
+              width=int(w * 0.75))
+    out = home() / "app" / "icon-src.png"
+    out.parent.mkdir(parents=True, exist_ok=True)
+    img.save(out)
+    return out
+
+
+def _png_to_icns(png: Path, icns_out: Path) -> None:
+    import tempfile
+
+    from PIL import Image
+
+    # Chrome ships 256 px max; never upscale past the source (blurry).
+    # macOS 26 dark/tinted icon styles re-plate full-bleed icons -- the tint
+    # shows fully in the default icon style.
+    src_px = Image.open(png).width
+    with tempfile.TemporaryDirectory() as td:
+        iconset = Path(td) / "icon.iconset"
+        iconset.mkdir()
+        for pts in (16, 32, 128, 256, 512):
+            for scale in (1, 2):
+                px = pts * scale
+                if px > src_px:
+                    continue
+                suffix = f"{pts}x{pts}" + ("@2x" if scale == 2 else "")
+                subprocess.run(["sips", "-z", str(px), str(px), str(png),
+                                "--out", str(iconset / f"icon_{suffix}.png")],
+                               check=True, capture_output=True)
+        subprocess.run(["iconutil", "-c", "icns", str(iconset),
+                        "-o", str(icns_out)], check=True, capture_output=True)
+
+
+def build_app_bundle(png: str | None = None, icns: str | None = None,
+                     color: str = "#6A1B9A",
+                     name: str = "Solaris Browser") -> Path:
+    """Make a dedicated Chromium app bundle with its own name + Dock icon so
+    browserctl windows are visually distinct from the user's main Chrome.
+
+    APFS clonefile copy (`cp -Rc`) - instant and near-zero extra disk. The
+    icon comes from --icns, --png (converted), or the tinted Chrome artwork
+    (falls back to a generated glyph). The bundle is ad-hoc re-signed;
+    `launch` prefers it automatically once built (registry key `app_bundle`)."""
+    if sys.platform != "darwin":
+        raise RuntimeError("app bundles are a macOS feature")
+    src_bundle = _playwright_chromium_bundle()
+
+    app_dir = home() / "app"
+    app_dir.mkdir(parents=True, exist_ok=True)
+    bundle = app_dir / f"{name}.app"
+    shutil.rmtree(bundle, ignore_errors=True)
+    r = subprocess.run(["cp", "-Rc", str(src_bundle), str(bundle)],
+                       capture_output=True, text=True)
+    if r.returncode != 0:  # non-APFS fallback
+        subprocess.run(["cp", "-R", str(src_bundle), str(bundle)], check=True)
+
+    icns_out = bundle / "Contents" / "Resources" / "app.icns"
+    if icns:
+        shutil.copy2(Path(icns).expanduser(), icns_out)
+    else:
+        png_path = (Path(png).expanduser() if png
+                    else _tinted_chrome_png(color) or _generate_icon_png(color))
+        _png_to_icns(png_path, icns_out)
+
+    plist = bundle / "Contents" / "Info.plist"
+    for k, val in (("CFBundleDisplayName", name), ("CFBundleName", name),
+                   ("CFBundleIdentifier", "me.yurasov.solaris.browser")):
+        subprocess.run(["plutil", "-replace", k, "-string", val, str(plist)],
+                       check=True, capture_output=True)
+    # macOS prefers CFBundleIconName (Assets.car asset catalog) over
+    # CFBundleIconFile, so the replaced app.icns would never show. Drop the
+    # catalog reference and the catalog itself.
+    subprocess.run(["plutil", "-remove", "CFBundleIconName", str(plist)],
+                   capture_output=True)
+    (bundle / "Contents" / "Resources" / "Assets.car").unlink(missing_ok=True)
+    subprocess.run(["codesign", "--force", "--deep", "--sign", "-", str(bundle)],
+                   check=True, capture_output=True)
+
+    def _set(state: dict) -> None:
+        state["app_bundle"] = str(bundle)
+        state["app_bundle_src"] = str(src_bundle)
+
+    mutate_state(_set)
+    return bundle
+
+
+def ensure_app_bundle() -> None:
+    """Lazily (re)build the branded bundle before a launch (macOS only), so a
+    fresh install gets the Solaris Browser name/icon with zero manual steps.
+    Builds when no bundle is registered or its dir is gone; rebuilds when the
+    recorded Chromium source was removed (a Playwright update that cleaned the
+    old build). Never blocks a launch -- any failure just means the stock
+    Chromium binary is used.
+
+    Cheap by design: when a healthy bundle is registered, this is two stat
+    calls. An update that leaves the old Chromium dir in place is NOT detected
+    here -- re-run `icon` (documented refresh path) to re-tint."""
+    if sys.platform != "darwin":
+        return
+    state = load_state()
+    bundle = state.get("app_bundle")
+    src = state.get("app_bundle_src")
+    if bundle and Path(bundle).is_dir() and (src is None or Path(src).is_dir()):
+        return
+    try:
+        build_app_bundle()
+    except Exception as exc:
+        print(f"note: app bundle build failed ({exc}); using stock Chromium",
+              file=sys.stderr)
 
 
 def port_free(port: int) -> bool:
@@ -412,11 +677,13 @@ def launch(project: str, profile: str, *, headless: bool,
         lock.unlink(missing_ok=True)
     if entry.get("color"):
         write_theme(project, profile, entry["color"])
+    sanitize_session_prefs(project, profile)
 
     logs = home() / "logs"
     logs.mkdir(parents=True, exist_ok=True)
     log_path = logs / f"{project}--{profile}.log"
 
+    ensure_app_bundle()
     cmd = [
         chromium_executable(),
         f"--user-data-dir={pdir}",
@@ -460,6 +727,11 @@ def launch(project: str, profile: str, *, headless: bool,
         raise RuntimeError(
             f"chromium did not come up on port {entry['port']} within 60s")
 
+    # Tab hygiene: a boot may auto-open tabs beyond the requested URL
+    # (restored session, stray about:blank). Keep exactly one.
+    time.sleep(0.5)  # let the initial target(s) register
+    _close_extra_tabs(entry["port"], url)
+
     # Phase 3 (locked): record the boot on a fresh read - never write back a
     # snapshot held across the (slow) browser start.
     def _record(state: dict) -> dict:
@@ -500,6 +772,11 @@ def stop(project: str, profile: str) -> str:
             _remove_profile(project, profile)
             return "stopped+removed"
         return "not-running"
+    # Tab hygiene: close every tab before closing the browser, so nothing
+    # lingers for a future restore. Closing the last tab may already quit
+    # Chromium; the explicit Browser.close below is then a no-op.
+    for t in _cdp_pages(entry["port"]):
+        _cdp_close_target(entry["port"], t["id"])
     with contextlib.suppress(Exception):
         from playwright.sync_api import sync_playwright
 
@@ -876,6 +1153,16 @@ def main() -> int:
                        help="print the profile's CDP attach endpoint")
     p.add_argument("--profile", required=True)
 
+    p = sub.add_parser("icon",
+                       help="build the dedicated app bundle (own Dock "
+                            "icon/name for browserctl windows; macOS only)")
+    src = p.add_mutually_exclusive_group()
+    src.add_argument("--png", help="1024px PNG to convert into the icon")
+    src.add_argument("--icns", help="ready-made .icns to use as-is")
+    p.add_argument("--color", default="#6A1B9A",
+                   help="fill for the generated icon (default Solaris purple)")
+    p.add_argument("--name", default="Solaris Browser", help="app/Dock name")
+
     p = sub.add_parser("tabs", parents=[common], help="list open tabs")
     p.add_argument("--profile", required=True)
 
@@ -891,7 +1178,7 @@ def main() -> int:
     p.add_argument("--profile", required=True)
     p.add_argument("--out", required=True,
                    help="output path (bare filenames land in "
-                        "~/.browserctl/out/<project>/, never the CWD)")
+                        "~/.solaris/browserctl/out/<project>/, never the CWD)")
     p.add_argument("--tab", type=int)
 
     p = sub.add_parser("screenshot", parents=[common], help="save a PNG screenshot")
@@ -1003,6 +1290,13 @@ def main() -> int:
 
     if args.cmd == "cdp-url":
         print(cdp_url(args.profile, project))
+        return 0
+
+    if args.cmd == "icon":
+        bundle = build_app_bundle(png=args.png, icns=args.icns,
+                                  color=args.color, name=args.name)
+        print(f"app bundle built: {bundle} - future chromium launches use it "
+              "(relaunch running profiles to pick it up)")
         return 0
 
     if args.cmd == "tabs":

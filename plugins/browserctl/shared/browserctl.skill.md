@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -44,9 +44,11 @@ you when it is missing).
 ## Profiles: Per-Project, Clean, Ephemeral on Demand
 
 A profile is a named persistent Chromium user-data dir under
-`~/.browserctl/profiles/<project>/<name>/` with a registry entry in `~/.browserctl/state.json`
-(port, color, ephemeral flag, pid when running). Everything under `~/.browserctl/` is
-machine-local and disposable - never inside the repo (repos are often cloud-synced).
+`~/.solaris/browserctl/profiles/<project>/<name>/` with a registry entry in
+`~/.solaris/browserctl/state.json` (port, color, ephemeral flag, pid when running). Everything
+under `~/.solaris/browserctl/` is machine-local and disposable - never inside the repo (repos are
+often cloud-synced). Override with `$BROWSERCTL_HOME` to point at a different root (e.g. for
+sandboxed harnesses or to keep old profiles from a prior `~/.browserctl/` home).
 
 - **Every profile belongs to a project.** The project id is auto-derived (nearest
   `ai/manifest.json` walking up from the CWD, else the git-root/CWD name) or forced with
@@ -82,6 +84,7 @@ All commands take `--project P` (omitted = auto-derived). Lifecycle:
 | `clone --from <name\|project/name\|dir> --to <name> [--color C]` | Login-preserving slim copy (source closed). |
 | `theme --profile P --color '#RRGGBB'` | Recolor (browser must be closed). |
 | `cdp-url --profile P` | Print `http://localhost:<port>` for attaching. |
+| `icon [--png F\|--icns F] [--color C] [--name N]` | Build the branded app bundle (`Solaris Browser`) so launches appear in the Dock with a distinct name and tinted Chrome icon. Auto-built on first `launch` (macOS only); re-run to refresh after a Playwright update. |
 
 Drive commands (attach over CDP, leave the browser open; `--tab` defaults to the last tab):
 
@@ -93,8 +96,8 @@ Drive commands (attach over CDP, leave the browser open; `--tab` defaults to the
 | `screenshot --profile P --out F [--tab N] [--full-page]` | PNG for visual verification. |
 | `eval --profile P --js EXPR [--tab N]` | `page.evaluate`; prints JSON. |
 
-Bare `--out` filenames land in `~/.browserctl/out/<project>/` (never the CWD); absolute paths
-are honored.
+Bare `--out` filenames land in `~/.solaris/browserctl/out/<project>/` (never the CWD); absolute
+paths are honored.
 
 ## Typical Flows
 
@@ -141,19 +144,22 @@ out.
    persists and relaunch takes seconds.
 3. **Clone/theme only against a closed browser.** `clone` refuses a running source; `Singleton*`
    lock files are never copied (browserctl strips them, and clears stale ones on launch).
-4. **Keep repos clean.** Snapshots/screenshots default to `~/.browserctl/out/<project>/`; move
-   anything worth keeping into the project explicitly - never auto-commit captures.
+4. **Keep repos clean.** Snapshots/screenshots default to `~/.solaris/browserctl/out/<project>/`;
+   move anything worth keeping into the project explicitly - never auto-commit captures.
 5. Run `prune` at natural hygiene points (end of a sweep, project health checks) so ephemeral
    profiles do not accumulate.
-6. `~/.browserctl/` is reconstructible (re-create + re-auth); nothing under it is a source of
-   truth. A wedged registry entry (port shown busy, nothing running) can be fixed by deleting
-   the entry from `state.json`.
-7. **Sandbox fallback.** Per the sandbox ladder, in an interactive session per-command
+6. `~/.solaris/browserctl/` is reconstructible (re-create + re-auth); nothing under it is a
+   source of truth. A wedged registry entry (port shown busy, nothing running) can be fixed by
+   deleting the entry from `state.json`.
+7. **Tab hygiene:** `launch` always starts with exactly one tab (extra tabs auto-opened by session
+   restore or crash restore are closed after boot). `stop` closes every tab before shutting the
+   browser so nothing lingers for a future restore.
+8. **Sandbox fallback.** Per the sandbox ladder, in an interactive session per-command
    escalation outranks these relocations - ask first; use them when running unattended,
    when the harness has no escalation, or when it is declined. In harnesses that deny
    home-dir writes, two known failure modes and their one-retry fixes (disclose when used):
-   - `PermissionError` on `~/.browserctl/.state.lock` (or any `~/.browserctl/` path) → rerun
-     with `BROWSERCTL_HOME=<writable scratch>/__browserctl/`.
+   - `PermissionError` on `~/.solaris/browserctl/.state.lock` → rerun with
+     `BROWSERCTL_HOME=<writable scratch>/__browserctl/`.
    - `uv` dies on `~/.cache/uv` permission errors before browserctl even starts → rerun with
      `UV_CACHE_DIR=<writable scratch>/uv-cache`.
    Both variables compose: `UV_CACHE_DIR=... BROWSERCTL_HOME=... uv run <path>/browserctl.py ...`.
@@ -171,3 +177,7 @@ out.
    for the full launch/tabs/stop chain), or **split launch from drive**: have an unsandboxed
    session launch the profile, then drive it from the sandboxed one over the CDP port
    (`tabs`/`navigate`/`snapshot`/`eval` only need localhost).
+9. **Icon style note (macOS 26+):** the dark and tinted icon styles re-plate full-bleed icons
+   with their own squircle background, so the tinted Chrome artwork renders fully in the
+   default icon style. The generated glyph fallback uses a transparent background, which works
+   across all styles.

@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Rule: browserctl conventions <!-- omit in toc -->
 
@@ -32,15 +32,15 @@ full command reference live in [`browserctl.skill.md`](browserctl.skill.md).
 
 ## Outputs and Hygiene
 
-- Snapshots/screenshots default to `~/.browserctl/out/<project>/` (machine-local). Copy anything
-  worth keeping into the project deliberately; **never auto-commit captures**.
+- Snapshots/screenshots default to `~/.solaris/browserctl/out/<project>/` (machine-local). Copy
+  anything worth keeping into the project deliberately; **never auto-commit captures**.
 - Stop ephemeral profiles when their job ends (stop deletes them) and run `prune` at natural
   hygiene points; leave `default` (and other persistent profiles) running only when a standing
   task needs the session held open.
 - **Sandboxed harnesses (home dir not writable):** if a command fails with a permission error
-  on `~/.browserctl/` (e.g. `.state.lock`), retry once with the state root moved into writable
-  scratch - `BROWSERCTL_HOME=<harness scratch dir or workspace>/__browserctl/` - and say you
-  did. If `uv` itself fails on a home-cache permission error first, also set
+  on `~/.solaris/browserctl/` (e.g. `.state.lock`), retry once with the state root moved into
+  writable scratch - `BROWSERCTL_HOME=<harness scratch dir or workspace>/__browserctl/` - and
+  say you did. If `uv` itself fails on a home-cache permission error first, also set
   `UV_CACHE_DIR=<same scratch>/uv-cache`; if that cache is pre-warmed and the shell has no
   network, add `UV_OFFLINE=1` (the resolver otherwise still dials the index). Profiles created
   this way are machine-and-session local; treat them as ephemeral. **Every command in the flow

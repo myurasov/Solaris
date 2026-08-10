@@ -29,8 +29,10 @@ browser outlives any single agent turn.
 - **Ephemeral on demand.** `launch --ephemeral` profiles are deleted on `stop` and swept by
   `prune`; `launch --fresh` spins a clean ephemeral sibling when the requested profile is busy.
   `persist` marks a profile long-lived.
-- **State root:** `~/.browserctl/` (`$BROWSERCTL_HOME`) - `profiles/<project>/<name>/`,
-  `state.json` registry, `logs/`, `out/<project>/`. Machine-local, disposable, never in a repo.
+- **State root:** `~/.solaris/browserctl/` (`$BROWSERCTL_HOME` to override) -
+  `profiles/<project>/<name>/`, `state.json` registry, `logs/`, `out/<project>/`. Machine-local,
+  disposable, never in a repo. Private per-framework so `app_bundle` pointers from other
+  frameworks cannot hijack launches.
 
 ## Layout
 
@@ -53,10 +55,10 @@ need only `uv`.
 
 ## Design Notes
 
-Derived from a production agent framework's browser layer that fully replaced its Playwright
-MCP with this pattern, adapted for Solaris: per-project namespaces with clean first-use
-profiles instead of a shared login-bearing master profile as clone source, JSON state (stdlib +
-playwright only), and with the upstream Firefox holder daemon, macOS Space placement, and
-custom Dock app bundle intentionally left out (niche; add back if a project needs them).
-Public context: agent tooling is broadly moving browser automation from MCP servers to CLI +
-skills for token efficiency (e.g. microsoft/playwright-cli).
+Chromium is the only supported engine. Derived from a production agent framework's browser
+layer that fully replaced its Playwright MCP with this pattern, adapted for Solaris:
+per-project namespaces with clean first-use profiles instead of a shared login-bearing master
+profile as clone source, private per-framework state root, branded app bundle (`icon` command,
+auto-built on first launch), tab hygiene on launch and stop, and JSON state (stdlib + playwright
++ pillow only). Public context: agent tooling is broadly moving browser automation from MCP
+servers to CLI + skills for token efficiency (e.g. microsoft/playwright-cli).
