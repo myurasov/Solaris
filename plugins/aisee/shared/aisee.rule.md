@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -33,7 +33,7 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
   encodes two feeds); pass `diarize: true` for per-lane speaker attribution, or use the
   `diarize` kind for who-spoke-when only. AISee never interprets or merges lanes - deciding
   what mic/system/per-participant lanes mean and combining them is the CONSUMER'S job;
-  identical lanes come back marked `duplicate_of`. Segment timestamps are absolute seconds
+  bit-identical lanes (equal decoded PCM) come back marked `duplicate_of`. Segment timestamps are absolute seconds
   in the recording; rendered per-lane transcripts (`transcript[-<lane>].txt/.srt/.vtt`, plus
   full-word JSON) download from `GET /v1/tasks/{id}/artifacts/<name>`. Pass speaker-count
   hints (`min/max/num_speakers`, applied per lane) when roughly known - long multi-party
@@ -69,3 +69,11 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
 - A cold or idle-unloaded model takes minutes to load; query tools block through it. Do not
   resubmit - that only queues more work. For long `watch`/`transcribe`/`diarize` jobs pass
   `wait=false` and poll `get_task` (ASR runs at roughly realtime/30 or faster once loaded).
+  While a task runs, `progress` carries a `pct` (0-100) wherever completion is computable
+  (watch chunks, audio lanes; interpolated inside long engine calls) - read it instead of
+  guessing from elapsed time.
+- Long meeting videos: `look`/`assert` with native video are safe at any length (the server
+  re-encodes down to the model's frame budget), but detail-over-time questions still belong
+  to `watch`. On unified-memory hosts avoid hour-scale transcriptions while a large VLM is
+  resident - the audio engine is sacrificed by design and the task fails with a clear
+  "engine connection failed" (retry after the VLM idle-unloads).

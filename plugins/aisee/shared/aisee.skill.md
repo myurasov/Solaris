@@ -15,7 +15,7 @@ antitriggers:
 summary: Capture the UI (or take provided media), then have AISee's VLM eyes answer a question,
   assert an expectation, or watch a recording - MCP first, REST/CLI fallback.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: aisee - visual verification with AISee <!-- omit in toc -->
 
@@ -65,7 +65,9 @@ task folder).
 ### 2a. MCP (preferred)
 
 Tools: `look(media, question, ...)`, `assert_visual(media, expectation, ...)`,
-`watch(video, question|expectation, fps, wait, ...)`, plus `list_models`, `list_tasks`,
+`watch(video, question|expectation, fps, wait, ...)`,
+`transcribe(media, diarize?, diarize_model?, min/max/num_speakers?, wait?)`,
+`diarize(media, min/max/num_speakers?, wait?)`, plus `list_models`, `list_tasks`,
 `get_task`, `cancel_task`, `describe`, `health`.
 
 Media entries are AISee-host paths or `sha256:<hex>` blob refs. For a local file:
@@ -79,12 +81,16 @@ curl -s -X POST <server>/v1/blobs -F files=@shot.png \
 ```
 
 Query tools block until done (a cold model can take minutes - be patient, never resubmit).
-For long videos: `watch(..., wait=false)` returns a task id; poll `get_task` every few
-seconds until `status` is terminal. Useful parameters: `model` (omit for default), `frames`
+For long jobs: pass `wait=false` (watch/transcribe/diarize) and poll `get_task` every few
+seconds until `status` is terminal; `progress.pct` reports live completion where
+computable. Transcribe results are PER LANE (`tracks` list: one entry per audio track and
+per stereo channel; bit-identical lanes marked `duplicate_of`); word timings and rendered
+`transcript[-<lane>].txt/.srt/.vtt` download from `GET /v1/tasks/{id}/artifacts/<name>`. Useful parameters: `model` (omit for default), `frames`
 / `fps` (video sampling), `native` (send the video itself - temporal reasoning,
 video-capable models only), `context` (background the model cannot see in the pixels),
-`max_tokens` (answer budget; truncation is flagged, never silent), `diarize` /
-`min_speakers` / `max_speakers` / `num_speakers` (transcribe/diarize), `thinking` (bool -
+`max_tokens` (answer budget; truncation is flagged, never silent), `diarize` (transcribe:
+add per-lane speaker attribution) / `diarize_model` (diarizer slug; pinned into the task) /
+`min_speakers` / `max_speakers` / `num_speakers` (per-lane diarization hints), `thinking` (bool -
 enable/disable chain-of-thought on models whose describe entry says `Thinking: optional`;
 on by default there, and thinking counts against `max_tokens`; some models always think
 and ignore it - check each model's `Thinking:` line in describe).
