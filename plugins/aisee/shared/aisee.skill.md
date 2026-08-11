@@ -138,7 +138,7 @@ git clone https://github.com/myurasov/AISee ~/aisee && cd ~/aisee
 uv sync && ./aisee install            # checks docker/NVIDIA toolkit/ffmpeg, creates ~/.aisee
 ./aisee creds set HF_TOKEN            # gated model downloads
 ./aisee model install qwen3-vl-30b-a3b-instruct   # recommended default
-./aisee api start                     # REST + MCP on 0.0.0.0:8484
+./aisee api start                     # REST + MCP on 0.0.0.0:4444
 ```
 
 Then record the URL in `ai/.memory/resources.md` (`aisee_server`), the consumer token (if

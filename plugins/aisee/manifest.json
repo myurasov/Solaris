@@ -16,7 +16,7 @@
       "Media files local to this machine are uploaded once via POST <server>/v1/blobs (content-addressed by sha256, ~24h TTL refreshed on reuse) and then referenced in queries as sha256:<hex>. Paths already on the AISee host pass as-is."
     ],
     "resources": [
-      {"key": "aisee_server", "prompt": "AISee server base URL (the GPU host running `aisee api`)", "default": "http://localhost:8484"},
+      {"key": "aisee_server", "prompt": "AISee server base URL (the GPU host running `aisee api`)", "default": "http://localhost:4444"},
       {"key": "aisee_consumer_token", "prompt": "AISee consumer bearer token (or 'none' if the server runs open)", "default": "none", "secret": true}
     ]
   }
