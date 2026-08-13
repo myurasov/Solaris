@@ -22,7 +22,10 @@ shared across all of them; canonical rules in the template `ai/engineer.agent.md
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
-`tasks/`. Full specification: [`spec/spec-v0.24.0.md`](spec/spec-v0.24.0.md).
+`tasks/`. Perishable reference data (current model tiers, harness capabilities) lives in
+[`solaris/info/`](info/) - rules reference it abstractly and never inline it; the ai-pack templates
+embed condensed copies that sync to projects via revisions. Full specification:
+[`spec/spec-v0.24.0.md`](spec/spec-v0.24.0.md).
 
 ## Persona Model
 
@@ -64,7 +67,9 @@ There is one running agent. It adopts a persona by reading the active context:
   first `develop-project` of a session); otherwise only on request (`--deep` for full health checks). Do not
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.
 - **Keep memory.** Framework `.memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets,
-  gitignored), `interactions.jsonl` (log), and `instructions.md` (**operating memory** - terse, timestamped
+  gitignored), `interactions.jsonl` (log), `config.json` (behavior switches - flat keys defined by the
+  rules in `solaris/rules/`, e.g. `"subagents.level"`, `"yagni.enabled"`; machine-local, absent keys fall
+  back to each rule's stated default), and `instructions.md` (**operating memory** - terse, timestamped
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
   past ~100KB). ai-packs never read this directory; copy needed
@@ -77,7 +82,9 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
-- `uv run -m solaris.tools.read_first [--remind]` (the read-first loader hook; not called by hand)
+- `uv run -m solaris.tools.read_first [--remind|--part 2|--check]` (the read-first loader hook; loads in
+  two session-start parts - core set and subagents/YAGNI rules - because the Claude Code inline threshold
+  of 10k chars applies per hook call; not called by hand except `--check`)
 - `uv run -m solaris.tools.skill_loader` (the prompt-submit skill auto-loader hook; matches the prompt against each skill's `triggers` minus `antitriggers` and injects matching skill bodies; not called by hand)
 - `uv run -m solaris.tools.toc [--check|--write] <file>... | --all` (maintain Markdown tables of contents)
 
@@ -109,6 +116,14 @@ Two independent mechanisms:
   same-turn delete verification).
 - Interaction + writing: [`rules/interaction.rule.md`](rules/interaction.rule.md) - answer a direct
   question in the reply's first line; brevity by default; no buzzwords; explain jargon inline.
+- Subagents: [`rules/subagents.rule.md`](rules/subagents.rule.md) - delegate self-contained work to
+  subagents at the level in `.memory/config.json` (`"subagents.level"` off/med/full, absent = `med`);
+  tier-match models per [`info/model-tiers.md`](info/model-tiers.md); `subagents: <level>` in a prompt
+  is a per-request override.
+- YAGNI mode: [`rules/yagni.rule.md`](rules/yagni.rule.md) - opt-in (`"yagni.enabled"` in
+  `.memory/config.json`, absent = off): deliver exactly what was asked, smallest coherent form, with
+  hard guardrails (trust-boundary validation, data-loss handling, safety rules never trimmed);
+  `yagni: on|off` in a prompt is a per-request override.
 - Markdown docs (framework and project alike): headings in **Title Case**; reader-facing docs
   (READMEs, specs, guides) carry a TOC listing **h2 and deeper only** - the h1 title stays out
   (`solaris.tools.toc` does both: it marks the h1 `omit in toc` and maintains the list).

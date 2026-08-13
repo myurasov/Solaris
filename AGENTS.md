@@ -47,9 +47,11 @@ Escalation grants capability, not permission - rule 2 still applies on top.
 2. [`solaris/rules/commits.rule.md`](solaris/rules/commits.rule.md) - git commit policy (always applies).
 3. [`solaris/rules/safety.rule.md`](solaris/rules/safety.rule.md) - confirm before destructive / remote-mutating / outward actions (always applies).
 4. [`solaris/rules/interaction.rule.md`](solaris/rules/interaction.rule.md) - answer-the-question-first + writing style (always applies).
-5. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
+5. [`solaris/rules/subagents.rule.md`](solaris/rules/subagents.rule.md) - leveled subagent delegation (`.memory/config.json` `"subagents.level"`, default `med`; always applies at its level).
+6. [`solaris/rules/yagni.rule.md`](solaris/rules/yagni.rule.md) - YAGNI mode (opt-in via `.memory/config.json` `"yagni.enabled"`; `yagni: on|off` per-request).
+7. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
 
-A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`) auto-injects these five files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
+A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`, in two parts - the harness inline limit applies per hook call) auto-injects these files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
 
 Run the `health-check` overview to orient **before you start working on a project** (the first
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run

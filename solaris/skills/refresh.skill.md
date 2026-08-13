@@ -51,6 +51,9 @@ git step here - only framework files move.
 - `uv run -m solaris.tools.version current` - report the version change (old -> new).
 - `uv run -m solaris.tools.read_first --check` - the read-first payload still fits inline.
 - `uv run -m solaris.tools.revs status` - tracked files consistent.
+- **Info staleness:** check the "as of" dates in `solaris/info/model-tiers.md` and
+  `solaris/info/harnesses.md`; if stale (model lineup or harness capabilities shifted), update them and
+  sync the condensed copies embedded in `solaris/templates/ai-pack/` (edit + `revs bump` the templates).
 
 ## 5. Flag Stale Projects + Report
 

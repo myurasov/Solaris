@@ -34,11 +34,14 @@ Read, in this order, and then obey them:
 2. `projects/<slug>/ai/manifest.json` - name/type/mode + attached plugins.
 3. `projects/<slug>/ai/engineer.instructions.md` (shareable build/run/test + conventions),
    `ai/spec.md`, and `ai/.memory/*` (private: `resources.md`, `credentials.md`).
-4. Every `projects/<slug>/ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
+4. Every `projects/<slug>/ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode);
+   their switches read `ai/defaults.json` overridden per key by `ai/.memory/config.json`. Treat each
+   `ai/skills/*.skill.md` as trigger-invoked.
+5. Every `projects/<slug>/ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
    `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked**
    plugin - see `install-plugin` step 5): load the plugin's `shared/` rules and skills from the path it
    names, the same way.
-5. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules
+6. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules
    (the ai-pack strictly overrides repo-carried rules on any conflict - flag, never silently defer). If `remote-code`:
    `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
 
@@ -66,7 +69,7 @@ Follow the engineer agent's workflows:
 - **Learn:** when the user teaches a durable project preference, update `ai/engineer.instructions.md`
   (keep it shareable - put any host/secret/internal-URL specifics in `ai/.memory/` instead, never dropped).
   When the knowledge is a trigger-shaped, occasionally-run multi-step procedure, **propose a project-local
-  skill** (`ai/<name>.skill.md`) instead of growing the instructions - create it only after the user
+  skill** (`ai/skills/<name>.skill.md`) instead of growing the instructions - create it only after the user
   agrees; the routing criteria live in the template `ai/engineer.agent.md` (Memory).
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) in **both** the project's

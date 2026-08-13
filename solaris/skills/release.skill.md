@@ -29,6 +29,9 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
 4. **Update docs to reflect the changes.** Always:
    - **Spec file** — add a "What changed in vX.Y.Z" sentence to the opening paragraph of the current spec (e.g. `solaris/spec/spec-v0.8.0.md`). For a **MINOR** bump, also create a new spec snapshot `solaris/spec/spec-v<version>.md` as a copy of the updated current spec, then update every spec link across the repo (`AGENTS.md`, `README.md`, `solaris/solaris.agent.md`) to point to the new file. Keep the old spec file in place (it is referenced by git history and migration notes).
    - Any skill, rule, template, or tools-reference doc that the change touched — keep them accurate.
+   - **Info sync** — if any `solaris/info/*.md` changed since the last release, sync the condensed
+     copies embedded in `solaris/templates/ai-pack/` (edit + `revs bump` the templates); the info file
+     is the source of truth, the templates are what reaches projects.
    - **README content** the release makes stale: the bundled-plugins list (new/renamed plugin), the
      Getting Started setup lines, and any feature the release adds/retires (e.g. a retired default
      MCP server). The doc refresh is **mandatory even when `README.md` carries unrelated

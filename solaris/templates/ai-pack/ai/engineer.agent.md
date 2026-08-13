@@ -1,4 +1,4 @@
-_Rev. 31_
+_Rev. 32_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -29,15 +29,20 @@ this project is developed.
    the preserved initial spec.
 3. `ai/engineer.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
    this file; portable, no host/secret/internal-URL specifics).
-4. `ai/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
+4. Every `ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode). Their behavior
+   switches read `ai/defaults.json` (committed team defaults, flat keys) overridden per key by
+   `ai/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Treat each
+   `ai/skills/*.skill.md` (init, refresh, project-local skills) as trigger-invoked: load one only when
+   its frontmatter `triggers` match the request.
+5. `ai/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
    APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the session-context summary -
    read it first for prior context).
-5. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
+6. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
    trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked** plugin, attached in link mode
    without a copy): load the plugin's `shared/` rules and skills from the path it names, the same way -
    but only edit those files when deliberately developing the plugin (they are the live source for every
    consumer).
-6. local mode: `source/AGENTS.md` if present, as **gap-filling** project rules. The ai-pack (this file,
+7. local mode: `source/AGENTS.md` if present, as **gap-filling** project rules. The ai-pack (this file,
    `ai/*` rules and instructions, plugin overlays) **strictly overrides** anything the codebase carries
    (`source/AGENTS.md`, `CLAUDE.md`, CONTRIBUTING, repo conventions): repo rules fill gaps only, and on
    any conflict - commit style included - the ai-pack wins; never silently defer, flag the conflict
@@ -146,13 +151,13 @@ When the user teaches a durable preference about this project, update `ai/engine
 **Route procedures to project-local skills, not instructions.** When the durable knowledge is a
 **multi-step procedure invoked on a recognizable trigger and run occasionally** - onboarding, data
 staging, a capture/import/release/deploy flow - it belongs in a project-local skill
-(`ai/<name>.skill.md`, trigger-invoked; loaded only when its trigger fires), not inlined into
+(`ai/skills/<name>.skill.md`, trigger-invoked; loaded only when its trigger fires), not inlined into
 `engineer.instructions.md`, which is read every turn and should hold the always-relevant layer: facts,
 commands, gotchas, conventions, decisions. Skill-shaped signs: it reads as numbered steps executed
 start-to-finish; it is a screen or more; it carries its own preconditions/verification/hand-off or
 guardrails; it would be stale context on most turns. **Propose it and ask the user first** (create the
 skill vs extend instructions) - do not create the skill unprompted. When approved: model the file on
-`ai/init.skill.md` (frontmatter `name`/`triggers`/`summary`, numbered sections), and leave a one-line
+`ai/skills/init.skill.md` (frontmatter `name`/`triggers`/`summary`, numbered sections), and leave a one-line
 pointer to it in `engineer.instructions.md` where the procedure would have gone.
 
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the

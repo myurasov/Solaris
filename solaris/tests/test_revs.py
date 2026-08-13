@@ -182,3 +182,13 @@ def test_set_rev_places_marker_after_frontmatter():
     assert R.set_rev(legacy, ".md", 3) == stamped
     # no frontmatter: marker stays on line 1
     assert R.set_rev("# T\n\nbody\n", ".md", 1).startswith("_Rev. 1_\n")
+
+
+def test_materialized_map_covers_pack_rules_and_skills(tmp_path):
+    # The pack's always-on rules and skill stubs sync per file like the engineer agent.
+    rels = {rel for _, _, rel in R.materialized_map(tmp_path)}
+    assert "ai/rules/subagents.rule.md" in rels
+    assert "ai/rules/yagni.rule.md" in rels
+    assert "ai/skills/init.skill.md" in rels
+    assert "ai/skills/refresh.skill.md" in rels
+    assert "ai/engineer.agent.md" in rels
