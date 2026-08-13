@@ -10,9 +10,12 @@ deterministic by emitting their contents from a hook, so the harness (not the mo
 
 Two modes:
 
-- **no args** - full load. Print the concatenated read-first files under an authoritative header. Wired to
-  the session-start hook (Claude Code ``SessionStart``; Cursor ``sessionStart``) so it fires once per
-  session and again after a compaction / clear / resume.
+- **no args** - full load, part 1 (rules + memory + orchestrator role). Print the concatenated read-first
+  files under an authoritative header. Wired to the session-start hook (Claude Code ``SessionStart``;
+  Cursor ``sessionStart``) so it fires once per session and again after a compaction / clear / resume.
+- **``--part 2``** - full load, part 2 (the subagents + YAGNI rules). Wired as a *second* session-start
+  hook entry: the harness inline threshold applies per hook call, so splitting the set across two calls
+  doubles the inline room without risking a spill.
 - **``--check``** - print per-file sizes, the inline budget, and whether the rendered payload fits
   (the size assertion; run after growing any read-first file, especially ``.memory/instructions.md``).
 - **``--remind``** - print a one-line forcing reminder that the set was loaded. Wired to Claude Code's
@@ -37,9 +40,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
-# The AGENTS.md "Read first" set in INLINE PRIORITY order (not reading order): the two always-on
+# The AGENTS.md "Read first" set in INLINE PRIORITY order (not reading order): the always-on
 # rules are small and operative, so they must always arrive whole; the operating memory and the
 # orchestrator role are larger and degrade gracefully to a truncated head + a read-the-rest pointer.
+# The set is split into two parts because Claude Code's inline threshold is PER HOOK INVOCATION:
+# both parts are wired as separate SessionStart hooks, so each gets its own budget.
 READ_FIRST = (
     "solaris/rules/commits.rule.md",
     "solaris/rules/safety.rule.md",
@@ -47,10 +52,15 @@ READ_FIRST = (
     ".memory/instructions.md",
     "solaris/solaris.agent.md",
 )
+READ_FIRST_2 = (
+    "solaris/rules/subagents.rule.md",
+    "solaris/rules/yagni.rule.md",
+)
 
-# Claude Code persists hook stdout beyond a size threshold to a file, keeping only a ~2KB inline
+# Claude Code persists hook stdout beyond 10,000 characters to a file, keeping only a small inline
 # preview - which silently defeats the whole point of this hook (observed 2026-08-08: a 35.2KB
-# payload arrived as a preview; agents then failed rule-recall canaries in the agent-bench runs).
+# payload arrived as a preview; agents then failed rule-recall canaries in the agent-bench runs;
+# the 10k threshold is documented in the Claude Code hooks reference and applies per hook call).
 # Stay comfortably under that: pack whole files first, truncate the first overflowing file at a
 # paragraph boundary, and reduce the rest to must-read pointers. Override via env for tuning.
 _DEFAULT_BUDGET = 9_500
@@ -65,12 +75,21 @@ _HEADER = (
     "it yourself.\n"
 )
 
+_HEADER_2 = (
+    "=== SOLARIS READ-FIRST, PART 2 (auto-loaded every session by the read_first hook) ===\n"
+    "Continuation of the authoritative read-first set (split across two hook calls to stay inline). "
+    "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
+    "read it yourself before relying on it.\n"
+)
+
 _REMINDER = (
-    "[Solaris read-first] The authoritative set (solaris.agent.md + the commit, safety & interaction "
-    "rules + .memory/instructions.md) was loaded at session start - follow it. Quick reminders: bare "
-    "`ssh`/`open` are blocked, use the /tmp wrappers (`hss`, `nepo`); confirm before destructive / "
-    "remote-mutating / outward actions; answer a direct question in the reply's first line; log the "
-    "turn to .memory/interactions.jsonl (UTC ts)."
+    "[Solaris read-first] The authoritative set (solaris.agent.md + the commit, safety, interaction, "
+    "subagents & YAGNI rules + .memory/instructions.md) was loaded at session start - follow it. "
+    "Quick reminders: bare `ssh`/`open` are blocked, use the /tmp wrappers (`hss`, `nepo`); confirm "
+    "before destructive / remote-mutating / outward actions; answer a direct question in the reply's "
+    "first line; delegate self-contained work to subagents per the subagents rule (level default "
+    "`med`; `subagents:`/`yagni:` in a prompt are per-request overrides); log the turn to "
+    ".memory/interactions.jsonl (UTC ts)."
 )
 
 
@@ -123,24 +142,27 @@ def _truncate_at_boundary(text: str, limit: int) -> str:
     return head[: cut if cut > 0 else limit]
 
 
-def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None) -> str:
+def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None, part: int = 1) -> str:
     """Header + read-first files packed into the inline budget.
 
     Files are taken in inline-priority order: whole while they fit; the first file that
     overflows is truncated at a paragraph boundary with an explicit marker; every later file
     becomes a one-line MUST-READ pointer. This keeps the payload inline in Claude Code (large
     hook stdout is otherwise spilled to a barely-previewed file) while degrading loudly, never
-    silently.
+    silently. ``part`` selects which slice of the set to render (the budget is per hook call,
+    so each part is wired as its own SessionStart hook).
     """
+    files = READ_FIRST_2 if part == 2 else READ_FIRST
+    header = _HEADER_2 if part == 2 else _HEADER
     budget = _budget() if budget is None else budget
-    remaining = budget - len(_HEADER)
-    parts = [_HEADER]
+    remaining = budget - len(header)
+    parts = [header]
     truncated = False
 
     def _pointer(rel: str) -> str:
         return "\n----- " + rel + " (POINTER - read this file yourself NOW) -----\n"
 
-    for i, rel in enumerate(READ_FIRST):
+    for i, rel in enumerate(files):
         delim = "\n----- " + rel + " -----\n"
         try:
             body = (Path(repo_root) / rel).read_text(encoding="utf-8")
@@ -148,7 +170,7 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None) -> str
             body = "(could not read this file - open it directly)\n"
         # Worst-case room the files after this one still need (each degrades to a pointer line);
         # counting it here guarantees pointers can never push the payload past the budget.
-        reserve = sum(len(_pointer(r)) for r in READ_FIRST[i + 1:])
+        reserve = sum(len(_pointer(r)) for r in files[i + 1:])
         if truncated or len(delim) + len(body) + reserve > remaining:
             if not truncated and remaining - reserve > len(delim) + 500:
                 head = _truncate_at_boundary(body, remaining - reserve - len(delim) - 120)
@@ -168,17 +190,19 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None) -> str
 
 
 def check(repo_root: Path = REPO_ROOT) -> str:
-    """Size assertion for humans/CI: per-file sizes, the budget, and the rendered payload size."""
-    lines = ["read_first check: budget=%d (%s)" % (_budget(), _BUDGET_ENV)]
-    for rel in READ_FIRST:
-        try:
-            n = len((Path(repo_root) / rel).read_text(encoding="utf-8"))
-        except Exception:
-            n = -1
-        lines.append("  %8d  %s" % (n, rel))
-    rendered = render_full(repo_root)
-    ok = len(rendered) <= _budget()
-    lines.append("  rendered payload: %d bytes -> %s" % (len(rendered), "OK (inline)" if ok else "OVER BUDGET"))
+    """Size assertion for humans/CI: per-file sizes, the budget, and both rendered payload sizes."""
+    lines = ["read_first check: budget=%d per part (%s)" % (_budget(), _BUDGET_ENV)]
+    for part, files in ((1, READ_FIRST), (2, READ_FIRST_2)):
+        for rel in files:
+            try:
+                n = len((Path(repo_root) / rel).read_text(encoding="utf-8"))
+            except Exception:
+                n = -1
+            lines.append("  %8d  %s" % (n, rel))
+        rendered = render_full(repo_root, part=part)
+        ok = len(rendered) <= _budget()
+        lines.append("  part %d rendered payload: %d bytes -> %s"
+                     % (part, len(rendered), "OK (inline)" if ok else "OVER BUDGET"))
     return "\n".join(lines)
 
 
@@ -204,13 +228,14 @@ def main(argv: "list[str] | None" = None) -> int:
             print(check())
             return 0
         remind = "--remind" in argv
-        if not remind:
+        part = 2 if "2" in argv and "--part" in argv else 1
+        if not remind and part == 1:
             migrate_legacy_memory()  # session start: pick up a pre-0.19 checkout's memory/ folder
         ide = detect_ide()
         # Cursor carries hook context as JSON without spilling large payloads to a file, so it
         # keeps the full set; the inline budget exists for Claude Code's stdout-persist behavior.
         full_budget = 1_000_000 if ide == "cursor" else None
-        text = _REMINDER if remind else render_full(budget=full_budget)
+        text = _REMINDER if remind else render_full(budget=full_budget, part=part)
         emit(text, ide)
     except Exception:
         pass  # fail-safe: a context-loading hook must never break the user's turn

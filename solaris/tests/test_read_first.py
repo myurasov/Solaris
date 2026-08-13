@@ -88,3 +88,28 @@ def test_check_reports_budget(capsys):
     assert R.main(["--check"]) == 0
     out = capsys.readouterr().out
     assert "rendered payload" in out and ("OK (inline)" in out or "OVER BUDGET" in out)
+
+def test_render_part2_inlines_both_rules_whole():
+    # Part 2 (second SessionStart hook call) carries the subagents + YAGNI rules, whole and in budget.
+    out = R.render_full(part=2)
+    assert len(out) <= R._budget()
+    assert "READ-FIRST, PART 2" in out
+    for rel in R.READ_FIRST_2:
+        body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert body in out, rel + " must be inlined whole"
+    # part 2 never re-lists part-1 files
+    for rel in R.READ_FIRST:
+        assert ("----- " + rel + " -----") not in out
+
+
+def test_main_part2(capsys):
+    assert R.main(["--part", "2"]) == 0
+    out = capsys.readouterr().out
+    assert "READ-FIRST, PART 2" in out and "PART 2" in out
+
+
+def test_check_covers_both_parts(capsys):
+    assert R.main(["--check"]) == 0
+    out = capsys.readouterr().out
+    assert "part 1 rendered payload" in out and "part 2 rendered payload" in out
+    assert "OVER BUDGET" not in out
