@@ -25,7 +25,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 `tasks/`. Perishable reference data (current model tiers, harness capabilities) lives in
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; the ai-pack templates
 embed condensed copies that sync to projects via revisions. Full specification:
-[`spec/spec-v0.24.0.md`](spec/spec-v0.24.0.md).
+[`spec/spec-v0.25.0.md`](spec/spec-v0.25.0.md).
 
 ## Persona Model
 

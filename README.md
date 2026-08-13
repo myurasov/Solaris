@@ -203,5 +203,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.24.0.md`](solaris/spec/spec-v0.24.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.25.0.md`](solaris/spec/spec-v0.25.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.

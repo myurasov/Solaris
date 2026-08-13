@@ -1,4 +1,4 @@
-# Solaris v0.24.0 - Specification <!-- omit in toc -->
+# Solaris v0.25.0 - Specification <!-- omit in toc -->
 
 - [Overview](#overview)
 - [Repository layout](#repository-layout)
@@ -15,8 +15,8 @@
 - [Validation (acceptance)](#validation-acceptance)
 - [Deferred](#deferred)
 
-Authoritative description of Solaris v0.24.0. Supersedes the 0.1.0-0.23.1 specs (in git history; the latest prior snapshot is
-[`spec-v0.23.0.md`](spec-v0.23.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
+Authoritative description of Solaris v0.25.0. Supersedes the 0.1.0-0.24.0 specs (in git history; the latest prior snapshot is
+[`spec-v0.24.0.md`](spec-v0.24.0.md)), alongside the original brief [`spec-v0.txt`](spec-v0.txt) and the v0.1.0
 build plan [`plan-v0.1.0.md`](plan-v0.1.0.md). What changed in 0.25.0 (see [`../migrations/0.25.0.md`](../migrations/0.25.0.md)): **ai-packs gain `ai/rules/` + `ai/skills/` folders and config defaults** - always-on pack rules live in `ai/rules/` (two new ones, ported in concept from field use and re-authored for Solaris: **subagents** - leveled delegation of self-contained work to tier-matched subagent models, levels `off`/`med`/`full` with `med` the default, a 5-point task contract for every delegated prompt, and a per-request `subagents: <level>` override; and **YAGNI mode** - opt-in deliver-exactly-what-was-asked in the smallest coherent form, `yagni: on|off` per request, with hard guardrails: trust-boundary validation, data-loss handling, security, and safety rules are never trimmed), trigger-invoked skills live in `ai/skills/` (the init/refresh stubs move there from flat `ai/`), and behavior switches read the committed `ai/defaults.json` overridden per key by the private `ai/.memory/config.json`. The framework carries both rules in `solaris/rules/` (switches in `.memory/config.json`) and auto-loads them as read-first **part 2** - a second SessionStart hook call, because Claude Code's 10,000-char inline threshold applies per hook call. A new **`solaris/info/`** layer holds perishable reference data (`model-tiers.md`, `harnesses.md`) that rules cite abstractly and the pack templates embed (synced via revisions; staleness checks in the `refresh` and `release` skills). `revs` now tracks pack rules and skills alongside `AGENTS.md` and the engineer agent, so `revs ff`/`classify` genuinely sync the stubs. Pack schema change (folder move); migration `0.25.0.md`. Templates: engineer agent rev 32, pack `AGENTS.md` rev 14. What changed in 0.24.0 (see [`../migrations/0.24.0.md`](../migrations/0.24.0.md)): **refresh flows learn rewritten upstream history** - both the ai-pack `refresh` skill (template rev 6) and a **new framework `refresh` skill** (`solaris/skills/refresh.skill.md`, triggers "refresh/update solaris") diagnose a failed fast-forward: when local-only commits are just pre-rewrite versions of what upstream now carries (a force-pushed history rewrite, e.g. an author/committer cleanup), they adopt the new history (`git reset --hard origin/<branch>` after confirmation, re-applying genuinely local work; tags refreshed with `--force`) instead of merging the old and new histories together; genuine divergence still stops for a user decision. The framework skill also resyncs the environment (`uv sync`, hook-change restart detection, MCP check), verifies (tests, version, `read_first --check`, revs), and flags projects needing `update-project` (`update-project` gains antitriggers so "update solaris" routes to it). The **structured release-notes style is codified** in the `release` skill and the engineer template's Commit Policy (rev 31): notes cover the full tag-to-tag diff, ~200 words, `##` sections with bold-led bullets, migration pointer, every path/placeholder backtick-quoted (GitHub strips unquoted angle-bracket tokens). Additive; no ai-pack schema change. What changed in 0.23.1 (patch): bundled-plugin refinements only. **browserctl** (plugin 0.2.0) moves its machine-local state root from `~/.browserctl/` to `~/.solaris/browserctl/` (per the remote/local footprint convention; `$BROWSERCTL_HOME` still overrides), launches through a branded `Solaris Browser` app bundle with a tinted icon (auto-built on first launch on macOS, `icon` command to refresh), defaults new profiles to the purple theme, and tightens tab hygiene in the drive commands. **aisee** documents the server's `transcribe` and `diarize` query kinds (lane contract, lane results with progress percent, `diarize_model` selection, long-video guidance), 256k-context models with GiB-based memory gating, and retry-later admission refusals. No framework or ai-pack change; no migration (patch). What changed in 0.23.0 (see [`../migrations/0.23.0.md`](../migrations/0.23.0.md)): projects are **grouped** one level below `projects/` (`projects/<group>/<slug>/` - current groups `nv/`, `my/`, `tmp/`; slugs resolve via a two-depth scan of `projects/*/` and `projects/*/*/`, and `projects/<slug>/` remains the docs shorthand) and ad-hoc tasks file by month under `tasks/<YYYY>/<MM>/<YYYY-MM-DD>-<slug>/`. A new always-on **interaction rule** (`rules/interaction.rule.md`, mirrored in the engineer template as an Interaction Policy) mandates answer-the-question-first replies (explicit answer in the first line, requested word counts honored, a mid-autonomous question is not a resume signal) and the writing style (brevity by default, no consultant buzzwords, jargon explained with a short parenthetical). The safety rule gains **Long-Running Remote Work** duties: verify a job's pace within its first iteration, re-verify external state after a harness restart, and confirm every remote delete/stop with a same-turn list. Interaction-log `ts` is UTC (`Z` suffix, from a real clock). The `skill_loader` hook now also injects a **per-project overlay index** (that project's `ai/*.rule.md`, `ai/<plugin>/*.rule.md`, `ai/*.link.md`, one line each, once per session) whenever a prompt or the session cwd targets a project - overlay compliance no longer depends on the agent walking AGENTS.md by hand. The `read_first` packer reserves pointer space so the inline payload can never exceed its budget (now 9.5KB), with the interaction rule third in inline priority. browserctl (skill rev 8) documents the real invocation paths (`ai/browserctl/` copy vs `plugins/browserctl/shared/` link) and `install-plugin` computes link-file depth for grouped layouts. Additive; no ai-pack schema change. What changed in 0.22.3 (patch): documentation - the README is reframed into numbered sections led by a "What is Solaris" overview, with clarified section headings and a proper ordered-list table of contents; and the ai-pack template's `init` / `refresh` skill stubs get their `_Rev. N_` markers repositioned after the YAML frontmatter (completing the 0.22.2 GitHub-rendering fix for the template skill files). What changed in 0.22.2 (patch): in files that open with YAML frontmatter (skill files), the `_Rev. N_` marker now sits **right after the closing `---`** instead of on line 1 - GitHub only renders frontmatter that starts the file, so marker-first skill files displayed as a broken horizontal rule + text blob. `revs` places (and migrates) the marker automatically, hash-neutrally; loaders and `toc` accept both positions. What changed in 0.22.1 (patch): the browserctl plugin's `slack-web` skill documents the client-side Web API recipe for **thread-reply file attachments** (invisible to Slack's search/fetch layers): boot the app.slack.com client URL, read the session token from `localStorage.localConfig_v2`, call `conversations.replies` on the app.slack.com API host, and fetch `url_private_download` through the browser context's cookies. What changed in 0.22.0 (see [`../migrations/0.22.0.md`](../migrations/0.22.0.md)): the engineer persona (template `engineer.agent.md` rev 25, mirrored in `develop-project`) gains a **knowledge-routing rule** - durable knowledge that is a **trigger-shaped, occasionally-run multi-step procedure** (onboarding, data staging, capture/import/release/deploy flows; signals: numbered start-to-finish steps, a screen or more, own preconditions/verification/guardrails, stale on ordinary turns) is **proposed as a project-local skill** (`ai/<name>.skill.md`, modeled on `ai/init.skill.md`, with a one-line pointer left in the instructions) instead of being inlined into the every-turn `ai/engineer.instructions.md`; the skill is created **only after the user agrees** (ask-first for now), while facts, commands, gotchas, and conventions keep living in the instructions file. Content-only; no ai-pack schema change. What changed in 0.21.0 (see [`../migrations/0.21.0.md`](../migrations/0.21.0.md)): a new bundled plugin **`plugins/browserctl/`** makes browser automation **CLI-based**, replacing the Playwright MCP server as the standard browser layer (the `playwright` entry is removed from `mcp.json.example`; no MCP servers ship by default). Playwright stays the engine: `shared/browserctl.py` (PEP 723 inline deps, run via `uv run`) launches the Playwright-managed Chromium directly, one persistent profile per purpose on a stable CDP port - profiles are namespaced **per project** (id auto-derived from the nearest `ai/manifest.json`), created **clean** on first use or project init (`init`), and **ephemeral on demand** (`launch --ephemeral` / `--fresh` siblings, `stop` deletes, `prune` sweeps, `persist` / `remove` manage exceptions). CLI drive commands (`tabs`/`navigate`/`snapshot`/`screenshot`/`eval`) cover the common MCP tools and an `attach()` helper exposes the full Playwright-Python API over CDP; state lives under `~/.browserctl/`, machine-local and disposable. The plugin also carries `shared/slack-web.skill.md` - a use-case skill for operating the Slack web client through browserctl (scroll-and-snapshot capture of virtualized panes, thread handling, attachment downloads via the authenticated session, and guarded react/post write actions). Additive and opt-in per project; no ai-pack schema change. What changed in 0.20.2 (patch): rev markers are scoped to materialized masters only (templates/ai-pack, templates/workspace, plugin shared/) - stripped from README, AGENTS.md, the orchestrator file, skills, the 0.18.0 migration, the current spec, and the Python tools, where they were inert metadata that had already caused two parser bugs; the scope rule is codified in solaris.agent.md, the release skill, and the spec. What changed in 0.20.1 (patch): the ai-pack is now
 explicitly **standalone-first** - a shared/detached pack must work with no Solaris framework around it, so
 every `solaris.tools` / framework-path reference in the templates (and bundled plugin overlays) is either
@@ -76,7 +76,7 @@ natively, Claude Code via a one-line `CLAUDE.md` (`@AGENTS.md`) shim. Its own to
   solaris/                      # the framework (python package: solaris, solaris.tools)
     solaris.agent.md            # orchestrator role
     revisions.json              # rev + content-hash ledger for tracked framework files
-    spec/  skills/  rules/  migrations/  templates/  tools/  tests/
+    spec/  skills/  rules/  info/  migrations/  templates/  tools/  tests/  # info/: perishable reference data (model tiers, harness capabilities)
   plugins/                      # plugin sources (gitignored except .empty)
   .memory/                      # framework memory, gitignored except .empty (resources, credentials, interactions)
   projects/                     # user projects (gitignored)
@@ -124,9 +124,11 @@ projects/<slug>/
     engineer.instructions.md   # shareable build/run/test commands + conventions (no host/secret specifics)
     manifest.json               # project {name,slug,type,mode}, framework_version, plugins[], revisions{}
     spec.md
-    init.skill.md  refresh.skill.md  # project-skill stubs: one-time onboarding / update a teammate's checkout
+    defaults.json               # committed behavior defaults (flat keys, e.g. "subagents.level", "yagni.enabled")
+    rules/                      # always-on pack rules (rev-marked): subagents.rule.md  yagni.rule.md
+    skills/                     # trigger-invoked skills (rev-marked): init.skill.md  refresh.skill.md  + project-local
     .memory/                    # private/local layer (not for sharing): env-specific + sensitive bits
-      spec-v0.md  resources.md  credentials.md  context.md  interactions.jsonl
+      spec-v0.md  resources.md  credentials.md  context.md  interactions.jsonl  config.json
     <plugin>/                   # materialized plugin overlay(s): copies of each plugin's shared/ (rev-marked)
     <plugin>.link.md            # OR a linked plugin: self-describing pointer to the live plugins/<name>/ source
   source/                          # local mode: code (own .git) - the DEFAULT workspace | remote-code: replaced by remote.json
@@ -147,7 +149,7 @@ projects/<slug>/                # container (not a git repo)
     .gitignore  .secrets.env     # .gitignore excludes ai/.memory/ + .secrets.env
     AGENTS.md  CLAUDE.md  README.md
     ai/                          # the ai-pack, embedded in the repo
-      engineer.agent.md  engineer.instructions.md  spec.md  manifest.json  init.skill.md  refresh.skill.md  .memory/  <plugin>/
+      engineer.agent.md  engineer.instructions.md  spec.md  manifest.json  defaults.json  rules/  skills/  .memory/  <plugin>/
     ...                          # the repo's own code + files
 ```
 
@@ -333,16 +335,19 @@ Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
 - `mcp_sync` - detect/sync drift between `.mcp.json` and `.cursor/mcp.json`.
 - `log_interaction` - the fail-safe prompt-submit hook (not called by hand).
 - `read_first` - the fail-safe read-first loader hook (not called by hand): with no args it injects the
-  AGENTS.md read-first set at session start (Claude `SessionStart` / Cursor `sessionStart`); `--remind`
-  prints a one-line per-turn nudge (Claude `UserPromptSubmit` only); `--check` reports per-file sizes vs
-  the inline budget. On Claude the payload is packed into a 9.5KB inline budget (large hook stdout is
-  otherwise spilled to a barely-previewed file): rules first and whole, then truncated-with-marker /
-  pointer degradation, with pointer space reserved so the budget can never overflow; Cursor gets the full
-  unbudgeted set. IDE-aware output (Cursor JSON vs Claude plain stdout).
+  AGENTS.md read-first set at session start (Claude `SessionStart` / Cursor `sessionStart`) in **two
+  parts** - part 1 the core set (commit/safety/interaction rules, operating memory, orchestrator role),
+  `--part 2` the subagents + YAGNI rules - each wired as its own hook entry because Claude Code's
+  10,000-char inline threshold applies per hook call; `--remind` prints a one-line per-turn nudge
+  (Claude `UserPromptSubmit` only); `--check` reports per-file sizes and both parts' payloads vs the
+  budget. Per part the payload is packed into a 9.5KB inline budget (larger hook stdout is spilled to a
+  barely-previewed file): rules first and whole, then truncated-with-marker / pointer degradation, with
+  pointer space reserved so the budget can never overflow; Cursor gets the full unbudgeted set.
+  IDE-aware output (Cursor JSON vs Claude plain stdout).
 - `skill_loader` - the fail-safe prompt-submit skill auto-loader hook (not called by hand; Claude
   `UserPromptSubmit` only): matches the prompt against every skill's `triggers`/`antitriggers` and injects
   the full body of any match (once per session, then a one-line reminder). When the prompt or session cwd
-  targets a project, it also injects that project's **overlay index** - one line per `ai/*.rule.md`,
+  targets a project, it also injects that project's **overlay index** - one line per `ai/rules/*.rule.md`,
   `ai/<plugin>/*.rule.md`, and `ai/*.link.md` file, once per session per project (grouped, flat, and
   embedded layouts). Tolerates a leading `_Rev. N_`
   marker above the skill frontmatter, and skips synthetic turns (task notifications, command transcripts,
@@ -378,6 +383,21 @@ All have unit tests under `solaris/tests/` (`uv run pytest`).
   outward actions; show the command/diff first; never print or commit secrets. Long-running remote work
   adds three duties: first-iteration pace check, post-restart external-state re-verify, same-turn
   delete/stop verification.
+- **Subagents** (`rules/subagents.rule.md`; pack copy `ai/rules/subagents.rule.md`): delegate
+  self-contained work (sweeps, lookups, summaries, specified mechanical edits, verification passes) to
+  subagents by default, keeping the main context for orchestration and judgment. Level from
+  `"subagents.level"` in `.memory/config.json` (pack: `ai/defaults.json` overridden by
+  `ai/.memory/config.json`): `off` / `med` (default; one-up every tier) / `full` (cheapest viable tier);
+  `subagents: <level>` in a message overrides for that request only. Every delegated prompt carries the
+  5-point task contract (exact scope, procedure, return shape, boundaries, active modes restated).
+  Abstract tiers (cheap/mid/high/frontier) map to concrete models in `solaris/info/model-tiers.md`; a
+  harness with no subagent tool (`solaris/info/harnesses.md`) falls back to `off` behavior. Destructive,
+  remote-mutating, and outward actions never delegate.
+- **YAGNI mode** (`rules/yagni.rule.md`; pack copy `ai/rules/yagni.rule.md`): opt-in
+  (`"yagni.enabled"`, absent = off; `yagni: on|off` per request): deliver exactly what was asked in the
+  smallest coherent form; bans unrequested features/abstractions/files/refactors. Guardrails: YAGNI
+  shortens the solution, never the reading; trust-boundary input validation, data-loss handling,
+  security, and the commit/safety/interaction rules are never trimmed.
 - **Interaction + writing** (`rules/interaction.rule.md`, embedded as the template's Interaction Policy):
   a direct question gets its explicit answer in the reply's first line; requested word counts are honored;
   brevity by default; no consultant buzzwords; jargon explained with a ~10-15-word parenthetical.
