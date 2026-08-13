@@ -37,8 +37,8 @@
       ]
     },
     "shared/aisee.skill.md": {
-      "rev": 6,
-      "hash": "c40b4d0381b64e13f2ff2e66c2d64cde7b350651a3f338876e96282a7f526e0a",
+      "rev": 7,
+      "hash": "59b4b871f09e79ee3c75cbe8af3323fd486e42dad02a6c7aeff3ff99d4835fbc",
       "history": [
         {
           "rev": 1,
@@ -71,6 +71,10 @@
         {
           "rev": 6,
           "hash": "c40b4d0381b64e13f2ff2e66c2d64cde7b350651a3f338876e96282a7f526e0a"
+        },
+        {
+          "rev": 6,
+          "hash": "59b4b871f09e79ee3c75cbe8af3323fd486e42dad02a6c7aeff3ff99d4835fbc"
         }
       ]
     }
