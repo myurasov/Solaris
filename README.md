@@ -163,7 +163,8 @@ servers, optional project types - so any project can opt into it.
   the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill),
   `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing),
   `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous Brev
-  cloud-GPU run lifecycle).
+  cloud-GPU run lifecycle), `report` (findings-report authoring + zero-npm-dep PDF rendering
+  via installed Chrome; per-project theme: fonts, accent color, page furniture).
 
 ## 9. Keeping Solaris Projects Current
 
@@ -204,5 +205,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.25.0.md`](solaris/spec/spec-v0.25.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.26.0.md`](solaris/spec/spec-v0.26.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
