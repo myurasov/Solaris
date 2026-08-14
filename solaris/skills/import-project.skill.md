@@ -72,8 +72,10 @@ into the generic `engineer.instructions.md`.
   (`project.{name,slug,type,mode}`, `framework_version` from `version current`, `plugins`). Write the
   minimal project root (`AGENTS.md` + a one-line `CLAUDE.md` `@AGENTS.md` shim; no `.cursor/` / `mcp.json.example` / `.gitignore`),
   the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root `mcp.json.example`
-  plus any plugin servers), and the revisions baseline
-  (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
+  plus any plugin servers). Seed `ai/defaults.json` from
+  `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it),
+  materialize the tracked pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>`), and
+  record the revisions baseline (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
 
 ## 6. Ask on Ambiguity
 

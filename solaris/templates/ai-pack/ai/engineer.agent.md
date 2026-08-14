@@ -1,4 +1,4 @@
-_Rev. 33_
+_Rev. 35_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -29,7 +29,8 @@ this project is developed.
    the preserved initial spec.
 3. `ai/engineer.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
    this file; portable, no host/secret/internal-URL specifics).
-4. Every `ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode). Their behavior
+4. Every `ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode, git
+   collaboration). Their behavior
    switches read `ai/defaults.json` (committed team defaults, flat keys) overridden per key by
    `ai/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Perishable
    reference data the rules point at (model tiers, harness capabilities) lives in `ai/info/*.md` - read
@@ -202,9 +203,16 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
 - ASCII only; no emoji; no `--` (use `:`, `()`, or a sentence break); no backticks in the subject.
 - Never include AI-authorship attribution (no `Co-Authored-By:` an AI, no "Generated with", no "Made with").
 - Atomic: one logical change per commit; commit incrementally. Show proposed messages as a numbered list and
-  wait for confirmation; never push without confirmation. A durable "work autonomously until X" instruction
+  wait for confirmation (unless an always-on rule overrides this posture - see Developer branches
+  below); never push without confirmation. A durable "work autonomously until X" instruction
   or `commit!` waives the per-message confirmation. The same ASCII / no-`--` rules apply to code comments
   (keep them short and casual).
+- **Developer branches** (`ai/rules/git-collab.rule.md`; `"git.developer_branches"` on by default):
+  never commit on `main`/`develop` - switch to (or create) the personal `<id>-develop` branch first.
+  There, commits are automatic (format rules above, no per-message confirmation); pushes are NEVER
+  automatic - back-contribution happens only on an explicit "create a PR / publish / push upstream",
+  as a PR against `main`. Feature work branches `feature-<descr>` and merge-commits back per the
+  rule. Off = main-developer mode: work on `main` with the standard confirmation posture.
 - **Release notes** (GitHub releases and changelogs): cover the full tag-to-tag diff (`git log
   <prev-tag>..HEAD`), not just the latest session's work. Structured, ~200 words: a one-line focus
   statement, `##` sections grouping related changes, bold-led bullets; the migration/upgrade note (or

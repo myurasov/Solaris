@@ -3,7 +3,7 @@ name: refresh
 triggers: ["refresh", "refresh project", "update my checkout", "pull latest", "sync with upstream", "get the new version"]
 summary: Bring a team member's existing checkout of {{NAME}} up to date - pull from git, migrate the private layer and environment to any new layout/conventions, and report what changed.
 ---
-_Rev. 6_
+_Rev. 8_
 
 # Skill: refresh - Update and Migrate a Local Checkout <!-- omit in toc -->
 
@@ -24,7 +24,12 @@ pushes, and never touches private `ai/.memory/` content beyond layout migrations
 
 ## 2. Pull
 
-`git pull --ff-only` from the main remote. On failure (diverged history), diagnose before asking:
+When `"git.developer_branches"` is on (rule `ai/rules/git-collab.rule.md`) and the checkout
+works on a personal branch: `git fetch origin`, `git switch main` + `git pull --ff-only`, then
+`git switch` back to the personal branch and bring the changes over (`git merge main` by
+default; rebase only if the user prefers). Otherwise (main-developer mode, or already on
+`main`): `git pull --ff-only` from the main remote. On a pull failure (diverged history),
+diagnose before asking:
 
 - **Rewritten upstream (force-push)?** `git fetch`, then check `git rev-list --count origin/<branch>..HEAD`.
   If every local-only commit is the user's own work, stop and surface it. But when the local-only commits

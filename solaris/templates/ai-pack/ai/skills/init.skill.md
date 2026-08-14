@@ -3,7 +3,7 @@ name: init
 triggers: ["init project", "initialize the project", "initialize this project", "set up my environment", "onboard me", "getting started", "register resources"]
 summary: One-time onboarding for a fresh checkout of {{NAME}} - collect environment resources, verify reachability, write the private ai/.memory layer, and bring the environment up.
 ---
-_Rev. 4_
+_Rev. 6_
 
 # Skill: init - Environment Onboarding <!-- omit in toc -->
 
@@ -30,8 +30,20 @@ resources and setup steps, and delete what does not apply.)
 Ask only for what setup actually needs, in one batch; accept partial answers and record "TBD" rather than
 blocking. Do **not** ask for secrets here - collect each secret the first time a step needs it.
 
+Every resource question also offers **"skip - not needed yet"**: someone exploring the project (or
+working on a part that does not need that resource, e.g. no GPU host for CPU-only work on a GPU
+project) proceeds without it. Record a skip in `resources.md` as `none (skipped at init)` and name
+the workflows that stay unavailable until it is registered; re-running this skill later adds it.
+
 - (resource 1: e.g. a dev host - ask for the ssh alias only; probe capabilities yourself over ssh)
 - (resource 2: e.g. a service base URL)
+
+**Developer branch** (rule `ai/rules/git-collab.rule.md`): when `"git.developer_branches"` is on
+(the shipped default), resolve the developer's personal branch now per the rule's derivation
+chain (gh login only if `gh` is installed AND authenticated, else the `git config user.email`
+local-part, else the `user.name` slug; slugified, suffixed `-develop`), create/switch to it, and
+cache the full branch name as `"git.branch"` (plus `"git.branch_email"`) in
+`ai/.memory/config.json`.
 
 ## 3. Write the Private Layer
 

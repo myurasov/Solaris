@@ -213,3 +213,13 @@ def test_sh_js_css_markers_roundtrip():
     sh = R.set_rev("#!/bin/sh\necho hi\n", ".sh", 3)
     assert sh.splitlines()[0] == "#!/bin/sh"
     assert sh.splitlines()[1] == "# rev. 3"
+
+
+def test_template_defaults_carry_rule_switch_keys():
+    import json
+    from solaris.tools.revs import TEMPLATE_DIR
+    defaults = json.loads((TEMPLATE_DIR / "ai" / "defaults.json").read_text(encoding="utf-8"))
+    for key in ("subagents.level", "yagni.enabled", "git.developer_branches", "git.feature_branches"):
+        assert key in defaults, key
+    assert defaults["git.developer_branches"] is True
+    assert defaults["git.feature_branches"] is True
