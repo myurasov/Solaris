@@ -95,6 +95,48 @@ def test_classify_verdicts(tmp_path):
     assert rows["ai/myplug/gone.rule.md"] == "missing"
 
 
+def test_plugins_materialize_under_ai_plugins(tmp_path):
+    # 0.28.0+: plugin shared files live under ai/plugins/<name>/; a pack that still has the
+    # legacy ai/<name>/ dir (pre-migration) classifies against that until it is moved.
+    tpl = tmp_path / "tpl"
+    plugins = tmp_path / "plugins"
+    _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
+    _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
+    manifest = json.dumps({"plugins": [{"name": "myplug", "version": "0.1.0"}], "revisions": {}})
+
+    # fresh project (no plugin dir yet) -> new home, never the legacy one
+    fresh = tmp_path / "fresh"
+    (fresh / "ai").mkdir(parents=True)
+    (fresh / "ai" / "manifest.json").write_text(manifest, encoding="utf-8")
+    rels = {rel for _, _, rel in R.materialized_map(fresh, template_dir=tpl, plugins_dir=plugins)}
+    assert "ai/plugins/myplug/a.rule.md" in rels and "ai/myplug/a.rule.md" not in rels
+
+    # a plugin named like a pack-owned dir never treats ai/rules/ as its legacy overlay
+    _wmd(plugins / "rules" / "shared" / "r.rule.md", "# r\n\nrule\n", 1)
+    clash = tmp_path / "clash"
+    _wmd(clash / "ai" / "rules" / "pack.rule.md", "# pack\n\nrule\n", 1)
+    (clash / "ai" / "manifest.json").write_text(json.dumps({
+        "plugins": [{"name": "rules", "version": "0.1.0"}], "revisions": {}}), encoding="utf-8")
+    rels = {rel for _, _, rel in R.materialized_map(clash, template_dir=tpl, plugins_dir=plugins)}
+    assert "ai/plugins/rules/r.rule.md" in rels and "ai/rules/r.rule.md" not in rels
+
+    # legacy project (only ai/<name>/ exists) -> legacy home until migrated
+    legacy = tmp_path / "legacy"
+    _wmd(legacy / "ai" / "myplug" / "a.rule.md", "# a\n\nrule\n", 1)
+    (legacy / "ai" / "manifest.json").write_text(manifest, encoding="utf-8")
+    rels = {rel for _, _, rel in R.materialized_map(legacy, template_dir=tpl, plugins_dir=plugins)}
+    assert "ai/myplug/a.rule.md" in rels and "ai/plugins/myplug/a.rule.md" not in rels
+
+    # migrated project (both dirs somehow present) -> new home wins
+    both = tmp_path / "both"
+    _wmd(both / "ai" / "myplug" / "a.rule.md", "# a\n\nrule\n", 1)
+    _wmd(both / "ai" / "plugins" / "myplug" / "a.rule.md", "# a\n\nrule\n", 1)
+    (both / "ai" / "manifest.json").write_text(manifest, encoding="utf-8")
+    rels = {rel for _, _, rel in R.materialized_map(both, template_dir=tpl, plugins_dir=plugins)}
+    assert "ai/plugins/myplug/a.rule.md" in rels and "ai/myplug/a.rule.md" not in rels
+
+
 def test_fast_forward_and_baseline(tmp_path):
     tpl = tmp_path / "tpl"
     plugins = tmp_path / "plugins"

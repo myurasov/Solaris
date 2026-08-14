@@ -57,14 +57,14 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.27.0.md`](solaris/spec/spec-v0.27.0.md).
+Full specification: [`solaris/spec/spec-v0.28.0.md`](solaris/spec/spec-v0.28.0.md).
 
 ## Execution Model
 
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
+- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 
@@ -87,7 +87,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 
-When a project has plugins attached, also load and obey every `ai/<plugin>/*.rule.md` (always-on) and treat each `ai/<plugin>/*.skill.md` as an additional, trigger-invoked skill. A plugin attached in **link mode** has a self-describing pointer file `ai/<name>.link.md` instead of `ai/<name>/` - follow it (canonical definition: `install-plugin` step 5).
+When a project has plugins attached, also load and obey every `ai/plugins/<plugin>/*.rule.md` (always-on) and treat each `ai/plugins/<plugin>/*.skill.md` as an additional, trigger-invoked skill (`ai/plugins/` is the pack-side home for plugin shared files). A plugin attached in **link mode** has a self-describing pointer file `ai/plugins/<name>.link.md` instead of `ai/plugins/<name>/` - follow it (canonical definition: `install-plugin` step 5).
 
 ## Memory + Logging
 
@@ -100,4 +100,4 @@ Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignore
 ## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions vs release-only semver) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.27.0.md`](solaris/spec/spec-v0.27.0.md).
+- Versioning (per-file revisions vs release-only semver) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.28.0.md`](solaris/spec/spec-v0.28.0.md).

@@ -294,9 +294,19 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             name = entry.get("name") if isinstance(entry, dict) else entry
             plugin_root = plugins_dir / name
             if (plugin_root / "shared").is_dir():
+                # Plugins materialize under ai/plugins/<name>/ (0.28.0+); a pre-migration pack that
+                # still has the legacy ai/<name>/ dir classifies against that until it is migrated.
+                # Pack-owned dir names never count as a legacy overlay (a plugin named "rules" etc.
+                # would otherwise collide with the pack's own ai/rules/).
+                base = f"ai/plugins/{name}"
+                if (not (project_dir / base).is_dir()
+                        and name not in ("rules", "skills", "info", "plugins", ".memory")
+                        and (project_dir / "ai" / name).is_dir()):
+                    base = f"ai/{name}"
                 for f in iter_plugin_shared(plugin_root):
                     sub = f.relative_to(plugin_root / "shared")
-                    pairs.append((f, project_dir / "ai" / name / sub, f"ai/{name}/{sub}"))
+                    rel = f"{base}/{sub}"
+                    pairs.append((f, project_dir / rel, rel))
     return pairs
 
 

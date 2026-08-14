@@ -39,8 +39,8 @@
       ]
     },
     "shared/browserctl.skill.md": {
-      "rev": 9,
-      "hash": "e7f897068f0ea42415912dd785b1d6bd87aced1d373f23f120f8ffca6a51ae07",
+      "rev": 10,
+      "hash": "73cf079a9c4ccdb6f0c1d68ece61dddc3929af58a2e0ff9e9109bb2a9985f3cf",
       "history": [
         {
           "rev": 1,
@@ -77,6 +77,10 @@
         {
           "rev": 9,
           "hash": "e7f897068f0ea42415912dd785b1d6bd87aced1d373f23f120f8ffca6a51ae07"
+        },
+        {
+          "rev": 10,
+          "hash": "73cf079a9c4ccdb6f0c1d68ece61dddc3929af58a2e0ff9e9109bb2a9985f3cf"
         }
       ]
     },

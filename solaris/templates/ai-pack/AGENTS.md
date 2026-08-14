@@ -1,4 +1,4 @@
-_Rev. 15_
+_Rev. 16_
 
 <!-- Minimal pointer. Edit ai/engineer.agent.md, not this file. -->
 
@@ -13,8 +13,8 @@ On every turn, load and follow:
 3. Every `ai/rules/*.rule.md` (always-on pack rules; switches read `ai/defaults.json`, overridden per key
    by the private `ai/.memory/config.json`; perishable reference data they point at lives in
    `ai/info/*.md`) and every `ai/skills/*.skill.md` (trigger-invoked).
-4. Every plugin overlay: each `ai/<plugin>/*.rule.md` (always-on) and `ai/<plugin>/*.skill.md`
-   (trigger-invoked). Follow every `ai/<name>.link.md` (a linked plugin - the file describes itself).
+4. Every plugin overlay: each `ai/plugins/<plugin>/*.rule.md` (always-on) and `ai/plugins/<plugin>/*.skill.md`
+   (trigger-invoked). Follow every `ai/plugins/<name>.link.md` (a linked plugin - the file describes itself).
 5. `source/AGENTS.md` if present (local mode) as gap-filling project rules - the ai-pack strictly
    overrides it (and any other in-repo conventions) on conflict; in remote-code mode the code lives at the host
    in `remote.json`; in embedded mode the code is this same repo (this `ai/` is a subdir, no separate `source/`).

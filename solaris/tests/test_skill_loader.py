@@ -172,11 +172,14 @@ def _mk_project(tmp_path, rel, embedded_repo=None):
     """Scaffold a fake project under tmp_path/projects/<rel> and return the repo root."""
     root = tmp_path / "projects" / rel
     pack = root / embedded_repo if embedded_repo else root
-    (pack / "ai" / "plug").mkdir(parents=True)
+    (pack / "ai" / "plug").mkdir(parents=True)  # legacy pre-0.28 overlay location
+    (pack / "ai" / "plugins" / "newplug").mkdir(parents=True)
     (pack / "ai" / "manifest.json").write_text("{}", encoding="utf-8")
     (pack / "ai" / "canary.rule.md").write_text("# rule", encoding="utf-8")
     (pack / "ai" / "plug" / "x.rule.md").write_text("# rule", encoding="utf-8")
     (pack / "ai" / "other.link.md").write_text("# link", encoding="utf-8")
+    (pack / "ai" / "plugins" / "newplug" / "y.rule.md").write_text("# rule", encoding="utf-8")
+    (pack / "ai" / "plugins" / "linked.link.md").write_text("# link", encoding="utf-8")
     return tmp_path
 
 
@@ -206,7 +209,11 @@ def test_render_overlays_lists_files_once_per_session(tmp_path):
     text, fresh = S.render_overlays(roots, set(), repo)
     assert "projects/nv/proj" in text
     assert "ai/canary.rule.md" in text and "ai/plug/x.rule.md" in text
+    assert "ai/plugins/newplug/y.rule.md" in text
     assert "ai/other.link.md" in text and "linked plugin" in text
+    # the linked-plugin label attaches to link files in the new home too
+    linked_line = next(l for l in text.splitlines() if "ai/plugins/linked.link.md" in l)
+    assert "linked plugin" in linked_line
     assert fresh == ["overlay:projects/nv/proj"]
     text2, fresh2 = S.render_overlays(roots, set(fresh), repo)
     assert text2 == "" and fresh2 == []

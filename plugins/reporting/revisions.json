@@ -35,18 +35,22 @@
       ]
     },
     "shared/assets/style.css": {
-      "rev": 1,
-      "hash": "c09b1affc143fd28f17493c02ed58f67cf8a0b1bdfd08a71d9640230768d91fa",
+      "rev": 2,
+      "hash": "af1d0d7e034f795a46db704ba34cc63cf773df80ea29a4e12db4d88ce8cf06e9",
       "history": [
         {
           "rev": 1,
           "hash": "c09b1affc143fd28f17493c02ed58f67cf8a0b1bdfd08a71d9640230768d91fa"
+        },
+        {
+          "rev": 2,
+          "hash": "af1d0d7e034f795a46db704ba34cc63cf773df80ea29a4e12db4d88ce8cf06e9"
         }
       ]
     },
     "shared/report.skill.md": {
-      "rev": 3,
-      "hash": "382f62f92dd5f96c2bb640b2ba2b535c914dcb387097d4b5485449f2e491e1af",
+      "rev": 4,
+      "hash": "fade6dc699c6b3f4fbe614e74982fae7d2f12e89d35b6a8b1820de6e1fa7a6d6",
       "history": [
         {
           "rev": 1,
@@ -59,6 +63,10 @@
         {
           "rev": 3,
           "hash": "382f62f92dd5f96c2bb640b2ba2b535c914dcb387097d4b5485449f2e491e1af"
+        },
+        {
+          "rev": 4,
+          "hash": "fade6dc699c6b3f4fbe614e74982fae7d2f12e89d35b6a8b1820de6e1fa7a6d6"
         }
       ]
     }

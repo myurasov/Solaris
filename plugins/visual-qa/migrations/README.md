@@ -1,6 +1,6 @@
 # visual-qa migrations
 
-Plugin-scoped migrations adapt the materialized copy (`projects/<slug>/ai/visual-qa/`) when this plugin's
+Plugin-scoped migrations adapt the materialized copy (`projects/<slug>/ai/plugins/visual-qa/`; pre-0.28 packs: `ai/visual-qa/`) when this plugin's
 `version` (in `../manifest.json`) advances. Same shape as framework migrations: one `<to_version>.md` per
 target version with frontmatter; no registry file. Applied via `install-plugin` (migrate), driven by
 `update-project`.

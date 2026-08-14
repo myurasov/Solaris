@@ -11,7 +11,7 @@ antitriggers:
   - "work on tasks/"
 summary: Capture the running UI (web / native / mobile), then have the VLM 'eyes' answer or assert against it - the visual leg of verification.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # visual-qa <!-- omit in toc -->
 
@@ -53,12 +53,12 @@ the quant: Blackwell -> NVFP4, Hopper/Ada -> FP8, Ampere/older -> AWQ int4), and
 
 Procedure:
 
-1. **Detect the GPU.** Locally: `uv run --no-project ai/visual-qa/eyes.py detect`. On a remote host, run
+1. **Detect the GPU.** Locally: `uv run --no-project ai/plugins/visual-qa/eyes.py detect`. On a remote host, run
    `nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits` there (via the `hss` wrapper)
    and read off the name + MiB. Unified-memory parts (e.g. GB10) report memory as `N/A` - use the usable
    budget instead (the Spark is ~110 GB).
 2. **Get ranked options** for the detected `vram`/`arch` and the task:
-   `uv run --no-project ai/visual-qa/eyes.py recommend --vram <GB> --arch <arch> --task <task>`
+   `uv run --no-project ai/plugins/visual-qa/eyes.py recommend --vram <GB> --arch <arch> --task <task>`
    (or `--detect` to read the local GPU). It returns a ranked shortlist with estimated VRAM, the quant,
    serving backend, and license. The catalog is editable data in [`models.json`](models.json).
 3. **Ask the user to choose.** Present the top few options (name, size, est. VRAM, why) and let them pick -
@@ -92,10 +92,10 @@ Call the **`visual-qa` MCP** tools (or run `eyes.py` directly via Bash):
 CLI equivalents (for scripting / health checks):
 
 ```
-uv run --no-project ai/visual-qa/eyes.py health
-uv run --no-project ai/visual-qa/eyes.py look   --media shot.png  --q "what's on screen?"
-uv run --no-project ai/visual-qa/eyes.py assert --media shot.png  --expect "login form with email + password"
-uv run --no-project ai/visual-qa/eyes.py assert --media flow.mov --frames 8 --video --expect "checkout completes and a success toast appears"
+uv run --no-project ai/plugins/visual-qa/eyes.py health
+uv run --no-project ai/plugins/visual-qa/eyes.py look   --media shot.png  --q "what's on screen?"
+uv run --no-project ai/plugins/visual-qa/eyes.py assert --media shot.png  --expect "login form with email + password"
+uv run --no-project ai/plugins/visual-qa/eyes.py assert --media flow.mov --frames 8 --video --expect "checkout completes and a success toast appears"
 ```
 
 `--media` accepts an image, multiple images (repeat the flag), or a video (`--video`, sampled to `--frames`
@@ -125,8 +125,8 @@ call count: chunks ≈ duration × fps / server_frames). In assert mode `watch` 
 synthesized, time-cited summary. `--scale <height>` downscales frames to cut latency.
 
 ```
-uv run --no-project ai/visual-qa/eyes.py watch --media run.mp4 --fps 1  --q "when does the scene load?"
-uv run --no-project ai/visual-qa/eyes.py watch --media run.mp4 --fps 15 --expect "no black or corrupted frames"
+uv run --no-project ai/plugins/visual-qa/eyes.py watch --media run.mp4 --fps 1  --q "when does the scene load?"
+uv run --no-project ai/plugins/visual-qa/eyes.py watch --media run.mp4 --fps 15 --expect "no black or corrupted frames"
 ```
 
 MCP: `watch_tool(media, question|expectation, fps, ...)`; `look`/`assert` also accept `fps`/`native`.

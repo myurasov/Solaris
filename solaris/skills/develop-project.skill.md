@@ -39,8 +39,8 @@ Read, in this order, and then obey them:
    perishable reference data they point at (model tiers, harness capabilities) lives in `ai/info/*.md` -
    read the pointed-at file, never substitute memory. Treat each `ai/skills/*.skill.md` as
    trigger-invoked.
-5. Every `projects/<slug>/ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
-   `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked**
+5. Every `projects/<slug>/ai/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
+   `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/plugins/<name>.link.md` (a **linked**
    plugin - see `install-plugin` step 5): load the plugin's `shared/` rules and skills from the path it
    names, the same way.
 6. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules

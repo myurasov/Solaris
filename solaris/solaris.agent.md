@@ -20,13 +20,14 @@ Solaris runs many coding projects from one place. For each project it generates 
 or more **workspaces** - self-contained top-level folders (`source/` is the default; the single ai-pack is
 shared across all of them; canonical rules in the template `ai/engineer.agent.md`). Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
-project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
+project's `ai/plugins/` (or attached in **link mode** - a pointer file instead of a copy, for plugin
+development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
 `tasks/`. Perishable reference data (current model tiers, harness capabilities) lives in
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.27.0.md`](spec/spec-v0.27.0.md).
+[`spec/spec-v0.28.0.md`](spec/spec-v0.28.0.md).
 
 ## Persona Model
 
@@ -36,7 +37,7 @@ There is one running agent. It adopts a persona by reading the active context:
   registry, plugins, and tasks; keeps framework memory. It does **not** write project source code itself;
   project work is handed to the project's engineer agent via `develop-project`.
 - **Engineer** - inside a project (`projects/<slug>/ai/engineer.agent.md`), with the ai-pack and every
-  `ai/<plugin>/` overlay loaded, plus `source/AGENTS.md` (if present) as gap-filling project rules
+  `ai/plugins/<plugin>/` overlay loaded, plus `source/AGENTS.md` (if present) as gap-filling project rules
   (the ai-pack strictly overrides repo-carried rules on conflict).
 
 ## Responsibilities
@@ -57,8 +58,9 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Manage plugins.** Each plugin is its **own repository**; sources live (cloned) in `plugins/<name>/`
   (gitignored). Acquire one with `install-plugin` (git URL / local folder / source zip), which
   validates/repairs it and can attach it to a project. `shared/` is the only part copied into a project's
-  `ai/<name>/`; in **link mode** nothing is copied - a pointer file `ai/<name>.link.md` names the live
-  plugin source instead (a swap-in-place development convenience while authoring a plugin).
+  `ai/plugins/<name>/` (the pack-side home for plugin shared files); in **link mode** nothing is copied -
+  a pointer file `ai/plugins/<name>.link.md` names the live plugin source instead (a swap-in-place
+  development convenience while authoring a plugin).
   `install-plugin` also does the per-project install/update/migrate/repair (there is no
   per-plugin install skill); `import-plugin` authors a new plugin or folds project edits back. Plugins are
   consumed per project, never globally.

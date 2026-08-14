@@ -155,8 +155,8 @@ A *plugin* packages a domain or employer workflow - always-on rules, trigger-inv
 servers, optional project types - so any project can opt into it.
 
 - **Attach one:** *"install plugin `<git url | folder | zip>`"*, then *"add plugin `<name>` to
-  `<project>`"*. Its `shared/` files are copied into the project's `ai/<name>/` and its MCP servers
-  merged. While developing a plugin, use **link mode** (*"link plugin `<name>` to `<project>`"*) -
+  `<project>`"*. Its `shared/` files are copied into the project's `ai/plugins/<name>/` and its MCP
+  servers merged. While developing a plugin, use **link mode** (*"link plugin `<name>` to `<project>`"*) -
   a pointer to the live source instead of a copy.
 - **Author one:** *"make a plugin from `<project>`"* factors that project's ways of working into a
   reusable plugin; the same skill folds later project-local edits back into the plugin source.
@@ -164,7 +164,7 @@ servers, optional project types - so any project can opt into it.
   the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill),
   `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing),
   `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous Brev
-  cloud-GPU run lifecycle), `report` (findings-report authoring + zero-npm-dep PDF rendering
+  cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF rendering
   via installed Chrome; per-project theme: fonts, accent color, page furniture).
 
 ## 9. Keeping Solaris Projects Current
@@ -206,5 +206,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.27.0.md`](solaris/spec/spec-v0.27.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.28.0.md`](solaris/spec/spec-v0.28.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.

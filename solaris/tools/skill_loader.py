@@ -27,7 +27,8 @@ requesting them, and the harness fires this hook on them too.
 
 The hook also injects **project overlay indexes**: when the prompt (or session cwd) targets a project
 under ``projects/``, it emits a one-line-per-file index of that project's always-on overlay files
-(``ai/rules/*.rule.md``, ``ai/<plugin>/*.rule.md``, ``ai/*.link.md``) once per session per project, so overlay
+(``ai/rules/*.rule.md``, ``ai/plugins/<plugin>/*.rule.md``, ``ai/plugins/*.link.md`` - plus the legacy
+pre-0.28 locations ``ai/<plugin>/*.rule.md`` / ``ai/*.link.md``) once per session per project, so overlay
 compliance does not depend on the agent walking the project's AGENTS.md by hand.
 
 Output is IDE-aware (Cursor JSON ``additional_context`` vs plain stdout), but injection is effectively
@@ -207,8 +208,8 @@ def match_skills(prompt: str, skills: list) -> list:
 
 # --- Project overlay injection -------------------------------------------------------------------
 #
-# Always-on project rules (ai/rules/*.rule.md, ai/<plugin>/*.rule.md) and linked-plugin pointers
-# (ai/<name>.link.md) reach the agent only if it walks the project's AGENTS.md by hand - the exact
+# Always-on project rules (ai/rules/*.rule.md, ai/plugins/<plugin>/*.rule.md) and linked-plugin pointers
+# (ai/plugins/<name>.link.md) reach the agent only if it walks the project's AGENTS.md by hand - the exact
 # step that gets skipped (agent-bench 2026-08-08: an overlay canary rule was missed by default).
 # So when a prompt (or the session cwd) targets a project, name that project's overlay files
 # explicitly - names only, one line each, to stay far from any inline-size limit; full bodies are
@@ -266,8 +267,10 @@ def overlay_files(project_root: Path) -> list:
     out = []
     try:
         out += ai.glob("*.rule.md")
-        out += ai.glob("*/*.rule.md")
-        out += ai.glob("*.link.md")
+        out += ai.glob("*/*.rule.md")  # ai/rules/ + legacy pre-0.28 ai/<plugin>/ overlays
+        out += ai.glob("plugins/*/*.rule.md")
+        out += ai.glob("*.link.md")  # legacy pre-0.28 link-file location
+        out += ai.glob("plugins/*.link.md")
     except Exception:
         return []
     return sorted(str(p.relative_to(project_root)) for p in out)

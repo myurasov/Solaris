@@ -9,7 +9,7 @@ summary: Author and render a project findings report - HTML source in
   merged with poppler pdfunite). Styling/rendering tooling is this plugin's assets/;
   theme and page furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
@@ -40,7 +40,7 @@ is a render artifact of that HTML, never hand-edited.
   shared stylesheet and the project theme:
 
   ```html
-  <link rel="stylesheet" href="../../ai/report/assets/style.css">
+  <link rel="stylesheet" href="../../ai/plugins/reporting/assets/style.css">
   <link rel="stylesheet" href="../theme.css">
   ```
 
@@ -54,9 +54,9 @@ is a render artifact of that HTML, never hand-edited.
 
 ## Source of Truth + Theming
 
-The styling + rendering tooling is materialized from the `report` plugin into
-`ai/report/assets/`; the plugin masters (`plugins/report/shared/assets/` under a Solaris
-checkout) are the editing source of truth. Standalone, edit the materialized copies and
+The styling + rendering tooling is materialized from the `reporting` plugin into
+`ai/plugins/reporting/assets/`; the plugin masters (`plugins/reporting/shared/assets/`
+under a Solaris checkout) are the editing source of truth. Standalone, edit the materialized copies and
 they fold back on the next plugin update (import-plugin Mode A picks up the higher revs).
 
 | File | What it is |
@@ -144,10 +144,10 @@ dataviz palette; the accent color is decorative only, never a data encoding.
 ## Rendering the PDF
 
 ```bash
-ai/report/assets/render.sh <MMDD>-<slug>       # render one (no arg: render all)
-ai/report/assets/render.sh --live [slug ...]   # watch sources and re-render on save
+ai/plugins/reporting/assets/render.sh <MMDD>-<slug>       # render one (no arg: render all)
+ai/plugins/reporting/assets/render.sh --live [slug ...]   # watch sources and re-render on save
 # or directly:
-node ai/report/assets/render.js reports/html/<slug>.html reports/<slug>.pdf [--watermark "TEXT"]
+node ai/plugins/reporting/assets/render.js reports/html/<slug>.html reports/<slug>.pdf [--watermark "TEXT"]
 ```
 
 Chrome cannot vary headers per page, so the script renders page 1 and pages 2+ as two

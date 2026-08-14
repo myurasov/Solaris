@@ -54,7 +54,7 @@ placeholder-ize every hit:
 A shared ai-pack must behave with **only** the shipped folder present - no Solaris root, hooks, or
 framework memory around it:
 
-- Any **linked** plugin (`ai/<name>.link.md`) cannot resolve outside - convert to a copy install first
+- Any **linked** plugin (`ai/plugins/<name>.link.md`) cannot resolve outside - convert to a copy install first
   (`install-plugin`, link -> copy).
 - `AGENTS.md` / `ai/` contain no reference that must **resolve** outside the project root (no live
   `solaris/...`, `plugins/...`, framework-`.memory/...` paths; the template's conditional "when working

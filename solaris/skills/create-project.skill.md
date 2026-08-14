@@ -91,7 +91,7 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
 ## 5. Attach Plugins
 
 For each chosen plugin (including any implied by a plugin-provided type), run `install-plugin` (install):
-it copies the plugin's `shared/` into `ai/<name>/`, merges its `mcps.json` servers into the project runtime
+it copies the plugin's `shared/` into `ai/plugins/<name>/`, merges its `mcps.json` servers into the project runtime
 MCP (step 7), runs the plugin's `setup` from `manifest.json` (prompts for resources -> `ai/.memory/`), and
 records `{name, version}` in `ai/manifest.json` -> `plugins`.
 

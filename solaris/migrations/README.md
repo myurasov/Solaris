@@ -41,7 +41,9 @@ can be reintroduced later if it grows.
 - One file per `to_version`; the skill applies them one at a time (chained).
 - Idempotent: re-running over an already-migrated ai-pack is a no-op.
 - Revertible by default; mark `revertible: false` only for genuinely irreversible changes.
-- Migrations modify `ai/` only (excluding `ai/<plugin>/`, which each plugin's own `migrations/` owns).
+- Migrations modify `ai/` only. Plugin overlay contents (`ai/plugins/<name>/`, legacy pre-0.28
+  `ai/<name>/`) are owned by each plugin's own `migrations/` - a framework migration may relocate a
+  whole overlay dir (as 0.28.0 does) but never edits the files inside it.
 - `touches:` lists every path the migration writes/creates/deletes.
 
 The first migration is [`0.2.0.md`](0.2.0.md) (0.1.0 -> 0.2.0).

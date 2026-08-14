@@ -22,8 +22,9 @@ Author guide:
 - Mark revertible: false ONLY for genuinely irreversible changes (data loss).
 - List every ai-pack path the migration writes/creates/deletes in `touches`.
 - Helper scripts (optional) live under solaris/migrations/<to_version>/ and run via `uv run`.
-- Migrations modify projects/<slug>/ai/ only - never the project's source/ code, and never ai/<plugin>/
-  (each plugin migrates itself via its own migrations/).
+- Migrations modify projects/<slug>/ai/ only - never the project's source/ code. Plugin overlay
+  contents (ai/plugins/<name>/) are each plugin's own to migrate (via its migrations/): a framework
+  migration may relocate a whole overlay dir but never edits the files inside it.
 -->
 
 ## Summary

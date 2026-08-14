@@ -20,7 +20,7 @@ any NVIDIA GPU (DGX Spark, workstation RTX, datacenter, cloud).
 ## What this is
 
 - **Client** — [`shared/eyes.py`](shared/eyes.py): zero-dependency HTTP client (PEP 723 script), usable as
-  a CLI or as an **MCP stdio server**. Materialized into each project at `ai/visual-qa/eyes.py`.
+  a CLI or as an **MCP stdio server**. Materialized into each project at `ai/plugins/visual-qa/eyes.py`.
 - **Instance registry** — `ai/.memory/visual-qa-endpoints.json` (project private layer): the installed
   serving instances. **One ACTIVE instance at a time**; every call routes to it unless `--model` overrides.
 - **Serving** — [`serving/`](serving/): lifecycle scripts that run models as memory-capped docker/vLLM
@@ -46,7 +46,7 @@ Instance names are **slugs of the model name** (org prefix dropped): `Qwen/Qwen3
 ## MCP API
 
 `mcps.json` registers the stdio server in each project (merged into `.mcp.json` at plugin install):
-`uv run --no-project ai/visual-qa/eyes.py mcp`, env `VISUAL_QA_*` as fallback when no registry exists.
+`uv run --no-project ai/plugins/visual-qa/eyes.py mcp`, env `VISUAL_QA_*` as fallback when no registry exists.
 
 | Tool | Parameters (defaults) | Returns |
 |---|---|---|
@@ -70,7 +70,7 @@ Semantics:
 ## CLI quick reference
 
 ```bash
-E=ai/visual-qa/eyes.py                      # in a project; add VISUAL_QA_TIMEOUT=300 for 32B-class models
+E=ai/plugins/visual-qa/eyes.py                      # in a project; add VISUAL_QA_TIMEOUT=300 for 32B-class models
 uv run --no-project $E health               # all instances + which is active
 uv run --no-project $E use cosmos-reason2-8b       # switch the ACTIVE instance (persists)
 uv run --no-project $E pick --task ui-video        # advisory recommendation only
@@ -173,7 +173,7 @@ and `res/report-5-*` (Holo + system/browser scenarios).
 |---|---|
 | `manifest.json` | plugin manifest (`setup` consumed by install-plugin) |
 | `mcps.json` | MCP servers merged into the project (`visual-qa`, `playwright`) |
-| `shared/eyes.py` | the client (CLI + MCP); materialized to `ai/visual-qa/` |
+| `shared/eyes.py` | the client (CLI + MCP); materialized to `ai/plugins/visual-qa/` |
 | `shared/visual-qa.skill.md` / `.rule.md` | skill (trigger-invoked) + always-on conventions |
 | `shared/models.json` | model catalog for the recommender |
 | `serving/*.sh` | instance lifecycle on the GPU host |

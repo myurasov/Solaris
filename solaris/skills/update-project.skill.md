@@ -40,7 +40,7 @@ good step and surface its Revert.
 
 ## 3. Update Plugins
 
-Step 1's revisions sync already reconciled each `ai/<plugin>/`. Additionally, for any plugin with a
+Step 1's revisions sync already reconciled each `ai/plugins/<plugin>/`. Additionally, for any plugin with a
 minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to apply
 `plugins/<name>/migrations/` and record the new plugin version in `ai/manifest.json`.
 

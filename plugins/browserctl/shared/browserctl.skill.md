@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -16,7 +16,7 @@ _Rev. 9_
 
 ## Why This Exists
 
-`browserctl.py` (in this plugin's overlay - `ai/browserctl/` in the project, or the plugin's
+`browserctl.py` (in this plugin's overlay - `ai/plugins/browserctl/` in the project, or the plugin's
 `shared/` when linked) **replaces the Playwright MCP** as the project's browser layer. Playwright
 remains the engine: browserctl launches the Playwright-managed Chromium directly, one persistent
 profile per purpose, each on a stable CDP port. Any client attaches over CDP, so several flows
@@ -30,7 +30,7 @@ where this skill was loaded from:
 
 ```bash
 # copy install (the usual case) - from the project root:
-uv run ai/browserctl/browserctl.py <cmd> ...
+uv run ai/plugins/browserctl/browserctl.py <cmd> ...
 # link install (plugin development) - from the Solaris root:
 uv run plugins/browserctl/shared/browserctl.py <cmd> ...
 ```
@@ -119,7 +119,7 @@ selectors), write a short Python script against the same live browser - full Pla
 
 ```python
 import importlib.util
-spec = importlib.util.spec_from_file_location("browserctl", "ai/browserctl/browserctl.py")  # or the absolute path; same resolution as the CLI above
+spec = importlib.util.spec_from_file_location("browserctl", "ai/plugins/browserctl/browserctl.py")  # or the absolute path; same resolution as the CLI above
 bctl = importlib.util.module_from_spec(spec); spec.loader.exec_module(bctl)
 
 with bctl.attach("default") as (pw, browser):

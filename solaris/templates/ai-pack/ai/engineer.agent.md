@@ -1,4 +1,4 @@
-_Rev. 35_
+_Rev. 36_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -40,8 +40,8 @@ this project is developed.
 5. `ai/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
    APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the session-context summary -
    read it first for prior context).
-6. Every `ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
-   trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked** plugin, attached in link mode
+6. Every `ai/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
+   trigger-invoked skill. Follow every `ai/plugins/<name>.link.md` (a **linked** plugin, attached in link mode
    without a copy): load the plugin's `shared/` rules and skills from the path it names, the same way -
    but only edit those files when deliberately developing the plugin (they are the live source for every
    consumer).
