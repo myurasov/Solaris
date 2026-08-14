@@ -76,6 +76,9 @@ into the generic `engineer.instructions.md`.
   `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it),
   materialize the tracked pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>`), and
   record the revisions baseline (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
+- Seed the project's own version (root `.version` file): adopt the highest existing semver `v*` git tag
+  if the imported repo has them; else `1.0.0` if it has already shipped to users/partners (ask when
+  unclear), else `0.1.0`. `uv run -m solaris.tools.version project-set --dir projects/<slug> <X.Y.Z>`.
 
 ## 6. Ask on Ambiguity
 

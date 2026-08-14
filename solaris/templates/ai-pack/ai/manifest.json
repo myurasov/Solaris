@@ -1,6 +1,6 @@
 {
-  "_rev": 2,
-  "_comment": "Solaris project manifest. Versions live here (no .version files). Standalone collaborators: you may edit project.workspaces and plugins[]; the revisions map is Solaris sync metadata - leave it as-is (merge conflicts in it: take either side). No host/deploy/secret specifics - those live in ai/.memory/. plugins[] entries are {name, version} for copied plugins, {name, \"mode\": \"link\"} (no version - always live) for linked ones.",
+  "_rev": 3,
+  "_comment": "Solaris project manifest. Framework + plugin versions live here; the project's own semver lives in the root .version file. Standalone collaborators: you may edit project.workspaces and plugins[]; the revisions map is Solaris sync metadata - leave it as-is (merge conflicts in it: take either side). No host/deploy/secret specifics - those live in ai/.memory/. plugins[] entries are {name, version} for copied plugins, {name, \"mode\": \"link\"} (no version - always live) for linked ones.",
   "schema_version": 1,
   "project": {
     "name": "{{NAME}}",

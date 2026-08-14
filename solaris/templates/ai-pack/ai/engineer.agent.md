@@ -1,4 +1,4 @@
-_Rev. 36_
+_Rev. 38_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -10,6 +10,7 @@ _Rev. 36_
 - [Workspaces](#workspaces)
 - [Memory](#memory)
 - [Authoring ai Files (Diff-Friendly)](#authoring-ai-files-diff-friendly)
+- [Project Version](#project-version)
 - [Commit Policy](#commit-policy)
 - [Safety Policy](#safety-policy)
 - [Interaction Policy](#interaction-policy)
@@ -196,6 +197,24 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
   sync. Same for `_Rev. N_` markers: keep whichever survives the merge, never hand-craft one. For
   committed append-only `*.jsonl` logs, add `*.jsonl merge=union` to the repo's `.gitattributes` so
   parallel appends merge cleanly.
+
+## Project Version
+
+- The project's own semver lives in a plain-text `.version` file at the project root (embedded mode: the
+  repo root) - independent of `ai/manifest.json`'s `framework_version`, plugin versions, and `_Rev.` sync
+  markers. Under a Solaris checkout, `uv run -m solaris.tools.version project|project-set|project-bump
+  --dir <project>` reads/writes it; standalone, edit the file directly (bare `MAJOR.MINOR.PATCH`).
+- **Propose, never bump silently.** When a milestone completes (experiment accepted, phase done, first
+  delivery to a partner), suggest a bump with the level and a one-line why, and wait for confirmation.
+  An explicit "bump/release the project" request always works. If `.version` is missing (pack predates
+  it), offer to seed it: adopt the repo's highest semver `v*` tag if it has any, else `1.0.0` when the
+  project has already shipped to others, else `0.1.0`. A seed gets the same commit-and-tag treatment as
+  a bump (below); a version adopted from an existing tag is not re-tagged.
+- On an approved bump or seed: write `.version` and, **when a git repo tracks the project root**
+  (embedded packs always; some local-mode layouts keep the repo only in `source/`, and remote-code
+  packs have no local repo - there the file change is the whole record, no commit or tag), commit it
+  single-line (e.g. "Release 1.2.0") and create a local tag `v<X.Y.Z>` on that commit. Pushing the tag
+  is an outward action - the Safety Policy's confirm-first rule applies; never push tags automatically.
 
 ## Commit Policy
 

@@ -6,7 +6,9 @@
 The framework version is the single source of truth in ``pyproject.toml`` (``[project].version``). An
 ai-pack records the framework version it was written/updated at in ``<project>/ai/manifest.json``
 (``framework_version``). Plugins version independently in ``plugins/<name>/manifest.json``; the
-materialized version is recorded per-plugin in the project's manifest. There are no ``.version`` files.
+materialized version is recorded per-plugin in the project's manifest. The project's own content is
+versioned by a plain-text ``.version`` file (bare MAJOR.MINOR.PATCH) at the project root - the one
+place a ``.version`` file exists; framework and plugin versions stay in their manifests.
 
 Migration files live at ``solaris/migrations/<to_version>.md`` with simple frontmatter; there is no
 registry file - this module scans them directly.
@@ -19,6 +21,9 @@ Run as a module::
     uv run -m solaris.tools.version set --dir projects/todo 0.2.0
     uv run -m solaris.tools.version plugin --dir projects/isaac-lab --plugin nvidia-isaac-lab
     uv run -m solaris.tools.version check-plugins --dir projects/isaac-lab
+    uv run -m solaris.tools.version project --dir projects/todo
+    uv run -m solaris.tools.version project-set --dir projects/todo 1.0.0
+    uv run -m solaris.tools.version project-bump --dir projects/todo minor
 """
 
 from __future__ import annotations
@@ -115,6 +120,42 @@ def set_aipack_version(project_dir: "str | Path", version: str) -> None:
     manifest = read_manifest(project_dir)
     manifest["framework_version"] = str(version)
     write_manifest(project_dir, manifest)
+
+
+# --------------------------------------------------------------------------- project version (.version)
+
+VERSION_FILE = ".version"
+
+
+def project_version_path(project_dir: "str | Path") -> Path:
+    return Path(project_dir) / VERSION_FILE
+
+
+def project_version(project_dir: "str | Path") -> str:
+    """The project's own semver from its root .version file (normalized MAJOR.MINOR.PATCH)."""
+    path = project_version_path(project_dir)
+    if not path.is_file():
+        raise FileNotFoundError(f"no {VERSION_FILE} at {path} (seed one: project-set --dir <project> 0.1.0)")
+    return str(parse(path.read_text(encoding="utf-8")))
+
+
+def set_project_version(project_dir: "str | Path", version: "str | Version") -> str:
+    v = parse(version)  # validate before writing
+    project_version_path(project_dir).write_text(f"{v}\n", encoding="utf-8")
+    return str(v)
+
+
+def bump_project_version(project_dir: "str | Path", level: str) -> str:
+    v = parse(project_version(project_dir))
+    if level == "major":
+        v = Version(v.major + 1, 0, 0)
+    elif level == "minor":
+        v = Version(v.major, v.minor + 1, 0)
+    elif level == "patch":
+        v = Version(v.major, v.minor, v.patch + 1)
+    else:
+        raise ValueError(f"bump level must be major, minor, or patch (got {level!r})")
+    return set_project_version(project_dir, v)
 
 
 def plugin_recorded_version(project_dir: "str | Path", name: str) -> "str | None":
@@ -282,6 +323,35 @@ def _cmd_check_plugins(args: argparse.Namespace) -> int:
     return rc
 
 
+def _cmd_project(args: argparse.Namespace) -> int:
+    try:
+        print(project_version(args.dir))
+    except (OSError, ValueError) as e:
+        print(e)
+        return 1
+    return 0
+
+
+def _cmd_project_set(args: argparse.Namespace) -> int:
+    try:
+        v = set_project_version(args.dir, args.version)
+    except (OSError, ValueError) as e:
+        print(e)
+        return 1
+    print(f"set project version = {v} in {args.dir}/{VERSION_FILE}")
+    return 0
+
+
+def _cmd_project_bump(args: argparse.Namespace) -> int:
+    try:
+        v = bump_project_version(args.dir, args.level)
+    except (OSError, ValueError) as e:
+        print(e)
+        return 1
+    print(v)
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="solaris.tools.version", description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest="command", required=True)
@@ -306,6 +376,16 @@ def build_parser() -> argparse.ArgumentParser:
     sp_plugin.set_defaults(func=_cmd_plugin)
 
     _with_dir("check-plugins", "compare each attached plugin's recorded version vs its source").set_defaults(func=_cmd_check_plugins)
+
+    _with_dir("project", "print the project's own version (root .version file)").set_defaults(func=_cmd_project)
+
+    sp_pset = _with_dir("project-set", "write the project's own version into its root .version file")
+    sp_pset.add_argument("version", help="semver MAJOR.MINOR.PATCH")
+    sp_pset.set_defaults(func=_cmd_project_set)
+
+    sp_pbump = _with_dir("project-bump", "increment the project's own version and print the result")
+    sp_pbump.add_argument("level", choices=["major", "minor", "patch"], help="which component to bump")
+    sp_pbump.set_defaults(func=_cmd_project_bump)
     return parser
 
 

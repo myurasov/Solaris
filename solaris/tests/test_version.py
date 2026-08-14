@@ -168,3 +168,49 @@ def test_cli_check_exit_codes(tmp_path, capsys):
 
     V.set_aipack_version(proj, "9.9.9")
     assert V.main(["check", "--dir", str(proj)]) == 2      # ahead -> downgrade
+
+
+def test_project_version_roundtrip_and_bump(tmp_path):
+    proj = tmp_path / "p"
+    proj.mkdir()
+    # missing file is a clean, actionable error
+    with pytest.raises(FileNotFoundError):
+        V.project_version(proj)
+    assert V.set_project_version(proj, "0.1.0") == "0.1.0"
+    assert (proj / ".version").read_text() == "0.1.0\n"
+    assert V.project_version(proj) == "0.1.0"
+    # tolerant read (whitespace, leading v) normalizes on the way out
+    (proj / ".version").write_text(" v1.2.3 \n")
+    assert V.project_version(proj) == "1.2.3"
+    assert V.bump_project_version(proj, "patch") == "1.2.4"
+    assert V.bump_project_version(proj, "minor") == "1.3.0"
+    assert V.bump_project_version(proj, "major") == "2.0.0"
+    with pytest.raises(ValueError):
+        V.bump_project_version(proj, "huge")
+    with pytest.raises(ValueError):
+        V.set_project_version(proj, "1.2")
+
+
+def test_cli_project_commands(tmp_path, capsys):
+    proj = tmp_path / "p"
+    proj.mkdir()
+    assert V.main(["project", "--dir", str(proj)]) == 1          # missing -> clean error, exit 1
+    assert ".version" in capsys.readouterr().out
+    assert V.main(["project-set", "--dir", str(proj), "1.0.0"]) == 0
+    capsys.readouterr()
+    assert V.main(["project", "--dir", str(proj)]) == 0
+    assert capsys.readouterr().out.strip() == "1.0.0"
+    assert V.main(["project-bump", "--dir", str(proj), "minor"]) == 0
+    assert capsys.readouterr().out.strip() == "1.1.0"
+    assert V.main(["project-set", "--dir", str(proj), "not-a-version"]) == 1
+
+
+def test_cli_project_error_paths_stay_clean(tmp_path, capsys):
+    # a typo'd --dir must give a one-line error + exit 1, never a traceback
+    missing = tmp_path / "does-not-exist"
+    assert V.main(["project-set", "--dir", str(missing), "0.1.0"]) == 1
+    assert "does-not-exist" in capsys.readouterr().out
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert V.main(["project-bump", "--dir", str(empty), "patch"]) == 1
+    assert ".version" in capsys.readouterr().out

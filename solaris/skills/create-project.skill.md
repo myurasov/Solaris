@@ -104,6 +104,9 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
 - Ensure `ai/manifest.json` has `project.{name,slug,type,mode}`, `framework_version`, and `plugins`; when
   the project has workspaces beyond the default, also `project.workspaces` (array of folder names,
   `source` included).
+- Seed the project's own version: `uv run -m solaris.tools.version project-set --dir projects/<slug> 0.1.0`
+  (a plain-text `.version` at the project root; the engineer proposes bumps at milestones - see the
+  template's Project Version section).
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes
   the `revisions` map (per materialized file: rev + content hash), so future `update-project` runs can tell
   whether the user edited a file.

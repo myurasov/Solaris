@@ -3,7 +3,7 @@ name: init
 triggers: ["init project", "initialize the project", "initialize this project", "set up my environment", "onboard me", "getting started", "register resources"]
 summary: One-time onboarding for a fresh checkout of {{NAME}} - collect environment resources, verify reachability, write the private ai/.memory layer, and bring the environment up.
 ---
-_Rev. 6_
+_Rev. 8_
 
 # Skill: init - Environment Onboarding <!-- omit in toc -->
 
@@ -23,6 +23,10 @@ resources and setup steps, and delete what does not apply.)
 
 - If `ai/.memory/resources.md` already has concrete values, this checkout is initialized - confirm the
   user wants to update it, otherwise stop.
+- `.version` exists at the project root (the project's own semver - see the engineer agent's Project
+  Version section). If missing (pack predates it), offer to seed it: adopt the repo's highest semver
+  `v*` tag if any, else `1.0.0` when the project has already shipped to others, else `0.1.0` - then
+  apply that section's commit-and-tag treatment with the user's say-so.
 - (any legacy-layout migrations or other checks go here)
 
 ## 2. Collect Resources

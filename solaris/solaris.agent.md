@@ -27,7 +27,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.28.0.md`](spec/spec-v0.28.0.md).
+[`spec/spec-v0.29.0.md`](spec/spec-v0.29.0.md).
 
 ## Persona Model
 
@@ -81,7 +81,7 @@ There is one running agent. It adopts a persona by reading the active context:
 
 ## Tools (Stdlib, Run as Modules)
 
-- `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins> [...]`
+- `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump> [...]`
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
@@ -93,7 +93,7 @@ There is one running agent. It adopts a persona by reading the active context:
 
 ## Versioning and Sync
 
-Two independent mechanisms:
+Three independent mechanisms:
 
 - **Per-file revisions** (`solaris.tools.revs`): every materialized framework/plugin file carries a rev
   integer + a rev-excluded content hash. ai-packs record a baseline in `ai/manifest.json` -> `revisions`.
@@ -110,6 +110,12 @@ Two independent mechanisms:
   explicit request or when publishing to a public git remote. Migrations (`solaris/migrations/`) are
   authored only for **minor/major** bumps; **patch** never requires one.
   `ai/manifest.json.framework_version` gates which migrations a project still needs.
+- **Project versions** (`<project>/.version`, plain-text semver): each project's own content version,
+  seeded at create/import (`0.1.0`; imports may adopt existing `v*` tags or `1.0.0` for shipped work) and
+  bumped only with user approval - the engineer *proposes* a bump when a milestone lands; each approved
+  bump is committed and locally tagged `v<X.Y.Z>`. Tooling: `version project|project-set|project-bump`.
+  Fully separate from the revisions mechanism above: `.version` is per-project content with **no rev
+  marker**, never materialized from a template, and never touched by `revs classify/ff/baseline`.
 
 ## Always-On Rules
 

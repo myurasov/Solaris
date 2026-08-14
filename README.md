@@ -108,6 +108,11 @@ What lands in the pack:
 - **Private, short-term / machine-local** (`ai/.memory/`, gitignored): hosts, secrets, session
   context, logs. Drop this layer to share the project.
 
+Every project also carries its own semver in a root `.version` file (new projects start at `0.1.0`;
+imports adopt an existing `v*` tag or `1.0.0` for already-shipped work): the engineer
+proposes a bump when a milestone lands - never bumps silently - and each approved bump is committed
+and tagged `v<X.Y.Z>`. This is independent of the pack-sync metadata (revisions, `framework_version`).
+
 The pack is **standalone-first**: it works with no Solaris around it, and can be refreshed from
 the framework master at any time (*"update `<project>`"*) to pick up the latest improvements.
 
@@ -206,5 +211,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.28.0.md`](solaris/spec/spec-v0.28.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.29.0.md`](solaris/spec/spec-v0.29.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
