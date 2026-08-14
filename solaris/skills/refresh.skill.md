@@ -53,7 +53,8 @@ git step here - only framework files move.
 - `uv run -m solaris.tools.revs status` - tracked files consistent.
 - **Info staleness:** check the "as of" dates in `solaris/info/model-tiers.md` and
   `solaris/info/harnesses.md`; if stale (model lineup or harness capabilities shifted), update them and
-  sync the condensed copies embedded in `solaris/templates/ai-pack/` (edit + `revs bump` the templates).
+  sync the pack-adapted copies in `solaris/templates/ai-pack/ai/info/` in the same edit (bump their
+  revs; the "as of" dates must match — a test enforces it).
 
 ## 5. Flag Stale Projects + Report
 

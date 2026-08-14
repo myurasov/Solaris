@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: Subagents (Leveled Delegation) <!-- omit in toc -->
 
@@ -58,12 +58,11 @@ is genuinely inseparable from the reading.
 ## Model Tiering
 
 Think in four abstract tiers - cheap (mechanical), mid (standard/moderate synthesis), high (strong
-synthesis/review), frontier (hardest judgment). Concrete names as of 2026-08 in Claude Code's Agent
-tool: cheap=`haiku`, mid=`sonnet`, high=`opus`, frontier=`fable`/session model, with the read-only
-`Explore` type for sweeps and `effort:` matched to tier (low/inherit/high/xhigh). Model lineups
-shift - under a Solaris checkout `solaris/info/model-tiers.md` is the current source; standalone,
-verify against the harness's own model list when in doubt. Match the task class, then read the
-active level's column:
+synthesis/review), frontier (hardest judgment). Concrete model names live in
+`ai/info/model-tiers.md` (this pack's perishable data layer) - every tier choice reads that file,
+never memory; there is no fallback. If the file is missing, the pack is broken: surface it and
+repair (restore from git, or a project update under Solaris) instead of guessing. Match the task
+class, then read the active level's column:
 
 | Task class | `full` | `med` |
 |---|---|---|
@@ -72,7 +71,8 @@ active level's column:
 | Judgment-heavy (anything acted on directly) | session model, or inline | session model, never below high |
 
 In doubt at `full`, take the cheaper tier; in doubt at `med`, take the stronger one. A harness
-with no subagent tool (e.g. Cursor today) falls back to `off` behavior regardless of level.
+with no subagent tool (see `ai/info/harnesses.md`) falls back to `off` behavior regardless of
+level.
 
 ## What Stays Inline
 

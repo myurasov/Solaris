@@ -1,4 +1,4 @@
-_Rev. 32_
+_Rev. 33_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -31,7 +31,9 @@ this project is developed.
    this file; portable, no host/secret/internal-URL specifics).
 4. Every `ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode). Their behavior
    switches read `ai/defaults.json` (committed team defaults, flat keys) overridden per key by
-   `ai/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Treat each
+   `ai/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Perishable
+   reference data the rules point at (model tiers, harness capabilities) lives in `ai/info/*.md` - read
+   the pointed-at file when a rule requires it, never substitute memory. Treat each
    `ai/skills/*.skill.md` (init, refresh, project-local skills) as trigger-invoked: load one only when
    its frontmatter `triggers` match the request.
 5. `ai/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,

@@ -35,8 +35,10 @@ Read, in this order, and then obey them:
 3. `projects/<slug>/ai/engineer.instructions.md` (shareable build/run/test + conventions),
    `ai/spec.md`, and `ai/.memory/*` (private: `resources.md`, `credentials.md`).
 4. Every `projects/<slug>/ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode);
-   their switches read `ai/defaults.json` overridden per key by `ai/.memory/config.json`. Treat each
-   `ai/skills/*.skill.md` as trigger-invoked.
+   their switches read `ai/defaults.json` overridden per key by `ai/.memory/config.json`, and the
+   perishable reference data they point at (model tiers, harness capabilities) lives in `ai/info/*.md` -
+   read the pointed-at file, never substitute memory. Treat each `ai/skills/*.skill.md` as
+   trigger-invoked.
 5. Every `projects/<slug>/ai/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
    `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/<name>.link.md` (a **linked**
    plugin - see `install-plugin` step 5): load the plugin's `shared/` rules and skills from the path it

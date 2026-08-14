@@ -102,7 +102,8 @@ What lands in the pack:
 - **Shareable, long-term** (commits with the repo): `engineer.agent.md` (the role),
   `engineer.instructions.md` (build/run/test + conventions), `spec.md` (the contract),
   `manifest.json`, always-on pack rules in `rules/` (subagent delegation, YAGNI mode) with their
-  committed defaults in `defaults.json`, and `init` / `refresh` skill stubs in `skills/` for teammates.
+  committed defaults in `defaults.json`, perishable reference data the rules read in `info/` (model
+  tiers, harness capabilities), and `init` / `refresh` skill stubs in `skills/` for teammates.
 - **Private, short-term / machine-local** (`ai/.memory/`, gitignored): hosts, secrets, session
   context, logs. Drop this layer to share the project.
 

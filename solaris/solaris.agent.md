@@ -23,8 +23,9 @@ of working are factored into **plugins** (`plugins/<name>/`), opted into per pro
 project's `ai/` (or attached in **link mode** - a pointer file instead of a copy, for plugin development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
 `tasks/`. Perishable reference data (current model tiers, harness capabilities) lives in
-[`solaris/info/`](info/) - rules reference it abstractly and never inline it; the ai-pack templates
-embed condensed copies that sync to projects via revisions. Full specification:
+[`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
+adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
+pack "as of" dates matched). Full specification:
 [`spec/spec-v0.25.0.md`](spec/spec-v0.25.0.md).
 
 ## Persona Model

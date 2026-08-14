@@ -35,5 +35,6 @@ As of **2026-08-13**, for the two harnesses Solaris runs on:
 ## Keeping This Current
 
 Harness capabilities shift with releases. Re-verify this table whenever the `refresh` skill runs
-(and at every release); update this file, then sync any embedded copies in
-`solaris/templates/ai-pack/` (bump revs). Rules never carry these observations directly.
+(and at every release); update this file, then sync the pack-adapted copy
+`solaris/templates/ai-pack/ai/info/harnesses.md` in the same edit (bump its rev; the "as of" dates
+must match - a test enforces it). Rules never carry these observations directly.

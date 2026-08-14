@@ -1,3 +1,5 @@
+_Rev. 1_
+
 # Info: Model Tiers <!-- omit in toc -->
 
 - [Tier Ladder](#tier-ladder)
@@ -5,11 +7,9 @@
 - [Effort + Thinking](#effort--thinking)
 - [Keeping This Current](#keeping-this-current)
 
-Perishable data layer for `solaris/rules/subagents.rule.md` (and the ai-pack copy): rules speak in
-abstract tiers; the concrete model names live here and age. This file is the source of truth - the
-ai-pack template carries an adapted copy at `solaris/templates/ai-pack/ai/info/model-tiers.md`, so
-when this file changes, update that copy in the same edit and `revs bump` it (the `refresh` and
-`release` skills carry this as a checklist item; a test asserts the "as of" dates match).
+Perishable data layer for this pack's rules (see `ai/rules/subagents.rule.md`): rules speak in
+abstract tiers; the concrete model names live here and age. Tier choices come from this file -
+not from memory or guesswork. Standalone-first: needs nothing beyond this pack.
 
 ## Tier Ladder
 
@@ -34,9 +34,9 @@ As of **2026-08-13** (re-verify per "Keeping This Current"):
 | frontier | `fable` or the session model | Fable 5 / Opus 5 |
 
 Notes: Opus 5 benchmarks near-frontier at roughly half the frontier price - in Claude Code the `opus`
-selector is the best price/performance pick for high-tier and budget-frontier work. Cursor exposes no
-subagent tool (see `solaris/info/harnesses.md`), so its column matters only for choosing the *session*
-model there.
+selector is the best price/performance pick for high-tier and budget-frontier work. In Claude Code,
+use the read-only `Explore` agent type for search sweeps. Cursor exposes no subagent tool (see
+`ai/info/harnesses.md`), so its column matters only for choosing the *session* model there.
 
 ## Effort + Thinking
 
@@ -46,7 +46,7 @@ Leave extended thinking ON wherever it is available - never worth toggling off p
 
 ## Keeping This Current
 
-Model lineups and tier placements shift often. Re-verify this table whenever the `refresh` skill runs
-(and at every release), against current benchmark data; update this file, then sync the pack copy
-`solaris/templates/ai-pack/ai/info/model-tiers.md` in the same edit (bump its rev; the "as of" dates
-must match). Never bake concrete model names into rules - they belong here only.
+Model lineups and tier placements shift often. Under a Solaris checkout this file syncs from the
+framework master (`solaris/info/model-tiers.md`) on every project update. Standalone, if the "as of"
+date looks stale, verify the mapping against the harness's own model list and update this file (a
+pack `refresh` is a good moment).

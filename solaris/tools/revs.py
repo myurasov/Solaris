@@ -51,6 +51,7 @@ FRAMEWORK_GLOBS = [
     "solaris/templates/ai-pack/ai/engineer.agent.md",
     "solaris/templates/ai-pack/ai/rules/*.rule.md",
     "solaris/templates/ai-pack/ai/skills/*.skill.md",
+    "solaris/templates/ai-pack/ai/info/*.md",
 ]
 PLUGIN_SHARED_GLOB = "shared/*.md"  # per plugin, relative to plugins/<name>/
 
@@ -251,9 +252,9 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
         (template_dir / "ai" / "engineer.agent.md", project_dir / "ai" / "engineer.agent.md",
          "ai/engineer.agent.md"),
     ]
-    # Pack rules and skills sync per file like the agent; instructions/spec stay seeded-only
+    # Pack rules, skills, and info sync per file like the agent; instructions/spec stay seeded-only
     # (per-project content, never fast-forwarded).
-    for sub, pattern in (("rules", "*.rule.md"), ("skills", "*.skill.md")):
+    for sub, pattern in (("rules", "*.rule.md"), ("skills", "*.skill.md"), ("info", "*.md")):
         for f in sorted((template_dir / "ai" / sub).glob(pattern)):
             rel = f"ai/{sub}/{f.name}"
             pairs.append((f, project_dir / rel, rel))

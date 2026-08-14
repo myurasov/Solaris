@@ -191,4 +191,6 @@ def test_materialized_map_covers_pack_rules_and_skills(tmp_path):
     assert "ai/rules/yagni.rule.md" in rels
     assert "ai/skills/init.skill.md" in rels
     assert "ai/skills/refresh.skill.md" in rels
+    assert "ai/info/model-tiers.md" in rels
+    assert "ai/info/harnesses.md" in rels
     assert "ai/engineer.agent.md" in rels
