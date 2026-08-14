@@ -1,4 +1,4 @@
-// rev. 2
+// rev. 3
 
 // Render a report HTML to PDF in the Co-SA document style - ZERO npm deps.
 // Drives the installed Google Chrome over the DevTools protocol using Node's
@@ -40,7 +40,18 @@ try {
   cfg = JSON.parse(fs.readFileSync(path.join(path.dirname(pdfPath), 'report.json'), 'utf8'));
 } catch (e) { /* no config - use defaults */ }
 if (watermark === null) watermark = cfg.watermark || '';
-const preparedBy = cfg.prepared_by || '';
+// Byline: explicit prepared_by override, else the rendering developer's git
+// identity (so reports name their actual author), else none.
+function gitByline() {
+  try {
+    const opts = { cwd: path.dirname(htmlPath), encoding: 'utf8' };
+    const name = execFileSync('git', ['config', 'user.name'], opts).trim();
+    const email = execFileSync('git', ['config', 'user.email'], opts).trim();
+    if (name || email) return `Prepared by ${name}${email ? ` <${email}>` : ''}`.replace('  ', ' ').trim();
+  } catch (e) { /* not a git repo or no identity configured */ }
+  return '';
+}
+const preparedBy = cfg.prepared_by || gitByline();
 const furnitureFont = cfg.furniture_font || 'Helvetica Neue';
 
 const html = fs.readFileSync(htmlPath, 'utf8');

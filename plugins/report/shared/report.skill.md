@@ -9,7 +9,7 @@ summary: Author and render a project findings report - HTML source in
   merged with poppler pdfunite). Styling/rendering tooling is this plugin's assets/;
   theme and page furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
@@ -48,7 +48,9 @@ is a render artifact of that HTML, never hand-edited.
 - **Project-owned config** (tracked, survives plugin updates):
   - `reports/theme.css` - CSS token overrides on `.viz-root` (see Theming below).
   - `reports/report.json` - page furniture: `{"prepared_by": "...", "watermark": "...",
-    "furniture_font": "..."}` - all keys optional.
+    "furniture_font": "..."}` - all keys optional. `prepared_by` is a fixed-byline override;
+    leave it unset so each report names its actual author (the rendering developer's
+    `git config user.name <user.email>`).
 
 ## Source of Truth + Theming
 
@@ -60,7 +62,7 @@ they fold back on the next plugin update (import-plugin Mode A picks up the high
 | File | What it is |
 |---|---|
 | `style.css` | The stylesheet every report links. Organized in commented sections (tokens, typography, headings, TOC, tables, diagrams, print, screen). **Defaults: Helvetica Neue body font, Solaris purple accent (#6A1B9A)** |
-| `render.js` | Zero-npm-dep PDF renderer: drives installed Chrome over the DevTools protocol (plain Node >= 22, built-in WebSocket; `$CHROME` overrides the binary path), merges two passes with poppler `pdfunite`. Owns page geometry (Letter, margins) and the page furniture: page-1 header "Prepared by ... on <render date, HH:MM TZ>" (from `report.json`; "Rendered on ..." when no `prepared_by`), pages-2+ header "<H1 title> - <subtitle>", footer watermark (from `report.json`; none by default) + date parsed from the H1's MMDD prefix |
+| `render.js` | Zero-npm-dep PDF renderer: drives installed Chrome over the DevTools protocol (plain Node >= 22, built-in WebSocket; `$CHROME` overrides the binary path), merges two passes with poppler `pdfunite`. Owns page geometry (Letter, margins) and the page furniture: page-1 header "Prepared by ... on <render date, HH:MM TZ>" (byline: `report.json` `prepared_by` override, else the rendering developer's git identity, else plain "Rendered on ..."), pages-2+ header "<H1 title> - <subtitle>", footer watermark (from `report.json`; none by default) + date parsed from the H1's MMDD prefix |
 | `render.sh` | The single render entry point, run from the project root or `reports/`: `render.sh` (all), `render.sh <slug> ...` (some), `render.sh --live [slug ...]` (watch sources + theme, re-render on change) |
 
 **Theming** is two-layer, so the plugin copy stays generic and project identity lives in
