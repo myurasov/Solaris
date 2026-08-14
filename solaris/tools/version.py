@@ -182,20 +182,20 @@ def scan_migrations(migrations_dir: Path = MIGRATIONS_DIR) -> list[dict]:
 
 
 def find_chain(from_v: str, to_v: str, migrations_dir: Path = MIGRATIONS_DIR) -> list[dict]:
-    """Ordered migrations advancing from_v -> to_v. Empty if not advancing or no linking migrations."""
+    """Ordered migrations advancing from_v -> to_v: every one with from_v < to_version <= to_v.
+
+    Keyed on to_version alone; from_version is informational. Exact from_version linking used to
+    break the chain whenever a patch release (which never authors a migration) sat between two
+    migration points, silently reporting an empty chain.
+    """
     if compare(from_v, to_v) >= 0:
         return []
-    by_from = {str(r["from_version"]): r for r in scan_migrations(migrations_dir)}
-    chain: list[dict] = []
-    cur, target, seen = str(parse(from_v)), str(parse(to_v)), set()
-    while compare(cur, target) < 0:
-        step = by_from.get(cur)
-        if step is None or str(step["to_version"]) in seen:
-            break
-        seen.add(str(step["to_version"]))
-        chain.append(step)
-        cur = str(parse(step["to_version"]))
-    return chain
+    rows = [
+        r for r in scan_migrations(migrations_dir)
+        if compare(str(r["to_version"]), from_v) > 0 and compare(str(r["to_version"]), to_v) <= 0
+    ]
+    rows.sort(key=lambda r: parse(str(r["to_version"])))
+    return rows
 
 
 # --------------------------------------------------------------------------- CLI

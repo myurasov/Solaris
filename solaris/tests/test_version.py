@@ -140,6 +140,18 @@ def test_find_chain_stops_on_gap(tmp_path):
     assert [r["to_version"] for r in chain] == ["0.2.0"]
 
 
+def test_find_chain_spans_patch_gaps(tmp_path):
+    # a patch release between migration points (0.2.1) must not break the chain: a project
+    # at 0.2.0 still needs the 0.3.0 migration even though it declares from_version 0.2.1
+    mig = tmp_path / "migrations"
+    _write_migration(mig, "0.3.0", "0.2.1")
+    _write_migration(mig, "0.4.0", "0.3.0")
+    chain = V.find_chain("0.2.0", "0.4.0", mig)
+    assert [r["to_version"] for r in chain] == ["0.3.0", "0.4.0"]
+    # and a project already past a migration point does not get it again
+    assert [r["to_version"] for r in V.find_chain("0.3.0", "0.4.0", mig)] == ["0.4.0"]
+
+
 def test_cli_current(capsys):
     rc = V.main(["current"])
     assert rc == 0
