@@ -1,0 +1,58 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/assets/render.js": {
+      "rev": 2,
+      "hash": "52c97a88e8a2fd5b7bbce1be74f048071d66c8cc0eacc27a7a89edfbba60c45e",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "5365488982713271ea6cfeb3d9a512224e1df142737288343cec861f63577bb2"
+        },
+        {
+          "rev": 2,
+          "hash": "52c97a88e8a2fd5b7bbce1be74f048071d66c8cc0eacc27a7a89edfbba60c45e"
+        }
+      ]
+    },
+    "shared/assets/render.sh": {
+      "rev": 2,
+      "hash": "3b933b4938d9b5158850b38bccb5f264b05ea957b1300d960eff5b6367d1efaf",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "da6b3ee26f2d5c3d52424bbfb0720bfdaa31cf8f9eb4d5e6e944f70ed4d511a7"
+        },
+        {
+          "rev": 2,
+          "hash": "3b933b4938d9b5158850b38bccb5f264b05ea957b1300d960eff5b6367d1efaf"
+        }
+      ]
+    },
+    "shared/assets/style.css": {
+      "rev": 1,
+      "hash": "c09b1affc143fd28f17493c02ed58f67cf8a0b1bdfd08a71d9640230768d91fa",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "c09b1affc143fd28f17493c02ed58f67cf8a0b1bdfd08a71d9640230768d91fa"
+        }
+      ]
+    },
+    "shared/report.skill.md": {
+      "rev": 2,
+      "hash": "c38bea8a6480e4346dd0b4e654eb710ae7c6091251f8cd19f91e1074eb85daae",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "6d62363a1c084acfe752f5fa7e4754484da87c9d72efad5417e2ce22d4d964fe"
+        },
+        {
+          "rev": 2,
+          "hash": "c38bea8a6480e4346dd0b4e654eb710ae7c6091251f8cd19f91e1074eb85daae"
+        }
+      ]
+    }
+  }
+}
