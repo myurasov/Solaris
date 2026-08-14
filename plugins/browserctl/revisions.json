@@ -2,6 +2,16 @@
   "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
   "schema_version": 1,
   "files": {
+    "shared/browserctl.py": {
+      "rev": 3,
+      "hash": "f65dd2eab5f560be029054105e33af95da7f455ee4d8d4bc4dc1d0e01539514b",
+      "history": [
+        {
+          "rev": 3,
+          "hash": "f65dd2eab5f560be029054105e33af95da7f455ee4d8d4bc4dc1d0e01539514b"
+        }
+      ]
+    },
     "shared/browserctl.rule.md": {
       "rev": 5,
       "hash": "a07a946694fe8bc810415e8637c292401174ae1d79652572b480876eca7ad0d3",

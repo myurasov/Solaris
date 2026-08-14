@@ -194,3 +194,22 @@ def test_materialized_map_covers_pack_rules_and_skills(tmp_path):
     assert "ai/info/model-tiers.md" in rels
     assert "ai/info/harnesses.md" in rels
     assert "ai/engineer.agent.md" in rels
+
+
+def test_sh_js_css_markers_roundtrip():
+    from solaris.tools import revs as R
+    cases = [
+        (".sh", "#!/bin/sh\necho hi\n", "# rev. 2"),
+        (".js", "const x = 1;\n", "// rev. 2"),
+        (".css", ".a { color: red; }\n", "/* rev. 2 */"),
+    ]
+    for ext, body, want_marker in cases:
+        stamped = R.set_rev(body, ext, 2)
+        assert R.read_rev(stamped, ext) == 2, ext
+        assert want_marker in stamped, ext
+        # content hash identical with and without the marker
+        assert R.content_hash(stamped, ext) == R.content_hash(body, ext), ext
+    # a shebang stays the first line so the script remains directly executable
+    sh = R.set_rev("#!/bin/sh\necho hi\n", ".sh", 3)
+    assert sh.splitlines()[0] == "#!/bin/sh"
+    assert sh.splitlines()[1] == "# rev. 3"

@@ -11,7 +11,9 @@ independent of semantic versions (which are release-only; see version.py).
 Marker by file type (placed at the top of the file):
   .md / .mdc : first line      ``_Rev. N_``  (with YAML frontmatter: right after the closing ---,
                so GitHub still renders the frontmatter as metadata instead of a broken rule+blob)
-  .py        : first line      ``# rev. N``
+  .py / .sh  : first line      ``# rev. N`` (after the shebang when one is present)
+  .js / .ts  : first line      ``// rev. N``
+  .css       : first line      ``/* rev. N */``
   .json      : first field     ``"_rev": N``
 
 Framework ledger: ``solaris/revisions.json`` (current rev+hash + short history per tracked framework file).
@@ -53,10 +55,21 @@ FRAMEWORK_GLOBS = [
     "solaris/templates/ai-pack/ai/skills/*.skill.md",
     "solaris/templates/ai-pack/ai/info/*.md",
 ]
-PLUGIN_SHARED_GLOB = "shared/*.md"  # per plugin, relative to plugins/<name>/
+# Per plugin, relative to plugins/<name>/: everything under shared/ in a marker-capable format
+# (md docs/skills/rules, py tools, js/sh/css assets) is revision-tracked in the plugin's own ledger.
+PLUGIN_SHARED_GLOBS = [
+    "shared/**/*.md", "shared/**/*.py", "shared/**/*.js", "shared/**/*.sh", "shared/**/*.css",
+]
 
 _MD_RE = re.compile(r"^_Rev\.\s+(\d+)_\s*$")
 _PY_RE = re.compile(r"^#\s*rev\.\s+(\d+)\s*$")
+_JS_RE = re.compile(r"^//\s*rev\.\s+(\d+)\s*$")
+_CSS_RE = re.compile(r"^/\*\s*rev\.\s+(\d+)\s*\*/\s*$")
+# Marker regex per extension; hash-comment style (.py) is shared by .sh.
+_RX_BY_EXT = {
+    ".md": _MD_RE, ".mdc": _MD_RE, ".py": _PY_RE, ".sh": _PY_RE,
+    ".js": _JS_RE, ".ts": _JS_RE, ".css": _CSS_RE,
+}
 
 
 def _ext(path: "str | Path") -> str:
@@ -66,8 +79,12 @@ def _ext(path: "str | Path") -> str:
 def _marker(ext: str, rev: int) -> str:
     if ext in (".md", ".mdc"):
         return f"_Rev. {rev}_"
-    if ext == ".py":
+    if ext in (".py", ".sh"):
         return f"# rev. {rev}"
+    if ext in (".js", ".ts"):
+        return f"// rev. {rev}"
+    if ext == ".css":
+        return f"/* rev. {rev} */"
     raise ValueError(f"no text marker for {ext}")
 
 
@@ -78,7 +95,7 @@ def read_rev(text: str, ext: str) -> "int | None":
         except json.JSONDecodeError:
             return None
         return int(val) if isinstance(val, int) else None
-    rx = _MD_RE if ext in (".md", ".mdc") else _PY_RE if ext == ".py" else None
+    rx = _RX_BY_EXT.get(ext)
     if rx is None:
         return None
     for line in text.splitlines():
@@ -94,7 +111,7 @@ def canonical(text: str, ext: str) -> str:
         obj = json.loads(text)
         obj.pop("_rev", None)
         return json.dumps(obj, sort_keys=True, indent=2) + "\n"
-    rx = _MD_RE if ext in (".md", ".mdc") else _PY_RE if ext == ".py" else None
+    rx = _RX_BY_EXT.get(ext)
     lines = text.splitlines()
     if rx is not None:
         lines = [ln for ln in lines if not rx.match(ln)]
@@ -114,6 +131,10 @@ def set_rev(text: str, ext: str, rev: int) -> str:
         return json.dumps({"_rev": rev, **obj}, indent=2) + "\n"  # _rev first
     body = canonical(text, ext).strip("\n")
     marker = _marker(ext, rev)
+    if ext in (".py", ".sh") and body.startswith("#!"):
+        # keep the shebang as the first line - the marker goes right under it
+        first, _, rest = body.partition("\n")
+        return f"{first}\n{marker}\n{rest}\n" if rest else f"{first}\n{marker}\n"
     if ext in (".md", ".mdc") and body.startswith("---\n"):
         # YAML frontmatter must stay the first bytes of the file or GitHub
         # renders it as a horizontal rule + text blob - place the marker
@@ -169,7 +190,13 @@ def plugin_dirs(repo_root: Path = REPO_ROOT) -> list[Path]:
 
 
 def iter_plugin_shared(plugin_dir: Path) -> list[Path]:
-    return sorted(Path(plugin_dir).glob(PLUGIN_SHARED_GLOB))
+    root = Path(plugin_dir)
+    seen: set = set()
+    for g in PLUGIN_SHARED_GLOBS:
+        for p in root.glob(g):
+            if "__pycache__" not in p.parts:
+                seen.add(p)
+    return sorted(seen)
 
 
 # ----------------------------------------------------------------- ledger
@@ -203,7 +230,7 @@ def rebuild_ledger(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> dic
 
 
 def rebuild_plugin_ledger(plugin_dir: Path) -> dict:
-    """Rebuild plugins/<name>/revisions.json from that plugin's shared/*.md (keys relative to the plugin)."""
+    """Rebuild plugins/<name>/revisions.json from that plugin's shared/ tree (all marker-capable types)."""
     plugin_dir = Path(plugin_dir)
     path = plugin_dir / "revisions.json"
     led = load_ledger(path)
@@ -265,10 +292,11 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             if isinstance(entry, dict) and entry.get("mode") == "link":
                 continue  # linked plugins are never materialized; nothing to track
             name = entry.get("name") if isinstance(entry, dict) else entry
-            shared = plugins_dir / name / "shared"
-            if shared.is_dir():
-                for f in sorted(shared.glob("*.md")):
-                    pairs.append((f, project_dir / "ai" / name / f.name, f"ai/{name}/{f.name}"))
+            plugin_root = plugins_dir / name
+            if (plugin_root / "shared").is_dir():
+                for f in iter_plugin_shared(plugin_root):
+                    sub = f.relative_to(plugin_root / "shared")
+                    pairs.append((f, project_dir / "ai" / name / sub, f"ai/{name}/{sub}"))
     return pairs
 
 

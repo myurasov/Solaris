@@ -2,6 +2,16 @@
   "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
   "schema_version": 1,
   "files": {
+    "shared/eyes.py": {
+      "rev": 11,
+      "hash": "dc56549c2d71844559e26f473437e7bd3cc61509adce3de310f50e6fb5126d30",
+      "history": [
+        {
+          "rev": 11,
+          "hash": "dc56549c2d71844559e26f473437e7bd3cc61509adce3de310f50e6fb5126d30"
+        }
+      ]
+    },
     "shared/visual-qa.rule.md": {
       "rev": 2,
       "hash": "08edb9338d29cee7ebfbb3ced8386a88c9e771342f74adda6b4db425a61b5998",
