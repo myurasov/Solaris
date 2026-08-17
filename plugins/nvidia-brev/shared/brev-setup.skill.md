@@ -7,7 +7,7 @@ summary: Install the Brev CLI, guide the user through account registration and l
   (browser flow - never secrets in chat), select the org, and verify access. Run this
   before the first brev-run in any environment.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: brev-setup - CLI installation + account onboarding <!-- omit in toc -->
 
@@ -32,17 +32,28 @@ every step checks state first and skips what is already done.
 
 ## 2. Account + login
 
-1. Probe auth state with `brev ls` (fast, harmless):
+1. Probe auth state with `brev ls` (fast, harmless; run it with a short timeout - a
+   logged-out CLI may prompt and wait):
    - Succeeds -> already authenticated; go to step 3.
-   - Prompts for login -> continue.
+   - Prompts for login / auth error / times out -> continue. An **expired session**
+     mid-project takes this same path: re-login exactly as below, never improvise flags.
 2. If the user has **no Brev account yet**, point them at https://console.brev.nvidia.com
    (sign in with an NVIDIA account; org + billing are configured there) and wait until they
    confirm the account exists. Registration cannot be done for them.
-3. Run `printf '\n' | brev login` (accepts the default email prompt). The CLI prints a
-   device-auth / browser URL: **surface that URL to the user and ask them to complete the
-   login in their browser.** Never ask for passwords, tokens, or one-time codes in chat;
-   never paste or store credentials in the repo.
-4. When the CLI reports success, re-verify with `brev ls`.
+3. Run `printf '\n' | brev login` (accepts the default email prompt) as a **background
+   task** - it blocks until the browser flow completes, so a foreground call hangs the
+   session. Plain `brev login`, no extra flags: it auto-opens the login page in the
+   user's browser, which is exactly what is wanted. **Never pass `--skip-browser`**: it
+   does not make login non-interactive - it only prints the URL instead of opening the
+   browser and still blocks until someone completes the flow, so an unattended session
+   gets stuck (observed in the field). `--email`/`--token` do not substitute for the
+   browser step either. If the browser cannot auto-open (headless/remote host), read the
+   URL from the background task's output and hand it to the user.
+4. Tell the user to complete the login in the browser tab that just opened. Never ask for
+   passwords, tokens, or one-time codes in chat; never paste or store credentials in the
+   repo.
+5. Poll `brev ls` every ~15 s until it succeeds (give up after ~5 min and ask the user),
+   then reap the background login task and continue.
 
 ## 3. Organization
 

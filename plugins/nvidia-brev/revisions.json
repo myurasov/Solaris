@@ -49,8 +49,8 @@
       ]
     },
     "shared/brev-setup.skill.md": {
-      "rev": 3,
-      "hash": "3ce595480f29f53512ae8e45ebb91232545fa369e49629adc422288e76c26196",
+      "rev": 4,
+      "hash": "5e288e270fc6979a5332fafff4433f66a6757ffa709bd9556c9de6565e92c2d1",
       "history": [
         {
           "rev": 1,
@@ -63,6 +63,10 @@
         {
           "rev": 3,
           "hash": "3ce595480f29f53512ae8e45ebb91232545fa369e49629adc422288e76c26196"
+        },
+        {
+          "rev": 4,
+          "hash": "5e288e270fc6979a5332fafff4433f66a6757ffa709bd9556c9de6565e92c2d1"
         }
       ]
     }
