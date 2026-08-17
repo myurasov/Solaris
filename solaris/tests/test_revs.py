@@ -267,3 +267,73 @@ def test_template_defaults_carry_rule_switch_keys():
         assert key in defaults, key
     assert defaults["git.developer_branches"] is True
     assert defaults["git.feature_branches"] is True
+
+
+def test_plugins_block_renders_copied_linked_and_empty():
+    assert R._plugins_block({"plugins": []}) == "- none attached yet"
+    assert R._plugins_block({"plugins": None}) == "- none attached yet"
+    # malformed entries (no name) are skipped, never rendered as `None`
+    assert R._plugins_block({"plugins": [{"mode": "link"}, {"version": "1.0"}]}) == "- none attached yet"
+    block = R._plugins_block({"plugins": [
+        {"name": "aplug", "version": "0.1.1"},
+        {"name": "lplug", "mode": "link"},
+    ]})
+    assert "- `aplug` 0.1.1 - copied into `plugins/aplug/`" in block
+    assert "`lplug` - linked" in block and "plugins/lplug.link.md" in block
+
+
+def test_readme_fast_forwards_after_plugin_attach(tmp_path):
+    # baseline stability: a manifest-only plugin attach must re-classify the README as
+    # fast-forward (the on-disk copy matches the baseline), never conflict, and ff re-renders it
+    tpl = tmp_path / "tpl"
+    plugins = tmp_path / "plugins"
+    proj = tmp_path / "proj"
+    _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
+    _wmd(tpl / "ai" / "README.md", "# {{NAME}}\n\n{{PLUGINS}}\n", 1)
+    _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
+    (proj / "ai").mkdir(parents=True)
+    mpath = proj / "ai" / "manifest.json"
+    mpath.write_text(json.dumps({
+        "project": {"name": "P", "slug": "p", "type": "t", "mode": "local"},
+        "plugins": [], "revisions": {},
+    }), encoding="utf-8")
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    assert "- none attached yet" in (proj / "ai" / "README.md").read_text(encoding="utf-8")
+
+    m = json.loads(mpath.read_text(encoding="utf-8"))
+    m["plugins"] = [{"name": "myplug", "version": "0.2.0"}]
+    mpath.write_text(json.dumps(m), encoding="utf-8")
+    rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
+    assert rows["ai/README.md"] == "fast-forward"
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    text = (proj / "ai" / "README.md").read_text(encoding="utf-8")
+    assert "- `myplug` 0.2.0 - copied into `plugins/myplug/`" in text
+
+
+def test_materialized_map_includes_pack_readme(tmp_path):
+    # the shipped template carries the generated pack README; it syncs like the engineer agent
+    rels = {rel for _, _, rel in R.materialized_map(tmp_path)}
+    assert "ai/README.md" in rels
+
+
+def test_ff_materializes_readme_with_plugin_list(tmp_path):
+    tpl = tmp_path / "tpl"
+    plugins = tmp_path / "plugins"
+    proj = tmp_path / "proj"
+    _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
+    _wmd(tpl / "ai" / "README.md", "# {{NAME}} - AI Pack\n\n{{PLUGINS}}\n", 1)
+    _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
+    (proj / "ai").mkdir(parents=True)
+    (proj / "ai" / "manifest.json").write_text(json.dumps({
+        "project": {"name": "Proj X", "slug": "proj-x", "type": "t", "mode": "local"},
+        "plugins": [{"name": "myplug", "version": "0.2.0"}, {"name": "lp", "mode": "link"}],
+        "revisions": {},
+    }), encoding="utf-8")
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    text = (proj / "ai" / "README.md").read_text(encoding="utf-8")
+    assert text.startswith("_Rev. 1_")
+    assert "# Proj X - AI Pack" in text
+    assert "- `myplug` 0.2.0 - copied into `plugins/myplug/`" in text
+    assert "`lp` - linked" in text and "{{PLUGINS}}" not in text

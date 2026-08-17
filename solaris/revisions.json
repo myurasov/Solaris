@@ -48,6 +48,20 @@
         }
       ]
     },
+    "solaris/templates/ai-pack/ai/README.md": {
+      "rev": 1,
+      "hash": "5dab2214b52db957cc66741c5ee2d8eb929c6baaa21a8dc80f4d5b471d384a4e",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "de9ebe85bd98cdb7e8378a0e283dda671755ca49c2c1a2abe31be7dc9b053ca4"
+        },
+        {
+          "rev": 1,
+          "hash": "5dab2214b52db957cc66741c5ee2d8eb929c6baaa21a8dc80f4d5b471d384a4e"
+        }
+      ]
+    },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
       "rev": 39,
       "hash": "fc7e72fcd2281736a9fa33ec9ccf996e5832446f4ff9a43991e057b6262df395",

@@ -50,6 +50,7 @@ LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
 # projects, so they are versioned by git + semver rather than by revisions.)
 FRAMEWORK_GLOBS = [
     "solaris/templates/ai-pack/AGENTS.md",
+    "solaris/templates/ai-pack/ai/README.md",
     "solaris/templates/ai-pack/ai/engineer.agent.md",
     "solaris/templates/ai-pack/ai/rules/*.rule.md",
     "solaris/templates/ai-pack/ai/skills/*.skill.md",
@@ -279,6 +280,11 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
         (template_dir / "ai" / "engineer.agent.md", project_dir / "ai" / "engineer.agent.md",
          "ai/engineer.agent.md"),
     ]
+    # The generated pack README (its {{PLUGINS}} renders from the manifest); optional so template
+    # fixtures without one still classify.
+    readme = template_dir / "ai" / "README.md"
+    if readme.exists():
+        pairs.append((readme, project_dir / "ai" / "README.md", "ai/README.md"))
     # Pack rules, skills, and info sync per file like the agent; instructions/spec stay seeded-only
     # (per-project content, never fast-forwarded).
     for sub, pattern in (("rules", "*.rule.md"), ("skills", "*.skill.md"), ("info", "*.md")):
@@ -310,6 +316,27 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     return pairs
 
 
+def _plugins_block(manifest: dict) -> str:
+    """Markdown bullet list of the manifest's attached plugins (the {{PLUGINS}} placeholder)."""
+    lines = []
+    for entry in manifest.get("plugins") or []:
+        if not isinstance(entry, dict):
+            if entry:
+                lines.append(f"- `{entry}`")
+            continue
+        name = entry.get("name")
+        if not name:
+            continue  # malformed entry; the README list just skips it
+        if entry.get("mode") == "link":
+            lines.append(f"- `{name}` - linked (always live from the local plugin "
+                         f"source; see `plugins/{name}.link.md`)")
+        else:
+            ver = entry.get("version", "")
+            ver_part = f" {ver}" if ver else ""
+            lines.append(f"- `{name}`{ver_part} - copied into `plugins/{name}/`")
+    return "\n".join(lines) if lines else "- none attached yet"
+
+
 def _placeholder_subs(manifest: dict) -> dict:
     """Template placeholders resolved from a project's manifest (the rev marker is not a placeholder)."""
     p = manifest.get("project", {})
@@ -318,6 +345,7 @@ def _placeholder_subs(manifest: dict) -> dict:
         "{{TYPE}}": p.get("type", ""), "{{MODE}}": p.get("mode", ""),
         "{{FRAMEWORK_VERSION}}": str(manifest.get("framework_version", "")),
         "{{DATE}}": str(manifest.get("created", "")),
+        "{{PLUGINS}}": _plugins_block(manifest),
     }
 
 

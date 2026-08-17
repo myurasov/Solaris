@@ -85,7 +85,8 @@ Solaris supports several modes of use; each has its own workflow, and they mix f
 
 Say *"create a new project"* (the agent will ask for what it needs) or *"import project
 `<path>`"* to adopt an existing codebase. Either way you get an *ai-pack* at
-`projects/<slug>/ai/` - the bundle that tells any AI agent how to develop that project.
+`projects/<slug>/ai/` - the bundle that tells any AI agent how to develop that project (its
+generated `ai/README.md` explains the pack to humans: contents, configuration, everyday how-tos).
 
 A project can be anything - a service, a research codebase, a firmware tree, a content pipeline,
 a doc site; nothing limits you to the bundled kinds. Choices you make at creation:

@@ -74,7 +74,8 @@ into the generic `engineer.instructions.md`.
   the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root `mcp.json.example`
   plus any plugin servers). Seed `ai/defaults.json` from
   `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it),
-  materialize the tracked pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>`), and
+  materialize the tracked pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>` - this
+  also generates `ai/README.md`, the pack overview, from the manifest), and
   record the revisions baseline (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
 - Seed the project's own version (root `.version` file): adopt the highest existing semver `v*` git tag
   if the imported repo has them; else `1.0.0` if it has already shipped to users/partners (ask when

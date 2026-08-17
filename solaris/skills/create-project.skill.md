@@ -52,7 +52,9 @@ remote). Ask to proceed / edit / cancel. If `projects/<slug>/` exists and is non
 Create `projects/` if it does not exist (gitignored, lazily created), then copy
 `solaris/templates/ai-pack/` -> `projects/<slug>/` and substitute placeholders in every copied text file:
 `{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO), and
-`{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`).
+`{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`). Do not hand-substitute
+`ai/README.md` - delete the copied stub (or skip copying it): it is fully derived (its `{{PLUGINS}}`
+block renders from the manifest) and step 6 materializes it via `revs ff`.
 
 The project root is intentionally minimal: `AGENTS.md` + a one-line `CLAUDE.md` (`@AGENTS.md`, copied from
 the template) plus `ai/` and (local mode) `source/`. There is no `.cursor/`, no `mcp.json.example`, and no
@@ -107,6 +109,9 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
 - Seed the project's own version: `uv run -m solaris.tools.version project-set --dir projects/<slug> 0.1.0`
   (a plain-text `.version` at the project root; the engineer proposes bumps at milestones - see the
   template's Project Version section).
+- Materialize the derived pack files: `uv run -m solaris.tools.revs ff --dir projects/<slug>` - writes
+  `ai/README.md` (the generated pack overview + how-to; its attached-plugins list renders from the
+  manifest, so run this after step 5).
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes
   the `revisions` map (per materialized file: rev + content hash), so future `update-project` runs can tell
   whether the user edited a file.

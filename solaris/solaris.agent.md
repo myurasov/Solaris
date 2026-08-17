@@ -51,7 +51,9 @@ There is one running agent. It adopts a persona by reading the active context:
   directly, or `<repo>/ai/manifest.json` in embedded mode); enumerate all projects with the same two-depth
   scan. When creating or importing a project, ask which group (default by owner: NVIDIA -> `nv/`,
   personal -> `my/`, experiments -> `tmp/`). Each project has an ai-pack at `ai/` (descriptor:
-  `ai/manifest.json` -> `project.name/type/mode`, `framework_version`, attached `plugins`). Local-mode
+  `ai/manifest.json` -> `project.name/type/mode`, `framework_version`, attached `plugins`; human
+  overview: a generated, rev-tracked `ai/README.md`, re-rendered on every sync with `{{PLUGINS}}`
+  from the manifest). Local-mode
   projects keep code in `source/`; remote-code projects replace `source/` with `remote.json`; **embedded**-mode
   projects put the whole pack (`ai/` + `AGENTS.md`) inside the source repo at `projects/<slug>/<repo>/`, no
   separate `source/`.

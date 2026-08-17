@@ -85,7 +85,10 @@ A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json
      `ai/.memory/resources.md` (or `credentials.md` if `secret: true`).
   4. Record `{name, version}` in `ai/manifest.json` -> `plugins` (link mode: `{name, "mode": "link"}` -
      **no** `version`: a linked plugin always runs the live source, so a recorded version would only go
-     stale), then `uv run -m solaris.tools.revs baseline --dir projects/<slug>` (safe in both modes - the
+     stale). Then `uv run -m solaris.tools.revs ff --dir projects/<slug>` - it re-renders
+     `ai/README.md`'s attached-plugins list from the manifest (run it after ANY change to the
+     `plugins` array: attach, detach, link/copy conversion) - and
+     `uv run -m solaris.tools.revs baseline --dir projects/<slug>` (both safe in both modes - the
      revs tools skip linked plugins).
 
 ## 5. Link Mode (Development Installs)
