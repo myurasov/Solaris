@@ -27,7 +27,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.29.0.md`](spec/spec-v0.29.0.md).
+[`spec/spec-v0.30.0.md`](spec/spec-v0.30.0.md).
 
 ## Persona Model
 
@@ -71,7 +71,7 @@ There is one running agent. It adopts a persona by reading the active context:
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.
 - **Keep memory.** Framework `.memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets,
   gitignored), `interactions.jsonl` (log), `config.json` (behavior switches - flat keys defined by the
-  rules in `solaris/rules/`, e.g. `"subagents.level"`, `"yagni.enabled"`; machine-local, absent keys fall
+  rules in `solaris/rules/`, e.g. `"subagents.level"`, `"economy.level"`, `"yagni.enabled"`; machine-local, absent keys fall
   back to each rule's stated default), and `instructions.md` (**operating memory** - terse, timestamped
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
@@ -85,9 +85,9 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
-- `uv run -m solaris.tools.read_first [--remind|--part 2|--check]` (the read-first loader hook; loads in
-  two session-start parts - core set and subagents/YAGNI rules - because the Claude Code inline threshold
-  of 10k chars applies per hook call; not called by hand except `--check`)
+- `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--check]` (the read-first loader hook;
+  loads in three session-start parts - core set, subagents/YAGNI rules, token economy - because the
+  Claude Code inline threshold of 10k chars applies per hook call; not called by hand except `--check`)
 - `uv run -m solaris.tools.skill_loader` (the prompt-submit skill auto-loader hook; matches the prompt against each skill's `triggers` minus `antitriggers` and injects matching skill bodies; not called by hand)
 - `uv run -m solaris.tools.toc [--check|--write] <file>... | --all` (maintain Markdown tables of contents)
 
@@ -125,10 +125,16 @@ Three independent mechanisms:
   same-turn delete verification).
 - Interaction + writing: [`rules/interaction.rule.md`](rules/interaction.rule.md) - answer a direct
   question in the reply's first line; brevity by default; no buzzwords; explain jargon inline.
-- Subagents: [`rules/subagents.rule.md`](rules/subagents.rule.md) - delegate self-contained work to
-  subagents at the level in `.memory/config.json` (`"subagents.level"` off/med/full, absent = `med`);
-  tier-match models per [`info/model-tiers.md`](info/model-tiers.md); `subagents: <level>` in a prompt
-  is a per-request override.
+- Subagents: [`rules/subagents.rule.md`](rules/subagents.rule.md) - always-on bulk-read floor (a
+  >~20k-token lookup runs in a subagent; ~10k at economy `full`) plus a delegate-by-default posture at
+  the level in `.memory/config.json` (`"subagents.level"` off/auto/quality/cost, absent = `auto` -
+  follows the resolved economy level; `quality`/`cost` pick the model tier, both delegate);
+  tier-match models per [`info/model-tiers.md`](info/model-tiers.md); `subagents: <posture>` in a
+  prompt is a per-request override.
+- Token economy: [`rules/token-economy.rule.md`](rules/token-economy.rule.md) - always-on floor (read
+  budget, unbounded-file discipline, batching, prefix stability) plus graded frugality measures and
+  pacing (`"economy.level"` off/med/full/auto, absent = `med`; `auto` scales with context - `full`
+  past ~100k tokens or a compaction; `economy: <level>` and `asap` are per-request overrides).
 - YAGNI mode: [`rules/yagni.rule.md`](rules/yagni.rule.md) - opt-in (`"yagni.enabled"` in
   `.memory/config.json`, absent = off): deliver exactly what was asked, smallest coherent form, with
   hard guardrails (trust-boundary validation, data-loss handling, safety rules never trimmed);

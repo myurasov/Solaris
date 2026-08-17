@@ -34,7 +34,7 @@ Read, in this order, and then obey them:
 2. `projects/<slug>/ai/manifest.json` - name/type/mode + attached plugins.
 3. `projects/<slug>/ai/engineer.instructions.md` (shareable build/run/test + conventions),
    `ai/spec.md`, and `ai/.memory/*` (private: `resources.md`, `credentials.md`).
-4. Every `projects/<slug>/ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode);
+4. Every `projects/<slug>/ai/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI mode);
    their switches read `ai/defaults.json` overridden per key by `ai/.memory/config.json`, and the
    perishable reference data they point at (model tiers, harness capabilities) lives in `ai/info/*.md` -
    read the pointed-at file, never substitute memory. Treat each `ai/skills/*.skill.md` as

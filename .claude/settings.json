@@ -16,6 +16,11 @@
             "type": "command",
             "command": "uv run -m solaris.tools.read_first --part 2",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "uv run -m solaris.tools.read_first --part 3",
+            "timeout": 10
           }
         ]
       }

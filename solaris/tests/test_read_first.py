@@ -108,8 +108,27 @@ def test_main_part2(capsys):
     assert "READ-FIRST, PART 2" in out and "PART 2" in out
 
 
-def test_check_covers_both_parts(capsys):
+def test_render_part3_inlines_economy_rule_whole():
+    # Part 3 (third SessionStart hook call) carries the token-economy rule, whole and in budget.
+    out = R.render_full(part=3)
+    assert len(out) <= R._budget()
+    assert "READ-FIRST, PART 3" in out
+    for rel in R.READ_FIRST_3:
+        body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert body in out, rel + " must be inlined whole"
+    # part 3 never re-lists earlier parts' files
+    for rel in R.READ_FIRST + R.READ_FIRST_2:
+        assert ("----- " + rel + " -----") not in out
+
+
+def test_main_part3(capsys):
+    assert R.main(["--part", "3"]) == 0
+    assert "READ-FIRST, PART 3" in capsys.readouterr().out
+
+
+def test_check_covers_all_parts(capsys):
     assert R.main(["--check"]) == 0
     out = capsys.readouterr().out
-    assert "part 1 rendered payload" in out and "part 2 rendered payload" in out
+    for n in (1, 2, 3):
+        assert ("part %d rendered payload" % n) in out
     assert "OVER BUDGET" not in out

@@ -49,13 +49,9 @@
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 38,
-      "hash": "e5bdbae41da908552344a078959d072a6e701a36b3cdd572e855f3cef7ee2b27",
+      "rev": 39,
+      "hash": "fc7e72fcd2281736a9fa33ec9ccf996e5832446f4ff9a43991e057b6262df395",
       "history": [
-        {
-          "rev": 29,
-          "hash": "ed7669e693a201831a6e498951b37236d34ad04ca9bd98f81a579f5156470d4e"
-        },
         {
           "rev": 30,
           "hash": "9288c3f37a7507bb3f757a86e81cbc12a23b6fb1c73cd72f92e8766e39696a14"
@@ -91,6 +87,10 @@
         {
           "rev": 38,
           "hash": "e5bdbae41da908552344a078959d072a6e701a36b3cdd572e855f3cef7ee2b27"
+        },
+        {
+          "rev": 39,
+          "hash": "fc7e72fcd2281736a9fa33ec9ccf996e5832446f4ff9a43991e057b6262df395"
         }
       ]
     },
@@ -113,8 +113,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/rules/subagents.rule.md": {
-      "rev": 2,
-      "hash": "75e6a4242713cbe9a88f603fbf51aeadf889adbbc04335254b79bc5385ddf5fd",
+      "rev": 3,
+      "hash": "ffc2a4d3babcec7c1294d74a700440bc50ad0cc6bd6f27479cf82ef8c4d2eec7",
       "history": [
         {
           "rev": 1,
@@ -123,6 +123,28 @@
         {
           "rev": 2,
           "hash": "75e6a4242713cbe9a88f603fbf51aeadf889adbbc04335254b79bc5385ddf5fd"
+        },
+        {
+          "rev": 3,
+          "hash": "38a7e07a2fae9d7ed111f6911f66e145618342cd32554ed8736f5844d087a337"
+        },
+        {
+          "rev": 3,
+          "hash": "ffc2a4d3babcec7c1294d74a700440bc50ad0cc6bd6f27479cf82ef8c4d2eec7"
+        }
+      ]
+    },
+    "solaris/templates/ai-pack/ai/rules/token-economy.rule.md": {
+      "rev": 1,
+      "hash": "55b4265bd041b9617131c6609b71567c5ef93ae89fc757bb34d1f5caf63cc6f5",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "9fb9f14d36892d0b06fdf1e00a97dceb11bee812d73952b21c480efffe746344"
+        },
+        {
+          "rev": 1,
+          "hash": "55b4265bd041b9617131c6609b71567c5ef93ae89fc757bb34d1f5caf63cc6f5"
         }
       ]
     },
@@ -181,12 +203,16 @@
       ]
     },
     "solaris/templates/ai-pack/ai/info/harnesses.md": {
-      "rev": 1,
-      "hash": "c6c0c51d42d65097a70a3890bccd3e56e67bbc3f75030e1c68fc2fb5f5b415e7",
+      "rev": 2,
+      "hash": "c749bcd44c25bdcf5382d289d6fb9617a7b3564b691e10a5afb54ca1633f6f19",
       "history": [
         {
           "rev": 1,
           "hash": "c6c0c51d42d65097a70a3890bccd3e56e67bbc3f75030e1c68fc2fb5f5b415e7"
+        },
+        {
+          "rev": 2,
+          "hash": "c749bcd44c25bdcf5382d289d6fb9617a7b3564b691e10a5afb54ca1633f6f19"
         }
       ]
     },

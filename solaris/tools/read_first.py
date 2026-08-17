@@ -13,9 +13,10 @@ Two modes:
 - **no args** - full load, part 1 (rules + memory + orchestrator role). Print the concatenated read-first
   files under an authoritative header. Wired to the session-start hook (Claude Code ``SessionStart``;
   Cursor ``sessionStart``) so it fires once per session and again after a compaction / clear / resume.
-- **``--part 2``** - full load, part 2 (the subagents + YAGNI rules). Wired as a *second* session-start
-  hook entry: the harness inline threshold applies per hook call, so splitting the set across two calls
-  doubles the inline room without risking a spill.
+- **``--part 2``** - full load, part 2 (the subagents + YAGNI rules); **``--part 3``** - full load,
+  part 3 (the token-economy rule). Wired as additional session-start hook entries: the harness inline
+  threshold applies per hook call, so splitting the set across calls multiplies the inline room
+  without risking a spill.
 - **``--check``** - print per-file sizes, the inline budget, and whether the rendered payload fits
   (the size assertion; run after growing any read-first file, especially ``.memory/instructions.md``).
 - **``--remind``** - print a one-line forcing reminder that the set was loaded. Wired to Claude Code's
@@ -43,8 +44,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # The AGENTS.md "Read first" set in INLINE PRIORITY order (not reading order): the always-on
 # rules are small and operative, so they must always arrive whole; the operating memory and the
 # orchestrator role are larger and degrade gracefully to a truncated head + a read-the-rest pointer.
-# The set is split into two parts because Claude Code's inline threshold is PER HOOK INVOCATION:
-# both parts are wired as separate SessionStart hooks, so each gets its own budget.
+# The set is split into three parts because Claude Code's inline threshold is PER HOOK INVOCATION:
+# every part is wired as its own SessionStart hook, so each gets its own budget.
 READ_FIRST = (
     "solaris/rules/commits.rule.md",
     "solaris/rules/safety.rule.md",
@@ -55,6 +56,9 @@ READ_FIRST = (
 READ_FIRST_2 = (
     "solaris/rules/subagents.rule.md",
     "solaris/rules/yagni.rule.md",
+)
+READ_FIRST_3 = (
+    "solaris/rules/token-economy.rule.md",
 )
 
 # Claude Code persists hook stdout beyond 10,000 characters to a file, keeping only a small inline
@@ -77,19 +81,26 @@ _HEADER = (
 
 _HEADER_2 = (
     "=== SOLARIS READ-FIRST, PART 2 (auto-loaded every session by the read_first hook) ===\n"
-    "Continuation of the authoritative read-first set (split across two hook calls to stay inline). "
+    "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
+    "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
+    "read it yourself before relying on it.\n"
+)
+
+_HEADER_3 = (
+    "=== SOLARIS READ-FIRST, PART 3 (auto-loaded every session by the read_first hook) ===\n"
+    "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
     "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
     "read it yourself before relying on it.\n"
 )
 
 _REMINDER = (
     "[Solaris read-first] The authoritative set (solaris.agent.md + the commit, safety, interaction, "
-    "subagents & YAGNI rules + .memory/instructions.md) was loaded at session start - follow it. "
-    "Quick reminders: bare `ssh`/`open` are blocked, use the /tmp wrappers (`hss`, `nepo`); confirm "
-    "before destructive / remote-mutating / outward actions; answer a direct question in the reply's "
-    "first line; delegate self-contained work to subagents per the subagents rule (level default "
-    "`med`; `subagents:`/`yagni:` in a prompt are per-request overrides); log the turn to "
-    ".memory/interactions.jsonl (UTC ts)."
+    "subagents, token-economy & YAGNI rules + .memory/instructions.md) was loaded at session start - "
+    "follow it. Quick reminders: bare `ssh`/`open` are blocked, use the /tmp wrappers (`hss`, "
+    "`nepo`); confirm before destructive / remote-mutating / outward actions; answer a direct "
+    "question in the reply's first line; delegate per the subagents rule (posture default `auto` - "
+    "follows the economy level) and honor the token-economy floor; `subagents:`/`economy:`/`yagni:`/"
+    "`asap` in a prompt are per-request overrides; log the turn to .memory/interactions.jsonl (UTC ts)."
 )
 
 
@@ -152,8 +163,8 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None, part: 
     silently. ``part`` selects which slice of the set to render (the budget is per hook call,
     so each part is wired as its own SessionStart hook).
     """
-    files = READ_FIRST_2 if part == 2 else READ_FIRST
-    header = _HEADER_2 if part == 2 else _HEADER
+    files = {2: READ_FIRST_2, 3: READ_FIRST_3}.get(part, READ_FIRST)
+    header = {2: _HEADER_2, 3: _HEADER_3}.get(part, _HEADER)
     budget = _budget() if budget is None else budget
     remaining = budget - len(header)
     parts = [header]
@@ -192,7 +203,7 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None, part: 
 def check(repo_root: Path = REPO_ROOT) -> str:
     """Size assertion for humans/CI: per-file sizes, the budget, and both rendered payload sizes."""
     lines = ["read_first check: budget=%d per part (%s)" % (_budget(), _BUDGET_ENV)]
-    for part, files in ((1, READ_FIRST), (2, READ_FIRST_2)):
+    for part, files in ((1, READ_FIRST), (2, READ_FIRST_2), (3, READ_FIRST_3)):
         for rel in files:
             try:
                 n = len((Path(repo_root) / rel).read_text(encoding="utf-8"))
@@ -228,7 +239,9 @@ def main(argv: "list[str] | None" = None) -> int:
             print(check())
             return 0
         remind = "--remind" in argv
-        part = 2 if "2" in argv and "--part" in argv else 1
+        part = 1
+        if "--part" in argv:
+            part = 3 if "3" in argv else (2 if "2" in argv else 1)
         if not remind and part == 1:
             migrate_legacy_memory()  # session start: pick up a pre-0.19 checkout's memory/ folder
         ide = detect_ide()

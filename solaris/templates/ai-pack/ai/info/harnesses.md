@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Info: Harness Capabilities <!-- omit in toc -->
 
@@ -25,10 +25,11 @@ As of **2026-08-13**, for the harnesses this pack is tested on:
 
 ## Notes
 
-- No subagent tool in Cursor means the subagents rule's posture falls back to `off` behavior
-  there: work inline, keep bulk material out of the transcript (slice/grep/summarize).
+- No subagent tool in Cursor means the subagents rule falls back to its checkpointed-inline
+  contract there: the lookup still runs, sliced/grepped within the read budget, notes to a scratch
+  file, only conclusions restated (the bulk-read floor is never disabled).
 - Any other harness: check its own docs for the same capabilities; the rules degrade the same way
-  (no subagent tool -> `off` behavior).
+  (no subagent tool -> checkpointed-inline).
 
 ## Keeping This Current
 

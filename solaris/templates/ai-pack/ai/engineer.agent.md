@@ -1,4 +1,4 @@
-_Rev. 38_
+_Rev. 39_
 
 # {{NAME}} - Engineer Agent <!-- omit in toc -->
 
@@ -30,8 +30,8 @@ this project is developed.
    the preserved initial spec.
 3. `ai/engineer.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
    this file; portable, no host/secret/internal-URL specifics).
-4. Every `ai/rules/*.rule.md` - always-on pack rules (subagents delegation, YAGNI mode, git
-   collaboration). Their behavior
+4. Every `ai/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI
+   mode, git collaboration). Their behavior
    switches read `ai/defaults.json` (committed team defaults, flat keys) overridden per key by
    `ai/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Perishable
    reference data the rules point at (model tiers, harness capabilities) lives in `ai/info/*.md` - read

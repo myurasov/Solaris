@@ -47,17 +47,18 @@ Escalation grants capability, not permission - rule 2 still applies on top.
 2. [`solaris/rules/commits.rule.md`](solaris/rules/commits.rule.md) - git commit policy (always applies).
 3. [`solaris/rules/safety.rule.md`](solaris/rules/safety.rule.md) - confirm before destructive / remote-mutating / outward actions (always applies).
 4. [`solaris/rules/interaction.rule.md`](solaris/rules/interaction.rule.md) - answer-the-question-first + writing style (always applies).
-5. [`solaris/rules/subagents.rule.md`](solaris/rules/subagents.rule.md) - leveled subagent delegation (`.memory/config.json` `"subagents.level"`, default `med`; always applies at its level).
-6. [`solaris/rules/yagni.rule.md`](solaris/rules/yagni.rule.md) - YAGNI mode (opt-in via `.memory/config.json` `"yagni.enabled"`; `yagni: on|off` per-request).
-7. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
+5. [`solaris/rules/subagents.rule.md`](solaris/rules/subagents.rule.md) - always-on bulk-read floor + leveled delegation (`.memory/config.json` `"subagents.level"` off/auto/quality/cost, default `auto` - follows the economy level; `subagents: <posture>` per-request).
+6. [`solaris/rules/token-economy.rule.md`](solaris/rules/token-economy.rule.md) - token economy: always-on read/batching floor + leveled frugality and pacing (`"economy.level"` off/med/full/auto, default `med`; `economy: <level>` / `asap` per-request).
+7. [`solaris/rules/yagni.rule.md`](solaris/rules/yagni.rule.md) - YAGNI mode (opt-in via `.memory/config.json` `"yagni.enabled"`; `yagni: on|off` per-request).
+8. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
 
-A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`, in two parts - the harness inline limit applies per hook call) auto-injects these files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
+A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`, in three parts - the harness inline limit applies per hook call) auto-injects these files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
 
 Run the `health-check` overview to orient **before you start working on a project** (the first
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.29.0.md`](solaris/spec/spec-v0.29.0.md).
+Full specification: [`solaris/spec/spec-v0.30.0.md`](solaris/spec/spec-v0.30.0.md).
 
 ## Execution Model
 
@@ -100,4 +101,4 @@ Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignore
 ## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.29.0.md`](solaris/spec/spec-v0.29.0.md).
+- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.30.0.md`](solaris/spec/spec-v0.30.0.md).

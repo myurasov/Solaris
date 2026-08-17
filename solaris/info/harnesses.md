@@ -25,10 +25,11 @@ As of **2026-08-13**, for the two harnesses Solaris runs on:
 
 ## Notes
 
-- The 10k inline hook budget is why `read_first` loads in two parts (core set + delegation/YAGNI
-  rules), each budgeted separately.
-- No subagent tool in Cursor means the subagents rule's posture falls back to `off` behavior
-  there: work inline, keep bulk material out of the transcript (slice/grep/summarize).
+- The 10k inline hook budget is why `read_first` loads in three parts (core set; delegation/YAGNI
+  rules; token economy), each budgeted separately.
+- No subagent tool in Cursor means the subagents rule falls back to its checkpointed-inline
+  contract there: the lookup still runs, sliced/grepped within the read budget, notes to a scratch
+  file, only conclusions restated (the bulk-read floor is never disabled).
 - Skill auto-injection (`skill_loader`) is Claude-only for the same per-prompt-injection reason;
   on Cursor the agent opens the matching skill file itself.
 

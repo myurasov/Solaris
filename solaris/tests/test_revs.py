@@ -230,6 +230,7 @@ def test_materialized_map_covers_pack_rules_and_skills(tmp_path):
     # The pack's always-on rules and skill stubs sync per file like the engineer agent.
     rels = {rel for _, _, rel in R.materialized_map(tmp_path)}
     assert "ai/rules/subagents.rule.md" in rels
+    assert "ai/rules/token-economy.rule.md" in rels
     assert "ai/rules/yagni.rule.md" in rels
     assert "ai/skills/init.skill.md" in rels
     assert "ai/skills/refresh.skill.md" in rels
@@ -261,7 +262,8 @@ def test_template_defaults_carry_rule_switch_keys():
     import json
     from solaris.tools.revs import TEMPLATE_DIR
     defaults = json.loads((TEMPLATE_DIR / "ai" / "defaults.json").read_text(encoding="utf-8"))
-    for key in ("subagents.level", "yagni.enabled", "git.developer_branches", "git.feature_branches"):
+    for key in ("subagents.level", "economy.level", "yagni.enabled", "git.developer_branches",
+                "git.feature_branches"):
         assert key in defaults, key
     assert defaults["git.developer_branches"] is True
     assert defaults["git.feature_branches"] is True
