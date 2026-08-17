@@ -272,6 +272,28 @@ def status(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> list[str]:
 
 # ----------------------------------------------------------------- project classification
 
+def _plugin_home(project_dir: Path, name: str) -> str:
+    """A plugin's pack-side home relative to ai/: plugins/<name> (0.28.0+), or the legacy <name>
+    for a pre-migration pack that still has ai/<name>/. Pack-owned dir names never count as a
+    legacy overlay (a plugin named "rules" etc. would otherwise collide with the pack's own
+    ai/rules/)."""
+    project_dir = Path(project_dir)
+    if (not (project_dir / "ai" / "plugins" / name).is_dir()
+            and name not in ("rules", "skills", "info", "plugins", ".memory")
+            and (project_dir / "ai" / name).is_dir()):
+        return name
+    return f"plugins/{name}"
+
+
+def _link_ref(project_dir: Path, name: str) -> str:
+    """A linked plugin's pack-side pointer file relative to ai/ (legacy pre-0.28 location aware)."""
+    project_dir = Path(project_dir)
+    if (not (project_dir / "ai" / "plugins" / f"{name}.link.md").exists()
+            and (project_dir / "ai" / f"{name}.link.md").exists()):
+        return f"{name}.link.md"
+    return f"plugins/{name}.link.md"
+
+
 def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
                      plugins_dir: Path = PLUGINS_DIR) -> list[tuple[Path, Path, str]]:
     """(master_path, project_path, rel_in_project) for every file the framework materializes into a project."""
@@ -300,15 +322,7 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             name = entry.get("name") if isinstance(entry, dict) else entry
             plugin_root = plugins_dir / name
             if (plugin_root / "shared").is_dir():
-                # Plugins materialize under ai/plugins/<name>/ (0.28.0+); a pre-migration pack that
-                # still has the legacy ai/<name>/ dir classifies against that until it is migrated.
-                # Pack-owned dir names never count as a legacy overlay (a plugin named "rules" etc.
-                # would otherwise collide with the pack's own ai/rules/).
-                base = f"ai/plugins/{name}"
-                if (not (project_dir / base).is_dir()
-                        and name not in ("rules", "skills", "info", "plugins", ".memory")
-                        and (project_dir / "ai" / name).is_dir()):
-                    base = f"ai/{name}"
+                base = f"ai/{_plugin_home(project_dir, name)}"
                 for f in iter_plugin_shared(plugin_root):
                     sub = f.relative_to(plugin_root / "shared")
                     rel = f"{base}/{sub}"
@@ -316,7 +330,7 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     return pairs
 
 
-def _plugins_block(manifest: dict) -> str:
+def _plugins_block(manifest: dict, project_dir: Path) -> str:
     """Markdown bullet list of the manifest's attached plugins (the {{PLUGINS}} placeholder)."""
     lines = []
     for entry in manifest.get("plugins") or []:
@@ -329,11 +343,11 @@ def _plugins_block(manifest: dict) -> str:
             continue  # malformed entry; the README list just skips it
         if entry.get("mode") == "link":
             lines.append(f"- `{name}` - linked (always live from the local plugin "
-                         f"source; see `plugins/{name}.link.md`)")
+                         f"source; see `{_link_ref(project_dir, name)}`)")
         else:
             ver = entry.get("version", "")
             ver_part = f" {ver}" if ver else ""
-            lines.append(f"- `{name}`{ver_part} - copied into `plugins/{name}/`")
+            lines.append(f"- `{name}`{ver_part} - copied into `{_plugin_home(project_dir, name)}/`")
     return "\n".join(lines) if lines else "- none attached yet"
 
 
@@ -430,12 +444,13 @@ def _skills_block(manifest: dict, project_dir: Path, template_dir: Path = TEMPLA
         if shared.is_dir():
             for f in sorted(shared.rglob("*.skill.md")):
                 sub = f.relative_to(shared)
-                ref = f"plugins/{pname}.link.md" if linked else f"plugins/{pname}/{sub}"
+                ref = (_link_ref(project_dir, pname) if linked
+                       else f"{_plugin_home(project_dir, pname)}/{sub}")
                 lines.append(entry(f, ref))
     return "\n".join(lines) if lines else "- none yet"
 
 
-def _placeholder_subs(manifest: dict) -> dict:
+def _placeholder_subs(manifest: dict, project_dir: Path) -> dict:
     """Template placeholders resolved from a project's manifest (the rev marker is not a placeholder)."""
     p = manifest.get("project", {})
     return {
@@ -443,7 +458,7 @@ def _placeholder_subs(manifest: dict) -> dict:
         "{{TYPE}}": p.get("type", ""), "{{MODE}}": p.get("mode", ""),
         "{{FRAMEWORK_VERSION}}": str(manifest.get("framework_version", "")),
         "{{DATE}}": str(manifest.get("created", "")),
-        "{{PLUGINS}}": _plugins_block(manifest),
+        "{{PLUGINS}}": _plugins_block(manifest, project_dir),
         "{{DESCRIPTION}}": _description_block(manifest),
         "{{WORKSPACES}}": _workspaces_block(manifest),
     }
@@ -463,7 +478,7 @@ def classify(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     manifest_path = project_dir / "ai" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     baseline = manifest.get("revisions", {})
-    subs = _placeholder_subs(manifest)
+    subs = _placeholder_subs(manifest, project_dir)
     subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
     rows: list[dict] = []
     for master, proj, rel in materialized_map(project_dir, template_dir, plugins_dir):
@@ -516,7 +531,7 @@ def fast_forward(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     manifest_path = project_dir / "ai" / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     revisions = manifest.setdefault("revisions", {})
-    subs = _placeholder_subs(manifest)
+    subs = _placeholder_subs(manifest, project_dir)
     subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
     applied, skipped = [], []
     for master, proj, rel in materialized_map(project_dir, template_dir, plugins_dir):

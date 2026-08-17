@@ -269,17 +269,34 @@ def test_template_defaults_carry_rule_switch_keys():
     assert defaults["git.feature_branches"] is True
 
 
-def test_plugins_block_renders_copied_linked_and_empty():
-    assert R._plugins_block({"plugins": []}) == "- none attached yet"
-    assert R._plugins_block({"plugins": None}) == "- none attached yet"
+def test_plugins_block_renders_copied_linked_and_empty(tmp_path):
+    assert R._plugins_block({"plugins": []}, tmp_path) == "- none attached yet"
+    assert R._plugins_block({"plugins": None}, tmp_path) == "- none attached yet"
     # malformed entries (no name) are skipped, never rendered as `None`
-    assert R._plugins_block({"plugins": [{"mode": "link"}, {"version": "1.0"}]}) == "- none attached yet"
+    assert R._plugins_block({"plugins": [{"mode": "link"}, {"version": "1.0"}]}, tmp_path) == "- none attached yet"
     block = R._plugins_block({"plugins": [
         {"name": "aplug", "version": "0.1.1"},
         {"name": "lplug", "mode": "link"},
-    ]})
+    ]}, tmp_path)
     assert "- `aplug` 0.1.1 - copied into `plugins/aplug/`" in block
     assert "`lplug` - linked" in block and "plugins/lplug.link.md" in block
+
+
+def test_plugin_blocks_respect_legacy_pack_layout(tmp_path):
+    # pre-0.28 pack: plugin files still under ai/<name>/ - rendered refs must point there
+    tpl = tmp_path / "tpl"
+    plugins = tmp_path / "plugins"
+    proj = tmp_path / "proj"
+    skill_body = '---\nname: do-thing\ntriggers: ["do the thing"]\n---\n\n# do\n'
+    _wmd(plugins / "myplug" / "shared" / "do.skill.md", skill_body, 1)
+    _wmd(proj / "ai" / "myplug" / "do.skill.md", skill_body, 1)
+    manifest = {"plugins": [{"name": "myplug", "version": "0.1.0"}]}
+    assert "- `myplug` 0.1.0 - copied into `myplug/`" in R._plugins_block(manifest, proj)
+    block = R._skills_block(manifest, proj, template_dir=tpl, plugins_dir=plugins)
+    assert "([`myplug/do.skill.md`](myplug/do.skill.md))" in block
+    # once migrated (ai/plugins/<name>/ exists), the new home wins again
+    (proj / "ai" / "plugins" / "myplug").mkdir(parents=True)
+    assert "copied into `plugins/myplug/`" in R._plugins_block(manifest, proj)
 
 
 def test_readme_fast_forwards_after_plugin_attach(tmp_path):
