@@ -25,6 +25,9 @@ the project's `source/` code.
 - **merge-up** (user rev > master): the user improved the materialized copy. For a plugin file, run
   `import-plugin` (update-from-project) to fold it into the plugin source and bump the master; for a core
   template file, copy the improvement up into `solaris/templates/ai-pack/...` and `revs bump` it. Re-run ff.
+  Exception: a **project-customized pack stub** (an `init.skill.md`/`refresh.skill.md` filled in with that
+  project's real resources and steps) classifies merge-up permanently - that is correct and safe (ff never
+  touches it); keep the project side and do NOT fold project-specific content into the template.
 - **conflict** (both changed): show a 3-way view (baseline / master / project) and ask the user, per file or
   hunk, which side wins; write the merged result; `revs bump` the master if it changed.
 

@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 13_
+_Rev. 14_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -23,8 +23,15 @@ read the upstream directly at `github.com/brevdev/brev-cli` under `.agents/skill
 
 ## 0. Preconditions
 
-`brev ls` succeeds (else run `brev-setup`), and the project has `ai/.memory/brev-costs.md`
-(create from the template below if missing).
+- `brev ls` succeeds (else run `brev-setup`).
+- **The active org matches the project's recorded `brev_org`** (`ai/.memory/resources.md`).
+  Check the active org with `brev org ls` (or `jq -r .name ~/.brev/active_org.json`). Being
+  logged in says nothing about the org, and an instance created under the wrong org lists and
+  bills there - invisible to the project team (a real field incident). If no `brev_org` is
+  recorded, or it is a TBD/unreviewed default: ask the user which org this project's instances
+  bill to, record the answer in `resources.md`, and never assume the personal org for a team
+  project. On mismatch: `brev org set <recorded>` and re-check before ANY `create`.
+- The project has `ai/.memory/brev-costs.md` (create from the template below if missing).
 
 ## 1. Pick and create the instance
 

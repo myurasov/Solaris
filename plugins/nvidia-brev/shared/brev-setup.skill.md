@@ -7,7 +7,7 @@ summary: Install the Brev CLI, guide the user through account registration and l
   (browser flow - never secrets in chat), select the org, and verify access. Run this
   before the first brev-run in any environment.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: brev-setup - CLI installation + account onboarding <!-- omit in toc -->
 
@@ -57,9 +57,12 @@ every step checks state first and skips what is already done.
 
 ## 3. Organization
 
-1. `brev org ls` - show the orgs; confirm with the user which one instances should bill to
-   (the `brev_org` setup answer, if recorded, is the default).
-2. If wrong: `brev org set <org>`.
+1. `brev org ls` - show the orgs with the active one marked, and confirm with the user which
+   org this project's instances bill to. The recorded `brev_org` in `ai/.memory/resources.md`
+   is the default when present; with nothing recorded, **ask - never assume the personal org**
+   (on a team project a personal-org instance is invisible to everyone else), then record the
+   answer as `brev_org` in `resources.md`.
+2. If the active org differs: `brev org set <org>`, then re-check with `brev org ls`.
 
 ## 4. Record + hand off
 

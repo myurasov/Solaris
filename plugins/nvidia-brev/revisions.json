@@ -3,13 +3,9 @@
   "schema_version": 1,
   "files": {
     "shared/brev-run.skill.md": {
-      "rev": 13,
-      "hash": "9f7f3d9ff6c2da687065ca89ddb5b04af24971f7fb14a520c7d17df9113a38f5",
+      "rev": 14,
+      "hash": "a4a58f6f7ecea359ae733f6f3f687db7f44875d1a88d44805b47eae6f3119c48",
       "history": [
-        {
-          "rev": 4,
-          "hash": "c77daa80dceda62874e7ee8936ec83c4e323fc0006959a7b1ec8a091ad65fbe6"
-        },
         {
           "rev": 5,
           "hash": "b731980a701fef4c2621e6f823c2a7d4985640f0cd756987e2fafe68c8be418c"
@@ -45,12 +41,16 @@
         {
           "rev": 13,
           "hash": "9f7f3d9ff6c2da687065ca89ddb5b04af24971f7fb14a520c7d17df9113a38f5"
+        },
+        {
+          "rev": 14,
+          "hash": "a4a58f6f7ecea359ae733f6f3f687db7f44875d1a88d44805b47eae6f3119c48"
         }
       ]
     },
     "shared/brev-setup.skill.md": {
-      "rev": 4,
-      "hash": "5e288e270fc6979a5332fafff4433f66a6757ffa709bd9556c9de6565e92c2d1",
+      "rev": 5,
+      "hash": "3dfa8fd504583444755ef0843287bce6592f9dfa11348da9d51577d23e2c7055",
       "history": [
         {
           "rev": 1,
@@ -67,6 +67,10 @@
         {
           "rev": 4,
           "hash": "5e288e270fc6979a5332fafff4433f66a6757ffa709bd9556c9de6565e92c2d1"
+        },
+        {
+          "rev": 5,
+          "hash": "3dfa8fd504583444755ef0843287bce6592f9dfa11348da9d51577d23e2c7055"
         }
       ]
     }

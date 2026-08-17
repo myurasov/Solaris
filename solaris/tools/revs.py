@@ -496,10 +496,13 @@ def classify(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             prev, phash = file_rev_hash(proj)
             if phash == mhash:
                 verdict = "in-sync"
+            elif prev is not None and mrev is not None and prev > mrev:
+                # user advanced past master - never auto-overwrite, even when the baseline
+                # matches (a customized-then-baselined file would otherwise "fast-forward"
+                # backwards onto the older master and lose the customization)
+                verdict = "merge-up"
             elif base and phash == base.get("hash"):
                 verdict = "fast-forward"          # user untouched; master advanced
-            elif prev is not None and mrev is not None and prev > mrev:
-                verdict = "merge-up"              # user advanced past master
             else:
                 verdict = "conflict"              # both changed (or no base)
         rows.append({"rel": rel, "verdict": verdict, "master_rev": mrev, "proj_rev": prev,

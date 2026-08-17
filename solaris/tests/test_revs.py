@@ -364,6 +364,29 @@ def test_ff_materializes_readme_with_plugin_list(tmp_path):
     assert "{{SKILLS}}" not in text and "{{WORKSPACES}}" not in text and "{{DESCRIPTION}}" not in text
 
 
+def test_customized_stub_above_master_rev_never_fast_forwards(tmp_path):
+    # a project-customized pack stub (rev bumped above master) must classify merge-up even
+    # after a baseline re-record - a fast-forward here would clobber it with the older master
+    tpl = tmp_path / "tpl"
+    proj = tmp_path / "proj"
+    _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
+    _wmd(tpl / "ai" / "skills" / "init.skill.md", "# init\n\nstub\n", 8)
+    custom = "# init\n\nproject-specific resources\n"
+    _wmd(proj / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(proj / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
+    _wmd(proj / "ai" / "skills" / "init.skill.md", custom, 9)
+    (proj / "ai" / "manifest.json").write_text(json.dumps({"plugins": [], "revisions": {}}),
+                                               encoding="utf-8")
+    plugins = tmp_path / "plugins"
+    R.record_baseline(proj, template_dir=tpl, plugins_dir=plugins)  # baseline == customized copy
+    rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
+    assert rows["ai/skills/init.skill.md"] == "merge-up"
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    text = (proj / "ai" / "skills" / "init.skill.md").read_text(encoding="utf-8")
+    assert "project-specific resources" in text  # untouched by ff
+
+
 def test_workspaces_block_variants():
     assert R._workspaces_block({"project": {"mode": "local"}}) == "- `source/` - the default (and only) workspace"
     assert R._workspaces_block({"project": {"mode": "embedded"}}).startswith("- this repo itself")
