@@ -103,7 +103,8 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
   `ai/.memory/spec-v0.md`.
 - The copied `ai/.memory/` already includes a fresh `context.md` (the session-context summary, with
   `{{NAME}}` substituted); leave its `## Session Context` empty for the engineer to fill at a save point.
-- Ensure `ai/manifest.json` has `project.{name,slug,type,mode}`, `framework_version`, and `plugins`; when
+- Ensure `ai/manifest.json` has `project.{name,slug,type,mode,description}` (the one-line description
+  feeds the pack README's `{{DESCRIPTION}}` render), `framework_version`, and `plugins`; when
   the project has workspaces beyond the default, also `project.workspaces` (array of folder names,
   `source` included).
 - Seed the project's own version: `uv run -m solaris.tools.version project-set --dir projects/<slug> 0.1.0`

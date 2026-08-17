@@ -49,8 +49,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/README.md": {
-      "rev": 1,
-      "hash": "5dab2214b52db957cc66741c5ee2d8eb929c6baaa21a8dc80f4d5b471d384a4e",
+      "rev": 2,
+      "hash": "7a4d9e34c99224256e2b4f26adeaabb5b92e55c374739f16483adbf28fb0e54b",
       "history": [
         {
           "rev": 1,
@@ -59,6 +59,10 @@
         {
           "rev": 1,
           "hash": "5dab2214b52db957cc66741c5ee2d8eb929c6baaa21a8dc80f4d5b471d384a4e"
+        },
+        {
+          "rev": 2,
+          "hash": "7a4d9e34c99224256e2b4f26adeaabb5b92e55c374739f16483adbf28fb0e54b"
         }
       ]
     },

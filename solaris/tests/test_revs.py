@@ -323,11 +323,15 @@ def test_ff_materializes_readme_with_plugin_list(tmp_path):
     proj = tmp_path / "proj"
     _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
     _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
-    _wmd(tpl / "ai" / "README.md", "# {{NAME}} - AI Pack\n\n{{PLUGINS}}\n", 1)
+    _wmd(tpl / "ai" / "README.md",
+         "# {{NAME}} - AI Pack\n\n{{DESCRIPTION}}\n\n{{PLUGINS}}\n\n{{WORKSPACES}}\n\n{{SKILLS}}\n", 1)
     _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
+    _wmd(plugins / "myplug" / "shared" / "do.skill.md",
+         '---\nname: do-thing\ntriggers: ["do the thing", "run thing"]\n---\n\n# do\n', 1)
     (proj / "ai").mkdir(parents=True)
     (proj / "ai" / "manifest.json").write_text(json.dumps({
-        "project": {"name": "Proj X", "slug": "proj-x", "type": "t", "mode": "local"},
+        "project": {"name": "Proj X", "slug": "proj-x", "type": "t", "mode": "local",
+                    "description": "Does X for Y."},
         "plugins": [{"name": "myplug", "version": "0.2.0"}, {"name": "lp", "mode": "link"}],
         "revisions": {},
     }), encoding="utf-8")
@@ -335,5 +339,41 @@ def test_ff_materializes_readme_with_plugin_list(tmp_path):
     text = (proj / "ai" / "README.md").read_text(encoding="utf-8")
     assert text.startswith("_Rev. 1_")
     assert "# Proj X - AI Pack" in text
+    assert "**The project:** Does X for Y." in text
     assert "- `myplug` 0.2.0 - copied into `plugins/myplug/`" in text
     assert "`lp` - linked" in text and "{{PLUGINS}}" not in text
+    assert "- `source/` - the default (and only) workspace" in text
+    assert '- **do-thing** - "do the thing", "run thing" ([`plugins/myplug/do.skill.md`](plugins/myplug/do.skill.md))' in text
+    assert "{{SKILLS}}" not in text and "{{WORKSPACES}}" not in text and "{{DESCRIPTION}}" not in text
+
+
+def test_workspaces_block_variants():
+    assert R._workspaces_block({"project": {"mode": "local"}}) == "- `source/` - the default (and only) workspace"
+    assert R._workspaces_block({"project": {"mode": "embedded"}}).startswith("- this repo itself")
+    multi = R._workspaces_block({"project": {"mode": "local", "workspaces": ["baseline", "experiments"]}})
+    assert multi.splitlines() == ["- `source/` - the default workspace", "- `baseline/`", "- `experiments/`"]
+
+
+def test_description_block_present_and_absent():
+    assert "see [`spec.md`](spec.md)" in R._description_block({"project": {}})
+    d = R._description_block({"project": {"description": "Does X for Y."}})
+    assert d.startswith("**The project:** Does X for Y.")
+
+
+def test_skills_block_lists_pack_and_plugin_skills(tmp_path):
+    tpl = tmp_path / "tpl"
+    plugins = tmp_path / "plugins"
+    proj = tmp_path / "proj"
+    _wmd(tpl / "ai" / "skills" / "init.skill.md",
+         '---\nname: init\ntriggers: ["init project", "onboard me", "getting started"]\n---\n\n# init\n', 1)
+    # multi-line dash form with "a" / "b" alternates: first alternate wins
+    _wmd(plugins / "myplug" / "shared" / "do.skill.md",
+         '---\nname: do-thing\ntriggers:\n  - "do the thing" / "run thing"\n---\n\n# do\n', 1)
+    _wmd(proj / "ai" / "skills" / "local.skill.md",
+         '---\nname: local\ntriggers: ["local dance"]\n---\n\n# local\n', 1)
+    block = R._skills_block(
+        {"plugins": [{"name": "myplug", "version": "1.0"}, {"name": "lnk", "mode": "link"}]},
+        proj, template_dir=tpl, plugins_dir=plugins)
+    assert '- **init** - "init project", "onboard me" ([`skills/init.skill.md`](skills/init.skill.md))' in block
+    assert '- **do-thing** - "do the thing" ([`plugins/myplug/do.skill.md`](plugins/myplug/do.skill.md))' in block
+    assert '- **local** - "local dance"' in block

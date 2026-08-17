@@ -337,6 +337,104 @@ def _plugins_block(manifest: dict) -> str:
     return "\n".join(lines) if lines else "- none attached yet"
 
 
+def _description_block(manifest: dict) -> str:
+    """The {{DESCRIPTION}} line: the manifest's one-line project description, pointing at the spec."""
+    desc = (manifest.get("project", {}).get("description") or "").strip()
+    if desc:
+        return f"**The project:** {desc} The full picture lives in [`spec.md`](spec.md)."
+    return "**The project:** see [`spec.md`](spec.md) for what it is and does."
+
+
+def _workspaces_block(manifest: dict) -> str:
+    """The {{WORKSPACES}} bullets: workspace folders from the manifest."""
+    p = manifest.get("project", {})
+    ws = [w for w in (p.get("workspaces") or []) if w]
+    if not ws:
+        if p.get("mode") == "embedded":
+            return "- this repo itself (embedded mode: the code and the pack share the repo)"
+        return "- `source/` - the default (and only) workspace"
+    if "source" not in ws and p.get("mode") != "embedded":
+        ws = ["source"] + ws
+    return "\n".join(f"- `{w}/` - the default workspace" if w == "source" else f"- `{w}/`"
+                     for w in ws)
+
+
+def _skill_triggers(path: Path) -> tuple[str, list[str]]:
+    """Best-effort (name, triggers) from a skill file's YAML frontmatter (stdlib only, tolerant)."""
+    name = path.name[:-len(".skill.md")] if path.name.endswith(".skill.md") else path.stem
+    triggers: list[str] = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return name, triggers
+    if not lines or lines[0].strip() != "---":
+        return name, triggers
+    in_triggers = False
+    for line in lines[1:]:
+        s = line.strip()
+        if s == "---":
+            break
+        if s.startswith("name:"):
+            name = s.split(":", 1)[1].strip() or name
+            in_triggers = False
+        elif s.startswith("triggers:"):
+            rest = s.split(":", 1)[1].strip()
+            if rest:
+                triggers += re.findall(r'"([^"]+)"', rest)
+                in_triggers = False
+            else:
+                in_triggers = True
+        elif in_triggers and s.startswith("- "):
+            # list items may pack alternates as "a" / "b" / "c" - keep the first
+            item = s[2:].strip().strip('"')
+            if " / " in item:
+                item = item.split(" / ")[0].strip().strip('"')
+            if item:
+                triggers.append(item)
+        elif s:
+            in_triggers = False
+    return name, triggers
+
+
+def _skills_block(manifest: dict, project_dir: Path, template_dir: Path = TEMPLATE_DIR,
+                  plugins_dir: Path = PLUGINS_DIR) -> str:
+    """Markdown menu of trigger-invoked skills (the {{SKILLS}} placeholder): pack + plugin skills."""
+    def entry(path: Path, ref: str) -> str:
+        name, triggers = _skill_triggers(path)
+        trig = ", ".join(f'"{t}"' for t in triggers[:2])
+        loc = f"`{ref}`" if ref.endswith(".link.md") else f"[`{ref}`]({ref})"
+        return f"- **{name}** - {trig} ({loc})" if trig else f"- **{name}** ({loc})"
+
+    lines: list[str] = []
+    seen: set[str] = set()
+    # pack skills: the template masters (always shipped) plus extra project-local ones
+    for f in sorted((Path(template_dir) / "ai" / "skills").glob("*.skill.md")):
+        rel = f"skills/{f.name}"
+        proj_f = Path(project_dir) / "ai" / rel
+        lines.append(entry(proj_f if proj_f.exists() else f, rel))
+        seen.add(rel)
+    proj_skills = Path(project_dir) / "ai" / "skills"
+    if proj_skills.is_dir():
+        for f in sorted(proj_skills.glob("*.skill.md")):
+            rel = f"skills/{f.name}"
+            if rel not in seen:
+                lines.append(entry(f, rel))
+                seen.add(rel)
+    # plugin skills, read from the live plugin source (covers copied and linked installs)
+    for pentry in manifest.get("plugins") or []:
+        pname = pentry.get("name") if isinstance(pentry, dict) else pentry
+        if not pname:
+            continue
+        linked = isinstance(pentry, dict) and pentry.get("mode") == "link"
+        shared = Path(plugins_dir) / pname / "shared"
+        if shared.is_dir():
+            for f in sorted(shared.rglob("*.skill.md")):
+                sub = f.relative_to(shared)
+                ref = f"plugins/{pname}.link.md" if linked else f"plugins/{pname}/{sub}"
+                lines.append(entry(f, ref))
+    return "\n".join(lines) if lines else "- none yet"
+
+
 def _placeholder_subs(manifest: dict) -> dict:
     """Template placeholders resolved from a project's manifest (the rev marker is not a placeholder)."""
     p = manifest.get("project", {})
@@ -346,6 +444,8 @@ def _placeholder_subs(manifest: dict) -> dict:
         "{{FRAMEWORK_VERSION}}": str(manifest.get("framework_version", "")),
         "{{DATE}}": str(manifest.get("created", "")),
         "{{PLUGINS}}": _plugins_block(manifest),
+        "{{DESCRIPTION}}": _description_block(manifest),
+        "{{WORKSPACES}}": _workspaces_block(manifest),
     }
 
 
@@ -364,6 +464,7 @@ def classify(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
     baseline = manifest.get("revisions", {})
     subs = _placeholder_subs(manifest)
+    subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
     rows: list[dict] = []
     for master, proj, rel in materialized_map(project_dir, template_dir, plugins_dir):
         if master.exists():
@@ -416,6 +517,7 @@ def fast_forward(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     revisions = manifest.setdefault("revisions", {})
     subs = _placeholder_subs(manifest)
+    subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
     applied, skipped = [], []
     for master, proj, rel in materialized_map(project_dir, template_dir, plugins_dir):
         v = verdicts.get(rel)

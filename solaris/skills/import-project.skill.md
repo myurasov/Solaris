@@ -69,7 +69,8 @@ into the generic `engineer.instructions.md`.
   session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
   gathered). Durable orientation also goes into `ai/engineer.instructions.md`, which survives future rewrites.
 - Seed `ai/.memory/interactions.jsonl` (empty). Write `ai/manifest.json`
-  (`project.{name,slug,type,mode}`, `framework_version` from `version current`, `plugins`). Write the
+  (`project.{name,slug,type,mode,description}` - the one-line description feeds the pack README -
+  `framework_version` from `version current`, `plugins`). Write the
   minimal project root (`AGENTS.md` + a one-line `CLAUDE.md` `@AGENTS.md` shim; no `.cursor/` / `mcp.json.example` / `.gitignore`),
   the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root `mcp.json.example`
   plus any plugin servers). Seed `ai/defaults.json` from
