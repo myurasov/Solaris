@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -120,9 +120,10 @@ Say **"save context"** before stepping away: the agent snapshots the session int
 
 ### Stay Up to Date (refresh)
 
-Say **"refresh"** or **"pull latest"**. The agent pulls `main`, brings your personal branch up
-to date (handling rewritten upstream history safely), migrates your local copy to any new
-layouts, and reports what changed. It never pushes. Details:
+Say **"refresh"** or **"pull latest"**. The agent stashes your local edits automatically, pulls
+`main`, rebases your personal branch onto it — resolving conflicts itself and asking only when
+genuinely in doubt — re-applies your edits, migrates your local copy to any new layouts, and
+reports what changed. It never pushes. Details:
 [`skills/refresh.skill.md`](skills/refresh.skill.md).
 
 ### Work with Git

@@ -49,8 +49,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/README.md": {
-      "rev": 2,
-      "hash": "7a4d9e34c99224256e2b4f26adeaabb5b92e55c374739f16483adbf28fb0e54b",
+      "rev": 3,
+      "hash": "991a97568b7803a9548926d8a77e99d14205b257f22c6894fe9858cde5257abd",
       "history": [
         {
           "rev": 1,
@@ -63,6 +63,10 @@
         {
           "rev": 2,
           "hash": "7a4d9e34c99224256e2b4f26adeaabb5b92e55c374739f16483adbf28fb0e54b"
+        },
+        {
+          "rev": 3,
+          "hash": "991a97568b7803a9548926d8a77e99d14205b257f22c6894fe9858cde5257abd"
         }
       ]
     },
@@ -203,8 +207,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/skills/refresh.skill.md": {
-      "rev": 8,
-      "hash": "6b3027bbb64fdb0e25c634e5094069752a99aab815267a603607f20a59d103e4",
+      "rev": 9,
+      "hash": "2913c6e022288fcb01b09c82621a0c6a5d418ba57c86df3135040cc65ee8b21a",
       "history": [
         {
           "rev": 6,
@@ -217,6 +221,10 @@
         {
           "rev": 8,
           "hash": "6b3027bbb64fdb0e25c634e5094069752a99aab815267a603607f20a59d103e4"
+        },
+        {
+          "rev": 9,
+          "hash": "2913c6e022288fcb01b09c82621a0c6a5d418ba57c86df3135040cc65ee8b21a"
         }
       ]
     },
