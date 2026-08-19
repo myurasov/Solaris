@@ -1,4 +1,4 @@
-_Rev. 8_
+_Rev. 9_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -35,7 +35,10 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
   what mic/system/per-participant lanes mean and combining them is the CONSUMER'S job;
   bit-identical lanes (equal decoded PCM) come back marked `duplicate_of`. Segment timestamps are absolute seconds
   in the recording; rendered per-lane transcripts (`transcript[-<lane>].txt/.srt/.vtt`, plus
-  full-word JSON) download from `GET /v1/tasks/{id}/artifacts/<name>`. Pass speaker-count
+  full-word JSON, plus per-lane RTTM when diarized) download from
+  `GET /v1/tasks/{id}/artifacts/<name>` - or all zipped from `GET /v1/tasks/{id}/archive`
+  (`transcript-<id>.zip` / `diarize-<id>.zip`); any task's full object downloads as
+  `results-<id>.json` from `GET /v1/tasks/{id}/results`. Pass speaker-count
   hints (`min/max/num_speakers`, applied per lane) when roughly known - long multi-party
   audio over-splits, and `suspicious_speaker_count: true` means re-run with a `max_speakers`
   hint.
