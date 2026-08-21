@@ -1,1 +1,5 @@
-nvidia-isaac-lab/
+# Plugins with their own private repos: multi-plugin clones live under .repos/,
+# symlinked here as plugins/<name>.
+.repos/
+nvidia-isaac-lab
+nvidia-nvbugs
