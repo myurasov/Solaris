@@ -20,8 +20,8 @@
     "NOTICE": true,
     "LICENSE": true
   },
+  "explorer.decorations.colors": false,
   "workbench.colorCustomizations": {
-    // "gitDecoration.ignoredResourceForeground": "#e3d9ff",
     "[Shades of Purple (Super Dark)]": {
       "foreground": "#ffffff",
       // "descriptionForeground": "#d5ceb3",
