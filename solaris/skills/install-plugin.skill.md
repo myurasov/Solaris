@@ -1,7 +1,7 @@
 ---
 name: install-plugin
-triggers: ["install plugin <git url|folder|zip>", "install the <name> plugin", "repair plugin <name>", "add plugin <X> to <project>", "update plugin <X> in <project>", "link plugin <X> to <project>", "link the <name> plugin", "unlink plugin <X>", "detach plugin <X> from <project>"]
-summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/folder/zip into plugins/, validate/repair it, and install (copy or link mode)/update/migrate/repair it in a project.
+triggers: ["install plugin <git url|folder|zip>", "install the <name> plugin", "repair plugin <name>", "add plugin <X> to <project>", "add plugin <X> to this task", "update plugin <X> in <project>", "link plugin <X> to <project>", "link the <name> plugin", "unlink plugin <X>", "detach plugin <X> from <project>"]
+summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/folder/zip into plugins/, validate/repair it, and install (copy or link mode)/update/migrate/repair it in a project (an ad-hoc task attaches per the ad-hoc-task skill).
 ---
 
 # install-plugin <!-- omit in toc -->
@@ -71,6 +71,10 @@ A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json
 
 - **No project named:** stop after step 3 - the plugin source is in `plugins/<name>/`, available to attach
   later.
+- **Ad-hoc task named instead of a project** ("add plugin `<X>` to this task"): acquire/validate here
+  (steps 2-3), then attach per the `ad-hoc-task` skill's "Use Plugins" section - a `Plugins:` line in the
+  task's `notes.md`, shared files loaded live from `plugins/<name>/shared/` (nothing copied, no manifest,
+  no revs; MCP merge and `setup` adapt as defined there). Steps 5-6 below are project-only.
 - **Project named, plugin already present in `plugins/`:** do **not** re-acquire. Run **`health-check`** to
   validate (`revs status`; for the project `revs classify --dir projects/<slug>`, `version check-plugins`,
   `mcp_sync --check`). Report problems + the fix. If valid but not yet attached, attach it (below).

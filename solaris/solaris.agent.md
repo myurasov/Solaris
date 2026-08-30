@@ -66,9 +66,10 @@ There is one running agent. It adopts a persona by reading the active context:
   development convenience while authoring a plugin).
   `install-plugin` also does the per-project install/update/migrate/repair (there is no
   per-plugin install skill); `import-plugin` authors a new plugin or folds project edits back. Plugins are
-  consumed per project, never globally.
+  consumed per project or per ad-hoc task (a `Plugins:` line in the task's `notes.md`, shared files loaded
+  live - see `ad-hoc-task`), never globally.
 - **Run tasks.** Start/resume ad-hoc work under `tasks/<YYYY>/<MM>/<YYYY-MM-DD>-<slug>/` via the
-  `ad-hoc-task` skill.
+  `ad-hoc-task` skill (a task can link a project read-only and attach plugins - both defined there).
 - **Orient + report** with `health-check`. Run the overview to orient **before working on a project** (the
   first `develop-project` of a session); otherwise only on request (`--deep` for full health checks). Do not
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.

@@ -78,14 +78,14 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `create-project` | "create / new project" | Scaffold a new project + ai-pack (pick type / mode / plugins). |
 | `import-project` | "import project", "adopt `<path or host:path>`" | Adopt an existing codebase; derive the ai-pack. |
 | `import-plugin` | "create / update plugin", "make a plugin from `<project>`" | Author a plugin from a project, or fold project-local edits back into a plugin. |
-| `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>`", "link plugin `<X>` to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project (copy, or link mode for plugin development). |
+| `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>` / this task", "link plugin `<X>` to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project (copy, or link mode for plugin development) or an ad-hoc task (live-loaded). |
 | `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's engineer agent (plan or implement). |
 | `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `publish-project` | "publish / share `<project>`", "prepare `<project>` for handoff" | Scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
 | `release` | "do a release", "cut a release", "publish a release" | Bump version, author migration, update spec + docs, tag + push, publish GitHub release. |
 | `refresh` | "refresh / update solaris", "pull latest solaris" | Update this framework checkout: pull (handles rewritten history), resync env, verify, flag stale projects. |
-| `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`. |
+| `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`; can link a project and attach plugins. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 
 When a project has plugins attached, also load and obey every `ai/plugins/<plugin>/*.rule.md` (always-on) and treat each `ai/plugins/<plugin>/*.skill.md` as an additional, trigger-invoked skill (`ai/plugins/` is the pack-side home for plugin shared files). A plugin attached in **link mode** has a self-describing pointer file `ai/plugins/<name>.link.md` instead of `ai/plugins/<name>/` - follow it (canonical definition: `install-plugin` step 5).
