@@ -75,8 +75,8 @@ A task can attach plugins **directly - no project link required** (at creation, 
 `<name>`", or later, e.g. "add plugin `<name>` to this task"). The plugin must already exist in
 `plugins/<name>/`; if it does not, acquire and validate it first via `install-plugin` (steps 2-3,
 plugins-only scope). Record the attachment as the `Plugins:` line in `notes.md`'s header (comma-separated
-for several); on resume, read that line to re-load. To detach, remove the name from the line (and undo the
-MCP merge below if nothing else uses those servers).
+for several); on resume, read that line to re-load. To detach, remove the name from the line (and remove
+the MCP servers its merge recorded - see below - once no other `Plugins:` line still names them).
 
 Nothing is copied: load the plugin's shared files live from `plugins/<name>/shared/` - each `*.rule.md`
 always-on, each `*.skill.md` trigger-invoked - the way link mode does for projects (a task has no ai-pack
@@ -87,9 +87,16 @@ plugin. Two pieces of a project install adapt to the task context:
 - **MCP servers** (plugin `mcps.json`): a task has no runtime MCP config of its own. When a plugin
   rule/skill needs its MCP servers, offer to merge them into the command-center runtime MCP (`.mcp.json` +
   `.cursor/mcp.json` at the Solaris root; verify with `mcp_sync --check`) - note that this applies to
-  every command-center session on this machine, and remove the servers once no consumer needs them.
+  every command-center session on this machine. Before merging, check each server's command resolves from
+  the Solaris root: an entry written for a copy install (a project-relative path like
+  `ai/plugins/<name>/...`) must be re-pointed at the live source (`plugins/<name>/shared/...`) or the
+  merged server cannot start. Record what was merged on the `Plugins:` line (e.g. `Plugins: <name>
+  (mcp: <server>, <server>)`) - that record is what makes removal safe later: only remove servers a task
+  merge added, and only once no `Plugins:` line across `tasks/*/*/*/notes.md` still names them.
 - **Setup** (`manifest.json` `setup`): surface each `setup.notes` line; write `setup.resources` answers to
   the framework `.memory/resources.md` (or `credentials.md` if `secret: true`) - a task has no `ai/.memory/`.
+  The same mapping applies on the read side: where a live-loaded plugin rule/skill reads
+  `ai/.memory/resources.md` or `ai/.memory/credentials.md`, use the framework `.memory/` equivalents.
 
 The section 2 authority contract applies unchanged: plugin rules and skills add context and conventions,
 not authority - all writes stay inside the task folder, and this skill wins on any conflict. Plugins
