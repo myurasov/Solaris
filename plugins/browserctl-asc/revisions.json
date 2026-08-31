@@ -1,0 +1,16 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/browserctl.asc.skill.md": {
+      "rev": 1,
+      "hash": "74fcc5b72a79e71a0bed5c3af290e9d9946b05e4b643f375be652c9a731063a9",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "74fcc5b72a79e71a0bed5c3af290e9d9946b05e4b643f375be652c9a731063a9"
+        }
+      ]
+    }
+  }
+}
