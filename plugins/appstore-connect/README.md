@@ -20,7 +20,7 @@ plugin) covers only what the API cannot reach.
 | `shared/asc-api.skill.md` | The default entry point: ASC REST API with a team key - listings, screenshots, builds, pricing, age rating, review submission, TestFlight; review-time editability; policy quirks. |
 | `shared/browserctl.asc.skill.md` | Browser flows the API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation - drive loop, dialog technique, upload pitfalls. Follows the `browserctl.<site>` extension-skill format (base `browserctl` plugin required). |
 | `shared/asc-upload.skill.md` | Archive and upload a build from the command line: archive-time signing overrides, `ExportOptions` with `destination upload`, `-allowProvisioningUpdates`; pitfalls (build numbers, wrong team, cloud-synced paths). |
-| `shared/appstore-connect.rule.md` | Always-on: API-first routing, outward-action confirmation, secrets/session discipline, verify-by-re-reading, living-documents duty. |
+| `shared/asc.rule.md` | Always-on: API-first routing, outward-action confirmation, secrets/session discipline, verify-by-re-reading, living-documents duty. |
 
 The skills cross-reference each other; new ASC areas get their own skill files as they are
 field-tested.
