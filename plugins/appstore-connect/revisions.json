@@ -1,0 +1,50 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/appstore-connect.rule.md": {
+      "rev": 1,
+      "hash": "59252b1bed18f46d1fb4a4049baac1a5bb59792951ae5e0b4fa2afcdbc2af061",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "59252b1bed18f46d1fb4a4049baac1a5bb59792951ae5e0b4fa2afcdbc2af061"
+        }
+      ]
+    },
+    "shared/asc-api.skill.md": {
+      "rev": 1,
+      "hash": "a9ef66eeb28f9f0869f454007db0fcbc58fab99edd4e23dd5eedd31252cb2df6",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "a9ef66eeb28f9f0869f454007db0fcbc58fab99edd4e23dd5eedd31252cb2df6"
+        }
+      ]
+    },
+    "shared/asc-upload.skill.md": {
+      "rev": 1,
+      "hash": "22312e674d44209a0564106c82356f54d7317a708680095553984067f8233f54",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "22312e674d44209a0564106c82356f54d7317a708680095553984067f8233f54"
+        }
+      ]
+    },
+    "shared/browserctl.asc.skill.md": {
+      "rev": 2,
+      "hash": "32989854575dfe74809fb418cf150952035bebd72649e4414ab5ce560397e20f",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "74fcc5b72a79e71a0bed5c3af290e9d9946b05e4b643f375be652c9a731063a9"
+        },
+        {
+          "rev": 2,
+          "hash": "32989854575dfe74809fb418cf150952035bebd72649e4414ab5ce560397e20f"
+        }
+      ]
+    }
+  }
+}

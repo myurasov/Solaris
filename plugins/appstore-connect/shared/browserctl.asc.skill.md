@@ -1,14 +1,13 @@
 ---
 name: browserctl.asc
-triggers: ["app store connect", "asc web", "asc api", "drive app store connect", "app store listing", "submit for review", "app privacy", "trader status", "app store screenshots", "attach build", "app store agreements", "testflight testers", "manage the iap", "apple developer site"]
-summary: Operate App Store Connect from the developer's perspective - API-first (ASC REST with a team key) for listings, screenshots, builds, pricing, review submission; browserctl for what the API cannot reach (App Privacy questionnaire, DSA trader status, agreements, IAP setup, API-key creation) - with field-tested flows, dialog technique, and pitfalls for iOS and macOS apps.
+triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
+summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 1_
+_Rev. 2_
 
-# Skill: browserctl.asc - Operating App Store Connect <!-- omit in toc -->
+# Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
 - [When to Use](#when-to-use)
-- [API First (Most Chores Are Not Browser Work)](#api-first-most-chores-are-not-browser-work)
 - [Session Prelude](#session-prelude)
 - [Two Drive Modes](#two-drive-modes)
 - [Reading Pages](#reading-pages)
@@ -16,48 +15,20 @@ _Rev. 1_
 - [ASC Dialogs (the House Style)](#asc-dialogs-the-house-style)
 - [Field-Tested Flows](#field-tested-flows)
 - [Forms, Saving, Uploads](#forms-saving-uploads)
-- [What Stays Editable During Review](#what-stays-editable-during-review)
-- [Policy Quirks](#policy-quirks)
 - [Guardrails](#guardrails)
 - [Maintenance (Standing Duty)](#maintenance-standing-duty)
 
 ## When to Use
 
-Any App Store Connect or developer.apple.com chore, for iOS or macOS apps: app records and
-bundle ids, version listings and metadata, screenshots, in-app purchases, pricing and
-availability, App Privacy, age rating, builds and TestFlight, review submission, agreements
-and compliance, API keys. Requires the base **browserctl** plugin in the same project (its
-`browserctl.skill.md` is the command reference); this skill adds the ASC-specific technique.
-The overlay path below is written as `ai/plugins/browserctl/browserctl.py` - adjust if the
-base plugin is linked rather than copied.
-
-## API First (Most Chores Are Not Browser Work)
-
-Nearly all ASC state is faster and more reliable over the **ASC REST API** with a team key
-(key ids, `.p8` path, staged resource ids: `ai/.memory/credentials.md`; JWT ES256 with
-`aud=appstoreconnect-v1` and **exp <= 20 minutes - longer and every call fails as an auth
-error**). Field-tested over the API: version records + localizations (description, keywords,
-promo text, support URL, copyright), app info (subtitle, privacy policy URL, category,
-content rights), age rating (the 2026 schema is a moving target - use an adaptive retry loop
-that reads "You must provide a value for the attribute 'X'" and fills booleans / "NONE"
-enums), pricing (free = 0-price point + appPriceSchedules with a `${price1}` included
-resource), screenshots (POST reserve -> PUT the upload operations -> PATCH uploaded+MD5;
-the 6.9-inch iPhone display type is `APP_IPHONE_67`), build attach, the review submission
-chain (`reviewSubmissions` -> `reviewSubmissionItems` -> PATCH `submitted:true`; a 409
-carries `meta.associatedErrors` naming the missing field - e.g. `copyright`), and TestFlight
-groups/testers (the web UI can add a tester without ever sending the invite - state stays
-NOT_INVITED; `POST /v1/betaTesterInvitations` actually sends it).
-
-Use the browser **only** for what the API cannot reach:
-
-- App Privacy questionnaire + publish (`appDataUsages` was removed from the 2026 API).
-- EU DSA trader status (Business > Compliance) and agreement acceptance.
-- In-app purchase setup when no API key exists yet (price, localization, review info).
-- ASC API key creation and the one-time `.p8` download (Users and Access > Integrations).
-- Visual verification (listing preview, screenshot thumbnails) and tester-side debugging.
-
-No API key on the account yet? Creating one is itself a browser flow (Field-Tested Flows) -
-do that first, then switch to the API for the bulk work.
+Browser work on App Store Connect / developer.apple.com. **Check
+[`asc-api.skill.md`](asc-api.skill.md) first** - most ASC chores are faster over the REST
+API; the browser is for what the API cannot reach (App Privacy questionnaire, EU DSA trader
+status, agreements, IAP setup, API-key creation, visual verification) and for the bootstrap
+case where no API key exists yet. Requires the base **browserctl** plugin in the same
+project (its `browserctl.skill.md` is the command reference); this skill adds the
+ASC-specific technique. The overlay path below is written as
+`ai/plugins/browserctl/browserctl.py` - adjust if the base plugin is linked rather than
+copied.
 
 ## Session Prelude
 
@@ -73,8 +44,8 @@ do that first, then switch to the API for the bulk work.
    outside browserctl, never export cookies. `stop` the profile when the chore is done.
 2. **Scripts:** if the project env has no playwright, run attach() scripts with
    `uv run --with playwright python <script>.py` from the project root.
-3. **Identifiers** (app id, version/submission ids, key ids, team id) come from
-   `ai/.memory/` - never hard-code them in shareable files.
+3. **Identifiers** (app id, version/submission ids, team id) come from `ai/.memory/` -
+   never hard-code them in shareable files.
 
 ## Two Drive Modes
 
@@ -198,31 +169,8 @@ Nearly every mutation happens in a `role=dialog` overlay:
   (with its Delete control) appears before saving. Upload order = display order - to
   reorder, Delete All and re-upload one file at a time. Size limits fail silently (the file
   just does not take) - resize first (`sips -z <h> <w> shot.png`). Field-verified sizes:
-  mac screenshots 2880x1800; iPhone 6.9-inch 1320x2868 (`APP_IPHONE_67`); IAP review
-  screenshot exactly 1280x800. (Prefer the API for app screenshots.)
-
-## What Stays Editable During Review
-
-Field-tested while a version sat in WAITING_FOR_REVIEW: **version localization edits
-(supportUrl, description) and app-info edits (privacyPolicyUrl) PATCH fine in place** - no
-cancel/resubmit needed, and the submission state is untouched. Do not preemptively cancel a
-submission to edit metadata; try the PATCH first and fall back to
-cancel (`reviewSubmissions` PATCH `canceled:true`) -> patch -> new submission -> item ->
-`submitted:true` only on a real lock error. Structural changes (build swap, screenshots)
-are the ones that need the version editable.
-
-## Policy Quirks
-
-- **Paid apps / IAP gate on the Paid Applications agreement.** Accounts whose legal address
-  is in a region where Apple suspended paid apps (e.g. Russia since 2022) are not offered
-  the agreement at all - no UI error, it is simply absent. A country/region change is an
-  Apple Developer Support case (Membership and Account), not self-serve.
-- **A first IAP must be submitted together with an app version** - it cannot go for review
-  alone, and a version whose app relies on the IAP should not be submitted before the paid
-  agreement exists (the purchase would be dead on arrival).
-- **External support/privacy URLs are referenced live** by the listing - renaming the repo
-  or host behind them (e.g. a GitHub Pages repo rename, which does not redirect) requires
-  re-pointing the ASC Support URL and Privacy Policy URL fields.
+  mac screenshots 2880x1800; iPhone 6.9-inch 1320x2868; IAP review screenshot exactly
+  1280x800. (Prefer the API for app screenshots.)
 
 ## Guardrails
 
@@ -237,12 +185,9 @@ are the ones that need the version editable.
 
 ## Maintenance (Standing Duty)
 
-This skill is a **living document** (owner directive, 2026-08): whenever a new App Store /
-App Store Connect lesson is learned from the developer's perspective - an API schema change,
-a web flow, a review or TestFlight behavior, a policy quirk, a pitfall and its fix - fold it
-into the matching section (or add one) **the same session it is field-verified**. Rewrite in
-place (not append-only), keep identifiers out, and bump the file's rev
-(`uv run -m solaris.tools.revs bump <this file>` + `revs ledger`, then commit the plugin
-repo). Edits here reach every consumer: linked projects immediately, copied installs on
-their next plugin update. A lesson that lives only in memory files or a chat transcript is
+This plugin's skills are **living documents** (owner directive, 2026-08): fold every newly
+field-verified App Store lesson into the matching skill (browser technique here, API
+material in [`asc-api.skill.md`](asc-api.skill.md)) the same session it is learned. Rewrite
+in place, keep identifiers out, bump the file's rev (`revs bump` + `revs ledger`), commit
+the framework repo. A lesson that lives only in memory files or a chat transcript is
 considered lost.

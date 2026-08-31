@@ -1,0 +1,23 @@
+{
+  "_comment": "Plugin manifest (authored by the plugin author). 'version' is the plugin semver (release-only); install-plugin reads 'setup'.",
+  "schema_version": 1,
+  "name": "appstore-connect",
+  "version": "0.1.0",
+  "description": "App Store Connect from the developer's perspective, as separate skills plus an always-on rule: asc-api.skill.md (the default path - ASC REST API with a team key: listings, screenshots, builds, pricing, age rating, review submission, TestFlight, review-time editability, policy quirks), browserctl.asc.skill.md (browserctl-driven flows the API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation), asc-upload.skill.md (archive + upload a build from the command line), and appstore-connect.rule.md (API-first routing, outward-action confirmation, secrets/session discipline). Field-tested on iOS and macOS app publishes. The browser skill follows the browserctl.<site> extension-skill format and requires the base browserctl plugin in the same project.",
+  "applies_to": {
+    "markers": ["project.yml", "*.xcodeproj", "*.storekit", "ExportOptions*.plist", "*.entitlements"]
+  },
+  "setup": {
+    "notes": [
+      "The browser skill requires the base browserctl plugin attached to the same project; the API skill needs an ASC team API key recorded in ai/.memory/credentials.md (creating one is a browser flow - see browserctl.asc.skill.md).",
+      "The signed-in Apple session lives in a browserctl profile: log in once headed (2FA needs the owner); the session persists in the profile and nowhere else."
+    ],
+    "resources": [
+      {
+        "name": "asc_browser_profile",
+        "prompt": "browserctl profile that holds (or will hold) the signed-in Apple/ASC session",
+        "default": "default"
+      }
+    ]
+  }
+}

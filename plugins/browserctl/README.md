@@ -49,14 +49,15 @@ No `mcps.json` - shipping zero MCP servers is the point.
 
 ## Extension Plugins
 
-Site-specific knowledge beyond the bundled examples ships as **browser-control extension
-plugins** - the standard format (owner directive, 2026-08-30): a separate plugin named
-`browserctl-<site>` whose `shared/` carries `browserctl.<site>.skill.md` (one skill or a set)
-defining how to work a particular website; frontmatter `name` matches the file stem. Extension
-plugins ship no tooling - the base browserctl plugin is a prerequisite in the same project;
-generic browserctl technique stays here, only site material lives in the extension. Reference
-instance: `plugins/browserctl-asc` (App Store Connect). (`slack-web.skill.md` predates the
-format and stays bundled here for now.)
+Site-specific browser knowledge beyond the bundled examples ships in separate plugins as
+**browser-control extension skills** - the standard format (owner directive, 2026-08-30):
+`shared/browserctl.<site>.skill.md` (one skill or a set per website; frontmatter `name`
+matches the file stem), living either in a dedicated `browserctl-<site>` plugin or in a
+domain plugin that bundles them with related non-browser skills. Extension skills ship no
+tooling - the base browserctl plugin is a prerequisite in the same project; generic
+browserctl technique stays here, only site material lives in the extension. Reference
+instance: `plugins/appstore-connect` (bundles `browserctl.asc.skill.md` with ASC API and
+upload skills). (`slack-web.skill.md` predates the format and stays bundled here for now.)
 
 ## Install
 
