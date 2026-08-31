@@ -31,17 +31,9 @@
       ]
     },
     "shared/visual-qa.skill.md": {
-      "rev": 11,
-      "hash": "74c30b0e3469ee63142ee495236ceb9dc4c018f1b1a57fb6f5cdc9d10497ee57",
+      "rev": 12,
+      "hash": "2a283731add95d7523d30e312f0f3ceb4689dc0f361b0fa5c5bc20a4574b356f",
       "history": [
-        {
-          "rev": 2,
-          "hash": "14a40737659d2c854721773065a31cb4a7f84a7464700950f4bd848553eb6d4d"
-        },
-        {
-          "rev": 3,
-          "hash": "c3db5efba70262b5f693adc955d28f0cf360fa3ab03aa67a92f1d215869e91d5"
-        },
         {
           "rev": 4,
           "hash": "a86d01020b77140bc31a5993c01c91e4357d5055345993e9d31c1e8c48a6edf6"
@@ -73,6 +65,14 @@
         {
           "rev": 11,
           "hash": "74c30b0e3469ee63142ee495236ceb9dc4c018f1b1a57fb6f5cdc9d10497ee57"
+        },
+        {
+          "rev": 12,
+          "hash": "6a1d25a874e3e310bfe431f0166f454ed6a9cb41c3e48e672be848cc557a17c6"
+        },
+        {
+          "rev": 12,
+          "hash": "2a283731add95d7523d30e312f0f3ceb4689dc0f361b0fa5c5bc20a4574b356f"
         }
       ]
     }

@@ -11,15 +11,15 @@ antitriggers:
   - "work on tasks/"
 summary: Capture the running UI (web / native / mobile), then have the VLM 'eyes' answer or assert against it - the visual leg of verification.
 ---
-_Rev. 11_
+_Rev. 12_
 
 # visual-qa <!-- omit in toc -->
 
 - [What this is](#what-this-is)
-- [0. Choose a model (per GPU system)](#0-choose-a-model-per-gpu-system)
-- [1. Capture](#1-capture)
-- [2. Ask or assert](#2-ask-or-assert)
-- [3. Report + evidence](#3-report--evidence)
+0. [Choose a model (per GPU system)](#0-choose-a-model-per-gpu-system)
+1. [Capture](#1-capture)
+2. [Ask or assert](#2-ask-or-assert)
+3. [Report + evidence](#3-report--evidence)
 - [Watching whole videos (fps + chunking)](#watching-whole-videos-fps--chunking)
 - [Multiple models: one ACTIVE at a time (selectable)](#multiple-models-one-active-at-a-time-selectable)
 - [Images vs. video](#images-vs-video)
@@ -37,6 +37,11 @@ The model is **pluggable and GPU-agnostic**: the client (`eyes.py`) talks to an 
 endpoint (`VISUAL_QA_ENDPOINT`) with a configurable model (`VISUAL_QA_MODEL`). It runs against **any
 NVIDIA GPU system** - a DGX Spark, a workstation RTX, a datacenter A100/H100, or a cloud endpoint - not
 just the Spark. To stand an endpoint up, see [`README.md`](../README.md).
+
+Every `eyes.py` command below uses the copy-install path, run from the project root:
+`uv run --no-project ai/plugins/visual-qa/eyes.py ...`. When the plugin is not materialized - a link-mode
+install, or live-loaded by an ad-hoc task - substitute the live source path from the Solaris root:
+`uv run --no-project plugins/visual-qa/shared/eyes.py ...` (same commands otherwise).
 
 ## 0. Choose a model (per GPU system)
 
