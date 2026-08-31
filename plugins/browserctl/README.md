@@ -3,6 +3,7 @@
 - [What It Is](#what-it-is)
 - [Profile Model](#profile-model)
 - [Layout](#layout)
+- [Extension Plugins](#extension-plugins)
 - [Install](#install)
 - [Design Notes](#design-notes)
 
@@ -45,6 +46,17 @@ browser outlives any single agent turn.
 | `manifest.json` | Plugin manifest (`setup` drives install-time steps). |
 
 No `mcps.json` - shipping zero MCP servers is the point.
+
+## Extension Plugins
+
+Site-specific knowledge beyond the bundled examples ships as **browser-control extension
+plugins** - the standard format (owner directive, 2026-08-30): a separate plugin named
+`browserctl-<site>` whose `shared/` carries `browserctl.<site>.skill.md` (one skill or a set)
+defining how to work a particular website; frontmatter `name` matches the file stem. Extension
+plugins ship no tooling - the base browserctl plugin is a prerequisite in the same project;
+generic browserctl technique stays here, only site material lives in the extension. Reference
+instance: `plugins/browserctl-asc` (App Store Connect). (`slack-web.skill.md` predates the
+format and stays bundled here for now.)
 
 ## Install
 
