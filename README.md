@@ -167,11 +167,14 @@ servers, optional project types - so any project can opt into it.
 - **Author one:** *"make a plugin from `<project>`"* factors that project's ways of working into a
   reusable plugin; the same skill folds later project-local edits back into the plugin source.
 - **Bundled plugins:** `browserctl` (CLI browser automation on per-project Chromium profiles -
-  the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill),
-  `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E testing),
-  `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous Brev
-  cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF rendering
-  via installed Chrome; per-project theme: fonts, accent color, page furniture).
+  the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill and
+  defines the `browserctl.<site>` extension-skill format for site-specific browser knowledge),
+  `appstore-connect` (App Store Connect from the developer's perspective: ASC REST API skill,
+  browser skill for the flows the API cannot reach, build archive + upload skill, always-on
+  rule), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
+  testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous
+  Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
+  rendering via installed Chrome; per-project theme: fonts, accent color, page furniture).
 
 ## 9. Keeping Solaris Projects Current
 
@@ -212,5 +215,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.30.0.md`](solaris/spec/spec-v0.30.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.31.0.md`](solaris/spec/spec-v0.31.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
