@@ -56,7 +56,7 @@ matches the file stem), living either in a dedicated `browserctl-<site>` plugin 
 domain plugin that bundles them with related non-browser skills. Extension skills ship no
 tooling - the base browserctl plugin is a prerequisite in the same project; generic
 browserctl technique stays here, only site material lives in the extension. Reference
-instance: `plugins/appstore-connect` (bundles `browserctl.asc.skill.md` with ASC API and
+instance: `plugins/apple-asc` (bundles `browserctl.asc.skill.md` with ASC API and
 upload skills). (`slack-web.skill.md` predates the format and stays bundled here for now.)
 
 ## Install

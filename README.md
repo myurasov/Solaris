@@ -169,7 +169,7 @@ servers, optional project types - so any project can opt into it.
 - **Bundled plugins:** `browserctl` (CLI browser automation on per-project Chromium profiles -
   the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill and
   defines the `browserctl.<site>` extension-skill format for site-specific browser knowledge),
-  `appstore-connect` (App Store Connect from the developer's perspective: ASC REST API skill,
+  `apple-asc` (App Store Connect from the developer's perspective: ASC REST API skill,
   browser skill for the flows the API cannot reach, build archive + upload skill, always-on
   rule), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous

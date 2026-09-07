@@ -1,4 +1,4 @@
-# appstore-connect - Solaris Plugin <!-- omit in toc -->
+# apple-asc - Solaris Plugin <!-- omit in toc -->
 
 - [What It Is](#what-it-is)
 - [Skills](#skills)
@@ -34,8 +34,8 @@ field-tested.
 
 ## Install
 
-Via the framework `install-plugin` skill: "install plugin appstore-connect to <project>"
-(copy) or "link plugin appstore-connect to <project>" (link mode, for plugin development).
+Via the framework `install-plugin` skill: "install plugin apple-asc to <project>"
+(copy) or "link plugin apple-asc to <project>" (link mode, for plugin development).
 Attach the base `browserctl` plugin first.
 
 ## Maintenance

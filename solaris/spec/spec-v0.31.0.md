@@ -243,7 +243,7 @@ browser automation on per-project Chromium profiles over CDP (see the 0.21.0 his
 the **browser-control extension-skill format**: site-specific browser knowledge ships as
 `shared/browserctl.<site>.skill.md` in a dedicated `browserctl-<site>` plugin or a domain plugin, with the
 base plugin as a prerequisite. The bundled `reporting` plugin authors and renders themeable PDF findings
-reports via installed Chrome (see the 0.26.0 history blurb). The bundled `appstore-connect` plugin operates
+reports via installed Chrome (see the 0.26.0 history blurb). The bundled `apple-asc` plugin operates
 App Store Connect from the developer's perspective: an API-first REST skill, a `browserctl.asc` browser
 skill for the flows the API cannot reach, a build archive + upload skill, and an always-on rule (see the
 0.31.0 history blurb).
