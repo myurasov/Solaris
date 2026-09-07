@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -166,7 +166,33 @@ Nearly every mutation happens in a `role=dialog` overlay:
 - **IAP setup** (browser; needed before any API key exists): the IAP page drives price,
   localization (Display Name is an unnamed textbox - fill by index), availability, and the
   review screenshot (see Uploads); a first IAP is submitted together with the app version,
-  not on its own.
+  not on its own. **An IAP stays in "Prepare for Submission" and silently refuses to join a
+  submission until Availability is set** (`Set Up Availability` -> the region dialog arrives
+  with everything checked -> `Done` -> `Save`; verify "All countries or regions selected"):
+  no error is shown, the add just does nothing.
+- **Submitting a version + IAP (2026 submission model, field-verified macOS):** on the version
+  page `Add for Review` is **disabled** while anything is missing, and the reason list sits
+  right under the button ("Unable to Add for Review - The items below are required...":
+  e.g. Content Rights Information under App Information -> `Set Up Content Rights
+  Information` -> radio "No, it does not contain..." -> `Done` -> `Save`). Also make App
+  Review Information consistent: `Sign-in required` arrives **checked** with empty
+  credentials - uncheck it for apps without accounts; fill contact name/phone/email and
+  reviewer Notes. Once enabled, `Add for Review` flips the version to "Ready for Review" and
+  creates a **draft submission** (App Review page -> `Draft Submissions (N)` panel, items
+  list + `Submit for Review`). The IAP's own `Add for Review` is a **menu**: pick "Draft
+  macOS Submission (1) ..." to add it to that draft (or "Create New Submission"); JS clicks
+  on the menu item do not register - use a Playwright `get_by_role("menuitem", ...)` click.
+  `Submit for Review` in the draft panel shows a transient "Submitting" dialog and no
+  confirm step; verify on a fresh load: the App Review row reads "2 Items Waiting for
+  Review", drafts count 0, the IAP status "Waiting for Review". Version rename before
+  submission is a plain `Version` textbox edit + `Save` (a never-submitted version can be
+  renamed freely); swapping the build is `Delete` on the Build row (no confirm) then Add
+  Build. Uploads processed in ~3 minutes for a small macOS app.
+- **Archive signing (asc-upload companion):** with automatic signing, do NOT pass
+  `CODE_SIGN_IDENTITY="Apple Distribution"` to `xcodebuild archive` - Xcode 26 fails with
+  "conflicting provisioning settings ... automatically signed for development"; archive with
+  `CODE_SIGN_STYLE=Automatic DEVELOPMENT_TEAM=<team>` only (the archive is signed for
+  development), and `-exportArchive ... destination upload` re-signs for distribution.
 
 ## Forms, Saving, Uploads
 

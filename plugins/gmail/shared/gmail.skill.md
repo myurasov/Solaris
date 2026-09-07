@@ -3,7 +3,7 @@ name: gmail
 triggers: ["gmail", "check email", "check my email", "check inbox", "check my inbox", "unread emails", "read email", "read the email", "read that email", "search email", "find the email", "send email", "send an email", "send a mail", "reply to the email", "reply to that email", "forward the email", "draft an email", "email <someone>"]
 summary: Read and send Gmail from the terminal with gws (the Google Workspace CLI) - triage or search the inbox, read a message body, send / reply / reply-all / forward / draft with attachments - plus the raw Gmail API form for what the helpers do not cover. Needs gws-setup once per machine.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: gmail - Read and Send Mail With gws <!-- omit in toc -->
 
@@ -46,6 +46,13 @@ The `+` helpers do the MIME/base64 decoding; message ids are the hex `id` values
 
 Flow: triage/search -> pick the `id` -> `+read --id`. Long bodies: redirect to a scratch file
 and grep/slice instead of dumping them into context (token economy).
+
+`+read` fails with `error: Message is missing Message-ID header` (HTTP 500 `internalError`)
+on mail whose sender omits that header (seen on every Apple Developer Support ticket mail,
+2026-09): fall back to the raw API for those - `gws gmail users messages get --params
+'{"userId":"me","id":"<ID>","format":"full"}' > msg.json`, then decode the `text/plain`
+(else `text/html`) parts' `body.data` with base64url (pad with `==`) in a small script; cut
+quoted history at the first `On ... wrote:` line. Keep the dump in the scratchpad.
 
 Attachments are not covered by the helpers - use the raw API, **always redirected into the
 session scratchpad, never printed** (the `format=full` JSON carries every body part
