@@ -3,7 +3,7 @@ name: gws-setup
 triggers: ["set up gmail", "setup gmail", "gmail setup", "install gws", "set up gws", "gws setup", "gws login", "gws auth", "log in to gmail", "gmail login", "google workspace cli", "set up google workspace cli", "install google workspace cli"]
 summary: Install gws (the Google Workspace CLI) on macOS or Linux, put an OAuth Desktop client in place, sign in with the Gmail scope (gws prints a URL, the owner completes consent in a browser; owner-confirmed export hand-off for headless hosts), verify, and record the account. Idempotent - run before the first gmail use on any machine, and again when auth expires.
 ---
-_Rev. 2_
+_Rev. 4_
 
 # Skill: gws-setup - Install and Sign In the Google Workspace CLI <!-- omit in toc -->
 
@@ -58,30 +58,54 @@ later service needs only extra scopes at login (step 3) plus its own skill.
 ## 2. OAuth Client (One-Time per Google Cloud Project)
 
 `gws auth status` prints JSON: `"client_config_exists": true` means a client is in place
-(default path `~/.config/gws/client_secret.json`) -> step 3. Otherwise gws needs an OAuth
-client of type **Desktop app** from a Google Cloud project with the **Gmail API** enabled.
-The owner drives this step (it touches their Google account and Cloud project):
+(default path `~/.config/gws/client_secret.json`) -> step 3. Otherwise gws needs its **own**
+OAuth client of type **Desktop app** from a Google Cloud project with the **Gmail API**
+enabled. Never reuse another tool's client file (a Gmail MCP's, another machine's): each
+tool gets its own client so revoking or deleting one never breaks the others - and a
+`deleted_client` error at login means exactly that, the file points at a client that no
+longer exists. Only the owner can create the client (it lives in their Google account), so
+send them the steps below **verbatim in one message**, with `<PROJECT_ID>` filled in when
+known, and wait:
 
-- **Manual (Cloud Console):** in `console.cloud.google.com`: (1) create or select a project;
-  (2) APIs & Services > Library > enable **Gmail API**; (3) OAuth consent screen (Google Auth
-  Platform > Audience): user type **External**, publishing status Testing is fine, and add
-  the owner's Google account under **Test users** - without it login fails with a generic
-  "Access blocked"; (4) Credentials > Create credentials > OAuth client ID > application type
-  **Desktop app**; (5) download the client JSON and save it as
-  `~/.config/gws/client_secret.json` (`mkdir -p ~/.config/gws && chmod 600 ...`).
-- **With `gcloud` installed and logged in:** `gws auth setup` (in the owner's terminal;
-  `--project <id>`, `--dry-run` to preview) creates or reuses the project and enables the
-  APIs, then prints the Console steps for the client - it does **not** create the OAuth
-  client or add Test users: do (3)-(4) above by hand and paste the client id/secret (or the
-  downloaded JSON path) when it prompts. Skip `--login`: it runs an unscoped login whose
-  terminal picker preselects seven Workspace services; do step 3 instead.
+1. **Project:** pick an existing Google Cloud project or create one at
+   `https://console.cloud.google.com/projectcreate` (any name, e.g. `solaris`); note its
+   project id - every URL below takes `?project=<PROJECT_ID>`.
+2. **Enable the Gmail API:**
+   `https://console.cloud.google.com/apis/library/gmail.googleapis.com?project=<PROJECT_ID>`
+   -> **Enable**.
+3. **Consent screen** (Google Auth Platform; older console: APIs & Services > OAuth consent
+   screen). First time in a project:
+   `https://console.cloud.google.com/auth/overview?project=<PROJECT_ID>` -> **Get started**:
+   app name `gws`, support email = your address, audience: **Internal** when the project
+   belongs to your Google Workspace organization and gws will act as an account of that org
+   (no test users, no "unverified app" screen, no 7-day token expiry - field-verified); else
+   **External**, then `https://console.cloud.google.com/auth/audience?project=<PROJECT_ID>`
+   -> **Test users** > **Add users** > the Google account gws will act as (without it login
+   fails with a generic "Access blocked"). Contact email, **Create**.
+4. **Create the client:** `https://console.cloud.google.com/auth/clients?project=<PROJECT_ID>`
+   (older console: APIs & Services > Credentials > Create credentials > OAuth client ID) ->
+   **Create client** -> application type **Desktop app**, name `gws` -> **Create** ->
+   **Download JSON** (`client_secret_<id>.json` lands in Downloads; re-downloadable from the
+   client's page later).
+5. **Install it** (the agent does this once told the download finished; take the newest
+   file - Downloads often still holds older clients):
+   `f=$(ls -t ~/Downloads/client_secret_*.json | head -n1) && mkdir -p ~/.config/gws && mv "$f" ~/.config/gws/client_secret.json && chmod 600 ~/.config/gws/client_secret.json`,
+   then `gws auth status` shows `"client_config_exists": true`, the new client's id prefix
+   in `config_client_id`, and the project id.
+
+`gws auth setup` (needs `gcloud` logged in as the same Google account) can do steps 1-2 and
+then prints the Console steps for 3-4 - it does **not** create the client or add Test users.
+Skip its `--login` flag: it runs an unscoped login whose terminal picker preselects seven
+Workspace services; do step 3 of this skill instead.
+
 - The client JSON is a credential: never paste it into chat, commits, or shared files;
   reference it by path. Record the GCP project id in `ai/.memory/resources.md`.
-- **Testing-mode expiry:** an External app left in **Testing** gets refresh tokens that
-  expire after 7 days, so `gws` needs step 3 again weekly. To stop that, publish the app
-  (Audience > **Publish app** > In production) - the "Google hasn't verified this app"
-  interstitial then stays (expected for a personal app; verification only matters when
-  distributing to other users) but tokens no longer expire.
+- **Testing-mode expiry (External audience only):** an External app left in **Testing** gets
+  refresh tokens that expire after 7 days, so `gws` needs step 3 again weekly. To stop that,
+  publish the app (Audience > **Publish app** > In production) - the "Google hasn't verified
+  this app" interstitial then stays (expected for a personal app; verification only matters
+  when distributing to other users) but tokens no longer expire. Internal-audience apps have
+  neither problem.
 
 ## 3. Sign In With Gmail Scopes
 

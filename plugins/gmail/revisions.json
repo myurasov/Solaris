@@ -31,8 +31,8 @@
       ]
     },
     "shared/gws-setup.skill.md": {
-      "rev": 2,
-      "hash": "a9dd9fb4bd832f8789aab8b39f78957bcff1219fa9462a24d0762d9eb39d3d10",
+      "rev": 4,
+      "hash": "6bc44fc3fb257a24f946b593526055e4d637b1546aebfdd6685cb60f2b8eab41",
       "history": [
         {
           "rev": 1,
@@ -45,6 +45,14 @@
         {
           "rev": 2,
           "hash": "a9dd9fb4bd832f8789aab8b39f78957bcff1219fa9462a24d0762d9eb39d3d10"
+        },
+        {
+          "rev": 3,
+          "hash": "b3c44bf7daa8f0d6bee2b877441c9ef845e2e00cca040ec6dbc795abb1dad50b"
+        },
+        {
+          "rev": 4,
+          "hash": "6bc44fc3fb257a24f946b593526055e4d637b1546aebfdd6685cb60f2b8eab41"
         }
       ]
     }
