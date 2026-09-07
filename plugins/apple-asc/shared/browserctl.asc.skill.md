@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -107,6 +107,8 @@ or `macos`; ids from `ai/.memory/`:
 | Pricing | `https://appstoreconnect.apple.com/apps/<app_id>/distribution/pricing` |
 | Availability | `https://appstoreconnect.apple.com/apps/<app_id>/distribution/availability` |
 | IAP detail | `https://appstoreconnect.apple.com/apps/<app_id>/distribution/iaps/<iap_id>` |
+| App Review (submissions list + Apple's messages) | `https://appstoreconnect.apple.com/apps/<app_id>/distribution/reviewsubmissions` |
+| One submission (items, rejection reason, Reply / Resubmit) | `https://appstoreconnect.apple.com/apps/<app_id>/distribution/reviewsubmissions/details/<submission_id>` |
 | TestFlight builds/groups | `https://appstoreconnect.apple.com/apps/<app_id>/testflight` |
 | Business (agreements + DSA compliance) | `https://appstoreconnect.apple.com/business` |
 | API keys | `https://appstoreconnect.apple.com/access/integrations/api` |
@@ -149,6 +151,18 @@ Nearly every mutation happens in a `role=dialog` overlay:
   processing, typically 15-60 min after upload) -> check the radio (`Done` stays disabled
   until one is selected) -> `Done` -> `Save` -> verify the Build section shows the version
   string with a Delete control.
+- **Reading a rejection** (browser-only: the API reports `UNRESOLVED_ISSUES` / `REJECTED`
+  and the "There's an issue with your submission" email carries no reason; the text lives
+  only here): submission details page (deep link above, id = the reviewSubmission id) ->
+  "Items Submitted" table shows the guideline per item (e.g. "2.1.0 Performance: App
+  Completeness") -> "Messages (N)" section, Apple's message is expanded by default: read the
+  `region` under the "Apple<date>" button via snapshot (headings "Review Environment",
+  "Guideline X - ...", "Next Steps"). Answer with `Reply to App Review` (text thread) or fix
+  and `Resubmit to App Review` (disabled until the rejected item is edited). Hardware-tied
+  apps (BLE accessories etc.) reliably draw **Guideline 2.1 Information Needed: a demo video**
+  of a physical iPhone pairing with the real hardware and running the full workflow - put the
+  video link in App Review Information > Notes before the first submission to skip the round
+  trip.
 - **IAP setup** (browser; needed before any API key exists): the IAP page drives price,
   localization (Display Name is an unnamed textbox - fill by index), availability, and the
   review screenshot (see Uploads); a first IAP is submitted together with the app version,

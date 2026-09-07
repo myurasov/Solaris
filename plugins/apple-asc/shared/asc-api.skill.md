@@ -3,7 +3,7 @@ name: asc-api
 triggers: ["app store connect", "asc api", "app store connect api", "app store listing", "submit for review", "app store screenshots", "attach build", "app store pricing", "testflight testers", "age rating"]
 summary: Operate App Store Connect over the ASC REST API (team key + short-lived JWT) - the default path for listings, screenshots, builds, pricing, age rating, review submission, TestFlight - with field-tested endpoints, schema pitfalls, review-time editability, and the policy quirks that gate submissions.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: asc-api - App Store Connect Over the REST API <!-- omit in toc -->
 
@@ -71,6 +71,15 @@ submission to edit metadata; try the PATCH first and fall back to
 cancel (`reviewSubmissions` PATCH `canceled:true`) -> patch -> new submission -> item ->
 `submitted:true` only on a real lock error. Structural changes (build swap, screenshots)
 are the ones that need the version editable.
+
+**After a rejection** the API is state-only: `reviewSubmissions/<id>?include=items` ->
+`state: UNRESOLVED_ISSUES`, item `state: REJECTED`, `appStoreVersions` `appVersionState:
+REJECTED`. The reviewer's text (guideline, what they want) is **not** in the API and not in
+the notification email either - read it in the browser (`browserctl.asc.skill.md`, "Reading
+a rejection"). The rejected version is editable again (metadata, review notes, build) and
+the existing submission is reused: fix, then `Resubmit to App Review` in the web UI (or PATCH
+the reviewSubmission `submitted:true` again). A first-submission rejection typically lands
+within ~20 min of "In Review" - poll the state, not the inbox.
 
 ## Policy Quirks
 
