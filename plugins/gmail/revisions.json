@@ -1,0 +1,52 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/gmail.rule.md": {
+      "rev": 2,
+      "hash": "a690db58fb7da795e4053097a2d69eb288787ffa84388ac8868043f3a48062c7",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "db78bb647829691af00f6567dafcc2392da95a10a29e2cc62d6987778cfdef62"
+        },
+        {
+          "rev": 2,
+          "hash": "a690db58fb7da795e4053097a2d69eb288787ffa84388ac8868043f3a48062c7"
+        }
+      ]
+    },
+    "shared/gmail.skill.md": {
+      "rev": 2,
+      "hash": "625d5f4c209dc55d81f5a8023b4635544062a6fb861cd9c8308114c4be00ed45",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "79de0ddcd16f9d421ceb8785cfd3d14ca6fe8707cf9389087da0bf5ce819d186"
+        },
+        {
+          "rev": 2,
+          "hash": "625d5f4c209dc55d81f5a8023b4635544062a6fb861cd9c8308114c4be00ed45"
+        }
+      ]
+    },
+    "shared/gws-setup.skill.md": {
+      "rev": 2,
+      "hash": "a9dd9fb4bd832f8789aab8b39f78957bcff1219fa9462a24d0762d9eb39d3d10",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "8ad0074a5a46ada61574a3e91651ea185715bed551a4324218bc71ab806dcee3"
+        },
+        {
+          "rev": 1,
+          "hash": "8102d0d86e1c7edc012d4481e75d7f51337c92722dbbf856f8743d3e3d77e092"
+        },
+        {
+          "rev": 2,
+          "hash": "a9dd9fb4bd832f8789aab8b39f78957bcff1219fa9462a24d0762d9eb39d3d10"
+        }
+      ]
+    }
+  }
+}
