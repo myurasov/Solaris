@@ -171,7 +171,9 @@ servers, optional project types - so any project can opt into it.
   defines the `browserctl.<site>` extension-skill format for site-specific browser knowledge),
   `apple-asc` (App Store Connect from the developer's perspective: ASC REST API skill,
   browser skill for the flows the API cannot reach, build archive + upload skill, always-on
-  rule), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
+  rule), `gmail` (Gmail through `gws`, the Google Workspace CLI: install + sign-in skill for
+  macOS/Linux, read + send skill, always-on send-confirmation rule), `nvidia-isaac-lab`
+  (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
   rendering via installed Chrome; per-project theme: fonts, accent color, page furniture).
@@ -215,5 +217,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.31.0.md`](solaris/spec/spec-v0.31.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.32.0.md`](solaris/spec/spec-v0.32.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
