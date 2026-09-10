@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -42,6 +42,9 @@ copied.
    Headless is fine once the session exists; for a (re)login launch `--headed` and ask the
    owner - 2FA needs them. The session lives only in the profile: never launch that profile
    outside browserctl, never export cookies. `stop` the profile when the chore is done.
+   **Expired-session signature:** the page lands on
+   `/login?targetUrl=<path>&authResult=FAILED`. Check `location.href` in the first eval before
+   reading anything else - an expired session otherwise looks like an empty page.
 2. **Scripts:** if the project env has no playwright, run attach() scripts with
    `uv run --with playwright python <script>.py` from the project root.
 3. **Identifiers** (app id, version/submission ids, team id) come from `ai/.memory/` -
@@ -188,6 +191,16 @@ Nearly every mutation happens in a `role=dialog` overlay:
   submission is a plain `Version` textbox edit + `Save` (a never-submitted version can be
   renamed freely); swapping the build is `Delete` on the Build row (no confirm) then Add
   Build. Uploads processed in ~3 minutes for a small macOS app.
+- **A version In Review is locked (field-verified 2026-09-09):** the version page disables the
+  `Version` textbox and the Build row and says "To edit all information or submit a new build,
+  remove this version from review". Getting a newer build reviewed therefore means cancelling the
+  active review and re-queuing from the end - a real cost, so put it to the owner before clicking.
+  Status also moves without warning between the emails (here: "Waiting for Review" for two days,
+  then "In Review" ~10 minutes into an upload), so **read the live status on the version page
+  before planning a build swap**, never the last status email. A freshly uploaded build is
+  unaffected by any of this: it appears under TestFlight > `<platform>` grouped by its own
+  `CFBundleShortVersionString` with status "Ready to Submit" and waits there until some version
+  record attaches it - so uploading early is free, and processing took ~5 min for a small macOS app.
 - **Archive signing (asc-upload companion):** with automatic signing, do NOT pass
   `CODE_SIGN_IDENTITY="Apple Distribution"` to `xcodebuild archive` - Xcode 26 fails with
   "conflicting provisioning settings ... automatically signed for development"; archive with
