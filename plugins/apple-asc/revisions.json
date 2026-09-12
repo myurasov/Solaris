@@ -37,8 +37,8 @@
       ]
     },
     "shared/browserctl.asc.skill.md": {
-      "rev": 5,
-      "hash": "48e269008929c49e8b0078fdb104ad88d332c9859329aad5b20299fa6333584a",
+      "rev": 6,
+      "hash": "1944d84e5c77ed09dc8ed83904b82fcdbeef8629bc8c04c4537ddefb76c43724",
       "history": [
         {
           "rev": 1,
@@ -59,6 +59,10 @@
         {
           "rev": 5,
           "hash": "48e269008929c49e8b0078fdb104ad88d332c9859329aad5b20299fa6333584a"
+        },
+        {
+          "rev": 6,
+          "hash": "1944d84e5c77ed09dc8ed83904b82fcdbeef8629bc8c04c4537ddefb76c43724"
         }
       ]
     }

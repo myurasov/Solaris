@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -160,8 +160,14 @@ Nearly every mutation happens in a `role=dialog` overlay:
   "Items Submitted" table shows the guideline per item (e.g. "2.1.0 Performance: App
   Completeness") -> "Messages (N)" section, Apple's message is expanded by default: read the
   `region` under the "Apple<date>" button via snapshot (headings "Review Environment",
-  "Guideline X - ...", "Next Steps"). Answer with `Reply to App Review` (text thread) or fix
-  and `Resubmit to App Review` (disabled until the rejected item is edited). Hardware-tied
+  "Guideline X - ...", "Next Steps"). Answer with `Reply to App Review` (text thread; file
+  attachments such as a demo video allowed) or fix and `Resubmit to App Review` (disabled until
+  the rejected item is edited). **A reply alone does not re-queue the app**: after an
+  "Information Needed" rejection, a reply carrying the requested video sat 3+ days unanswered
+  while the state stayed Unresolved Issues / Rejected - always follow up by editing the item
+  (e.g. one line in App Review Information > Notes pointing at the attachment) so `Resubmit`
+  enables, then resubmit and confirm via the API that the state left `UNRESOLVED_ISSUES`.
+  Hardware-tied
   apps (BLE accessories etc.) reliably draw **Guideline 2.1 Information Needed: a demo video**
   of a physical iPhone pairing with the real hardware and running the full workflow - put the
   video link in App Review Information > Notes before the first submission to skip the round
