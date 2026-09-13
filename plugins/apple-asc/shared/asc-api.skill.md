@@ -3,7 +3,7 @@ name: asc-api
 triggers: ["app store connect", "asc api", "app store connect api", "app store listing", "submit for review", "app store screenshots", "attach build", "app store pricing", "testflight testers", "age rating"]
 summary: Operate App Store Connect over the ASC REST API (team key + short-lived JWT) - the default path for listings, screenshots, builds, pricing, age rating, review submission, TestFlight - with field-tested endpoints, schema pitfalls, review-time editability, and the policy quirks that gate submissions.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: asc-api - App Store Connect Over the REST API <!-- omit in toc -->
 
@@ -77,9 +77,18 @@ are the ones that need the version editable.
 REJECTED`. The reviewer's text (guideline, what they want) is **not** in the API and not in
 the notification email either - read it in the browser (`browserctl.asc.skill.md`, "Reading
 a rejection"). The rejected version is editable again (metadata, review notes, build) and
-the existing submission is reused: fix, then `Resubmit to App Review` in the web UI (or PATCH
-the reviewSubmission `submitted:true` again). A first-submission rejection typically lands
-within ~20 min of "In Review" - poll the state, not the inbox.
+the existing submission is reused. Fixes PATCH fine over the API (review notes via
+`appStoreReviewDetails`; a demo video via `appStoreReviewAttachments`: POST reserve with
+`fileName`/`fileSize` + the `appStoreReviewDetail` relationship -> PUT the upload operations ->
+PATCH `uploaded:true` + MD5 `sourceFileChecksum` -> poll `assetDeliveryState` to COMPLETE; a
+35 MB .mov took ~10 s). **The resubmit itself does not work over the API**: PATCH
+`reviewSubmissions/<id>` `submitted:true` keeps returning 409 `STATE_ERROR` "Version is not
+ready to be submitted yet, please try again later" for minutes after the edits - it is not a
+propagation delay. Resubmit in the web UI instead: version page `Update Review` (flags the
+rejected item as updated) -> submission page `Resubmit to App Review` (see
+`browserctl.asc.skill.md`), then confirm via the API: `state: WAITING_FOR_REVIEW`, item
+`READY_FOR_REVIEW`, same submission id, new `submittedDate`. A first-submission rejection
+typically lands within ~20 min of "In Review" - poll the state, not the inbox.
 
 ## Policy Quirks
 

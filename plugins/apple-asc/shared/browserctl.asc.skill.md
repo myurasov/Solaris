@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 6_
+_Rev. 7_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -164,9 +164,12 @@ Nearly every mutation happens in a `role=dialog` overlay:
   attachments such as a demo video allowed) or fix and `Resubmit to App Review` (disabled until
   the rejected item is edited). **A reply alone does not re-queue the app**: after an
   "Information Needed" rejection, a reply carrying the requested video sat 3+ days unanswered
-  while the state stayed Unresolved Issues / Rejected - always follow up by editing the item
-  (e.g. one line in App Review Information > Notes pointing at the attachment) so `Resubmit`
-  enables, then resubmit and confirm via the API that the state left `UNRESOLVED_ISSUES`.
+  while the state stayed Unresolved Issues / Rejected. **Resubmit flow (field-tested):**
+  make the fix (API or UI; editing alone does NOT enable `Resubmit`, and the API resubmit
+  PATCH 409s) -> version page (`.../version/inflight`) -> button `Update Review` next to the
+  disabled `Save` (it redirects to the submission page and enables `Resubmit to App Review`)
+  -> click `Resubmit to App Review` (no confirm dialog) -> the page shows "Waiting for Review"
+  and a new "Date Submitted"; confirm via the API that the state left `UNRESOLVED_ISSUES`.
   Hardware-tied
   apps (BLE accessories etc.) reliably draw **Guideline 2.1 Information Needed: a demo video**
   of a physical iPhone pairing with the real hardware and running the full workflow - put the
