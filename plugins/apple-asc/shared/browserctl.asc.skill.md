@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -171,7 +171,12 @@ Nearly every mutation happens in a `role=dialog` overlay:
   Review` (no confirm dialog) -> the page shows "Waiting for Review" and a new "Date
   Submitted"; confirm via the API that the state left `UNRESOLVED_ISSUES`. The same resubmit
   also works API-only (item `resolved:true`, then `submitted:true` - see `asc-api.skill.md`),
-  which is the path when the web session has expired. Hardware-tied apps (BLE accessories
+  which is the path when the web session has expired. **Reply BEFORE resubmitting**: the
+  `Reply to App Review` button exists only while the submission is Unresolved Issues - once it
+  is Waiting for Review the thread is read-only (no reply control at all; only "Contact Us").
+  When Apple asks to "reply to this message", post the reply first, then resubmit; if the
+  session is expired and the reply cannot wait, put the full answer in App Review Information
+  Notes instead. Hardware-tied apps (BLE accessories
   etc.) reliably draw **Guideline 2.1 Information Needed: a demo video**, and the reviewer
   checks it: a **screen recording is rejected** - it must be filmed by a second camera with
   the physical device AND the hardware both visible, covering initial pairing and the full
