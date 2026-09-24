@@ -34,5 +34,10 @@ solaris/spec/references/
 .claude/settings.local.json
 
 .playwright*
+
+# Syncthing folder markers (machine-local)
+.stfolder/
+.stignore
+
 # Local-only scratch folders (the __*/ convention), including inside bundled plugins
 __*/
