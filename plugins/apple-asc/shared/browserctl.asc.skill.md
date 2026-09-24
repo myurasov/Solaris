@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -165,16 +165,22 @@ Nearly every mutation happens in a `role=dialog` overlay:
   the rejected item is edited). **A reply alone does not re-queue the app**: after an
   "Information Needed" rejection, a reply carrying the requested video sat 3+ days unanswered
   while the state stayed Unresolved Issues / Rejected. **Resubmit flow (field-tested):**
-  make the fix (API or UI; editing alone does NOT enable `Resubmit`, and the API resubmit
-  PATCH 409s) -> version page (`.../version/inflight`) -> button `Update Review` next to the
-  disabled `Save` (it redirects to the submission page and enables `Resubmit to App Review`)
-  -> click `Resubmit to App Review` (no confirm dialog) -> the page shows "Waiting for Review"
-  and a new "Date Submitted"; confirm via the API that the state left `UNRESOLVED_ISSUES`.
-  Hardware-tied
-  apps (BLE accessories etc.) reliably draw **Guideline 2.1 Information Needed: a demo video**
-  of a physical iPhone pairing with the real hardware and running the full workflow - put the
-  video link in App Review Information > Notes before the first submission to skip the round
-  trip.
+  make the fix (API or UI; editing alone does NOT enable `Resubmit`) -> version page
+  (`.../version/inflight`) -> button `Update Review` next to the disabled `Save` (it redirects
+  to the submission page and enables `Resubmit to App Review`) -> click `Resubmit to App
+  Review` (no confirm dialog) -> the page shows "Waiting for Review" and a new "Date
+  Submitted"; confirm via the API that the state left `UNRESOLVED_ISSUES`. The same resubmit
+  also works API-only (item `resolved:true`, then `submitted:true` - see `asc-api.skill.md`),
+  which is the path when the web session has expired. Hardware-tied apps (BLE accessories
+  etc.) reliably draw **Guideline 2.1 Information Needed: a demo video**, and the reviewer
+  checks it: a **screen recording is rejected** - it must be filmed by a second camera with
+  the physical device AND the hardware both visible, covering initial pairing and the full
+  workflow. Put it in App Review Information (attachment or link, plus a Notes line) before
+  the first submission to skip the round trip; strip the camera's location metadata first
+  (`ffmpeg -map_metadata -1`, also shrinks a phone .MOV ~10x as H.264). A second rejection
+  may add **Guideline 5.2.1 (IP)** when the subtitle/description name a chemistry or a
+  third-party brand the reviewer mistakes for a company (e.g. "LiFePO4") - answer with
+  documentary explanation in the Notes/reply, or reword the metadata.
 - **IAP setup** (browser; needed before any API key exists): the IAP page drives price,
   localization (Display Name is an unnamed textbox - fill by index), availability, and the
   review screenshot (see Uploads); a first IAP is submitted together with the app version,

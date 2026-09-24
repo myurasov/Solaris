@@ -3,7 +3,7 @@ name: asc-api
 triggers: ["app store connect", "asc api", "app store connect api", "app store listing", "submit for review", "app store screenshots", "attach build", "app store pricing", "testflight testers", "age rating"]
 summary: Operate App Store Connect over the ASC REST API (team key + short-lived JWT) - the default path for listings, screenshots, builds, pricing, age rating, review submission, TestFlight - with field-tested endpoints, schema pitfalls, review-time editability, and the policy quirks that gate submissions.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: asc-api - App Store Connect Over the REST API <!-- omit in toc -->
 
@@ -81,13 +81,15 @@ the existing submission is reused. Fixes PATCH fine over the API (review notes v
 `appStoreReviewDetails`; a demo video via `appStoreReviewAttachments`: POST reserve with
 `fileName`/`fileSize` + the `appStoreReviewDetail` relationship -> PUT the upload operations ->
 PATCH `uploaded:true` + MD5 `sourceFileChecksum` -> poll `assetDeliveryState` to COMPLETE; a
-35 MB .mov took ~10 s). **The resubmit itself does not work over the API**: PATCH
-`reviewSubmissions/<id>` `submitted:true` keeps returning 409 `STATE_ERROR` "Version is not
-ready to be submitted yet, please try again later" for minutes after the edits - it is not a
-propagation delay. Resubmit in the web UI instead: version page `Update Review` (flags the
-rejected item as updated) -> submission page `Resubmit to App Review` (see
-`browserctl.asc.skill.md`), then confirm via the API: `state: WAITING_FOR_REVIEW`, item
-`READY_FOR_REVIEW`, same submission id, new `submittedDate`. A first-submission rejection
+35 MB .mov took ~10 s; DELETE the stale attachment first so the reviewer sees one video).
+**Resubmit over the API is two PATCHes**: first `reviewSubmissionItems/<item id>` with
+`resolved:true` (the API twin of the web `Update Review` button; item goes REJECTED ->
+READY_FOR_REVIEW), then `reviewSubmissions/<id>` `submitted:true`. Skipping the first PATCH
+makes the second return 409 `STATE_ERROR` "Version is not ready to be submitted yet, please
+try again later" indefinitely - it is not a propagation delay. Confirm: `state:
+WAITING_FOR_REVIEW`, item `READY_FOR_REVIEW`, same submission id, new `submittedDate`. This
+works while the web session is expired; only the reply thread still needs the browser, and
+the review notes are a reviewer-facing channel for the same answer. A first-submission rejection
 typically lands within ~20 min of "In Review" - poll the state, not the inbox.
 
 ## Policy Quirks

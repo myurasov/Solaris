@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/asc-api.skill.md": {
-      "rev": 3,
-      "hash": "ba9a37dd52247cdf45b3b8b0ff8ce118b5ee8d3c9526ada5561c446e0109f5e3",
+      "rev": 4,
+      "hash": "9ccb8457819720cc6f473aa0ba732461203123333b0d0a6814fcf34f079f0e0e",
       "history": [
         {
           "rev": 1,
@@ -17,6 +17,10 @@
         {
           "rev": 3,
           "hash": "ba9a37dd52247cdf45b3b8b0ff8ce118b5ee8d3c9526ada5561c446e0109f5e3"
+        },
+        {
+          "rev": 4,
+          "hash": "9ccb8457819720cc6f473aa0ba732461203123333b0d0a6814fcf34f079f0e0e"
         }
       ]
     },
@@ -41,8 +45,8 @@
       ]
     },
     "shared/browserctl.asc.skill.md": {
-      "rev": 7,
-      "hash": "c5a2e89f075098ccc4c17d50af0eabd6ebec5eeb7112aeb3dfdd9d0e23eff951",
+      "rev": 8,
+      "hash": "c8a3aa8eac5663236ccb539710cfb3e30ccea0e099993f2b8c3b073f178d1579",
       "history": [
         {
           "rev": 1,
@@ -71,6 +75,10 @@
         {
           "rev": 7,
           "hash": "c5a2e89f075098ccc4c17d50af0eabd6ebec5eeb7112aeb3dfdd9d0e23eff951"
+        },
+        {
+          "rev": 8,
+          "hash": "c8a3aa8eac5663236ccb539710cfb3e30ccea0e099993f2b8c3b073f178d1579"
         }
       ]
     }
