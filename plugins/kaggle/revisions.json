@@ -1,0 +1,166 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/kaggle-cli/SKILL.md": {
+      "rev": 1,
+      "hash": "9045e608a23041202e2320408868f1c1b149b3718b5af273f59ebc44f79d382a",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "9045e608a23041202e2320408868f1c1b149b3718b5af273f59ebc44f79d382a"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/auth.md": {
+      "rev": 1,
+      "hash": "5bb169a312e80956dbae4511b9c21dc1baffff900e55524effbadafcd3030b88",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "5bb169a312e80956dbae4511b9c21dc1baffff900e55524effbadafcd3030b88"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/benchmarks.md": {
+      "rev": 1,
+      "hash": "01e3f8a2d5531f61eaab4d4480062b4be017fa2198e91cb43cd318f6eced28f3",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "01e3f8a2d5531f61eaab4d4480062b4be017fa2198e91cb43cd318f6eced28f3"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/competitions.md": {
+      "rev": 1,
+      "hash": "013eea2bc7a54601a03c3982ce436af17080e2c8166a5a24c79d8746ebf54a6c",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "013eea2bc7a54601a03c3982ce436af17080e2c8166a5a24c79d8746ebf54a6c"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/configuration.md": {
+      "rev": 1,
+      "hash": "9c1732ef8555fb4a31a17d2b8d609664756a641755e543e41b2bc5a16a4bfd91",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "9c1732ef8555fb4a31a17d2b8d609664756a641755e543e41b2bc5a16a4bfd91"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/datasets.md": {
+      "rev": 1,
+      "hash": "862238c7a6e895827022184323a32096b8211272c65a49df2bb86346685ac24f",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "862238c7a6e895827022184323a32096b8211272c65a49df2bb86346685ac24f"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/files.md": {
+      "rev": 1,
+      "hash": "4158643d0637fa870bc9ba0f2fa7137e2e0085868b3b45e3c74fee0b935e070c",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "4158643d0637fa870bc9ba0f2fa7137e2e0085868b3b45e3c74fee0b935e070c"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/forums.md": {
+      "rev": 1,
+      "hash": "e5da3dbc8329b87d525ec494c2f02dc87a33bab60822756808fe1f40c8a07668",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "e5da3dbc8329b87d525ec494c2f02dc87a33bab60822756808fe1f40c8a07668"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/kernels.md": {
+      "rev": 1,
+      "hash": "8b9537173eeda4eca2424f8e381ddf2fadbb98c1cac4bd71411393e556b2aa34",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "8b9537173eeda4eca2424f8e381ddf2fadbb98c1cac4bd71411393e556b2aa34"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/model_variations.md": {
+      "rev": 1,
+      "hash": "29850bcb7806de7d8a76430efa35f4e5f043c8aecccc101ebcee10db0ab07aac",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "29850bcb7806de7d8a76430efa35f4e5f043c8aecccc101ebcee10db0ab07aac"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/model_variations_versions.md": {
+      "rev": 1,
+      "hash": "8265414f5a298cbc6f2a72aa5e1c799858a5d2e7f54f3338932187e02589ead3",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "8265414f5a298cbc6f2a72aa5e1c799858a5d2e7f54f3338932187e02589ead3"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/models.md": {
+      "rev": 1,
+      "hash": "d3756cd6c9074c2ae0eb5654fa72c3d49de53996873a3238f998113acc0c9c1f",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "d3756cd6c9074c2ae0eb5654fa72c3d49de53996873a3238f998113acc0c9c1f"
+        }
+      ]
+    },
+    "shared/kaggle-cli/references/quota.md": {
+      "rev": 1,
+      "hash": "a809a69a0528b61ac4f06374fdb7f1334ac1ec3a7a51576a68e2d31dac38689f",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "a809a69a0528b61ac4f06374fdb7f1334ac1ec3a7a51576a68e2d31dac38689f"
+        }
+      ]
+    },
+    "shared/kaggle.py": {
+      "rev": 1,
+      "hash": "b9801e5c930d2e0bb4a6c71623b0b5984aaa2072f8270c9268e24300377c3e15",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "b9801e5c930d2e0bb4a6c71623b0b5984aaa2072f8270c9268e24300377c3e15"
+        }
+      ]
+    },
+    "shared/kaggle.rule.md": {
+      "rev": 1,
+      "hash": "29d7ff169fff628b9318724a1146b05e76b84b57494d586099e2906e3603e26b",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "29d7ff169fff628b9318724a1146b05e76b84b57494d586099e2906e3603e26b"
+        }
+      ]
+    },
+    "shared/kaggle.skill.md": {
+      "rev": 1,
+      "hash": "982d4bf12207209468d361c5b736bc4c61f39cfea24ff95b0555ad3c775967fd",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "982d4bf12207209468d361c5b736bc4c61f39cfea24ff95b0555ad3c775967fd"
+        }
+      ]
+    }
+  }
+}
