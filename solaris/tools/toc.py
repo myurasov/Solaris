@@ -7,7 +7,9 @@ Lists level-2-and-deeper headers; the level-1 title is omitted and marked ``<!--
 matches the GitHub / "Markdown All in One" style: a nested bullet list of ``- [Heading](#anchor)`` links
 placed right after the H1. Idempotent - re-running produces the same file. Headers inside fenced code blocks
 and headers carrying ``<!-- omit in toc -->`` are ignored. Files with no level-2 headers are left unchanged.
-A leading ``_Rev. N_`` revision marker (from solaris.tools.revs) is preserved above the TOC.
+A leading ``_Rev. N_`` revision marker (from solaris.tools.revs) is preserved above the TOC. Files in a
+plugin's vendored upstream tree (below a folder holding ``UPSTREAM.md``, inside ``plugins/<name>/``) are
+never touched: third-party content stays identical to its upstream.
 
 Run::
 
@@ -19,6 +21,7 @@ Run::
 from __future__ import annotations
 
 import argparse
+import os
 import re
 from pathlib import Path
 
@@ -166,8 +169,29 @@ def render(text: str) -> str:
     return newline.join(lines[:body_start] + new_body)
 
 
+def vendored(path: Path) -> bool:
+    """True for a file in a plugin's vendored upstream tree: a folder at least two levels below a
+    plugins/ folder (plugin source, or a project's ai/plugins/) that holds an UPSTREAM.md. Scoped to
+    plugins so a fork project's own UPSTREAM.md never switches off its docs' TOCs."""
+    # abspath, not resolve(): plugins are often symlinks (plugins/<name> -> .repos/...), and the depth
+    # rule has to be measured on the path as seen through plugins/
+    p = Path(os.path.abspath(path))
+    base = REPO_ROOT if REPO_ROOT in p.parents else Path(p.anchor)
+    for d in p.parents:
+        if d == base:
+            break
+        rel = d.relative_to(base).parts
+        # shared/ itself never counts: a project copy flattens it into ai/plugins/<name>/
+        if ("plugins" in rel[:-2] and not (rel[-1] == "shared" and rel[-3] == "plugins")
+                and (d / "UPSTREAM.md").is_file()):
+            return True
+    return False
+
+
 def process(path: Path, write: bool) -> str:
-    """Return 'current' (TOC up to date or n/a), 'written' (changed on disk), or 'stale' (would change)."""
+    """Return 'current' (TOC up to date, n/a, or vendored), 'written' (changed on disk), or 'stale'."""
+    if vendored(path):
+        return "current"
     original = path.read_text(encoding="utf-8")
     updated = render(original)
     if updated == original:

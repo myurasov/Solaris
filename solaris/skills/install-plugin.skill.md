@@ -57,7 +57,9 @@ If `plugins/<name>/` **already exists**, do not clobber it: go to step 3, and fo
 
 ## 3. Validate and Repair the Plugin Source
 
-A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json` (valid JSON, `name` +
+A plugin repo's layout (flat; only `migrations/` is a subfolder, plus any vendored upstream tree - a
+folder of third-party files kept identical to upstream, marked by an `UPSTREAM.md` that names its source,
+ref, and refresh procedure; inside `shared/` its rev markers are the only local change): `manifest.json` (valid JSON, `name` +
 `version`, optional `setup`), optional `mcps.json`, `shared/` with `*.skill.md` / `*.rule.md`, optional
 `<type>.project.md`, optional `migrations/`. Then **repair** anything off (this is also the standalone
 "repair a plugin already in `plugins/` but not referenced correctly" path):
@@ -65,7 +67,8 @@ A plugin repo's layout (flat; only `migrations/` is a subfolder): `manifest.json
 - Every `shared/*` file carries a rev marker - else `uv run -m solaris.tools.revs bump <file>`.
 - Refresh ledgers: `uv run -m solaris.tools.revs ledger` writes the plugin's **own** `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` never tracks plugins).
 - Fix missing `manifest.json` fields (ask for `name`/`version` if unknown).
-- Ensure every `*.md` has a TOC: `uv run -m solaris.tools.toc --write plugins/<name>/**/*.md`.
+- Ensure every `*.md` has a TOC: `uv run -m solaris.tools.toc --write plugins/<name>/**/*.md` (the tool
+  leaves vendored trees untouched).
 
 ## 4. Scope: Plugins-Only, or Attach to a Project
 

@@ -205,7 +205,7 @@ into `plugins/<name>/`, and `plugins/.gitignore` ignores it so it is never neste
 `nvidia-isaac-lab`) - **or authored in-place and bundled** in the framework repo under `plugins/` (tracked;
 e.g. `visual-qa`). Either way `install-plugin` validates/repairs the plugin source and optionally attaches
 it to a project, each plugin keeps its own `revisions.json`, and the framework ledger never tracks plugin
-files. The layout is flat (only `migrations/` is a subfolder):
+files. The layout is flat (only `migrations/` is a subfolder, plus vendored upstream trees):
 
 ```
 plugins/<name>/
@@ -214,8 +214,14 @@ plugins/<name>/
   <type>.project.md             # optional project-type(s) this plugin contributes
   shared/                       # the ONLY files attached to a project: copied to ai/plugins/<name>/, or linked (each rev-marked)
     *.skill.md  *.rule.md
+    <vendored>/UPSTREAM.md      # optional vendored upstream tree (see below)
   migrations/                   # <to_version>.md for the plugin's own minor/major bumps
 ```
+
+A **vendored upstream tree** is a folder of third-party files kept identical to upstream (e.g. a CLI
+vendor's own agent skill), marked by an `UPSTREAM.md` that names its source, ref, and refresh procedure.
+It sits inside `shared/` when projects need it (rev markers are then its only local change) or at the
+plugin top when only the plugin source needs it; `solaris.tools.toc` never rewrites files in it.
 
 Opted into per project (`ai/manifest.json` `plugins[]`); the engineer agent loads each `ai/plugins/<name>/*.rule.md`
 (always-on) and `*.skill.md` (trigger). Only `shared/` is materialized. Attachment comes in two modes:

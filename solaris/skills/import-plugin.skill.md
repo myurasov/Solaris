@@ -18,7 +18,9 @@ plugin against a project, attach it in **link mode** instead (`install-plugin`: 
 
 The user edited the materialized copy `projects/<slug>/ai/plugins/<name>/`. Capture it:
 
-1. Diff `projects/<slug>/ai/plugins/<name>/` against `plugins/<name>/shared/`.
+1. Diff `projects/<slug>/ai/plugins/<name>/` against `plugins/<name>/shared/`, skipping vendored
+   upstream trees (folders holding an `UPSTREAM.md`): project-side edits there are never folded
+   back - fix the plugin's own skills instead, or refresh the tree from upstream.
 2. Show the changes; confirm with the user.
 3. Apply them into `plugins/<name>/shared/` and `revs bump` each changed shared file (the rev tracks the
    change; the plugin `version` semver is bumped only at release/publish, not per edit). Mirror any
@@ -38,7 +40,10 @@ external `__ai/`-style setup):
    MCP) from **generic** dev preferences (which stay in `engineer.instructions.md`).
 2. Show the proposed split and the plugin name; confirm.
 3. Create `plugins/` if needed, write the plugin to `plugins/<name>/`, then delete the `plugins/.empty`
-   placeholder (the directory now has content). Flat; only `migrations/` may be a subfolder:
+   placeholder (the directory now has content). Flat; only `migrations/` may be a subfolder, plus
+   vendored upstream trees (third-party files kept identical to upstream, marked by an `UPSTREAM.md`
+   with source, ref, and refresh procedure - inside `shared/` when projects need them, where rev
+   markers are their only local change; the TOC tool leaves them alone):
    - `manifest.json` - `name`, `version` (semver), `description`, `applies_to.markers`, and an optional
      `setup` (notes + resource prompts that `install-plugin` runs on attach). No per-plugin install skill -
      the framework `install-plugin` drives the whole lifecycle.

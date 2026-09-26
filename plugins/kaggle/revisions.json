@@ -12,6 +12,16 @@
         }
       ]
     },
+    "shared/kaggle-cli/UPSTREAM.md": {
+      "rev": 1,
+      "hash": "e825fb83beaa78b0eb6dfe4f4d4dca6dc265fca7b6db56158b50f3fc80a14acf",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "e825fb83beaa78b0eb6dfe4f4d4dca6dc265fca7b6db56158b50f3fc80a14acf"
+        }
+      ]
+    },
     "shared/kaggle-cli/references/auth.md": {
       "rev": 1,
       "hash": "5bb169a312e80956dbae4511b9c21dc1baffff900e55524effbadafcd3030b88",
