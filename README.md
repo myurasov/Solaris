@@ -177,7 +177,11 @@ servers, optional project types - so any project can opt into it.
   macOS/Linux, read + send skill, always-on send-confirmation rule), `kaggle` (Kaggle through
   the official Kaggle CLI, CLI only: a gateway that pins the CLI and installs it per project or
   task, Kaggle's own agent skill vendored at the same version, always-on rule confirming every
-  write), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
+  write), `docker-home` (a per-project Linux container that runs the coding harness itself with
+  only the project folder and the container's home mounted, so nothing above the project exists
+  for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
+  strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
+  tree), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
   rendering via installed Chrome; per-project theme: fonts, accent color, page furniture).
@@ -221,5 +225,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.34.0.md`](solaris/spec/spec-v0.34.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.35.0.md`](solaris/spec/spec-v0.35.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
