@@ -14,7 +14,7 @@ plugin's `shared/` skills, which reference this tree.
 ```sh
 git clone --depth 1 --filter=blob:none --sparse https://github.com/brevdev/brev-cli /tmp/brev-cli-upstream
 git -C /tmp/brev-cli-upstream sparse-checkout set .agents/skills/brev-cli
-rsync -a --delete --exclude UPSTREAM.md /tmp/brev-cli-upstream/.agents/skills/brev-cli/ plugins/brev/brev-cli/
+rsync -a --delete --exclude UPSTREAM.md /tmp/brev-cli-upstream/.agents/skills/brev-cli/ plugins/nvidia-brev/brev-cli/
 ```
 
 Then update the mirrored ref above (`git -C /tmp/brev-cli-upstream rev-parse HEAD`) and
