@@ -43,6 +43,10 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
+# The primary persona: ai/<role>.agent.md + ai/<role>.instructions.md, "engineer" unless the manifest's
+# agents.primary renames it (solaris.tools.agents does the rename). Role briefs live in ai/agents/.
+DEFAULT_PRIMARY = "engineer"
+ROLE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
 # Framework master files tracked in solaris/revisions.json. Plugins are deliberately NOT here: each plugin
 # keeps its own plugins/<name>/revisions.json (see plugin_dirs / rebuild_plugin_ledger) so its rev ledger
@@ -294,13 +298,50 @@ def _link_ref(project_dir: Path, name: str) -> str:
     return f"plugins/{name}.link.md"
 
 
+def primary_role(manifest: dict) -> str:
+    """The primary persona's role name (ai/<role>.agent.md): manifest agents.primary, default engineer."""
+    agents = manifest.get("agents")
+    if agents is None:
+        agents = {}
+    if not isinstance(agents, dict):
+        raise ValueError('ai/manifest.json: "agents" must be an object like {"primary": "engineer"}')
+    unknown = sorted(set(agents) - {"primary"})
+    if unknown:
+        raise ValueError(f"ai/manifest.json: unknown agents key(s) {', '.join(unknown)}; only 'primary' is defined")
+    if "primary" not in agents:
+        return DEFAULT_PRIMARY
+    role = agents["primary"]   # present means set: an empty or null value is a mistake, not the default
+    if not isinstance(role, str) or not ROLE_RE.match(role):
+        raise ValueError(f"ai/manifest.json: agents.primary must match {ROLE_RE.pattern}, got {role!r}")
+    return role
+
+
+def _load_manifest(project_dir: Path, required: bool = False) -> dict:
+    """The project's ai/manifest.json ({} when absent unless required); malformed JSON is a clean ValueError."""
+    path = Path(project_dir) / "ai" / "manifest.json"
+    if not path.exists():
+        if required:
+            raise ValueError(f"{path} not found")
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{path} is not valid JSON: {exc}") from None
+    if not isinstance(data, dict):
+        raise ValueError(f"{path}: the top level must be a JSON object")
+    return data
+
+
 def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
                      plugins_dir: Path = PLUGINS_DIR) -> list[tuple[Path, Path, str]]:
     """(master_path, project_path, rel_in_project) for every file the framework materializes into a project."""
+    manifest = _load_manifest(project_dir)
+    primary = primary_role(manifest)
     pairs = [
         (template_dir / "AGENTS.md", project_dir / "AGENTS.md", "AGENTS.md"),
-        (template_dir / "ai" / "engineer.agent.md", project_dir / "ai" / "engineer.agent.md",
-         "ai/engineer.agent.md"),
+        # the engineer template is the primary persona, materialized under the project's chosen role name
+        (template_dir / "ai" / "engineer.agent.md", project_dir / "ai" / f"{primary}.agent.md",
+         f"ai/{primary}.agent.md"),
     ]
     # The generated pack README (its {{PLUGINS}} renders from the manifest); optional so template
     # fixtures without one still classify.
@@ -313,20 +354,17 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
         for f in sorted((template_dir / "ai" / sub).glob(pattern)):
             rel = f"ai/{sub}/{f.name}"
             pairs.append((f, project_dir / rel, rel))
-    manifest = project_dir / "ai" / "manifest.json"
-    if manifest.exists():
-        plugins = json.loads(manifest.read_text(encoding="utf-8")).get("plugins", [])
-        for entry in plugins:
-            if isinstance(entry, dict) and entry.get("mode") == "link":
-                continue  # linked plugins are never materialized; nothing to track
-            name = entry.get("name") if isinstance(entry, dict) else entry
-            plugin_root = plugins_dir / name
-            if (plugin_root / "shared").is_dir():
-                base = f"ai/{_plugin_home(project_dir, name)}"
-                for f in iter_plugin_shared(plugin_root):
-                    sub = f.relative_to(plugin_root / "shared")
-                    rel = f"{base}/{sub}"
-                    pairs.append((f, project_dir / rel, rel))
+    for entry in manifest.get("plugins") or []:
+        if isinstance(entry, dict) and entry.get("mode") == "link":
+            continue  # linked plugins are never materialized; nothing to track
+        name = entry.get("name") if isinstance(entry, dict) else entry
+        plugin_root = plugins_dir / name
+        if (plugin_root / "shared").is_dir():
+            base = f"ai/{_plugin_home(project_dir, name)}"
+            for f in iter_plugin_shared(plugin_root):
+                sub = f.relative_to(plugin_root / "shared")
+                rel = f"{base}/{sub}"
+                pairs.append((f, project_dir / rel, rel))
     return pairs
 
 
@@ -371,6 +409,27 @@ def _workspaces_block(manifest: dict) -> str:
         ws = ["source"] + ws
     return "\n".join(f"- `{w}/` - the default workspace" if w == "source" else f"- `{w}/`"
                      for w in ws)
+
+
+def _agents_block(manifest: dict, project_dir: Path) -> str:
+    """The {{AGENTS}} bullets: the primary persona plus every ai/agents/<role>.agent.md role brief."""
+    primary = primary_role(manifest)
+    lines = [f"- `{primary}` - the primary persona ([`{primary}.agent.md`]({primary}.agent.md) + "
+             f"[`{primary}.instructions.md`]({primary}.instructions.md)); drives every session"]
+    agents_dir = Path(project_dir) / "ai" / "agents"
+    if agents_dir.is_dir():
+        from solaris.tools import agents as A  # lazy: that module imports this one
+        for f in sorted(agents_dir.glob("*.agent.md")):
+            try:
+                role = A.load_role(f, primary)
+            except ValueError:
+                lines.append(f"- `agents/{f.name}` - INVALID brief (run `uv run -m solaris.tools.agents --check "
+                             "--dir <project>` for the reason)")
+                continue
+            tier = f"{role.tier} tier, " if role.tier else ""
+            lines.append(f"- `{role.name}` - {role.description} ({tier}{role.access}; "
+                         f"[`agents/{f.name}`](agents/{f.name}))")
+    return "\n".join(lines)
 
 
 def _skill_triggers(path: Path) -> tuple[str, list[str]]:
@@ -453,14 +512,17 @@ def _skills_block(manifest: dict, project_dir: Path, template_dir: Path = TEMPLA
 def _placeholder_subs(manifest: dict, project_dir: Path) -> dict:
     """Template placeholders resolved from a project's manifest (the rev marker is not a placeholder)."""
     p = manifest.get("project", {})
+    primary = primary_role(manifest)
     return {
         "{{SLUG}}": p.get("slug", ""), "{{NAME}}": p.get("name", ""),
         "{{TYPE}}": p.get("type", ""), "{{MODE}}": p.get("mode", ""),
         "{{FRAMEWORK_VERSION}}": str(manifest.get("framework_version", "")),
         "{{DATE}}": str(manifest.get("created", "")),
+        "{{PRIMARY}}": primary, "{{PRIMARY_TITLE}}": primary.replace("-", " ").title(),
         "{{PLUGINS}}": _plugins_block(manifest, project_dir),
         "{{DESCRIPTION}}": _description_block(manifest),
         "{{WORKSPACES}}": _workspaces_block(manifest),
+        "{{AGENTS}}": _agents_block(manifest, project_dir),
     }
 
 
@@ -475,8 +537,7 @@ def _render_master(master: Path, subs: dict) -> str:
 def classify(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
              plugins_dir: Path = PLUGINS_DIR) -> list[dict]:
     """Per materialized file, a verdict: in-sync / fast-forward / merge-up / conflict / missing."""
-    manifest_path = project_dir / "ai" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.exists() else {}
+    manifest = _load_manifest(project_dir)
     baseline = manifest.get("revisions", {})
     subs = _placeholder_subs(manifest, project_dir)
     subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
@@ -515,7 +576,7 @@ def record_baseline(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     """Record each present materialized file's current rev+hash into ai/manifest.json -> revisions."""
     project_dir = Path(project_dir)
     manifest_path = project_dir / "ai" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = _load_manifest(project_dir, required=True)
     baseline: dict = {}
     for _master, proj, rel in materialized_map(project_dir, template_dir, plugins_dir):
         if proj.exists():
@@ -532,7 +593,7 @@ def fast_forward(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     project_dir = Path(project_dir)
     verdicts = {r["rel"]: r["verdict"] for r in classify(project_dir, template_dir, plugins_dir)}
     manifest_path = project_dir / "ai" / "manifest.json"
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest = _load_manifest(project_dir, required=True)
     revisions = manifest.setdefault("revisions", {})
     subs = _placeholder_subs(manifest, project_dir)
     subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
@@ -644,7 +705,11 @@ def main(argv=None) -> int:
     sp.set_defaults(func=_cmd_ff)
 
     args = parser.parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except ValueError as exc:   # a malformed manifest (e.g. agents.primary) is user input: clean error, no traceback
+        print(f"revs: {exc}")
+        return 1
 
 
 if __name__ == "__main__":

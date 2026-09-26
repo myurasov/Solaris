@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: Subagents (Bulk-Read Floor + Leveled Delegation) <!-- omit in toc -->
 
@@ -89,7 +89,7 @@ A delegated task must be executable by a weaker model. Every subagent prompt car
 
 1. **Exact scope** - the files, directories, queries, or ids to operate on; no "look around".
 2. **Exact procedure** - which tools/commands, in what order, with the project's known invocations
-   (from `ai/engineer.instructions.md`) spelled out, not rediscovered.
+   (from `ai/{{PRIMARY}}.instructions.md`) spelled out, not rediscovered.
 3. **Exact return shape** - named facts, file:line pointers, a verdict, a table; never raw dumps.
 4. **Boundaries** - read-only vs write, what not to touch, any confidentiality rules in scope.
 5. **Active modes restated** - subagents do not see this pack's always-on rules; restate any

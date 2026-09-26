@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: Token Economy <!-- omit in toc -->
 
@@ -47,7 +47,7 @@ Applies at every level, including `off`:
 - **Read budget.** For any file past ~200 lines (source or docs), grep (or use its TOC/index) to
   locate the relevant section, then Read with offset/limit; whole-file reads are for known-small
   files or files whose full content the task genuinely needs. The pack's load-every-turn set
-  (`ai/engineer.agent.md`, instructions, spec, rules) is standing context - do not re-open those
+  (`ai/{{PRIMARY}}.agent.md`, instructions, spec, rules) is standing context - do not re-open those
   files unless editing them.
 - **Unbounded files.** Bounded-by-design files (config, `ai/.memory/context.md` - rewritten in
   place) may be read whole. Append-only stores are never read whole: tail-read the latest entries

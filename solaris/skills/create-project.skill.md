@@ -36,6 +36,10 @@ Use the question tool (one batch) for anything not already given:
   or `embedded` (opt-in: the ai-pack lives **inside** the source repo at `projects/<slug>/<repo>/`, no separate
   `source/`, so it commits with the repo). Offer `embedded` only when the user wants the pack to travel inside their repo.
 - **plugins** - any additional plugins to attach (names under `plugins/`).
+- **primary persona** (optional) - the role name of the project's primary agent: `engineer` unless the
+  user wants a project-specific one (e.g. `master`); `^[a-z][a-z0-9-]*$`.
+- **role personas** (optional) - names for additional briefs under `ai/agents/` (e.g. `reviewer`,
+  `reader`); offer this only when the user describes distinct agent roles.
 - **workspaces** (optional) - names of additional self-contained work tracks beyond the default
   (`source/`). Most projects start flat (just `source/`, the default workspace) and add workspaces later;
   offer this only when the user describes multiple parallel tracks.
@@ -51,8 +55,11 @@ remote). Ask to proceed / edit / cancel. If `projects/<slug>/` exists and is non
 
 Create `projects/` if it does not exist (gitignored, lazily created), then copy
 `solaris/templates/ai-pack/` -> `projects/<slug>/` and substitute placeholders in every copied text file:
-`{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO), and
-`{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`). Do not hand-substitute
+`{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO),
+`{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`), and `{{PRIMARY}}` /
+`{{PRIMARY_TITLE}}` (the chosen primary role and its Title Case - `engineer` / `Engineer` by default - so
+seeded-only files such as `ai/.memory/context.md` and `source/README.md` carry the right name from the
+start; the copied `ai/engineer.*` file names stay until step 6 renames them, never by hand). Do not hand-substitute
 `ai/README.md` - delete the copied stub (or skip copying it): it is fully derived (its `{{PLUGINS}}`
 block renders from the manifest) and step 6 materializes it via `revs ff`.
 
@@ -116,6 +123,13 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes
   the `revisions` map (per materialized file: rev + content hash), so future `update-project` runs can tell
   whether the user edited a file.
+- Personas (only when chosen in step 1): a non-default primary ->
+  `uv run -m solaris.tools.agents --rename-primary <role> --dir projects/<slug>` (after the baseline; it
+  moves `ai/engineer.*` to `ai/<role>.*`, sets the manifest's `agents.primary`, and re-renders the managed
+  files). Each role persona -> copy `solaris/templates/agents/role.agent.md` to
+  `ai/agents/<role>.agent.md`, fill the frontmatter and brief with the user, validate
+  (`uv run -m solaris.tools.agents --check --dir projects/<slug>`), then re-run `revs ff` + `revs baseline`
+  so the pack README lists them.
 
 ## 7. Runtime MCP (Gitignored)
 

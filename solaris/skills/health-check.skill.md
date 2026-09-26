@@ -19,7 +19,8 @@ demand.
 1. **Projects** - enumerate with the two-depth scan (`projects/*/` and `projects/*/*/` - projects are
    grouped, e.g. `projects/nv/<slug>/`; a project folder is one holding `ai/manifest.json`, or
    `<repo>/ai/manifest.json` in embedded mode). For each: read `ai/manifest.json` and show `name`, `type`, `mode`,
-   `framework_version`, attached plugins, and workspaces (`project.workspaces` when present). (An **embedded**-mode project keeps its ai-pack one level deeper, inside the repo - use the repo
+   `framework_version`, attached plugins, workspaces (`project.workspaces` when present), and the personas
+   (the primary, `agents.primary` or `engineer`, plus any role briefs under `ai/agents/`). (An **embedded**-mode project keeps its ai-pack one level deeper, inside the repo - use the repo
    root `projects/<slug>/<repo>/` (the directory holding `ai/`) as `--dir` in the checks below; the
    tools resolve `ai/manifest.json` and `.version` relative to it.)
 2. **Revisions** - `uv run -m solaris.tools.revs status` (framework files changed without a rev bump); per
@@ -49,6 +50,8 @@ Everything above, plus:
   projects/<slug>`; `version check-plugins --dir projects/<slug>` (recorded vs source plugin semver);
   `version project --dir projects/<slug>` (root `.version` present + valid semver; missing = a pre-0.29
   pack - flag it, the 0.29.0 migration seeds it);
+  `uv run -m solaris.tools.agents --check --dir projects/<slug>` (the primary persona file exists; every
+  `ai/agents/*.agent.md` brief is valid);
   confirm `AGENTS.md` exists and, for each attached plugin, `ai/plugins/<plugin>/` is present (legacy
   pre-0.28 packs: `ai/<plugin>/` until migrated) - or, for a
   **linked** plugin (`"mode": "link"`), `ai/plugins/<name>.link.md` exists and its path resolves to

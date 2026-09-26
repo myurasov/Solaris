@@ -58,14 +58,14 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.33.0.md`](solaris/spec/spec-v0.33.0.md).
+Full specification: [`solaris/spec/spec-v0.34.0.md`](solaris/spec/spec-v0.34.0.md).
 
 ## Execution Model
 
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **engineer** (`projects/<slug>/ai/engineer.agent.md`) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
+- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **primary persona** (`projects/<slug>/ai/<primary>.agent.md` - `engineer` unless the manifest's `agents.primary` renames it; optional **role personas** are briefs in `ai/agents/<role>.agent.md`, used by telling the model to act as that file) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 
@@ -79,7 +79,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `import-project` | "import project", "adopt `<path or host:path>`" | Adopt an existing codebase; derive the ai-pack. |
 | `import-plugin` | "create / update plugin", "make a plugin from `<project>`" | Author a plugin from a project, or fold project-local edits back into a plugin. |
 | `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>` / this task", "link plugin `<X>` to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project (copy, or link mode for plugin development) or an ad-hoc task (live-loaded). |
-| `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's engineer agent (plan or implement). |
+| `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's primary persona (`engineer` by default) to plan or implement. |
 | `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `publish-project` | "publish / share `<project>`", "prepare `<project>` for handoff" | Scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone. |
 | `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
@@ -100,5 +100,5 @@ Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignore
 
 ## Conventions (Pointers)
 
-- Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.33.0.md`](solaris/spec/spec-v0.33.0.md).
+- Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `agents`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
+- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.34.0.md`](solaris/spec/spec-v0.34.0.md).

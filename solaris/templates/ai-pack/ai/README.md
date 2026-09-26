@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -7,6 +7,7 @@ _Rev. 3_
 - [What Is in This Pack](#what-is-in-this-pack)
   - [Attached Plugins](#attached-plugins)
   - [Workspaces](#workspaces)
+  - [Personas](#personas)
 - [Configuration](#configuration)
 - [How-To](#how-to)
   - [Start a Work Session](#start-a-work-session)
@@ -17,6 +18,7 @@ _Rev. 3_
   - [Work with Git](#work-with-git)
   - [Release a Project Version](#release-a-project-version)
   - [Manage Plugins](#manage-plugins)
+  - [Add or Rename a Persona](#add-or-rename-a-persona)
   - [Update the Pack Itself](#update-the-pack-itself)
 - [Available Skills](#available-skills)
 - [Privacy: Memory, Logs, and Secrets](#privacy-memory-logs-and-secrets)
@@ -38,13 +40,13 @@ standalone-first: it works with just this project checked out, no framework arou
 ## What This Is
 
 An agent session starts at the project root's [`AGENTS.md`](../AGENTS.md), which points into
-this folder. The pack then does three jobs: it defines the **engineer persona** the agent adopts
-([`engineer.agent.md`](engineer.agent.md)), it carries the **project knowledge** the agent needs
+this folder. The pack then does three jobs: it defines the **{{PRIMARY}} persona** the agent adopts
+([`{{PRIMARY}}.agent.md`]({{PRIMARY}}.agent.md)), it carries the **project knowledge** the agent needs
 (spec, instructions, memory), and it enforces the **working rules** — commit policy, safety, git
 workflow, and the always-on rules in [`rules/`](rules/).
 
 This file is generated and re-rendered when the pack updates, so put durable notes in
-[`engineer.instructions.md`](engineer.instructions.md) instead of editing it. Files carry
+[`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md) instead of editing it. Files carry
 Solaris sync metadata (`_Rev. N_` markers, the `revisions` map in `manifest.json`) — leave that
 as-is.
 
@@ -53,8 +55,9 @@ as-is.
 | Path | What it is |
 |---|---|
 | [`manifest.json`](manifest.json) | Pack descriptor: project name/type/mode/description, framework version, attached plugins, sync metadata. |
-| [`engineer.agent.md`](engineer.agent.md) | The engineer persona — how the agent plans, codes, commits, and stays safe. |
-| [`engineer.instructions.md`](engineer.instructions.md) | Shareable project know-how: build/run/test commands, conventions, gotchas. |
+| [`{{PRIMARY}}.agent.md`]({{PRIMARY}}.agent.md) | The {{PRIMARY}} persona, the primary agent — how the agent plans, codes, commits, and stays safe. |
+| [`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md) | Shareable project know-how: build/run/test commands, conventions, gotchas. |
+| `agents/` | Role persona briefs (`<role>.agent.md`) beyond the primary — see [Personas](#personas). |
 | [`spec.md`](spec.md) | The living project spec. |
 | [`defaults.json`](defaults.json) | Committed behavior switches (see [Configuration](#configuration)). |
 | [`rules/`](rules/) | Always-on rules: git collaboration, subagent delegation, token economy, YAGNI mode. |
@@ -73,6 +76,15 @@ Code lives in self-contained workspace folders at the project root; this single 
 across all of them:
 
 {{WORKSPACES}}
+
+### Personas
+
+The primary persona drives every session. Additional **role personas** are briefs in
+`agents/<role>.agent.md` — a short frontmatter (`description`, optional `tier` and `access`) above the
+brief itself. A model uses a role by acting as that file: it is the opening instruction of a delegated
+subagent, or of a whole session. Every role inherits the primary persona's policies:
+
+{{AGENTS}}
 
 ## Configuration
 
@@ -111,7 +123,7 @@ personal git branch, and brings the environment up. Details:
 ### Run and Test the Project
 
 Just ask — "run the tests", "start the app". The exact commands, conventions, and gotchas live
-in [`engineer.instructions.md`](engineer.instructions.md), which the agent reads every session.
+in [`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md), which the agent reads every session.
 
 ### Save and Resume Context
 
@@ -144,6 +156,15 @@ explicitly (single-line commit plus a local `v<X.Y.Z>` tag).
 Under a Solaris checkout, "add plugin `<name>` to `<project>`" attaches one, and detaching
 removes it — the [Attached Plugins](#attached-plugins) list above re-renders on the next sync.
 A standalone checkout receives plugin updates through ordinary git pulls.
+
+### Add or Rename a Persona
+
+To add a role, write `agents/<role>.agent.md` — copy the shape of an existing brief (under a Solaris
+checkout the stub is `solaris/templates/agents/role.agent.md`, and
+`uv run -m solaris.tools.agents --check --dir <project>` validates it); the [Personas](#personas) list
+above re-renders on the next sync. The primary persona is `{{PRIMARY}}`; under a Solaris checkout,
+`uv run -m solaris.tools.agents --rename-primary <role> --dir <project>` renames it (moves its two files
+and re-renders this pack); standalone, keep the name.
 
 ### Update the Pack Itself
 

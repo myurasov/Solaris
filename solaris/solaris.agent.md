@@ -27,7 +27,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.33.0.md`](spec/spec-v0.33.0.md).
+[`spec/spec-v0.34.0.md`](spec/spec-v0.34.0.md).
 
 ## Persona Model
 
@@ -35,10 +35,18 @@ There is one running agent. It adopts a persona by reading the active context:
 
 - **Orchestrator** (this file) - at the Solaris root. Routes requests to skills; manages the project
   registry, plugins, and tasks; keeps framework memory. It does **not** write project source code itself;
-  project work is handed to the project's engineer agent via `develop-project`.
-- **Engineer** - inside a project (`projects/<slug>/ai/engineer.agent.md`), with the ai-pack and every
-  `ai/plugins/<plugin>/` overlay loaded, plus `source/AGENTS.md` (if present) as gap-filling project rules
-  (the ai-pack strictly overrides repo-carried rules on conflict).
+  project work is handed to the project's primary persona via `develop-project`.
+- **Primary persona** - inside a project: `projects/<slug>/ai/<primary>.agent.md` plus its
+  `ai/<primary>.instructions.md`, with the ai-pack and every `ai/plugins/<plugin>/` overlay loaded, plus
+  `source/AGENTS.md` (if present) as gap-filling project rules (the ai-pack strictly overrides
+  repo-carried rules on conflict). The role is `engineer` unless the manifest's `agents.primary` renames
+  it (`uv run -m solaris.tools.agents --rename-primary <role> --dir <project>`); wherever the docs and
+  skills say `engineer.agent.md` / `engineer.instructions.md`, read the project's primary name.
+- **Role personas** - optional briefs at `ai/agents/<role>.agent.md` (frontmatter `description`, optional
+  `tier` and `access`, then the brief; project content, no rev marker) that inherit the primary persona's
+  policies. A model uses a role by acting as that file - the opening instruction of a delegated subagent
+  or of a whole session; nothing is projected into harness-specific agent formats. The pack README lists
+  them; `uv run -m solaris.tools.agents --check --dir <project>` validates them.
 
 ## Responsibilities
 
@@ -88,6 +96,8 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump> [...]`
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
+- `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE]` (personas: validate the role
+  briefs under `ai/agents/`; rename the primary persona)
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
 - `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--check]` (the read-first loader hook;
   loads in three session-start parts - core set, subagents/YAGNI rules, token economy - because the

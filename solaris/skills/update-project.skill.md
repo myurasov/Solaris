@@ -18,7 +18,9 @@ the project's `source/` code.
 
 ## 1. Classify + Sync Files by Revision
 
-`uv run -m solaris.tools.revs classify --dir projects/<slug>` gives a per-materialized-file verdict:
+`uv run -m solaris.tools.revs classify --dir projects/<slug>` gives a per-materialized-file verdict (the
+template's `engineer.agent.md` maps onto the project's primary persona file `ai/<primary>.agent.md`, per the
+manifest's `agents.primary`):
 
 - **in-sync / fast-forward / missing** -> `uv run -m solaris.tools.revs ff --dir projects/<slug>` applies
   them (copies master -> project, updates the baseline). Files the user never touched just move forward.
@@ -53,5 +55,6 @@ automatically.
 
 ## 4. Summary + Revert
 
-Report what synced, what merged, and any versions set. `revs ff` is idempotent; migrations revert via their
-Revert section. Log one line to `.memory/interactions.jsonl`.
+Report what synced, what merged, and any versions set. When the pack has `ai/agents/` briefs, run
+`uv run -m solaris.tools.agents --check --dir projects/<slug>` too. `revs ff` is idempotent; migrations
+revert via their Revert section. Log one line to `.memory/interactions.jsonl`.

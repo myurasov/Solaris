@@ -29,8 +29,9 @@ existing codebase that is not yet a project, suggest `import-project`; for somet
 
 Read, in this order, and then obey them:
 
-1. `projects/<slug>/ai/engineer.agent.md` - the project's combined coder + planner + runner persona
-   (includes the embedded commit + safety policies).
+1. `projects/<slug>/ai/<primary>.agent.md` - the project's **primary persona**, a combined coder + planner +
+   runner (includes the embedded commit + safety policies). `<primary>` is `engineer` unless
+   `ai/manifest.json` -> `agents.primary` renames it; every `engineer.*` name below means that file.
 2. `projects/<slug>/ai/manifest.json` - name/type/mode + attached plugins.
 3. `projects/<slug>/ai/engineer.instructions.md` (shareable build/run/test + conventions),
    `ai/spec.md`, and `ai/.memory/*` (private: `resources.md`, `credentials.md`).
@@ -46,6 +47,9 @@ Read, in this order, and then obey them:
 6. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules
    (the ai-pack strictly overrides repo-carried rules on any conflict - flag, never silently defer). If `remote-code`:
    `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
+7. Every `projects/<slug>/ai/agents/<role>.agent.md` role brief, if present: personas the primary delegates
+   to (or runs a whole session as) by telling the model to act as that file, at the brief's `tier` and
+   read-only when its `access` says so; they inherit the primary persona's policies.
 
 **Embedded mode** (manifest `mode: embedded`): the ai-pack + `AGENTS.md` live *inside* the repo, so read the
 context above from `projects/<slug>/<repo>/` (e.g. `projects/<slug>/<repo>/ai/engineer.agent.md`); there is no
@@ -73,6 +77,10 @@ Follow the engineer agent's workflows:
   When the knowledge is a trigger-shaped, occasionally-run multi-step procedure, **propose a project-local
   skill** (`ai/skills/<name>.skill.md`) instead of growing the instructions - create it only after the user
   agrees; the routing criteria live in the template `ai/engineer.agent.md` (Memory).
+- **Personas:** when the user wants a new or changed role, create or edit `ai/agents/<role>.agent.md`
+  (stub: `solaris/templates/agents/role.agent.md`), validate with
+  `uv run -m solaris.tools.agents --check --dir projects/<slug>`, and run `revs ff` so `ai/README.md` lists
+  it; renaming the primary persona is `agents --rename-primary <role>`.
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) in **both** the project's
   `ai/.memory/interactions.jsonl` and the framework master `.memory/interactions.jsonl` (all work).

@@ -1,6 +1,6 @@
-_Rev. 9_
+_Rev. 10_
 
-# Engineer Instructions - {{NAME}} <!-- omit in toc -->
+# {{PRIMARY_TITLE}} Instructions - {{NAME}} <!-- omit in toc -->
 
 - [Workspaces](#workspaces)
 - [Build / Run / Test](#build--run--test)
@@ -11,14 +11,14 @@ _Rev. 9_
 - [Conventions](#conventions)
 
 Editable, project-specific notes on how to develop this project. Rewrite freely to keep the best version
-(not append-only). The commit and safety policies live in `engineer.agent.md`.
+(not append-only). The commit and safety policies live in `{{PRIMARY}}.agent.md`.
 
 **This is the "how" layer.** All procedures and project knowledge live here: build/run/test, **deploy &
 restart procedures**, **model/runtime details**, architecture/layers, and **gotchas**. The only things that do
 *not* live here are the inventory of *what exists* (hardware + hosts/accounts -> `ai/.memory/resources.md`),
 secrets (`credentials.md`), and the session-context summary (`context.md`).
 
-**Shareable layer.** This file sits in `ai/` alongside `engineer.agent.md` and `spec.md` - the portable,
+**Shareable layer.** This file sits in `ai/` alongside `{{PRIMARY}}.agent.md` and `spec.md` - the portable,
 shareable layer. Keep it free of anything environment-specific or sensitive: **no** hostnames, IPs,
 internal/corporate URLs, concrete deploy targets, remote paths, or secrets - those are inventory and live in
 `ai/.memory/resources.md` / `credentials.md`. Procedures still belong here, written as generic patterns
@@ -68,13 +68,13 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
 ## Runtime Notes & Gotchas
 
 - (model/runtime details, performance notes, and gotchas worth never relearning)
-- Sandbox ladder + name-block wrappers: policy lives in `engineer.agent.md` (Sandboxed Harnesses); under
+- Sandbox ladder + name-block wrappers: policy lives in `{{PRIMARY}}.agent.md` (Sandboxed Harnesses); under
   a Solaris checkout, `solaris.agent.md` carries the framework-wide version with the current known-hard
   denial list. Harness specifics seen so far: Codex `approval_policy = "on-request"` grants per-command
   escalation; Cursor's auto-review classifier can route a full-access command to user approval, and its
   network allowlist is user-configurable (adding a domain unblocks shell access without escalation).
   To opt this project out of the `/tmp` wrapper mechanism, say so in a line here - do not edit the
-  policy in `engineer.agent.md`.
+  policy in `{{PRIMARY}}.agent.md`.
 - If `uv` fails with a permission error on its home cache (`~/.cache/uv` / `uv cache dir`), the harness
   sandbox is denying home-dir writes: rerun once with `UV_CACHE_DIR=<writable scratch>/uv-cache` and say
   you did (some sandboxes redirect the cache automatically; others hard-deny - this is the portable fix).
