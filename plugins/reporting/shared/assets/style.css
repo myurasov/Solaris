@@ -1,4 +1,4 @@
-/* rev. 2 */
+/* rev. 5 */
 
 /* ==========================================================================
    Report stylesheet - the plugin-managed base for report styling.
@@ -40,14 +40,14 @@
   --font-sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --font-mono: "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
 
-  /* font sizes (PDF; base = main body text) */
-  --fs-base: 9pt;               /* p, li - the main PDF font size */
+  /* font sizes (PDF; house defaults: 8pt body, 7.75 provenance, 7.5 tables, 7.25 small) */
+  --fs-base: 8pt;               /* p, li - the main PDF font size */
   --fs-h1: 14.1pt;
   --fs-h2: 11pt;
-  --fs-sub: 8.5pt;              /* provenance line, table captions */
+  --fs-sub: 7.75pt;             /* provenance line, table captions */
   --fs-toc: 8pt;
-  --fs-table: 7.87pt;           /* table cells + diagram key */
-  --fs-small: 7.59pt;           /* code, footnote line, diagram captions */
+  --fs-table: 7.5pt;            /* table cells + diagram key */
+  --fs-small: 7.25pt;           /* code, footnote line, diagram captions */
 
   /* spacing + line heights */
   --lh-body: 1.25;
@@ -61,7 +61,7 @@
    2. PAGE + BASE TYPOGRAPHY
    ========================================================================== */
 * { box-sizing: border-box; margin: 0; }
-html { font-size: 9pt; }        /* PDF base; screen preview overrides at the bottom */
+html { font-size: 8pt; }        /* PDF base; screen preview overrides at the bottom */
 body.viz-root {
   font-family: var(--font-sans);
   background: var(--page);
@@ -116,13 +116,14 @@ h2::before { content: counter(section) ". "; color: var(--accent); font-weight: 
   margin: 0;
   padding: 0 0 0 1em;
   line-height: 1;
-  display: inline-grid;                    /* N columns via --toc-rows on the OL */
+  display: grid;                           /* 3 equal columns spanning the content width */
   grid-auto-flow: column;
-  grid-template-rows: repeat(var(--toc-rows, 2), auto);
-  grid-auto-columns: max-content;
+  grid-template-rows: repeat(var(--toc-rows, 2), auto); /* --toc-rows = ceil(items/3), an integer */
+  grid-template-columns: repeat(3, 1fr);   /* explicit: 1, 2 or 4 entries still get 3 equal columns */
+  grid-auto-columns: 1fr;
   column-gap: 2.2em;
 }
-.toc-list li { margin: 3pt 0; max-width: 3.6in; break-inside: avoid; font-size: var(--fs-toc); }
+.toc-list li { margin: 3pt 0; break-inside: avoid; font-size: var(--fs-toc); }
 .toc-list li::marker { color: #1d1d1d; font-weight: 500; }
 .toc-list a { color: var(--accent); text-decoration: none; }
 

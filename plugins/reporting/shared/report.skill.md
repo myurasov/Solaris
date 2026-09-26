@@ -9,7 +9,7 @@ summary: Author and render a project findings report - HTML source in
   merged with poppler pdfunite). Styling/rendering tooling is this plugin's assets/;
   theme and page furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 4_
+_Rev. 6_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
@@ -61,7 +61,7 @@ they fold back on the next plugin update (import-plugin Mode A picks up the high
 
 | File | What it is |
 |---|---|
-| `style.css` | The stylesheet every report links. Organized in commented sections (tokens, typography, headings, TOC, tables, diagrams, print, screen). **Defaults: Helvetica Neue body font, Solaris purple accent (#6A1B9A)** |
+| `style.css` | The stylesheet every report links. Organized in commented sections (tokens, typography, headings, TOC, tables, diagrams, print, screen). **Defaults: Helvetica Neue body font; 8pt body, 7.75pt provenance line, 7.5pt tables, 7.25pt small text, headings larger; Solaris purple accent (#6A1B9A)** |
 | `render.js` | Zero-npm-dep PDF renderer: drives installed Chrome over the DevTools protocol (plain Node >= 22, built-in WebSocket; `$CHROME` overrides the binary path), merges two passes with poppler `pdfunite`. Owns page geometry (Letter, margins) and the page furniture: page-1 header "Prepared by ... on <render date, HH:MM TZ>" (byline: `report.json` `prepared_by` override, else the rendering developer's git identity, else plain "Rendered on ..."), pages-2+ header "<H1 title> - <subtitle>", footer watermark (from `report.json`; none by default) + date parsed from the H1's MMDD prefix |
 | `render.sh` | The single render entry point, run from the project root or `reports/`: `render.sh` (all), `render.sh <slug> ...` (some), `render.sh --live [slug ...]` (watch sources + theme, re-render on change) |
 
@@ -95,8 +95,10 @@ In order, inside `<body class="viz-root"><main>`:
    (pages-2+ header, so the rev shows on every page).
 2. **`.sub` paragraph**: run provenance one-liner - when/where/what hardware, framework +
    seed, code state, what the reference rows are.
-3. **Inline TOC**: `.toc` div with `--toc-rows: ceil(items/N)` and a `.toc-list` OL of
-   anchor links to the `h2` ids.
+3. **Inline TOC**: `.toc` div with `--toc-rows: N` and a `.toc-list` OL of anchor links to
+   the `h2` ids. TOCs are **three equal columns spanning the content width**; N is
+   ceil(items/3) written as a plain integer (`--toc-rows: 4` for 10 entries) - a literal
+   `ceil()` is invalid inside the grid `repeat()` and collapses the TOC into one clipped row.
 4. **Headline table** (`table.headline`): Metric | Value | Note rows - never stat
    tiles/boxes. May sit inside its own first `<section>` with an H2 when titled.
 5. **Sections**: `<section><h2 id="...">` - H2s carry NO hardcoded numbers (a CSS
