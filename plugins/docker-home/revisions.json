@@ -1,0 +1,138 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/dh-build.sh": {
+      "rev": 1,
+      "hash": "403345e1b731693e0c0e775ae3a5c52a16fa3625f10bc87daadcf041a97b77ea",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "6e1146106c05a757b5a0ad109a056dad25060cdecf290acdd3c3140e23a1361f"
+        },
+        {
+          "rev": 1,
+          "hash": "403345e1b731693e0c0e775ae3a5c52a16fa3625f10bc87daadcf041a97b77ea"
+        }
+      ]
+    },
+    "shared/dh-common.sh": {
+      "rev": 1,
+      "hash": "6693f86137c45e06cdf6c86c48344a0a4c8cb464542ad5ada7efee1a485cd9ac",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "a28cfe989e0b370d7fceb049c7177dbf7c34b8302601afaeb1bc33893df3a73b"
+        },
+        {
+          "rev": 1,
+          "hash": "6693f86137c45e06cdf6c86c48344a0a4c8cb464542ad5ada7efee1a485cd9ac"
+        }
+      ]
+    },
+    "shared/dh-enter.sh": {
+      "rev": 1,
+      "hash": "610d0ee3cfd32f96c1a6909180fb1891af4db20ff44a14e43140b37d33fe7178",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "610d0ee3cfd32f96c1a6909180fb1891af4db20ff44a14e43140b37d33fe7178"
+        }
+      ]
+    },
+    "shared/dh-rebuild.sh": {
+      "rev": 1,
+      "hash": "fc9a3ef5a26fbb1f14cc3b61bd04251aaf5f585cf309bc9dcbaced88b6b21943",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "bf6301a4d642581422f994ebf9b2dd0b09bca250e00039c40e738920254ff31a"
+        },
+        {
+          "rev": 1,
+          "hash": "fc9a3ef5a26fbb1f14cc3b61bd04251aaf5f585cf309bc9dcbaced88b6b21943"
+        }
+      ]
+    },
+    "shared/dh-remove.sh": {
+      "rev": 1,
+      "hash": "74b7d7c705657c6d5c4f9471b6dac20e4cde904dcf337071acbc55dd94031fcf",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "b5656c38b474bb7ba0be30c46f3373228325fc1acf8524c6d98e47e48e606c41"
+        },
+        {
+          "rev": 1,
+          "hash": "74b7d7c705657c6d5c4f9471b6dac20e4cde904dcf337071acbc55dd94031fcf"
+        }
+      ]
+    },
+    "shared/dh-start.sh": {
+      "rev": 1,
+      "hash": "40aaa62d09b1b6c30ec5d077c629cd361d3d3ff37848f689bbc72fd0ec607976",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "da7c911e4b3ebc1e3e109a724cffce2f1cc6ada66803682fcaff457056f905cc"
+        },
+        {
+          "rev": 1,
+          "hash": "40aaa62d09b1b6c30ec5d077c629cd361d3d3ff37848f689bbc72fd0ec607976"
+        }
+      ]
+    },
+    "shared/dh-status.sh": {
+      "rev": 1,
+      "hash": "53ca03b52f2bb15f85f3e385f92cdafe1fdcf66afa0b5e8fee42b128f35fe81d",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "53ca03b52f2bb15f85f3e385f92cdafe1fdcf66afa0b5e8fee42b128f35fe81d"
+        }
+      ]
+    },
+    "shared/dh-stop.sh": {
+      "rev": 1,
+      "hash": "975a6511754561e0d195a7e479ab4a7e5ff03976cb51ed835c6a836e1bc433b4",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "1dc9dcee63ca239209a31fbb142f58d85dc0ae88e1b20abdb6781c64ffbc94f2"
+        },
+        {
+          "rev": 1,
+          "hash": "975a6511754561e0d195a7e479ab4a7e5ff03976cb51ed835c6a836e1bc433b4"
+        }
+      ]
+    },
+    "shared/docker-home.rule.md": {
+      "rev": 1,
+      "hash": "28707fc1c51353b01441f32a8585b1854f201e80a525740d08992677087bcf1c",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "701537bfc7f6308f504994f8467af83c2669b9a040d367bb84c674882bbaa6e0"
+        },
+        {
+          "rev": 1,
+          "hash": "28707fc1c51353b01441f32a8585b1854f201e80a525740d08992677087bcf1c"
+        }
+      ]
+    },
+    "shared/docker-home.skill.md": {
+      "rev": 1,
+      "hash": "ab8fc60a607e67e9c1197a87072221527f3968914a85ac434d2520fdb45e3c46",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "598badead6a61c722398d2cef6491b5473c25eecec912c1b5d2e0fc5bd9215f3"
+        },
+        {
+          "rev": 1,
+          "hash": "ab8fc60a607e67e9c1197a87072221527f3968914a85ac434d2520fdb45e3c46"
+        }
+      ]
+    }
+  }
+}
