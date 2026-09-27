@@ -49,7 +49,10 @@ Read, in this order, and then obey them:
    `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
 7. Every `projects/<slug>/ai/agents/<role>.agent.md` role brief, if present: personas the primary delegates
    to (or runs a whole session as) by telling the model to act as that file, at the brief's `tier` and
-   read-only when its `access` says so; they inherit the primary persona's policies.
+   read-only when its `access` says so; they inherit the primary persona's policies. Each brief is paired
+   with `ai/agents/<role>.instructions.md`, the role's own persistent know-how: the role reads it on start
+   and keeps it current; when a read-only role returns instructions updates in its report, the primary
+   applies them.
 
 **Embedded mode** (manifest `mode: embedded`): the ai-pack + `AGENTS.md` live *inside* the repo, so read the
 context above from `projects/<slug>/<repo>/` (e.g. `projects/<slug>/<repo>/ai/engineer.agent.md`); there is no
@@ -77,8 +80,9 @@ Follow the engineer agent's workflows:
   When the knowledge is a trigger-shaped, occasionally-run multi-step procedure, **propose a project-local
   skill** (`ai/skills/<name>.skill.md`) instead of growing the instructions - create it only after the user
   agrees; the routing criteria live in the template `ai/engineer.agent.md` (Memory).
-- **Personas:** when the user wants a new or changed role, create or edit `ai/agents/<role>.agent.md`
-  (stub: `solaris/templates/agents/role.agent.md`), validate with
+- **Personas:** when the user wants a new or changed role, create or edit the pair `ai/agents/<role>.agent.md`
+  + `ai/agents/<role>.instructions.md` (stubs: `solaris/templates/agents/role.agent.md`,
+  `role.instructions.md`), validate with
   `uv run -m solaris.tools.agents --check --dir projects/<slug>`, and run `revs ff` so `ai/README.md` lists
   it; renaming the primary persona is `agents --rename-primary <role>`.
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user

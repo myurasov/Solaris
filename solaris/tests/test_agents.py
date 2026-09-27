@@ -1,7 +1,8 @@
 # Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for solaris.tools.agents (renamable primary persona + role briefs) and the revs hooks behind it."""
+"""Tests for solaris.tools.agents (renamable primary persona + role personas: brief + instructions pairs) and
+the revs hooks behind it."""
 
 from __future__ import annotations
 
@@ -36,7 +37,7 @@ def _project(tmp_path, primary=None):
 
 
 def _brief(proj, name, desc="Reviews things before they count.", tier="high", access="read-only",
-           body="**Owns:** review.\n"):
+           body="**Owns:** review.\n", instructions=True):
     d = proj / "ai" / "agents"
     d.mkdir(exist_ok=True)
     fm = f"---\ndescription: {desc}\n"
@@ -45,6 +46,8 @@ def _brief(proj, name, desc="Reviews things before they count.", tier="high", ac
     if access:
         fm += f"access: {access}\n"
     (d / f"{name}.agent.md").write_text(fm + "---\n\n" + body, encoding="utf-8")
+    if instructions:
+        (d / f"{name}.instructions.md").write_text(f"# {name.title()} Instructions\n\n- notes\n", encoding="utf-8")
 
 
 def test_primary_role_default_and_validation():
@@ -90,6 +93,7 @@ def test_agents_block_lists_primary_and_roles(tmp_path):
     _brief(proj, "bad", desc="")            # invalid: flagged in the listing, never fatal for a render
     block = R._agents_block({}, proj)
     assert "- `reviewer` - Adversarial review before results count. (high tier, read-only;" in block
+    assert "[`agents/reviewer.agent.md`](agents/reviewer.agent.md) + [`agents/reviewer.instructions.md`]" in block
     assert "bad.agent.md" in block and "INVALID" in block
     R.fast_forward(proj, TEMPLATE_DIR, tmp_path / "plugins")
     assert "reviewer" in (proj / "ai" / "README.md").read_text(encoding="utf-8")
@@ -130,7 +134,7 @@ def test_check_cli(tmp_path, capsys):
     (proj / "ai" / "agents" / "notes.md").write_text("scratch\n", encoding="utf-8")
     assert A.main(["--dir", str(proj)]) == 0
     out = capsys.readouterr().out
-    assert "1 role brief(s)" in out and "reader" in out and "notes.md" in out
+    assert "1 role persona(s) in ai/agents/, all valid" in out and "reader" in out and "notes.md" in out
     _brief(proj, "broken", desc="")
     assert A.main(["--dir", str(proj)]) == 1
     assert "broken.agent.md" in capsys.readouterr().out
@@ -143,7 +147,7 @@ def test_rename_primary_round_trip(tmp_path):
     _brief(proj, "reviewer")
     with pytest.raises(ValueError, match="must match"):
         A.rename_primary(proj, "Master")
-    with pytest.raises(ValueError, match="role brief"):
+    with pytest.raises(ValueError, match="reviewer.agent.md belongs to a role persona"):
         A.rename_primary(proj, "reviewer")
     log, warnings = A.rename_primary(proj, "master")
     assert not warnings
@@ -238,6 +242,59 @@ def test_brief_edge_cases(tmp_path):
     with pytest.raises(ValueError, match="cannot read"):
         A.load_role(d / "dir.agent.md", "engineer")
     assert "INVALID" in R._agents_block({}, proj)   # a directory renders as an invalid brief, never a traceback
+
+
+def test_check_requires_the_role_instructions_file(tmp_path, capsys):
+    proj = _project(tmp_path)
+    _brief(proj, "worker", desc="Runs one job.", access="full", instructions=False)
+    assert A.main(["--dir", str(proj)]) == 1
+    out = capsys.readouterr().out
+    assert "1 incomplete" in out and "MISSING ai/agents/worker.instructions.md" in out
+    assert "role.instructions.md" in out                      # the fix hint names the stub
+    assert "no usable instructions file yet" in R._agents_block({}, proj)   # README still renders, never fatal
+    (proj / "ai" / "agents" / "worker.instructions.md").write_text("# Worker Instructions\n\n- x\n", encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 0
+    assert ("[`agents/worker.agent.md`](agents/worker.agent.md) + "
+            "[`agents/worker.instructions.md`](agents/worker.instructions.md)") in R._agents_block({}, proj)
+    (proj / "ai" / "agents" / "orphan.instructions.md").write_text("# Orphan\n", encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 0                  # an orphan is a note, not an error
+    assert "orphan.instructions.md: no matching orphan.agent.md" in capsys.readouterr().out
+    with pytest.raises(ValueError, match="orphan.instructions.md belongs to a role persona"):
+        A.rename_primary(proj, "orphan")                      # the name is taken even without a brief
+
+
+def test_unusable_instructions_files_are_reported(tmp_path, capsys):
+    proj = _project(tmp_path)
+    d = proj / "ai" / "agents"
+    _brief(proj, "empty", desc="Empty know-how.", instructions=False)
+    (d / "empty.instructions.md").write_text("\n\n", encoding="utf-8")
+    _brief(proj, "dirr", desc="Directory know-how.", instructions=False)
+    (d / "dirr.instructions.md").mkdir()
+    _brief(proj, "caser", desc="Wrong-case know-how.", instructions=False)
+    (d / "Caser.instructions.md").write_text("# Caser\n\n- x\n", encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 1
+    out = capsys.readouterr().out
+    assert "3 incomplete" in out
+    assert "ai/agents/empty.instructions.md is empty" in out
+    assert "ai/agents/dirr.instructions.md is not a regular file" in out
+    assert "MISSING ai/agents/caser.instructions.md" in out   # exact-name match, on any filesystem
+    assert "Caser.instructions.md: no matching Caser.agent.md" in out
+    block = R._agents_block({}, proj)
+    assert block.count("no usable instructions file yet") == 3
+    for r in A.load_personas(proj)[1]:
+        assert r.instructions is None and r.instructions_problem
+
+
+def test_role_stubs_validate_as_a_pair(tmp_path):
+    proj = _project(tmp_path)
+    d = proj / "ai" / "agents"
+    d.mkdir()
+    stubs = TEMPLATE_DIR.parent / "agents"
+    for stub, target in (("role.agent.md", "scout.agent.md"), ("role.instructions.md", "scout.instructions.md")):
+        (d / target).write_text((stubs / stub).read_text(encoding="utf-8"), encoding="utf-8")
+    prim, roles, notes = A.load_personas(proj)
+    assert [r.name for r in roles] == ["scout"] and roles[0].instructions is not None and not notes
+    assert A.main(["--dir", str(proj)]) == 0
 
 
 def test_revs_cli_reports_a_malformed_manifest_cleanly(tmp_path, capsys):

@@ -1,4 +1,4 @@
-_Rev. 10_
+_Rev. 11_
 
 # {{PRIMARY_TITLE}} Instructions - {{NAME}} <!-- omit in toc -->
 
@@ -16,7 +16,8 @@ Editable, project-specific notes on how to develop this project. Rewrite freely 
 **This is the "how" layer.** All procedures and project knowledge live here: build/run/test, **deploy &
 restart procedures**, **model/runtime details**, architecture/layers, and **gotchas**. The only things that do
 *not* live here are the inventory of *what exists* (hardware + hosts/accounts -> `ai/.memory/resources.md`),
-secrets (`credentials.md`), and the session-context summary (`context.md`).
+secrets (`credentials.md`), the session-context summary (`context.md`), and know-how that belongs to one
+role persona (`ai/agents/<role>.instructions.md`, kept by that role).
 
 **Shareable layer.** This file sits in `ai/` alongside `{{PRIMARY}}.agent.md` and `spec.md` - the portable,
 shareable layer. Keep it free of anything environment-specific or sensitive: **no** hostnames, IPs,

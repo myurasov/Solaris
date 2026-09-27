@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -57,7 +57,7 @@ as-is.
 | [`manifest.json`](manifest.json) | Pack descriptor: project name/type/mode/description, framework version, attached plugins, sync metadata. |
 | [`{{PRIMARY}}.agent.md`]({{PRIMARY}}.agent.md) | The {{PRIMARY}} persona, the primary agent — how the agent plans, codes, commits, and stays safe. |
 | [`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md) | Shareable project know-how: build/run/test commands, conventions, gotchas. |
-| `agents/` | Role persona briefs (`<role>.agent.md`) beyond the primary — see [Personas](#personas). |
+| `agents/` | Role personas beyond the primary: `<role>.agent.md` (the brief) + `<role>.instructions.md` (that role's persistent know-how) — see [Personas](#personas). |
 | [`spec.md`](spec.md) | The living project spec. |
 | [`defaults.json`](defaults.json) | Committed behavior switches (see [Configuration](#configuration)). |
 | [`rules/`](rules/) | Always-on rules: git collaboration, subagent delegation, token economy, YAGNI mode. |
@@ -79,10 +79,13 @@ across all of them:
 
 ### Personas
 
-The primary persona drives every session. Additional **role personas** are briefs in
-`agents/<role>.agent.md` — a short frontmatter (`description`, optional `tier` and `access`) above the
-brief itself. A model uses a role by acting as that file: it is the opening instruction of a delegated
-subagent, or of a whole session. Every role inherits the primary persona's policies:
+The primary persona drives every session. Additional **role personas** live in `agents/`, each the same
+two-file pair as the primary: the brief `<role>.agent.md` — a short frontmatter (`description`, optional
+`tier` and `access`) above the brief itself — and `<role>.instructions.md`, the role's persistent,
+committable know-how (procedures, gotchas, lessons), read on start and kept up to date by the role itself
+(a role running without write access hands updates back in its report). A model uses a role by acting as
+its brief: the opening instruction of a delegated subagent, or of a whole session. Every role inherits the
+primary persona's policies and shares this pack's private `.memory/` for short-term, machine-local state:
 
 {{AGENTS}}
 
@@ -159,10 +162,11 @@ A standalone checkout receives plugin updates through ordinary git pulls.
 
 ### Add or Rename a Persona
 
-To add a role, write `agents/<role>.agent.md` — copy the shape of an existing brief (under a Solaris
-checkout the stub is `solaris/templates/agents/role.agent.md`, and
-`uv run -m solaris.tools.agents --check --dir <project>` validates it); the [Personas](#personas) list
-above re-renders on the next sync. The primary persona is `{{PRIMARY}}`; under a Solaris checkout,
+To add a role, write the pair `agents/<role>.agent.md` (the brief) and `agents/<role>.instructions.md`
+(its know-how) — copy the shape of an existing role (under a Solaris checkout the stubs are
+`solaris/templates/agents/role.agent.md` and `role.instructions.md`, and
+`uv run -m solaris.tools.agents --check --dir <project>` validates the pair); the [Personas](#personas)
+list above re-renders on the next sync. The primary persona is `{{PRIMARY}}`; under a Solaris checkout,
 `uv run -m solaris.tools.agents --rename-primary <role> --dir <project>` renames it (moves its two files
 and re-renders this pack); standalone, keep the name.
 

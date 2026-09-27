@@ -44,7 +44,8 @@ TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
 # The primary persona: ai/<role>.agent.md + ai/<role>.instructions.md, "engineer" unless the manifest's
-# agents.primary renames it (solaris.tools.agents does the rename). Role briefs live in ai/agents/.
+# agents.primary renames it (solaris.tools.agents does the rename). Role personas (brief + instructions
+# pairs) live in ai/agents/.
 DEFAULT_PRIMARY = "engineer"
 ROLE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -412,7 +413,7 @@ def _workspaces_block(manifest: dict) -> str:
 
 
 def _agents_block(manifest: dict, project_dir: Path) -> str:
-    """The {{AGENTS}} bullets: the primary persona plus every ai/agents/<role>.agent.md role brief."""
+    """The {{AGENTS}} bullets: the primary persona plus every ai/agents/<role> persona (brief + instructions)."""
     primary = primary_role(manifest)
     lines = [f"- `{primary}` - the primary persona ([`{primary}.agent.md`]({primary}.agent.md) + "
              f"[`{primary}.instructions.md`]({primary}.instructions.md)); drives every session"]
@@ -427,8 +428,13 @@ def _agents_block(manifest: dict, project_dir: Path) -> str:
                              "--dir <project>` for the reason)")
                 continue
             tier = f"{role.tier} tier, " if role.tier else ""
-            lines.append(f"- `{role.name}` - {role.description} ({tier}{role.access}; "
-                         f"[`agents/{f.name}`](agents/{f.name}))")
+            files = f"[`agents/{f.name}`](agents/{f.name})"
+            if role.instructions is not None:
+                n = role.instructions.name
+                files += f" + [`agents/{n}`](agents/{n})"
+            else:
+                files += "; no usable instructions file yet"
+            lines.append(f"- `{role.name}` - {role.description} ({tier}{role.access}; {files})")
     return "\n".join(lines)
 
 

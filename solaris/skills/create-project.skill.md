@@ -38,8 +38,9 @@ Use the question tool (one batch) for anything not already given:
 - **plugins** - any additional plugins to attach (names under `plugins/`).
 - **primary persona** (optional) - the role name of the project's primary agent: `engineer` unless the
   user wants a project-specific one (e.g. `master`); `^[a-z][a-z0-9-]*$`.
-- **role personas** (optional) - names for additional briefs under `ai/agents/` (e.g. `reviewer`,
-  `reader`); offer this only when the user describes distinct agent roles.
+- **role personas** (optional) - names for additional personas under `ai/agents/` (e.g. `reviewer`,
+  `worker`), each a brief plus its own instructions file; offer this only when the user describes
+  distinct agent roles.
 - **workspaces** (optional) - names of additional self-contained work tracks beyond the default
   (`source/`). Most projects start flat (just `source/`, the default workspace) and add workspaces later;
   offer this only when the user describes multiple parallel tracks.
@@ -127,7 +128,8 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
   `uv run -m solaris.tools.agents --rename-primary <role> --dir projects/<slug>` (after the baseline; it
   moves `ai/engineer.*` to `ai/<role>.*`, sets the manifest's `agents.primary`, and re-renders the managed
   files). Each role persona -> copy `solaris/templates/agents/role.agent.md` to
-  `ai/agents/<role>.agent.md`, fill the frontmatter and brief with the user, validate
+  `ai/agents/<role>.agent.md` and `role.instructions.md` to `ai/agents/<role>.instructions.md`, fill the
+  frontmatter, brief, and starting know-how with the user, validate
   (`uv run -m solaris.tools.agents --check --dir projects/<slug>`), then re-run `revs ff` + `revs baseline`
   so the pack README lists them.
 

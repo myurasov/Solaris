@@ -1,16 +1,19 @@
 # Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Project personas: the renamable primary persona and the role briefs under ai/agents/ (stdlib only).
+"""Project personas: the renamable primary persona and the role personas under ai/agents/ (stdlib only).
 
 An ai-pack has one **primary persona** - ``ai/<primary>.agent.md`` plus ``ai/<primary>.instructions.md``,
 ``engineer`` by default, renamed through ``ai/manifest.json`` -> ``agents.primary`` - and any number of
-**role personas**, each a brief at ``ai/agents/<role>.agent.md``: a small YAML frontmatter (``description``
-required; optional ``tier`` cheap|mid|high|frontier and ``access`` read-only|full) above the markdown brief
-itself. A role is used by telling a model to act as that file ("act as ``ai/agents/reviewer.agent.md``"),
-in a delegated subagent or as a session's opening instruction - there is no per-harness agent format to
-keep in sync. Every role inherits the primary persona's policies. Briefs are project content: no rev
-marker, never materialized from a template.
+**role personas**, each the same pair under ``ai/agents/``: the brief ``<role>.agent.md`` (a small YAML
+frontmatter - ``description`` required; optional ``tier`` cheap|mid|high|frontier and ``access``
+read-only|full - above the markdown brief itself) and ``<role>.instructions.md``, the role's persistent,
+committable know-how, kept up to date by the role itself (short-term and machine-local state stays in the
+pack's shared ``ai/.memory/``). A role is used by telling a model to act as its brief ("act as
+``ai/agents/reviewer.agent.md``"), in a delegated subagent or as a session's opening instruction - there is
+no per-harness agent format to keep in sync. Every role inherits the primary persona's policies. Both files
+are project content: no rev marker, never materialized from a template (stubs in
+``solaris/templates/agents/``).
 
 Run::
 
@@ -43,6 +46,8 @@ class Persona:
     body: str = ""
     source: str = ""            # pack-relative path of the brief
     primary: bool = False
+    instructions: "Path | None" = None   # ai/agents/<role>.instructions.md when present and usable
+    instructions_problem: "str | None" = None   # why it is not: missing, empty, not a regular file
 
 
 # ----------------------------------------------------------------- frontmatter
@@ -87,6 +92,31 @@ def parse_frontmatter(text: str) -> "tuple[dict, str]":
     return fields, "\n".join(lines[end + 1:]).strip("\n")
 
 
+def _instructions_for(brief: Path, name: str) -> "tuple[Path | None, str | None]":
+    """The sibling <role>.instructions.md as (path, None), or (None, why) when it is missing, empty, or not
+    a regular file. Membership is tested against the real directory listing, so a file that only matches
+    by case on macOS (Caser.instructions.md) is reported missing - a case-sensitive clone would not find it."""
+    fname = f"{name}.instructions.md"
+    where = f"ai/agents/{fname}"
+    try:
+        names = {p.name for p in brief.parent.iterdir()}
+    except OSError:
+        names = set()
+    if fname not in names:
+        return None, (f"MISSING {where} - the role's persistent know-how; copy "
+                      "solaris/templates/agents/role.instructions.md there and fill it in")
+    path = brief.with_name(fname)
+    if not path.is_file():
+        return None, f"{where} is not a regular file (a directory?) - replace it with the role's instructions"
+    try:
+        text = path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        return None, f"{where}: cannot read it ({getattr(exc, 'strerror', None) or exc})"
+    if not text.strip():
+        return None, f"{where} is empty - fill it in (stub: solaris/templates/agents/role.instructions.md)"
+    return path, None
+
+
 def load_role(path: Path, primary: str) -> Persona:
     """Parse + validate one ai/agents/<role>.agent.md brief (ValueError carries a clean message)."""
     fname = Path(path).name
@@ -122,8 +152,9 @@ def load_role(path: Path, primary: str) -> Persona:
         raise ValueError(f"{where}: access must be one of {'|'.join(ACCESS)}, got {access!r}")
     if not body.strip():
         raise ValueError(f"{where}: the brief body (below the frontmatter) is empty")
+    instr, problem = _instructions_for(Path(path), name)
     return Persona(name=name, description=" ".join(desc.split()), tier=tier, access=access, body=body,
-                   source=where)
+                   source=where, instructions=instr, instructions_problem=problem)
 
 
 # ----------------------------------------------------------------- pack reading
@@ -156,9 +187,15 @@ def load_personas(project_dir: Path) -> "tuple[Persona, list[Persona], list[str]
     notes: list[str] = []
     agents_dir = project_dir / "ai" / "agents"
     if agents_dir.is_dir():
-        for f in sorted(agents_dir.iterdir()):
+        entries = sorted(agents_dir.iterdir())
+        names = {p.name for p in entries}   # exact names: case-insensitive filesystems must not mask a mismatch
+        for f in entries:
             if f.name.endswith(".agent.md"):
                 roles.append(load_role(f, primary))
+            elif f.name.endswith(".instructions.md"):
+                stem = f.name[: -len(".instructions.md")]
+                if f"{stem}.agent.md" not in names:
+                    notes.append(f"ai/agents/{f.name}: no matching {stem}.agent.md brief - ignored")
             elif f.suffix == ".md":
                 notes.append(f"ai/agents/{f.name}: not a role brief (name it <role>.agent.md) - ignored")
     return prim, roles, notes
@@ -176,14 +213,19 @@ def cmd_check(project_dir: Path) -> int:
               + " - a pack has one primary: set agents.primary in ai/manifest.json or remove them")
         return 1
     if not roles and not (project_dir / "ai" / "agents").is_dir():
-        print(f"agents: single persona ({prim.name}); role briefs go in ai/agents/<role>.agent.md")
+        print(f"agents: single persona ({prim.name}); role personas go in ai/agents/ "
+              "(<role>.agent.md brief + <role>.instructions.md know-how)")
         return 0
-    print(f"agents: primary {prim.name} + {len(roles)} role brief(s) in ai/agents/, all valid")
+    missing = [r for r in roles if r.instructions is None]
+    print(f"agents: primary {prim.name} + {len(roles)} role persona(s) in ai/agents/"
+          + (", all valid" if not missing else f", {len(missing)} incomplete"))
     for r in roles:
         print(f"  {r.name:<14} {r.tier or '-':<9} {r.access:<10} {r.description}")
+        if r.instructions_problem:
+            print(f"    {r.instructions_problem}")
     for n in notes:
         print(f"  note: {n}")
-    return 0
+    return 1 if missing else 0
 
 
 def rename_primary(project_dir: Path, new: str) -> "tuple[list[str], list[str]]":
@@ -204,8 +246,10 @@ def rename_primary(project_dir: Path, new: str) -> "tuple[list[str], list[str]]"
     for p in (new_agent, new_instr):
         if p.exists():
             raise ValueError(f"ai/{p.name} already exists")
-    if (ai / "agents" / f"{new}.agent.md").exists():
-        raise ValueError(f"ai/agents/{new}.agent.md is a role brief; the primary persona cannot share its name")
+    for sibling in (f"{new}.agent.md", f"{new}.instructions.md"):
+        if (ai / "agents" / sibling).exists():
+            raise ValueError(f"ai/agents/{sibling} belongs to a role persona; the primary persona cannot share "
+                             "its name")
     # the new name lands by re-rendering every managed file whose template carries it, so each of those
     # must be pristine (in sync with, or behind, its master) - a customized copy would keep the old name
     guarded = {rel for master, _proj, rel in R.materialized_map(project_dir)
@@ -260,7 +304,8 @@ def main(argv: "list[str] | None" = None) -> int:
     parser = argparse.ArgumentParser(prog="solaris.tools.agents", description=__doc__.splitlines()[0])
     parser.add_argument("--dir", required=True, help="project dir holding ai/ (embedded mode: the repo root)")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--check", action="store_true", help="validate the primary + role briefs (default)")
+    mode.add_argument("--check", action="store_true",
+                      help="validate the primary + role personas (brief + instructions pairs; default)")
     mode.add_argument("--rename-primary", metavar="ROLE",
                       help="rename the primary persona (its two files, the manifest, the rendered pack files)")
     args = parser.parse_args(argv)

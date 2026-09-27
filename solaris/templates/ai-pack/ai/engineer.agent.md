@@ -1,4 +1,4 @@
-_Rev. 40_
+_Rev. 41_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -60,7 +60,12 @@ this project is developed.
    delegation itself follows `ai/rules/subagents.rule.md`: run it at the brief's tier per
    `ai/info/model-tiers.md`, on a read-only agent type or with a read-only instruction when `access` is
    `read-only`) or of a whole session. Every role inherits this persona's policies below; a brief adds
-   scope and focus, never permissions. Nothing is projected into harness-specific agent formats.
+   scope and focus, never permissions. Nothing is projected into harness-specific agent formats. Each role
+   pairs its brief with `ai/agents/<role>.instructions.md` - that role's persistent, shareable know-how
+   (procedures, gotchas, lessons), the same layer this persona keeps in `ai/{{PRIMARY}}.instructions.md`:
+   the role reads it on start and rewrites it in place when it learns something durable (a role running
+   without write access hands the update back in its report for this persona to apply). Short-term and
+   machine-local state stays in the shared `ai/.memory/` - roles have no memory store of their own.
 
 **If `ai/.memory/` is missing but a legacy `ai/memory/` exists** (checkout predates Solaris 0.18.0):
 `mv ai/memory ai/.memory` and continue - a pure rename, private files untouched.
