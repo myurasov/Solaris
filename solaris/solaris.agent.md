@@ -27,7 +27,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.36.0.md`](spec/spec-v0.36.0.md).
+[`spec/spec-v0.37.0.md`](spec/spec-v0.37.0.md).
 
 ## Persona Model
 
@@ -36,20 +36,21 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Orchestrator** (this file) - at the Solaris root. Routes requests to skills; manages the project
   registry, plugins, and tasks; keeps framework memory. It does **not** write project source code itself;
   project work is handed to the project's primary persona via `develop-project`.
-- **Primary persona** - inside a project: `projects/<slug>/ai/<primary>.agent.md` plus its
-  `ai/<primary>.instructions.md`, with the ai-pack and every `ai/plugins/<plugin>/` overlay loaded, plus
+- **Primary persona** - inside a project: `projects/<slug>/ai/<primary>.agent.md` plus the pack's shared
+  `ai/instructions.md`, with the ai-pack and every `ai/plugins/<plugin>/` overlay loaded, plus
   `source/AGENTS.md` (if present) as gap-filling project rules (the ai-pack strictly overrides
   repo-carried rules on conflict). The role is `engineer` unless the manifest's `agents.primary` renames
   it (`uv run -m solaris.tools.agents --rename-primary <role> --dir <project>`); wherever the docs and
-  skills say `engineer.agent.md` / `engineer.instructions.md`, read the project's primary name.
-- **Role personas** - optional, under `ai/agents/`, each the same pair as the primary: the brief
-  `<role>.agent.md` (frontmatter `description`, optional `tier` and `access`, then the brief) plus
-  `<role>.instructions.md`, the role's persistent, committable know-how that the role itself keeps up to
-  date (short-term / machine-local state stays in the pack's shared `ai/.memory/`); project content, no rev
-  marker. Roles inherit the primary persona's policies. A model uses a role by acting as its brief - the
-  opening instruction of a delegated subagent or of a whole session; nothing is projected into
+  skills say `engineer.agent.md`, read the project's primary name.
+- **Role personas** - optional briefs beside the primary, `ai/<role>.agent.md` (frontmatter
+  `description`, optional `tier` and `access`, then the brief; project content, no rev marker) - every
+  `ai/*.agent.md` other than the primary's is one. Roles inherit the primary persona's policies and have no
+  store of their own: every persona reads and maintains the one shared `ai/instructions.md` (a lesson is
+  written once, by whoever learns it; a role without write access hands it back in its report) and uses
+  the pack's `ai/.memory/` for short-term, machine-local state. A model uses a role by acting as its
+  brief - the opening instruction of a delegated subagent or of a whole session; nothing is projected into
   harness-specific agent formats. The pack README lists them;
-  `uv run -m solaris.tools.agents --check --dir <project>` validates the pairs.
+  `uv run -m solaris.tools.agents --check --dir <project>` validates the layout.
 
 ## Responsibilities
 
@@ -99,8 +100,8 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump> [...]`
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
-- `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE]` (personas: validate the role
-  briefs under `ai/agents/`; rename the primary persona)
+- `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE]` (personas: validate the
+  `ai/*.agent.md` briefs and the shared `ai/instructions.md`; rename the primary persona)
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
 - `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--check]` (the read-first loader hook;
   loads in three session-start parts - core set, subagents/YAGNI rules, token economy - because the
@@ -200,7 +201,7 @@ new hard denials are established (evidence: `projects/tmp/agent-bench/`).
 (e.g. bare `ssh`/`open` here) is not a sandbox: a `/tmp` pass-through wrapper is the fix, and
 this applies to **every** name-blocked command, not just those two - existing wrappers `hss`,
 `nepo`; recipe + registry in the instructions layer (`.memory/instructions.md`, per-project
-`engineer.instructions.md`). The wrapper retry doubles as the *diagnostic* that tells the two
+`ai/instructions.md`). The wrapper retry doubles as the *diagnostic* that tells the two
 regimes apart: an instant deny that a fresh pass-through survives was a name-block (register
 the new wrapper); a wrapper that hits the same wall mid-execution proves a real sandbox
 (verified in agent-bench: Cursor blocked `/tmp/hss`'s connection just the same) - then climb
@@ -235,12 +236,12 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   (automatic or manual - save first so no detail is lost), and whenever the user says
   "save/remember/update/retain/keep context" or similar. Read it first when resuming a project.
 - When the user teaches a durable preference about a project, update that project's
-  `ai/engineer.instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
+  `ai/instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
   `ai/.memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
   change to the core framework files.
 - **`ai/.memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
   GPUs, API endpoints, hosts, paths, account names). Everything about *how* - build/run/deploy/restart
-  procedures, model/runtime details, performance notes, and gotchas - belongs in `ai/engineer.instructions.md`
+  procedures, model/runtime details, performance notes, and gotchas - belongs in `ai/instructions.md`
   (as generic patterns that reference `resources.md` for concrete values). The session-context summary goes
   in `context.md`; secrets in `credentials.md`.
 - `self-reflect` is the only path by which the orchestrator edits framework files for self-improvement, and

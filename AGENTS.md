@@ -58,14 +58,14 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.36.0.md`](solaris/spec/spec-v0.36.0.md).
+Full specification: [`solaris/spec/spec-v0.37.0.md`](solaris/spec/spec-v0.37.0.md).
 
 ## Execution Model
 
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **primary persona** (`projects/<slug>/ai/<primary>.agent.md` - `engineer` unless the manifest's `agents.primary` renames it; optional **role personas** are pairs in `ai/agents/`: the brief `<role>.agent.md`, used by telling the model to act as that file, plus `<role>.instructions.md`, the role's own persistent know-how) plus the ai-pack (`ai/spec.md`, `ai/.memory/*`) and every `ai/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
+- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **primary persona** (`projects/<slug>/ai/<primary>.agent.md` - `engineer` unless the manifest's `agents.primary` renames it; optional **role personas** are the other `ai/<role>.agent.md` briefs beside it, used by telling the model to act as that file) plus the ai-pack (the shared `ai/instructions.md` every persona reads and maintains, `ai/spec.md`, `ai/.memory/*`) and every `ai/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 
@@ -101,4 +101,4 @@ Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignore
 ## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `agents`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.36.0.md`](solaris/spec/spec-v0.36.0.md).
+- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.37.0.md`](solaris/spec/spec-v0.37.0.md).
