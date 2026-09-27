@@ -56,7 +56,7 @@ itself is not read). First read `projects/<slug>/ai/manifest.json` for `mode` an
 `embedded` mode the ai-pack lives at `projects/<slug>/<repo>/ai/` instead - resolve every path below
 against that root. Ignore workspaces (they scope where an *implementation* lands; a linked task never
 writes into the project, so no workspace applies - if the request is workspace-specific, hand off to
-`develop-project`). Then read, from the resolved `ai/` root: `<primary>.instructions.md`, `spec.md`, every
+`develop-project`). Then read, from the resolved `ai/` root: `instructions.md`, `spec.md`, every
 `rules/*.rule.md`, every `skills/*.skill.md` (trigger-invoked), and every `plugins/<plugin>/` overlay
 (`*.rule.md` always-on, `*.skill.md` trigger-invoked), following any `plugins/<name>.link.md` pointer to
 its `shared/` rules and skills the same way `develop-project` step 2 does. Skip `ai/.memory/*`

@@ -55,6 +55,7 @@ automatically.
 
 ## 4. Summary + Revert
 
-Report what synced, what merged, and any versions set. When the pack has `ai/agents/` briefs, run
-`uv run -m solaris.tools.agents --check --dir projects/<slug>` too. `revs ff` is idempotent; migrations
+Report what synced, what merged, and any versions set. Run
+`uv run -m solaris.tools.agents --check --dir projects/<slug>` too (personas and the shared
+`ai/instructions.md`; it flags pre-0.37 layout leftovers). `revs ff` is idempotent; migrations
 revert via their Revert section. Log one line to `.memory/interactions.jsonl`.

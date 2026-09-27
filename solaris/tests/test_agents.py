@@ -1,8 +1,8 @@
 # Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for solaris.tools.agents (renamable primary persona + role personas: brief + instructions pairs) and
-the revs hooks behind it."""
+"""Tests for solaris.tools.agents (renamable primary persona, role briefs beside it in ai/, the one shared
+ai/instructions.md) and the revs hooks behind it."""
 
 from __future__ import annotations
 
@@ -23,31 +23,27 @@ def _project(tmp_path, primary=None):
     manifest = {
         "project": {"name": "Todo", "slug": "todo", "type": "python-cli", "mode": "local",
                     "description": "A todo app."},
-        "framework_version": "0.34.0", "plugins": [], "revisions": {}, "created": "2026-09-26",
+        "framework_version": "0.37.0", "plugins": [], "revisions": {}, "created": "2026-09-27",
     }
     if primary:
         manifest["agents"] = {"primary": primary}
     (proj / "ai" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     R.fast_forward(proj, template_dir=TEMPLATE_DIR, plugins_dir=tmp_path / "plugins")
     role = primary or "engineer"
-    instr = (TEMPLATE_DIR / "ai" / "engineer.instructions.md").read_text(encoding="utf-8")
-    (proj / "ai" / f"{role}.instructions.md").write_text(
+    instr = (TEMPLATE_DIR / "ai" / "instructions.md").read_text(encoding="utf-8")
+    (proj / "ai" / "instructions.md").write_text(
         instr.replace("{{NAME}}", "Todo").replace("{{PRIMARY}}", role), encoding="utf-8")
     return proj
 
 
 def _brief(proj, name, desc="Reviews things before they count.", tier="high", access="read-only",
-           body="**Owns:** review.\n", instructions=True):
-    d = proj / "ai" / "agents"
-    d.mkdir(exist_ok=True)
+           body="**Owns:** review.\n"):
     fm = f"---\ndescription: {desc}\n"
     if tier:
         fm += f"tier: {tier}\n"
     if access:
         fm += f"access: {access}\n"
-    (d / f"{name}.agent.md").write_text(fm + "---\n\n" + body, encoding="utf-8")
-    if instructions:
-        (d / f"{name}.instructions.md").write_text(f"# {name.title()} Instructions\n\n- notes\n", encoding="utf-8")
+    (proj / "ai" / f"{name}.agent.md").write_text(fm + "---\n\n" + body, encoding="utf-8")
 
 
 def test_primary_role_default_and_validation():
@@ -69,7 +65,8 @@ def test_default_pack_still_renders_the_engineer(tmp_path):
     persona = proj / "ai" / "engineer.agent.md"
     assert persona.exists()
     assert "# Todo - Engineer Agent" in persona.read_text(encoding="utf-8")
-    assert "ai/engineer.agent.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
+    agents_md = (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert "ai/engineer.agent.md" in agents_md and "ai/instructions.md" in agents_md
     assert "{{" not in (proj / "ai" / "README.md").read_text(encoding="utf-8")
     assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, tmp_path / "plugins")} == {"in-sync"}
 
@@ -78,12 +75,13 @@ def test_materialized_map_and_render_follow_the_primary(tmp_path):
     proj = _project(tmp_path, primary="master")
     rels = {rel for _, _, rel in R.materialized_map(proj, TEMPLATE_DIR, tmp_path / "plugins")}
     assert "ai/master.agent.md" in rels and "ai/engineer.agent.md" not in rels
-    for rel in ("AGENTS.md", "ai/master.agent.md", "ai/README.md"):
+    for rel in ("AGENTS.md", "ai/master.agent.md", "ai/README.md", "ai/rules/subagents.rule.md"):
         text = (proj / rel).read_text(encoding="utf-8")
-        for stale in ("engineer.agent.md", "engineer.instructions.md", "Engineer Agent", "engineer persona"):
+        for stale in ("engineer.agent.md", "engineer.instructions.md", "master.instructions.md",
+                      "Engineer Agent", "engineer persona"):
             assert stale not in text, f"{rel} still says {stale}"
     assert "# Todo - Master Agent" in (proj / "ai" / "master.agent.md").read_text(encoding="utf-8")
-    assert "ai/master.instructions.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert "ai/instructions.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
 
 
 def test_agents_block_lists_primary_and_roles(tmp_path):
@@ -92,20 +90,19 @@ def test_agents_block_lists_primary_and_roles(tmp_path):
     _brief(proj, "reviewer", desc="Adversarial review before results count.")
     _brief(proj, "bad", desc="")            # invalid: flagged in the listing, never fatal for a render
     block = R._agents_block({}, proj)
-    assert "- `reviewer` - Adversarial review before results count. (high tier, read-only;" in block
-    assert "[`agents/reviewer.agent.md`](agents/reviewer.agent.md) + [`agents/reviewer.instructions.md`]" in block
+    assert ("- `reviewer` - Adversarial review before results count. (high tier, read-only; "
+            "[`reviewer.agent.md`](reviewer.agent.md))") in block
     assert "bad.agent.md" in block and "INVALID" in block
+    assert "instructions.md" not in block           # the shared store is described in prose, not per role
     R.fast_forward(proj, TEMPLATE_DIR, tmp_path / "plugins")
     assert "reviewer" in (proj / "ai" / "README.md").read_text(encoding="utf-8")
 
 
 def test_load_role_validation(tmp_path):
     proj = _project(tmp_path)
-    d = proj / "ai" / "agents"
-    d.mkdir()
+    d = proj / "ai"
     cases = {
         "Bad.agent.md": ("---\ndescription: x\n---\nbody\n", "must match"),
-        "engineer.agent.md": ("---\ndescription: x\n---\nbody\n", "primary persona"),
         "nodesc.agent.md": ("---\ntier: mid\n---\nbody\n", "description"),
         "unknown.agent.md": ("---\ndescription: x\nmode: primary\n---\nbody\n", "unknown frontmatter key"),
         "tier.agent.md": ("---\ndescription: x\ntier: huge\n---\nbody\n", "tier must be"),
@@ -119,22 +116,23 @@ def test_load_role_validation(tmp_path):
         (d / fname).write_text(text, encoding="utf-8")
         with pytest.raises(ValueError, match=needle):
             A.load_role(d / fname, "engineer")
+    with pytest.raises(ValueError, match="primary persona"):
+        A.load_role(d / "engineer.agent.md", "engineer")   # the rendered primary is not a role brief
     (d / "ok.agent.md").write_text('---\n# a comment\ndescription: "Quoted: yes"\ntier: mid\n---\n\n**Owns:** x\n',
                                    encoding="utf-8")
     r = A.load_role(d / "ok.agent.md", "engineer")
-    assert (r.name, r.description, r.tier, r.access) == ("ok", "Quoted: yes", "mid", "full")
+    assert (r.name, r.description, r.tier, r.access, r.source) == ("ok", "Quoted: yes", "mid", "full", "ai/ok.agent.md")
     assert r.body.startswith("**Owns:**")
 
 
 def test_check_cli(tmp_path, capsys):
     proj = _project(tmp_path)
     assert A.main(["--dir", str(proj)]) == 0
-    assert "single persona (engineer)" in capsys.readouterr().out
+    assert "single persona (engineer), all valid" in capsys.readouterr().out
     _brief(proj, "reader", desc="Reads external material.", tier="mid", access="read-only")
-    (proj / "ai" / "agents" / "notes.md").write_text("scratch\n", encoding="utf-8")
     assert A.main(["--dir", str(proj)]) == 0
     out = capsys.readouterr().out
-    assert "1 role persona(s) in ai/agents/, all valid" in out and "reader" in out and "notes.md" in out
+    assert "1 role persona(s) in ai/, all valid" in out and "reader" in out
     _brief(proj, "broken", desc="")
     assert A.main(["--dir", str(proj)]) == 1
     assert "broken.agent.md" in capsys.readouterr().out
@@ -142,31 +140,65 @@ def test_check_cli(tmp_path, capsys):
     assert "not found" in capsys.readouterr().out
 
 
+def test_check_reports_layout_problems(tmp_path, capsys):
+    proj = _project(tmp_path)
+    ai = proj / "ai"
+    _brief(proj, "worker", desc="Runs one job.", access="full")
+    (ai / "instructions.md").unlink()
+    (ai / "engineer.instructions.md").write_text("# old\n", encoding="utf-8")       # pre-0.37 layout
+    (ai / "agents").mkdir()
+    (ai / "agents" / "old.agent.md").write_text("---\ndescription: x\n---\nbody\n", encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 1
+    out = capsys.readouterr().out
+    assert "1 role persona(s) in ai/" in out and "all valid" not in out and "worker" in out
+    assert "PROBLEM: ai/instructions.md not found" in out
+    assert "legacy per-persona instructions file(s) ai/engineer.instructions.md" in out
+    assert "legacy ai/agents/ directory" in out
+    assert "old.agent.md" not in out.split("PROBLEM")[0]   # briefs under ai/agents/ are not read as roles
+    (ai / "instructions.md").write_text("\n", encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 1
+    assert "ai/instructions.md is empty" in capsys.readouterr().out
+    (ai / "instructions.md").unlink()
+    (ai / "instructions.md").mkdir()
+    assert A.main(["--dir", str(proj)]) == 1
+    assert "ai/instructions.md is not a regular file" in capsys.readouterr().out
+    (ai / "instructions.md").rmdir()
+    (ai / "instructions.md").write_text("# Instructions - Todo\n\n- x\n", encoding="utf-8")
+    (ai / "engineer.instructions.md").unlink()
+    (ai / "agents" / "old.agent.md").unlink()
+    (ai / "agents").rmdir()
+    assert A.main(["--dir", str(proj)]) == 0
+    assert "all valid" in capsys.readouterr().out
+    assert "no usable" not in R._agents_block({}, proj) and "`worker`" in R._agents_block({}, proj)
+
+
 def test_rename_primary_round_trip(tmp_path):
     proj = _project(tmp_path)
     _brief(proj, "reviewer")
     with pytest.raises(ValueError, match="must match"):
         A.rename_primary(proj, "Master")
-    with pytest.raises(ValueError, match="reviewer.agent.md belongs to a role persona"):
+    with pytest.raises(ValueError, match="reviewer.agent.md already exists"):
         A.rename_primary(proj, "reviewer")
     log, warnings = A.rename_primary(proj, "master")
     assert not warnings
     assert any("moved ai/engineer.agent.md -> ai/master.agent.md" in line for line in log)
     ai = proj / "ai"
     assert (ai / "master.agent.md").exists() and not (ai / "engineer.agent.md").exists()
-    assert (ai / "master.instructions.md").exists() and not (ai / "engineer.instructions.md").exists()
+    assert (ai / "instructions.md").exists()
+    assert not list(ai.glob("*.instructions.md"))            # no per-persona file appeared
     man = json.loads((ai / "manifest.json").read_text(encoding="utf-8"))
     assert man["agents"]["primary"] == "master"
     assert "ai/master.agent.md" in man["revisions"] and "ai/engineer.agent.md" not in man["revisions"]
     assert "# Todo - Master Agent" in (ai / "master.agent.md").read_text(encoding="utf-8")
     assert "ai/master.agent.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
-    instr = (ai / "master.instructions.md").read_text(encoding="utf-8")
-    assert "master.agent.md" in instr and "engineer.agent.md" not in instr
+    instr = (ai / "instructions.md").read_text(encoding="utf-8")
+    assert "master.agent.md" in instr and "engineer" not in instr    # prose says "the primary persona"
+    assert any("instructions.md: references to engineer.agent.md now name master.agent.md" in l for l in log)
     verdicts = {r["rel"]: r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, tmp_path / "plugins")}
     assert (verdicts["AGENTS.md"], verdicts["ai/master.agent.md"], verdicts["ai/README.md"]) == ("in-sync",) * 3
     assert A.rename_primary(proj, "master") == (["the primary persona is already 'master'; nothing to do"], [])
     A.rename_primary(proj, "engineer")
-    assert (ai / "engineer.agent.md").exists() and (ai / "engineer.instructions.md").exists()
+    assert (ai / "engineer.agent.md").exists() and (ai / "instructions.md").exists()
     assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, tmp_path / "plugins")} == {"in-sync"}
 
 
@@ -180,13 +212,20 @@ def test_rename_refuses_a_customized_persona(tmp_path):
 
 
 def test_rename_guards_every_file_that_carries_the_name(tmp_path):
-    # a customized pack rule that mentions the primary would keep the old name after a re-render: refuse
+    # a customized managed file that mentions the primary would keep the old name after a re-render: refuse
     proj = _project(tmp_path)
-    rule = proj / "ai" / "rules" / "subagents.rule.md"
-    rule.write_text(rule.read_text(encoding="utf-8") + "\nlocal tweak\n", encoding="utf-8")
-    with pytest.raises(ValueError, match="subagents.rule.md"):
+    readme = proj / "ai" / "README.md"
+    readme.write_text(readme.read_text(encoding="utf-8") + "\nlocal tweak\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="README.md"):
         A.rename_primary(proj, "master")
     assert (proj / "ai" / "engineer.agent.md").exists()
+    # a customized file that no longer carries the name (the subagents rule points at the shared
+    # instructions.md now) must not block the rename
+    readme.write_text(readme.read_text(encoding="utf-8").replace("\nlocal tweak\n", ""), encoding="utf-8")
+    rule = proj / "ai" / "rules" / "subagents.rule.md"
+    rule.write_text(rule.read_text(encoding="utf-8") + "\nlocal tweak\n", encoding="utf-8")
+    log, warnings = A.rename_primary(proj, "master")
+    assert not warnings and (proj / "ai" / "master.agent.md").exists()
 
 
 def test_rename_without_a_revisions_map_still_rerenders(tmp_path):
@@ -198,15 +237,15 @@ def test_rename_without_a_revisions_map_still_rerenders(tmp_path):
     log, warnings = A.rename_primary(proj, "master")
     assert not warnings
     assert "# Todo - Master Agent" in (proj / "ai" / "master.agent.md").read_text(encoding="utf-8")
-    assert "ai/master.instructions.md" in (proj / "ai" / "rules" / "subagents.rule.md").read_text(encoding="utf-8")
+    assert "ai/instructions.md" in (proj / "ai" / "rules" / "subagents.rule.md").read_text(encoding="utf-8")
     assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, tmp_path / "plugins")} == {"in-sync"}
 
 
 def test_rename_warns_when_the_instructions_file_is_absent(tmp_path):
     proj = _project(tmp_path)
-    (proj / "ai" / "engineer.instructions.md").unlink()
+    (proj / "ai" / "instructions.md").unlink()
     log, warnings = A.rename_primary(proj, "master")
-    assert warnings and "engineer.instructions.md was absent" in warnings[0]
+    assert warnings and "ai/instructions.md is absent" in warnings[0]
     assert (proj / "ai" / "master.agent.md").exists()
 
 
@@ -216,19 +255,18 @@ def test_primary_role_rejects_empty_or_null_values():
             R.primary_role({"agents": {"primary": bad}})
 
 
-def test_cli_rejects_empty_rename_and_flags_stray_personas(tmp_path, capsys):
+def test_cli_rejects_empty_rename_and_flags_invalid_briefs(tmp_path, capsys):
     proj = _project(tmp_path)
     assert A.main(["--dir", str(proj), "--rename-primary", ""]) == 1
     assert "must match" in capsys.readouterr().out
-    (proj / "ai" / "other.agent.md").write_text("# stray\n", encoding="utf-8")
+    (proj / "ai" / "other.agent.md").write_text("# stray\n", encoding="utf-8")   # beside the primary = a role
     assert A.main(["--dir", str(proj)]) == 1
-    assert "stray persona" in capsys.readouterr().out
+    assert "ai/other.agent.md: missing frontmatter" in capsys.readouterr().out
 
 
 def test_brief_edge_cases(tmp_path):
     proj = _project(tmp_path)
-    d = proj / "ai" / "agents"
-    d.mkdir()
+    d = proj / "ai"
     (d / "crlf.agent.md").write_bytes(b"---\r\ndescription: Windows brief\r\ntier: mid\r\n---\r\n\r\n**Owns:** x\r\n")
     r = A.load_role(d / "crlf.agent.md", "engineer")
     assert (r.description, r.tier) == ("Windows brief", "mid")
@@ -244,56 +282,12 @@ def test_brief_edge_cases(tmp_path):
     assert "INVALID" in R._agents_block({}, proj)   # a directory renders as an invalid brief, never a traceback
 
 
-def test_check_requires_the_role_instructions_file(tmp_path, capsys):
+def test_role_stub_validates(tmp_path):
     proj = _project(tmp_path)
-    _brief(proj, "worker", desc="Runs one job.", access="full", instructions=False)
-    assert A.main(["--dir", str(proj)]) == 1
-    out = capsys.readouterr().out
-    assert "1 incomplete" in out and "MISSING ai/agents/worker.instructions.md" in out
-    assert "role.instructions.md" in out                      # the fix hint names the stub
-    assert "no usable instructions file yet" in R._agents_block({}, proj)   # README still renders, never fatal
-    (proj / "ai" / "agents" / "worker.instructions.md").write_text("# Worker Instructions\n\n- x\n", encoding="utf-8")
-    assert A.main(["--dir", str(proj)]) == 0
-    assert ("[`agents/worker.agent.md`](agents/worker.agent.md) + "
-            "[`agents/worker.instructions.md`](agents/worker.instructions.md)") in R._agents_block({}, proj)
-    (proj / "ai" / "agents" / "orphan.instructions.md").write_text("# Orphan\n", encoding="utf-8")
-    assert A.main(["--dir", str(proj)]) == 0                  # an orphan is a note, not an error
-    assert "orphan.instructions.md: no matching orphan.agent.md" in capsys.readouterr().out
-    with pytest.raises(ValueError, match="orphan.instructions.md belongs to a role persona"):
-        A.rename_primary(proj, "orphan")                      # the name is taken even without a brief
-
-
-def test_unusable_instructions_files_are_reported(tmp_path, capsys):
-    proj = _project(tmp_path)
-    d = proj / "ai" / "agents"
-    _brief(proj, "empty", desc="Empty know-how.", instructions=False)
-    (d / "empty.instructions.md").write_text("\n\n", encoding="utf-8")
-    _brief(proj, "dirr", desc="Directory know-how.", instructions=False)
-    (d / "dirr.instructions.md").mkdir()
-    _brief(proj, "caser", desc="Wrong-case know-how.", instructions=False)
-    (d / "Caser.instructions.md").write_text("# Caser\n\n- x\n", encoding="utf-8")
-    assert A.main(["--dir", str(proj)]) == 1
-    out = capsys.readouterr().out
-    assert "3 incomplete" in out
-    assert "ai/agents/empty.instructions.md is empty" in out
-    assert "ai/agents/dirr.instructions.md is not a regular file" in out
-    assert "MISSING ai/agents/caser.instructions.md" in out   # exact-name match, on any filesystem
-    assert "Caser.instructions.md: no matching Caser.agent.md" in out
-    block = R._agents_block({}, proj)
-    assert block.count("no usable instructions file yet") == 3
-    for r in A.load_personas(proj)[1]:
-        assert r.instructions is None and r.instructions_problem
-
-
-def test_role_stubs_validate_as_a_pair(tmp_path):
-    proj = _project(tmp_path)
-    d = proj / "ai" / "agents"
-    d.mkdir()
-    stubs = TEMPLATE_DIR.parent / "agents"
-    for stub, target in (("role.agent.md", "scout.agent.md"), ("role.instructions.md", "scout.instructions.md")):
-        (d / target).write_text((stubs / stub).read_text(encoding="utf-8"), encoding="utf-8")
-    prim, roles, notes = A.load_personas(proj)
-    assert [r.name for r in roles] == ["scout"] and roles[0].instructions is not None and not notes
+    stub = (TEMPLATE_DIR.parent / "agents" / "role.agent.md").read_text(encoding="utf-8")
+    (proj / "ai" / "scout.agent.md").write_text(stub, encoding="utf-8")
+    prim, roles, problems = A.load_personas(proj)
+    assert [r.name for r in roles] == ["scout"] and not problems
     assert A.main(["--dir", str(proj)]) == 0
 
 

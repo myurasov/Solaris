@@ -14,7 +14,7 @@ summary: Prepare a project for external eyes - scrub identities/internals, add l
 
 Prepare a project (or any repo produced here) to be shared outside: with a customer, a third party, or the
 public. Everything below is a checklist against the **tracked** content only - the local-only layers
-(`__*/`, `ai/.memory/`) stay behind by design. `ai/engineer.instructions.md` is shareable and **ships**:
+(`__*/`, `ai/.memory/`) stay behind by design. `ai/instructions.md` is shareable and **ships**:
 relocate any machine-local notes in it (wrapper registry, host specifics) to `ai/.memory/` as part of the
 sweep. This skill
 is read-mostly; every fix is shown as a diff and confirmed before it is made, and nothing is pushed or

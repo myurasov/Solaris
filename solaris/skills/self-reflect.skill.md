@@ -29,7 +29,7 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 
 - **Framework changes** - generic, benefit any project: edit `solaris/` (agent, skills, rules, templates,
   tools, spec).
-- **Project-specific** - belongs in that project's `ai/engineer.instructions.md`, not the framework.
+- **Project-specific** - belongs in that project's `ai/instructions.md`, not the framework.
 - **Plugin-worthy** - a domain workflow that recurs: suggest `import-plugin` (create) or extending an
   existing plugin.
 

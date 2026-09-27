@@ -3,7 +3,7 @@ name: init
 triggers: ["init project", "initialize the project", "initialize this project", "set up my environment", "onboard me", "getting started", "register resources"]
 summary: One-time onboarding for a fresh checkout of {{NAME}} - collect environment resources, verify reachability, write the private ai/.memory layer, and bring the environment up.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: init - Environment Onboarding <!-- omit in toc -->
 
@@ -57,13 +57,13 @@ cache the full branch name as `"git.branch"` (plus `"git.branch_email"`) in
 
 ## 4. Bring Up + Verify
 
-- (install / build steps from `{{PRIMARY}}.instructions.md` - reference, do not duplicate)
+- (install / build steps from `instructions.md` - reference, do not duplicate)
 - (an end-to-end verification the user can see: a health URL, a smoke test)
 - Multi-workspace projects: ask which workspace(s) the user will work on, then follow each one's
-  `setup.md` in full (the workspace table in `{{PRIMARY}}.instructions.md` lists them) - a workspace can be
+  `setup.md` in full (the workspace table in `instructions.md` lists them) - a workspace can be
   skipped now and set up later from its own `setup.md`.
 
 ## 5. Hand Off
 
-Point the user at `README.md`, `ai/spec.md`, and `ai/{{PRIMARY}}.instructions.md` (in that order), plus any
+Point the user at `README.md`, `ai/spec.md`, and `ai/instructions.md` (in that order), plus any
 live links just brought up. Log the init in `ai/.memory/interactions.jsonl`.

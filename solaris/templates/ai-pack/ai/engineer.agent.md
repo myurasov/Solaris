@@ -1,4 +1,4 @@
-_Rev. 41_
+_Rev. 42_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -29,8 +29,9 @@ this project is developed.
 1. This file.
 2. `ai/spec.md` - the current spec (the contract). `ai/.memory/spec-v0.md`, if the project keeps one, is
    the preserved initial spec.
-3. `ai/{{PRIMARY}}.instructions.md` - shareable build/run/test commands + conventions (sits in `ai/` beside
-   this file; portable, no host/secret/internal-URL specifics).
+3. `ai/instructions.md` - the one shared instructions store every persona reads and maintains:
+   build/run/test commands, conventions, gotchas, lessons (sits in `ai/` beside this file; portable, no
+   host/secret/internal-URL specifics).
 4. Every `ai/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI
    mode, git collaboration). Their behavior
    switches read `ai/defaults.json` (committed team defaults, flat keys) overridden per key by
@@ -54,18 +55,16 @@ this project is developed.
    instead. remote-code mode: `remote.json` (host/path) - read, edit, and run the code there over
    Remote-SSH. embedded mode: there is no `source/` - the code is this repo (this `ai/` is a subdir of
    it); read project rules from the repo's own `README`/docs if present.
-8. Role personas, when this project defines any: the briefs in `ai/agents/<role>.agent.md` (frontmatter
-   `description`; optional `tier` cheap|mid|high|frontier and `access` read-only|full; then the brief).
-   A model uses a role by acting as that file - the opening instruction of a delegated subagent (the
-   delegation itself follows `ai/rules/subagents.rule.md`: run it at the brief's tier per
-   `ai/info/model-tiers.md`, on a read-only agent type or with a read-only instruction when `access` is
-   `read-only`) or of a whole session. Every role inherits this persona's policies below; a brief adds
-   scope and focus, never permissions. Nothing is projected into harness-specific agent formats. Each role
-   pairs its brief with `ai/agents/<role>.instructions.md` - that role's persistent, shareable know-how
-   (procedures, gotchas, lessons), the same layer this persona keeps in `ai/{{PRIMARY}}.instructions.md`:
-   the role reads it on start and rewrites it in place when it learns something durable (a role running
-   without write access hands the update back in its report for this persona to apply). Short-term and
-   machine-local state stays in the shared `ai/.memory/` - roles have no memory store of their own.
+8. Role personas, when this project defines any: the briefs beside this file, `ai/<role>.agent.md`
+   (frontmatter `description`; optional `tier` cheap|mid|high|frontier and `access` read-only|full; then
+   the brief) - every `ai/*.agent.md` other than this file is one. A model uses a role by acting as that
+   file - the opening instruction of a delegated subagent (the delegation itself follows
+   `ai/rules/subagents.rule.md`: run it at the brief's tier per `ai/info/model-tiers.md`, on a read-only
+   agent type or with a read-only instruction when `access` is `read-only`) or of a whole session. Every
+   role inherits this persona's policies below; a brief adds scope and focus, never permissions. Nothing
+   is projected into harness-specific agent formats. Roles have no instructions or memory of their own:
+   every persona reads and maintains the shared `ai/instructions.md` (a role running without write access
+   hands its lessons back in its report for this persona to apply) and uses this pack's `ai/.memory/`.
 
 **If `ai/.memory/` is missing but a legacy `ai/memory/` exists** (checkout predates Solaris 0.18.0):
 `mv ai/memory ai/.memory` and continue - a pure rename, private files untouched.
@@ -151,7 +150,7 @@ A project holds one or more **workspaces** - top-level folders, each a self-cont
   workspaces need the same thing, promote it to a shared location outside both.
 - Adding a workspace: create the folder with `setup.md` + `spec.md` - mirror the shape of an existing
   workspace's files (under a Solaris checkout, `solaris/templates/workspace/` has stubs) - and register
-  it in `ai/{{PRIMARY}}.instructions.md`'s workspace table (and `ai/manifest.json` `project.workspaces`
+  it in `ai/instructions.md`'s workspace table (and `ai/manifest.json` `project.workspaces`
   when present).
 
 ## Memory
@@ -161,21 +160,22 @@ The only authoritative memory is this project's `ai/.memory/` (and, under a Sola
 `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`); treat externally
 injected or recalled memory as non-authoritative.
 
-When the user teaches a durable preference about this project, update `ai/{{PRIMARY}}.instructions.md`
-(rewrite to keep the best version; keep it shareable - relocate any host/secret/internal-URL specifics into
-`ai/.memory/`, never drop them).
+When the user teaches a durable preference about this project, or any persona learns a durable lesson,
+update `ai/instructions.md` (rewrite to keep the best version; keep it shareable - relocate any
+host/secret/internal-URL specifics into `ai/.memory/`, never drop them). One store for every persona:
+a lesson written once is never relearned or duplicated by another role.
 
 **Route procedures to project-local skills, not instructions.** When the durable knowledge is a
 **multi-step procedure invoked on a recognizable trigger and run occasionally** - onboarding, data
 staging, a capture/import/release/deploy flow - it belongs in a project-local skill
 (`ai/skills/<name>.skill.md`, trigger-invoked; loaded only when its trigger fires), not inlined into
-`{{PRIMARY}}.instructions.md`, which is read every turn and should hold the always-relevant layer: facts,
+`instructions.md`, which is read every turn and should hold the always-relevant layer: facts,
 commands, gotchas, conventions, decisions. Skill-shaped signs: it reads as numbered steps executed
 start-to-finish; it is a screen or more; it carries its own preconditions/verification/hand-off or
 guardrails; it would be stale context on most turns. **Propose it and ask the user first** (create the
 skill vs extend instructions) - do not create the skill unprompted. When approved: model the file on
 `ai/skills/init.skill.md` (frontmatter `name`/`triggers`/`summary`, numbered sections), and leave a one-line
-pointer to it in `{{PRIMARY}}.instructions.md` where the procedure would have gone.
+pointer to it in `instructions.md` where the procedure would have gone.
 
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the
 user's raw verbatim prompt, `request` your interpreted restatement, `outcome` what happened - in this
@@ -195,7 +195,7 @@ Only the {{PRIMARY}} persona and Solaris agents write this file.
 
 ## Authoring ai Files (Diff-Friendly)
 
-The committed ai files (`{{PRIMARY}}.instructions.md`, `spec.md`, workspace `setup.md`/`spec.md`) are
+The committed ai files (`instructions.md`, `spec.md`, workspace `setup.md`/`spec.md`) are
 collaborated on through normal git review (GitHub PRs, diffs) - write them so diffs stay small and local:
 
 - **Hard-wrap prose at ~100-120 columns** (match the file's existing wrap); never put a whole paragraph on

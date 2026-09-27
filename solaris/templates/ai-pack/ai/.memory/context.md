@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # {{NAME}} - Context <!-- omit in toc -->
 
@@ -9,7 +9,7 @@ A **detailed summary of the current session's context** for {{NAME}}: what is be
 decided and why, what was found, and where things stand - everything a fresh session (or this session after
 compaction) needs to continue immediately. Complements `interactions.jsonl` (the terse
 `{ts, project, prompt, request, outcome}` machine record). Private/local layer; companion to `../spec.md`
-(the contract) and `../{{PRIMARY}}.instructions.md` (build/run). Gitignored - never shared or committed.
+(the contract) and `../instructions.md` (build/run). Gitignored - never shared or committed.
 
 ## How to Use This File
 
@@ -22,7 +22,7 @@ compaction) needs to continue immediately. Complements `interactions.jsonl` (the
      "retain context", "keep context", or similar.
 - **What:** a detailed prose summary of the session so far: the task(s) and their current state, decisions
   with their reasons, findings, key file references, open questions, and immediate next steps. Durable
-  cross-session knowledge does not live here - route it to `../{{PRIMARY}}.instructions.md` (how),
+  cross-session knowledge does not live here - route it to `../instructions.md` (how),
   `resources.md` (what exists), or `../spec.md` (the contract).
 - **Read:** at session start (and right after a compaction), read this file first to restore context.
 - **TOC:** after structural edits, regenerate with any Markdown TOC generator (under a Solaris checkout:

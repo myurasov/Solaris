@@ -30,7 +30,7 @@ context; `projects/<slug>/` below is shorthand for the grouped destination) and 
 
 - **workspace detection (any mode):** if the codebase already contains multiple self-contained top-level
   tracks (sibling dirs each with their own setup/build entry point), record them as workspaces
-  (`project.workspaces` in the manifest + the `engineer.instructions.md` workspace table) instead of
+  (`project.workspaces` in the manifest + the `ai/instructions.md` workspace table) instead of
   forcing everything under one `source/`.
 - **local:** if `source` already is `projects/<slug>/source/`, adopt in place. Otherwise copy/rsync `source`
   -> `projects/<slug>/source/`, excluding `.venv`, `.git` caches, `__pycache__`, `node_modules`, build
@@ -55,19 +55,20 @@ Scan for domain markers and propose plugins. Examples: NVBugs / `isaaclab.sh` / 
 -> suggest `nvidia-isaac-lab`. If markers clearly indicate a domain that no existing plugin covers (e.g. a
 bespoke `__ai/` setup), offer `import-plugin` (create mode) to factor it into a new plugin first. For each
 confirmed plugin, run `install-plugin` (install). Domain-specific knowledge maps into the plugin, **not**
-into the generic `engineer.instructions.md`.
+into the generic `ai/instructions.md`.
 
 ## 5. Derive the ai-pack (Best Effort)
 
 - `ai/spec.md` + `ai/.memory/spec-v0.md` - reconstruct the spec from code + README.
-- `ai/engineer.instructions.md` - inferred **generic, shareable** build/run/test/lint commands +
-  conventions (host/secret/internal-URL specifics go in `ai/.memory/resources.md`/`credentials.md`, not here;
-  plugins carry the domain-specific ones).
+- `ai/instructions.md` (from `solaris/templates/ai-pack/ai/instructions.md`; the one shared know-how store
+  every persona reads) - inferred **generic, shareable** build/run/test/lint commands + conventions
+  (host/secret/internal-URL specifics go in `ai/.memory/resources.md`/`credentials.md`, not here; plugins
+  carry the domain-specific ones).
 - `ai/.memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
   `ai/.memory/credentials.md` - placeholders only; never copy real secrets out of the source.
 - `ai/.memory/context.md` - the session-context summary; seed its `## Session Context` with the import
   session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
-  gathered). Durable orientation also goes into `ai/engineer.instructions.md`, which survives future rewrites.
+  gathered). Durable orientation also goes into `ai/instructions.md`, which survives future rewrites.
 - Seed `ai/.memory/interactions.jsonl` (empty). Write `ai/manifest.json`
   (`project.{name,slug,type,mode,description}` - the one-line description feeds the pack README -
   `framework_version` from `version current`, `plugins`). Write the

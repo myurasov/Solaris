@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -46,7 +46,7 @@ this folder. The pack then does three jobs: it defines the **{{PRIMARY}} persona
 workflow, and the always-on rules in [`rules/`](rules/).
 
 This file is generated and re-rendered when the pack updates, so put durable notes in
-[`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md) instead of editing it. Files carry
+[`instructions.md`](instructions.md) instead of editing it. Files carry
 Solaris sync metadata (`_Rev. N_` markers, the `revisions` map in `manifest.json`) — leave that
 as-is.
 
@@ -56,8 +56,8 @@ as-is.
 |---|---|
 | [`manifest.json`](manifest.json) | Pack descriptor: project name/type/mode/description, framework version, attached plugins, sync metadata. |
 | [`{{PRIMARY}}.agent.md`]({{PRIMARY}}.agent.md) | The {{PRIMARY}} persona, the primary agent — how the agent plans, codes, commits, and stays safe. |
-| [`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md) | Shareable project know-how: build/run/test commands, conventions, gotchas. |
-| `agents/` | Role personas beyond the primary: `<role>.agent.md` (the brief) + `<role>.instructions.md` (that role's persistent know-how) — see [Personas](#personas). |
+| `<role>.agent.md` | Any other `*.agent.md` beside it is a role persona brief — see [Personas](#personas). |
+| [`instructions.md`](instructions.md) | The one shared instructions store every persona reads and maintains: build/run/test commands, conventions, gotchas, lessons. |
 | [`spec.md`](spec.md) | The living project spec. |
 | [`defaults.json`](defaults.json) | Committed behavior switches (see [Configuration](#configuration)). |
 | [`rules/`](rules/) | Always-on rules: git collaboration, subagent delegation, token economy, YAGNI mode. |
@@ -79,13 +79,14 @@ across all of them:
 
 ### Personas
 
-The primary persona drives every session. Additional **role personas** live in `agents/`, each the same
-two-file pair as the primary: the brief `<role>.agent.md` — a short frontmatter (`description`, optional
-`tier` and `access`) above the brief itself — and `<role>.instructions.md`, the role's persistent,
-committable know-how (procedures, gotchas, lessons), read on start and kept up to date by the role itself
-(a role running without write access hands updates back in its report). A model uses a role by acting as
-its brief: the opening instruction of a delegated subagent, or of a whole session. Every role inherits the
-primary persona's policies and shares this pack's private `.memory/` for short-term, machine-local state:
+The primary persona drives every session. Additional **role personas** are the other `<role>.agent.md`
+briefs beside it — a short frontmatter (`description`, optional `tier` and `access`) above the brief
+itself. A model uses a role by acting as that file: the opening instruction of a delegated subagent, or of
+a whole session. Every persona — primary and roles alike — reads and maintains the one shared
+[`instructions.md`](instructions.md) (persistent, committable know-how; a lesson is written once, by
+whoever learns it, and a role running without write access hands it back in its report) and uses this
+pack's private `.memory/` for short-term, machine-local state. Every role inherits the primary persona's
+policies:
 
 {{AGENTS}}
 
@@ -126,7 +127,7 @@ personal git branch, and brings the environment up. Details:
 ### Run and Test the Project
 
 Just ask — "run the tests", "start the app". The exact commands, conventions, and gotchas live
-in [`{{PRIMARY}}.instructions.md`]({{PRIMARY}}.instructions.md), which the agent reads every session.
+in [`instructions.md`](instructions.md), which every persona reads every session.
 
 ### Save and Resume Context
 
@@ -162,13 +163,14 @@ A standalone checkout receives plugin updates through ordinary git pulls.
 
 ### Add or Rename a Persona
 
-To add a role, write the pair `agents/<role>.agent.md` (the brief) and `agents/<role>.instructions.md`
-(its know-how) — copy the shape of an existing role (under a Solaris checkout the stubs are
-`solaris/templates/agents/role.agent.md` and `role.instructions.md`, and
-`uv run -m solaris.tools.agents --check --dir <project>` validates the pair); the [Personas](#personas)
-list above re-renders on the next sync. The primary persona is `{{PRIMARY}}`; under a Solaris checkout,
-`uv run -m solaris.tools.agents --rename-primary <role> --dir <project>` renames it (moves its two files
-and re-renders this pack); standalone, keep the name.
+To add a role, write `<role>.agent.md` beside the primary persona — copy the shape of an existing brief
+(under a Solaris checkout the stub is `solaris/templates/agents/role.agent.md`, and
+`uv run -m solaris.tools.agents --check --dir <project>` validates it); its know-how goes into the shared
+[`instructions.md`](instructions.md), under a heading named for the role when only that role uses it; the
+[Personas](#personas) list above re-renders on the next sync. The primary persona is `{{PRIMARY}}`; under
+a Solaris checkout, `uv run -m solaris.tools.agents --rename-primary <role> --dir <project>` renames it
+(moves its file, fixes references in `instructions.md`, and re-renders this pack); standalone, keep the
+name.
 
 ### Update the Pack Itself
 

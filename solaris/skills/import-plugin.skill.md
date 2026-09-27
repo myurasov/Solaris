@@ -37,7 +37,7 @@ external `__ai/`-style setup):
 
 1. Read the source (e.g. an imported project's `ai/`, or files the user points at). Separate **domain /
    employer / repo-specific** material (NVBugs workflow, house git/PR conventions, CI specifics, a domain
-   MCP) from **generic** dev preferences (which stay in `engineer.instructions.md`).
+   MCP) from **generic** dev preferences (which stay in `ai/instructions.md`).
 2. Show the proposed split and the plugin name; confirm.
 3. Create `plugins/` if needed, write the plugin to `plugins/<name>/`, then delete the `plugins/.empty`
    placeholder (the directory now has content). Flat; only `migrations/` may be a subfolder, plus

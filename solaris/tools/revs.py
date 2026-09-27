@@ -43,9 +43,9 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
-# The primary persona: ai/<role>.agent.md + ai/<role>.instructions.md, "engineer" unless the manifest's
-# agents.primary renames it (solaris.tools.agents does the rename). Role personas (brief + instructions
-# pairs) live in ai/agents/.
+# The primary persona: ai/<role>.agent.md, "engineer" unless the manifest's
+# agents.primary renames it (solaris.tools.agents does the rename). Role briefs sit beside it as
+# ai/<role>.agent.md; every persona shares the one ai/instructions.md.
 DEFAULT_PRIMARY = "engineer"
 ROLE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -413,28 +413,25 @@ def _workspaces_block(manifest: dict) -> str:
 
 
 def _agents_block(manifest: dict, project_dir: Path) -> str:
-    """The {{AGENTS}} bullets: the primary persona plus every ai/agents/<role> persona (brief + instructions)."""
+    """The {{AGENTS}} bullets: the primary persona plus every ai/<role>.agent.md role brief beside it."""
     primary = primary_role(manifest)
-    lines = [f"- `{primary}` - the primary persona ([`{primary}.agent.md`]({primary}.agent.md) + "
-             f"[`{primary}.instructions.md`]({primary}.instructions.md)); drives every session"]
-    agents_dir = Path(project_dir) / "ai" / "agents"
-    if agents_dir.is_dir():
+    lines = [f"- `{primary}` - the primary persona ([`{primary}.agent.md`]({primary}.agent.md)); drives every "
+             "session"]
+    ai = Path(project_dir) / "ai"
+    if ai.is_dir():
         from solaris.tools import agents as A  # lazy: that module imports this one
-        for f in sorted(agents_dir.glob("*.agent.md")):
+        for f in sorted(ai.glob("*.agent.md")):
+            if f.name == f"{primary}.agent.md":
+                continue
             try:
                 role = A.load_role(f, primary)
             except ValueError:
-                lines.append(f"- `agents/{f.name}` - INVALID brief (run `uv run -m solaris.tools.agents --check "
+                lines.append(f"- `{f.name}` - INVALID brief (run `uv run -m solaris.tools.agents --check "
                              "--dir <project>` for the reason)")
                 continue
             tier = f"{role.tier} tier, " if role.tier else ""
-            files = f"[`agents/{f.name}`](agents/{f.name})"
-            if role.instructions is not None:
-                n = role.instructions.name
-                files += f" + [`agents/{n}`](agents/{n})"
-            else:
-                files += "; no usable instructions file yet"
-            lines.append(f"- `{role.name}` - {role.description} ({tier}{role.access}; {files})")
+            lines.append(f"- `{role.name}` - {role.description} ({tier}{role.access}; "
+                         f"[`{f.name}`]({f.name}))")
     return "\n".join(lines)
 
 

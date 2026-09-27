@@ -33,8 +33,9 @@ Read, in this order, and then obey them:
    runner (includes the embedded commit + safety policies). `<primary>` is `engineer` unless
    `ai/manifest.json` -> `agents.primary` renames it; every `engineer.*` name below means that file.
 2. `projects/<slug>/ai/manifest.json` - name/type/mode + attached plugins.
-3. `projects/<slug>/ai/engineer.instructions.md` (shareable build/run/test + conventions),
-   `ai/spec.md`, and `ai/.memory/*` (private: `resources.md`, `credentials.md`).
+3. `projects/<slug>/ai/instructions.md` (the one shared know-how store every persona reads and maintains:
+   build/run/test, conventions, gotchas, lessons), `ai/spec.md`, and `ai/.memory/*` (private:
+   `resources.md`, `credentials.md`).
 4. Every `projects/<slug>/ai/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI mode);
    their switches read `ai/defaults.json` overridden per key by `ai/.memory/config.json`, and the
    perishable reference data they point at (model tiers, harness capabilities) lives in `ai/info/*.md` -
@@ -47,12 +48,11 @@ Read, in this order, and then obey them:
 6. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules
    (the ai-pack strictly overrides repo-carried rules on any conflict - flag, never silently defer). If `remote-code`:
    `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
-7. Every `projects/<slug>/ai/agents/<role>.agent.md` role brief, if present: personas the primary delegates
+7. Every other `projects/<slug>/ai/<role>.agent.md` role brief, if present: personas the primary delegates
    to (or runs a whole session as) by telling the model to act as that file, at the brief's `tier` and
-   read-only when its `access` says so; they inherit the primary persona's policies. Each brief is paired
-   with `ai/agents/<role>.instructions.md`, the role's own persistent know-how: the role reads it on start
-   and keeps it current; when a read-only role returns instructions updates in its report, the primary
-   applies them.
+   read-only when its `access` says so; they inherit the primary persona's policies and share the same
+   `ai/instructions.md` - when a read-only role returns lessons in its report, the primary writes them
+   there.
 
 **Embedded mode** (manifest `mode: embedded`): the ai-pack + `AGENTS.md` live *inside* the repo, so read the
 context above from `projects/<slug>/<repo>/` (e.g. `projects/<slug>/<repo>/ai/engineer.agent.md`); there is no
@@ -62,7 +62,7 @@ Set the working directory to `projects/<slug>/source/` (local), `projects/<slug>
 operate over Remote-SSH against `remote.json` (remote-code).
 
 **Workspaces:** when the project has more than one workspace (manifest `project.workspaces`, or the
-workspace table in `ai/engineer.instructions.md`), determine which one the request targets - from the
+workspace table in `ai/instructions.md`), determine which one the request targets - from the
 prompt, or ask when ambiguous - and work inside that folder, honoring the self-containment rules in
 `ai/engineer.agent.md` (Workspaces): no file references into sibling workspaces; that workspace's
 `setup.md`/`spec.md` are part of the deliverable.
@@ -75,14 +75,15 @@ Follow the engineer agent's workflows:
   `ai/.memory/spec-v0.md` untouched. Hand to implementation only when the user approves.
 - **Implement:** write code against the spec; run/test (locally or on the remote per mode); honor the
   embedded safety policy before any remote-mutating or outward action.
-- **Learn:** when the user teaches a durable project preference, update `ai/engineer.instructions.md`
-  (keep it shareable - put any host/secret/internal-URL specifics in `ai/.memory/` instead, never dropped).
+- **Learn:** when the user teaches a durable project preference, or any persona learns a durable lesson,
+  update `ai/instructions.md` (keep it shareable - put any host/secret/internal-URL specifics in
+  `ai/.memory/` instead, never dropped).
   When the knowledge is a trigger-shaped, occasionally-run multi-step procedure, **propose a project-local
   skill** (`ai/skills/<name>.skill.md`) instead of growing the instructions - create it only after the user
   agrees; the routing criteria live in the template `ai/engineer.agent.md` (Memory).
-- **Personas:** when the user wants a new or changed role, create or edit the pair `ai/agents/<role>.agent.md`
-  + `ai/agents/<role>.instructions.md` (stubs: `solaris/templates/agents/role.agent.md`,
-  `role.instructions.md`), validate with
+- **Personas:** when the user wants a new or changed role, create or edit `ai/<role>.agent.md` beside the
+  primary (stub: `solaris/templates/agents/role.agent.md`; its know-how goes into the shared
+  `ai/instructions.md`), validate with
   `uv run -m solaris.tools.agents --check --dir projects/<slug>`, and run `revs ff` so `ai/README.md` lists
   it; renaming the primary persona is `agents --rename-primary <role>`.
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user

@@ -38,9 +38,9 @@ Use the question tool (one batch) for anything not already given:
 - **plugins** - any additional plugins to attach (names under `plugins/`).
 - **primary persona** (optional) - the role name of the project's primary agent: `engineer` unless the
   user wants a project-specific one (e.g. `master`); `^[a-z][a-z0-9-]*$`.
-- **role personas** (optional) - names for additional personas under `ai/agents/` (e.g. `reviewer`,
-  `worker`), each a brief plus its own instructions file; offer this only when the user describes
-  distinct agent roles.
+- **role personas** (optional) - names for additional persona briefs beside the primary
+  (`ai/<role>.agent.md`, e.g. `reviewer`, `worker`); offer this only when the user describes distinct
+  agent roles. All personas share the one `ai/instructions.md`.
 - **workspaces** (optional) - names of additional self-contained work tracks beyond the default
   (`source/`). Most projects start flat (just `source/`, the default workspace) and add workspaces later;
   offer this only when the user describes multiple parallel tracks.
@@ -75,12 +75,12 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
 
 - **local:** keep `source/`; `git init -b main` inside `source/` is deferred to the engineer agent (never commit
   yet; when it happens, seed the repo's `.gitignore` with `__*/` - the local-only-folders convention in
-  `ai/engineer.instructions.md`).
+  `ai/instructions.md`).
 - **workspaces** (any mode): `source/` is the **default workspace**. For each additional workspace named in
   step 1, create `<name>/` beside it (embedded: at the repo root) and materialize
   `solaris/templates/workspace/{setup.md,spec.md}` into it, substituting `{{WORKSPACE}}` (the folder name)
   and `{{NAME}}`; register each in the manifest `project.workspaces` array and in the
-  `engineer.instructions.md` workspace table. Workspaces are self-contained (own setup/deps, no file
+  `ai/instructions.md` workspace table. Workspaces are self-contained (own setup/deps, no file
   references into siblings; shared inputs live outside) - the canonical rules are in the template
   `ai/engineer.agent.md` (Workspaces).
 - **remote-code:** delete `source/`; write `projects/<slug>/remote.json`:
@@ -126,10 +126,11 @@ records `{name, version}` in `ai/manifest.json` -> `plugins`.
   whether the user edited a file.
 - Personas (only when chosen in step 1): a non-default primary ->
   `uv run -m solaris.tools.agents --rename-primary <role> --dir projects/<slug>` (after the baseline; it
-  moves `ai/engineer.*` to `ai/<role>.*`, sets the manifest's `agents.primary`, and re-renders the managed
-  files). Each role persona -> copy `solaris/templates/agents/role.agent.md` to
-  `ai/agents/<role>.agent.md` and `role.instructions.md` to `ai/agents/<role>.instructions.md`, fill the
-  frontmatter, brief, and starting know-how with the user, validate
+  moves `ai/engineer.agent.md` to `ai/<role>.agent.md`, sets the manifest's `agents.primary`, fixes the
+  references in `ai/instructions.md`, and re-renders the managed files). Each role persona -> copy
+  `solaris/templates/agents/role.agent.md` to `ai/<role>.agent.md` (beside the primary), fill the
+  frontmatter and brief with the user, put any starting know-how into the shared `ai/instructions.md`
+  (under a heading named for the role when only that role uses it), validate
   (`uv run -m solaris.tools.agents --check --dir projects/<slug>`), then re-run `revs ff` + `revs baseline`
   so the pack README lists them.
 

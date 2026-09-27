@@ -1,6 +1,6 @@
-_Rev. 11_
+_Rev. 12_
 
-# {{PRIMARY_TITLE}} Instructions - {{NAME}} <!-- omit in toc -->
+# Instructions - {{NAME}} <!-- omit in toc -->
 
 - [Workspaces](#workspaces)
 - [Build / Run / Test](#build--run--test)
@@ -10,14 +10,19 @@ _Rev. 11_
 - [Runtime Notes \& Gotchas](#runtime-notes--gotchas)
 - [Conventions](#conventions)
 
-Editable, project-specific notes on how to develop this project. Rewrite freely to keep the best version
-(not append-only). The commit and safety policies live in `{{PRIMARY}}.agent.md`.
+Editable, project-specific notes on how to develop this project - the **one shared "how" layer for every
+persona**: the primary persona and every role brief (`<role>.agent.md`) read it on start and keep it
+current. Rewrite freely to keep the best version (not append-only). The commit and safety policies live in
+`{{PRIMARY}}.agent.md`.
 
 **This is the "how" layer.** All procedures and project knowledge live here: build/run/test, **deploy &
-restart procedures**, **model/runtime details**, architecture/layers, and **gotchas**. The only things that do
-*not* live here are the inventory of *what exists* (hardware + hosts/accounts -> `ai/.memory/resources.md`),
-secrets (`credentials.md`), the session-context summary (`context.md`), and know-how that belongs to one
-role persona (`ai/agents/<role>.instructions.md`, kept by that role).
+restart procedures**, **model/runtime details**, architecture/layers, and **gotchas** - including whatever
+any one persona learns doing its job. A lesson lands here the moment it is learned, so no persona repeats
+another's mistake and nothing is kept twice; a persona running without write access hands the update back
+in its report for the primary persona to apply. Procedure that only one role runs (a reviewer's
+checklist, a worker's job protocol) goes under a heading named for that role, still in this file. The only
+things that do *not* live here are the inventory of *what exists* (hardware + hosts/accounts ->
+`ai/.memory/resources.md`), secrets (`credentials.md`), and the session-context summary (`context.md`).
 
 **Shareable layer.** This file sits in `ai/` alongside `{{PRIMARY}}.agent.md` and `spec.md` - the portable,
 shareable layer. Keep it free of anything environment-specific or sensitive: **no** hostnames, IPs,
