@@ -53,7 +53,7 @@ One agent runs everything; it adopts a persona from wherever it is working:
   procedures) and manages `projects/`, `plugins/`, and `tasks/`.
 - Inside a project folder (`projects/<group>/<slug>/`, grouped e.g. `projects/my/<slug>/`; written
   `projects/<slug>/` for short) it is that project's **primary persona** (`engineer` by default; a
-  project can rename it and add role personas as briefs under `ai/agents/`) - it plans, builds, and
+  project can rename it and add role personas, brief + instructions pairs under `ai/agents/`) - it plans, builds, and
   runs the project against the project's *ai-pack*.
 
 You do not manage this switch; saying *"work on `<project>`"* hands off automatically.
@@ -103,7 +103,8 @@ What lands in the pack:
 
 - **Shareable, long-term** (commits with the repo): `<primary>.agent.md` (the primary persona,
   `engineer` unless renamed), `<primary>.instructions.md` (build/run/test + conventions), optional
-  `agents/<role>.agent.md` role briefs, `spec.md` (the contract),
+  role personas as the same pair under `agents/` (`<role>.agent.md` brief + `<role>.instructions.md`
+  know-how kept by the role), `spec.md` (the contract),
   `manifest.json`, always-on pack rules in `rules/` (token economy, subagent delegation, YAGNI mode,
   git collaboration: developer branches + PR-based back-contribution) with their
   committed defaults in `defaults.json`, perishable reference data the rules read in `info/` (model
@@ -225,5 +226,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.35.0.md`](solaris/spec/spec-v0.35.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.36.0.md`](solaris/spec/spec-v0.36.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.

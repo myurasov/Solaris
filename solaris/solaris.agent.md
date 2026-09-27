@@ -27,7 +27,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.35.0.md`](spec/spec-v0.35.0.md).
+[`spec/spec-v0.36.0.md`](spec/spec-v0.36.0.md).
 
 ## Persona Model
 
@@ -42,11 +42,14 @@ There is one running agent. It adopts a persona by reading the active context:
   repo-carried rules on conflict). The role is `engineer` unless the manifest's `agents.primary` renames
   it (`uv run -m solaris.tools.agents --rename-primary <role> --dir <project>`); wherever the docs and
   skills say `engineer.agent.md` / `engineer.instructions.md`, read the project's primary name.
-- **Role personas** - optional briefs at `ai/agents/<role>.agent.md` (frontmatter `description`, optional
-  `tier` and `access`, then the brief; project content, no rev marker) that inherit the primary persona's
-  policies. A model uses a role by acting as that file - the opening instruction of a delegated subagent
-  or of a whole session; nothing is projected into harness-specific agent formats. The pack README lists
-  them; `uv run -m solaris.tools.agents --check --dir <project>` validates them.
+- **Role personas** - optional, under `ai/agents/`, each the same pair as the primary: the brief
+  `<role>.agent.md` (frontmatter `description`, optional `tier` and `access`, then the brief) plus
+  `<role>.instructions.md`, the role's persistent, committable know-how that the role itself keeps up to
+  date (short-term / machine-local state stays in the pack's shared `ai/.memory/`); project content, no rev
+  marker. Roles inherit the primary persona's policies. A model uses a role by acting as its brief - the
+  opening instruction of a delegated subagent or of a whole session; nothing is projected into
+  harness-specific agent formats. The pack README lists them;
+  `uv run -m solaris.tools.agents --check --dir <project>` validates the pairs.
 
 ## Responsibilities
 
