@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -421,7 +421,7 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Feasibility -> experiment -> submission:** an idea reaches a submission only after an honest experiment with a go
   criterion set in advance, and a stop rule for cheap early exits (a one-day probe before a 100-GPU-hour retrain).
 - **Map the competition's official answer classes onto your candidate pools** (the data description says what
-  the answers are and where they come from). An answer class your pools cannot hold, such as structures found only
+  the answers are and where they come from). An answer class your pools cannot hold, such as answers found only
   in a large public database, is a retrieval gap, not a modelling gap: no ranker picks an answer its candidates
   lack, so widen the pool first. A public list drawn from such a database alone can outscore, on the board, that
   class's whole contribution to a team's best submission.

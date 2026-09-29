@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/how-to-kaggle.skill.md": {
-      "rev": 2,
-      "hash": "a3ee0e1003a5e058db948a105232d67ef0a9ab07cc17ab7dd919529754c0af0f",
+      "rev": 3,
+      "hash": "ba457c6ee8fe0e4de8866e4086b89208885a3f5b1272a3b4f26be4456fc57c21",
       "history": [
         {
           "rev": 1,
@@ -17,6 +17,10 @@
         {
           "rev": 2,
           "hash": "a3ee0e1003a5e058db948a105232d67ef0a9ab07cc17ab7dd919529754c0af0f"
+        },
+        {
+          "rev": 3,
+          "hash": "ba457c6ee8fe0e4de8866e4086b89208885a3f5b1272a3b4f26be4456fc57c21"
         }
       ]
     },
@@ -195,12 +199,16 @@
       ]
     },
     "shared/kaggle-discussions.skill.md": {
-      "rev": 1,
-      "hash": "61f60b99799799dc6696d8a32a21a3d196d4be7d2321e74edb700a002debe265",
+      "rev": 2,
+      "hash": "c8f5aea5fe70038d1f9d900aca433c16273e493e313a2037ef08b28a5e5bf026",
       "history": [
         {
           "rev": 1,
           "hash": "61f60b99799799dc6696d8a32a21a3d196d4be7d2321e74edb700a002debe265"
+        },
+        {
+          "rev": 2,
+          "hash": "c8f5aea5fe70038d1f9d900aca433c16273e493e313a2037ef08b28a5e5bf026"
         }
       ]
     },
@@ -285,12 +293,16 @@
       ]
     },
     "shared/tools/kaggle_forum.py": {
-      "rev": 1,
-      "hash": "9fa001ef400800b55c7ef16e5170e42640b074ab29503714c40b4fa8df12b3b1",
+      "rev": 2,
+      "hash": "aaa81c77201813b9df4ed09d4272831acd5a520a1ad80f71112800844c37413b",
       "history": [
         {
           "rev": 1,
           "hash": "9fa001ef400800b55c7ef16e5170e42640b074ab29503714c40b4fa8df12b3b1"
+        },
+        {
+          "rev": 2,
+          "hash": "aaa81c77201813b9df4ed09d4272831acd5a520a1ad80f71112800844c37413b"
         }
       ]
     },

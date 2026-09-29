@@ -3,7 +3,7 @@ name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
 summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -27,11 +27,14 @@ gateway, read-only. Posting, replying and voting are web-only steps for the owne
 1. **`check <slug>`** lists every page of the forum (sorted by recent comments), diffs the listing with what was
    read, and fetches the new and changed topics: about one call per 20 topics, plus two per topic fetched.
 2. **`show <slug> --new`** prints what is new: new topics whole, and for changed topics only the comments
-   posted since the last read, each with the comment it replies to. `show <slug>` prints changed topics whole.
+   posted since the last read, each with the comment it replies to, then the topics that went missing.
+   `show <slug>` prints changed topics whole. Either way it records what it printed.
 3. **Log what matters** (below) with topic ids and actions. Act at once on rule, eligibility or data-bug
    findings.
-4. **`commit <slug>`** records the topics as read, and topics gone from the forum as gone, so the next check
-   shows only what is newer.
+4. **`commit <slug>`** records as read exactly what `show` printed since the last commit: each topic up to the
+   newest comment it showed, and the missing topics it listed (as gone). A scheduled check that runs between
+   `show` and `commit` cannot make unseen topics or comments count as read: they stay pending for the next
+   `show`.
 
 The check needs no agent: cron, launchd or the harness scheduler can run it in the context folder, and the
 agent reads at its own hourly pass. For example (crontab, a few minutes off the hour):
@@ -55,11 +58,11 @@ Run from the project root or task folder:
 | Command | Does |
 |---|---|
 | `check <slug>` | `list`, `diff` and `fetch` in one: the hourly check. Takes the options of `list`. |
-| `list <slug>` | Reads the topic list through the gateway (`competitions topics list <slug> --sort-by recent --format json -p <N>`, 20 topics a page, every page up to `--max-pages`, default 50) and saves it. `--from <page.json>...` takes pages a browser saved instead. |
+| `list <slug>` | Reads the topic list through the gateway (`competitions topics list <slug> --sort-by recent --format json -p <N>`, 20 topics a page, every page up to `--max-pages`, default 50) and saves it. `--from <page.json>... --pages <N>` takes pages a browser saved instead (below). |
 | `diff <slug>` | Compares the newest listing (or `--listing <file>`) with what was read: NEW topics, CHANGED ones (the comment count moved), BACK (a missing topic listed again) and MISSING ones (read before, not listed now; reported once, and only from a complete listing). Saves their ids to `pending.json`. |
 | `fetch <slug> [<id>...]` | Reads each topic (default: the pending new and changed ones) twice: `forums topics show <id> --format json` (every comment, as HTML) and the table view (the opening post and the reply tree). A failed read keeps the earlier files; after a 429 the rest waits for the next check. |
-| `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones): title, author, date, link, the opening post, and every comment in thread order, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. |
-| `commit <slug> [<id>...]` | Records the topics as read (default: the pending ones fetched since the last diff, and the missing ones as gone). |
+| `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones, then the pending missing ones): title, author, date, link, the opening post, and every comment in thread order, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. Records what it printed in `shown.json`. |
+| `commit <slug> [<id>...]` | Records as read what `show` printed since the last commit (each topic up to the newest comment it showed; the missing topics it listed, as gone). A topic whose listing showed more comments than were read stays pending. With ids: those topics as shown, or else as fetched. |
 
 `check`, `list` and `fetch` take `--gateway <path>` (default: the `kaggle.py` beside the tool) and `--pause
 <seconds>` between Kaggle calls (default 1). Every command takes `--dir <base>` (or `KAGGLE_FORUM_DIR=<base>`),
@@ -76,6 +79,7 @@ characters: so `fetch` saves both and `show` joins them.
 <context>/__data/kaggle/<slug>/forum/
     state.json          each topic as last read: {"<id>": {title, comments, votes, newest_comment, read_at}}
     pending.json        what the last diff found: the new, changed and missing topic ids
+    shown.json          what show printed since the last commit: each topic's comment count and newest comment
     listings/           every listing, named by its UTC time (-browser, -partial when so), never overwritten
     topics/<id>.json    the topic and every comment (the CLI's JSON)
     topics/<id>.txt     the table view: the opening post and the reply tree
@@ -90,16 +94,18 @@ newest comments beyond the count read then.
 
 When the CLI cannot list a forum (`list` then fails and says so), a browser page can. The plugin ships the
 extractor `tools/kaggle_forum_list.js`, which returns a discussion page's topics as JSON. With the `browserctl`
-plugin, for each page N until a page holds fewer than 20 topics:
+plugin, for each page N from 1 to the last page the forum's pagination shows:
 
 ```bash
 uv run <browserctl>/browserctl.py navigate --profile <profile> --url "https://www.kaggle.com/competitions/<slug>/discussion?sort=recent-comments&page=<N>"
 uv run <browserctl>/browserctl.py eval --profile <profile> --js "$(cat <kaggle tools>/kaggle_forum_list.js)" > __data/kaggle/<slug>/forum/browser/p<N>.json
 ```
 
-Then `list <slug> --from __data/kaggle/<slug>/forum/browser/p*.json` (or `check` with the same `--from`); pages
-go in the order of the URL each file records. Any browser automation will do - the plugin itself never drives a
-browser, and nothing needs one. Rows without a date are the featured strip or recently viewed links and are
+Then `list <slug> --from __data/kaggle/<slug>/forum/browser/p*.json --pages <last page>` (or `check` with the same
+options); pages go in the order of the URL each file records. The listing is complete only when the files hold
+every page from 1 to the count given; otherwise (no `--pages`, or a page skipped) it is partial: it still shows
+new and changed topics, but never reports one missing. Any browser automation will do - the plugin itself never
+drives a browser, and nothing needs one. Rows without a date are the featured strip or recently viewed links and are
 dropped; a browser title can carry the author's name at its end (the title `fetch` saves is the CLI's). Use a
 signed-in profile only if the forum needs one, and only to read: never post, vote or reply from it.
 

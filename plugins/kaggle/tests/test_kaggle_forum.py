@@ -11,7 +11,6 @@ import shutil
 import sys
 import tempfile
 import textwrap
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -186,17 +185,28 @@ class BrowserListingTests(Tmp):
         featured = browser_rows([205, 206], dated=False)  # the featured strip repeats topics, undated
         p1 = self.browser_page("p1.json", 1, featured + browser_rows(range(200, 220)))
         p2 = self.browser_page("p2.json", 2, browser_rows([219, 220, 221]))  # 219 moved while paging
-        _path, listing = self.listing(None, files=[p2, p1])
+        _path, listing = self.listing(None, files=[p2, p1], total_pages=2)
         ids = [t["id"] for t in listing["topics"]]
         self.assertEqual(ids, list(range(200, 222)))
         self.assertEqual((listing["complete"], listing["duplicates"], listing["source"]), (True, 1, "browser"))
         self.assertEqual(listing["topics"][0]["when"], "Posted 3h ago")
 
-    def test_a_full_last_page_leaves_the_listing_partial(self):
+    def test_a_browser_listing_is_complete_only_with_every_page(self):
+        self.state({str(t): {"title": f"Topic {t}", "comments": 1} for t in (300, 320, 345)})
         p1 = self.browser_page("p1.json", 1, browser_rows(range(300, 320)))
-        path, listing = self.listing(None, files=[p1])
-        self.assertFalse(listing["complete"])
+        p2 = self.browser_page("p2.json", 2, browser_rows(range(320, 340)))
+        p3 = self.browser_page("p3.json", 3, browser_rows([340, 341]))
+        # a skipped middle page, even with the page count: partial, and nothing is reported missing
+        path, listing = self.listing(None, files=[p1, p3], total_pages=3)
+        self.assertEqual((listing["complete"], listing["note"]), (False, "page 2 of 3 not given"))
         self.assertTrue(path.name.endswith("-browser-partial.json"))
+        self.assertEqual(F.run_diff(self.d, path)[3], [])
+        # no page count: a short last page proves nothing
+        self.assertFalse(self.listing(None, files=[p1, p2, p3])[1]["complete"])
+        # every page given: only now is the topic absent from all of them missing
+        path, listing = self.listing(None, files=[p3, p1, p2], total_pages=3)
+        self.assertTrue(listing["complete"])
+        self.assertEqual([k for k, _s in F.run_diff(self.d, path)[3]], ["345"])
 
     def test_the_shipped_extractor_sits_beside_the_tool(self):
         js = (TOOLS / "kaggle_forum_list.js").read_text()
@@ -225,6 +235,10 @@ class DiffTests(Tmp):
         for tid, n in ((2, 3), (4, 0)):
             comments = [comment(i, "A", f"2026-09-2{i}T00:00:00", "x") for i in range(n)]
             (self.d / "topics" / f"{tid}.json").write_text(topic_json(tid, f"Topic {tid}", comments))
+        # nothing was shown yet, so a plain commit records nothing
+        self.assertEqual(F.commit(self.d), ([], [], []))
+        text = F.show_topics(self.d, SLUG)
+        self.assertIn("MISSING  3  Topic 3", text)
         done, gone, skipped = F.commit(self.d)
         self.assertEqual((done, gone, skipped), ([4, 2], [3], []))
         state = F.load_state(self.d)
@@ -306,14 +320,42 @@ class FetchShowTests(Tmp):
         self.assertIn("* Late (2026-09-22 00:00) [0] (place in the thread unknown)", text)
         self.assertGreater(text.index("Late reply."), text.index("Also asking."))
 
-    def test_commit_skips_topics_not_fetched_since_the_last_diff(self):
-        F.fetch_topics([7], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
-        old = time.time() - 3600
-        os.utime(self.d / "topics" / "7.json", (old, old))
-        F.write_json(self.d / F.PENDING, {"at": F.utc_now(), "new": [7, 8], "changed": [], "missing": []})
-        done, _gone, skipped = F.commit(self.d)
-        self.assertEqual((done, skipped), ([], [(7, "not fetched since the last diff"), (8, "not fetched")]))
-        self.assertEqual(F.commit(self.d, [7])[0], [7])
+    def test_a_check_between_show_and_commit_adds_nothing_unseen(self):
+        # the agent shows topic 101 with one comment; a scheduled check then lists 202 and a second comment on 101
+        c1 = comment(1, "First", "2026-09-20T01:00:00.100000", "<p>first</p>")
+        c2 = comment(2, "Second", "2026-09-21T01:00:00.100000", "<p>second</p>")
+        before = FakeGateway(pages={1: cli_list([row(101, "Topic 101", 1)])},
+                             topics={101: (topic_json(101, "Topic 101", [c1]), table(101, "Topic 101", "Q", [(0, c1)]))})
+        F.run_diff(self.d, self.listing(before)[0])
+        F.fetch_topics(F.load_pending(self.d)["new"], self.d, self.gateway, self.tmp, run=before, pause=0)
+        self.assertIn("==== 101", F.show_topics(self.d, SLUG))
+        after = FakeGateway(pages={1: cli_list([row(202, "Topic 202", 0), row(101, "Topic 101", 2)])},
+                            topics={101: (topic_json(101, "Topic 101", [c1, c2]),
+                                          table(101, "Topic 101", "Q", [(0, c1), (0, c2)])),
+                                    202: (topic_json(202, "Topic 202", []), table(202, "Topic 202", "Hi", []))})
+        F.run_diff(self.d, self.listing(after)[0])
+        self.assertEqual(F.load_pending(self.d)["new"], [202, 101])
+        F.fetch_topics([202, 101], self.d, self.gateway, self.tmp, run=after, pause=0)
+        done, gone, skipped = F.commit(self.d)
+        self.assertEqual((done, gone, skipped), ([101], [], []))
+        state = F.load_state(self.d)
+        self.assertEqual(list(state), ["101"])
+        self.assertEqual((state["101"]["comments"], state["101"]["newest_comment"]), (1, "2026-09-20T01:00:00.100000"))
+        # 202 was never shown and 101 has a comment no one saw: both stay pending, and show marks that comment
+        self.assertEqual(F.load_pending(self.d)["new"], [202, 101])
+        text = F.show_topics(self.d, SLUG, new_only=True)
+        self.assertIn("==== 202", text)
+        self.assertIn("* NEW Second", text)
+        self.assertNotIn("First", text)
+        self.assertEqual(F.commit(self.d)[0], [202, 101])
+        self.assertEqual(F.load_pending(self.d)["new"], [])
+
+    def test_commit_of_given_ids_uses_the_shown_read_else_the_fetched_one(self):
+        F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
+        F.show_topics(self.d, SLUG, [8])
+        self.assertEqual(F.commit(self.d, [7, 8, 9]), ([7, 8], [], [(9, "not fetched")]))
+        self.assertEqual(F.load_state(self.d)["7"]["comments"], 3)
+        self.assertEqual(F.load_shown(self.d)["topics"], {})
 
 
 # a stand-in gateway run as a subprocess: topic list pages and topics from a fixture file

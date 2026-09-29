@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_forum: watch a Kaggle competition's discussions.
 
@@ -8,7 +8,7 @@ opening post and every comment, HTML stripped, with the comments added since
 the last read marked.
 
     python3 <plugin-dir>/tools/kaggle_forum.py check <slug>
-    python3 <plugin-dir>/tools/kaggle_forum.py list <slug> [--from <page.json> ...]
+    python3 <plugin-dir>/tools/kaggle_forum.py list <slug> [--from <page.json> ... --pages <N>]
     python3 <plugin-dir>/tools/kaggle_forum.py diff <slug>
     python3 <plugin-dir>/tools/kaggle_forum.py fetch <slug> [<topic id> ...]
     python3 <plugin-dir>/tools/kaggle_forum.py show <slug> [<topic id> ...] [--new]
@@ -19,15 +19,19 @@ in one. `list` reads the topic list through the gateway (--gateway; default
 the kaggle.py beside this file): `competitions topics list <slug> --sort-by
 recent`, 20 topics a page. Where the CLI cannot list a forum, --from takes the
 pages a browser saved instead (the extractor is kaggle_forum_list.js beside
-this file). `diff` finds new, changed and missing topics; `fetch` reads each
-through the gateway, read-only, twice: `forums topics show <id> --format json`
-has every comment but not the opening post, and the table view has the
-opening post and the reply tree. `commit` records what was read. Everything
-lives in <context>/__data/kaggle/<slug>/forum/ (or <base>/<slug>/ with --dir
-<base> or KAGGLE_FORUM_DIR=<base>): state.json (each topic as last read),
-pending.json (what the last diff found), listings/ (every listing, never
-overwritten) and topics/ (<id>.json and <id>.txt). Public forum content only;
-keep it local. Stdlib only.
+this file); such a listing is complete only when --pages N gives the forum's
+page count and the files hold pages 1 to N. `diff` finds new, changed and
+missing topics; `fetch` reads each through the gateway, read-only, twice:
+`forums topics show <id> --format json` has every comment but not the opening
+post, and the table view has the opening post and the reply tree. `show`
+records what it printed, and `commit` records exactly that as read, so a
+check that runs in between cannot count unseen topics or comments as read.
+Everything lives in <context>/__data/kaggle/<slug>/forum/ (or <base>/<slug>/
+with --dir <base> or KAGGLE_FORUM_DIR=<base>): state.json (each topic as last
+read), pending.json (what the last diff found), shown.json (what show printed
+since the last commit), listings/ (every listing, never overwritten) and
+topics/ (<id>.json and <id>.txt). Public forum content only; keep it local.
+Stdlib only.
 """
 
 from __future__ import annotations
@@ -55,11 +59,9 @@ ENV_DIR = "KAGGLE_FORUM_DIR"
 PACKS = ("ai", "aipack")
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
-# the CLI lists a competition's topics 20 to a page (it ignores --page-size there)
-PAGE_ROWS = 20
 MAX_PAGES = 50
 PAUSE = 1.0
-STATE, PENDING = "state.json", "pending.json"
+STATE, PENDING, SHOWN = "state.json", "pending.json", "shown.json"
 # "Next Page Token = 2" follows a topic list page when more pages exist
 TOKEN_RE = re.compile(r"^\s*next page token\s*[=:]\s*(\S+)\s*$", re.I | re.M)
 # a comment in the table view: "├─ <author> (<date>) [+<votes>]", indented two spaces per reply level
@@ -304,12 +306,13 @@ def _page_number(data):
     return int(m.group(1)) if m else 1
 
 
-def read_pages(files):
+def read_pages(files, total=None):
     """(pages, complete, note) from listing files a browser saved, one page per file.
 
     Files hold the extractor's result ({"url", "topics": [...]}) or a plain list of topic rows. When every
-    file names its page URL, pages go in page order; otherwise in the order given. A last page short of 20
-    topics ends the forum, so the listing is complete.
+    file names its page URL, pages go in page order; otherwise in the order given. The listing is complete
+    only when total (the forum's page count, from its pagination) is given and the files hold exactly the
+    pages 1 to total; a partial listing never reports a topic missing.
     """
     loaded = []
     for i, f in enumerate(files):
@@ -321,14 +324,23 @@ def read_pages(files):
         if not isinstance(items, list):
             raise ForumError(f"{f}: no topics in it")
         loaded.append((_page_number(data), i, items))
-    if loaded and all(n is not None for n, _i, _t in loaded):
+    numbered = bool(loaded) and all(n is not None for n, _i, _t in loaded)
+    if numbered:
         loaded.sort(key=lambda x: (x[0], x[1]))
     pages = [[r for r in (normalize(x) for x in items) if r] for _n, _i, items in loaded]
     if not pages:
         raise ForumError("no listing files given")
-    if len(pages[-1]) < PAGE_ROWS:
-        return pages, True, None
-    return pages, False, "the last page given was full: more pages may follow"
+    if not total:
+        return pages, False, "pass --pages <count> with every page to make a browser listing complete"
+    if not numbered:
+        return pages, False, "the files name no page URLs, so which pages they hold is unknown"
+    have = {n for n, _i, _t in loaded}
+    lacking = [n for n in range(1, total + 1) if n not in have]
+    if lacking:
+        return pages, False, f"page {', '.join(map(str, lacking))} of {total} not given"
+    if max(have) > total:
+        return pages, False, f"a page beyond --pages {total} was given"
+    return pages, True, None
 
 
 def build_listing(slug, pages, *, source, complete, note=None, fetched_at=None):
@@ -379,10 +391,11 @@ def latest_listing(d):
     return max(files, key=lambda p: (p.name[:16], p.stat().st_mtime_ns))
 
 
-def take_listing(slug, d, *, files=None, gateway=None, root=None, run=_run, max_pages=MAX_PAGES, pause=PAUSE):
+def take_listing(slug, d, *, files=None, total_pages=None, gateway=None, root=None, run=_run, max_pages=MAX_PAGES,
+                 pause=PAUSE):
     """List the forum (the CLI, or browser pages when files are given) and save it; returns (path, listing)."""
     if files:
-        pages, complete, note = read_pages(files)
+        pages, complete, note = read_pages(files, total_pages)
         listing = build_listing(slug, pages, source="browser", complete=complete, note=note)
     else:
         gw = gateway_path(gateway)
@@ -604,15 +617,20 @@ def _indent(text, pad):
 
 def render_topic(d, tid, slug, entry=None, new_only=False):
     """A topic as text: header, opening post, and the comments in thread order (new ones marked)."""
+    return _render(d, tid, slug, entry, new_only)[0]
+
+
+def _render(d, tid, slug, entry=None, new_only=False):
+    """(text, the topic JSON it was rendered from, or None when there was none)."""
     data = read_json(Path(d) / "topics" / f"{tid}.json", None)
     try:
         text = (Path(d) / "topics" / f"{tid}.txt").read_text(encoding="utf-8")
     except OSError:
         text = None
     if not isinstance(data, dict) and text is None:
-        return f"==== {tid}: not fetched yet (run fetch)"
-    topic = data.get("topic") if isinstance(data, dict) else {}
-    comments = [c for c in (data.get("comments") or [])] if isinstance(data, dict) else []
+        return f"==== {tid}: not fetched yet (run fetch)", None
+    topic = data["topic"] if isinstance(data, dict) and isinstance(data.get("topic"), dict) else {}
+    comments = [c for c in (data.get("comments") or []) if isinstance(c, dict)] if isinstance(data, dict) else []
     post, tree = parse_table(text) if text else ("", [])
     fresh = new_comment_ids(comments, entry)
     title = topic.get("title") or (text.splitlines()[0].partition(": ")[2] if text else "")
@@ -655,7 +673,56 @@ def render_topic(d, tid, slug, entry=None, new_only=False):
         out.append(f"{pad}* {mark}{head}{reply}")
         if body:
             out.append(_indent(body, pad + "  "))
-    return "\n".join(out)
+    return "\n".join(out), data if isinstance(data, dict) and isinstance(topic, dict) and topic else None
+
+
+def read_entry(data, now):
+    """A topic's state entry as of this JSON read: its comment count and newest comment."""
+    comments = [c for c in data.get("comments") or [] if isinstance(c, dict)]
+    topic = data["topic"]
+    count = _int(topic.get("commentCount"))
+    dates = [day_key(c.get("postDate")) for c in comments if c.get("postDate")]
+    return {"title": " ".join(str(topic.get("title") or "").split()),
+            "comments": len(comments) if count is None else count, "votes": _int(topic.get("votes")),
+            "newest_comment": max(dates).replace(" ", "T") if dates else None, "read_at": now}
+
+
+def load_shown(d):
+    """What show printed since the last commit: {"topics": {id: entry as shown}, "gone": [missing ids listed]}."""
+    s = read_json(Path(d) / SHOWN, None)
+    s = s if isinstance(s, dict) else {}
+    topics = s.get("topics") if isinstance(s.get("topics"), dict) else {}
+    return {"topics": {str(k): v for k, v in topics.items() if isinstance(v, dict)},
+            "gone": [i for i in (_int(x) for x in s.get("gone") or []) if i]}
+
+
+def show_topics(d, slug, ids=None, new_only=False, now=None):
+    """The text of the given topics, or of the pending ones followed by the pending missing ones; None if
+    there is nothing to show. What it printed goes to shown.json: each topic with its comment count and newest
+    comment as printed, and the missing topics listed, which is all that a plain commit records.
+    """
+    now = now or utc_now()
+    pending, state = load_pending(d), load_state(d)
+    missing = [] if ids else pending["missing"]
+    ids = list(ids) if ids else [*pending["new"], *pending["changed"]]
+    if not ids and not missing:
+        return None
+    parts, printed = [DISCLAIMER], {}
+    for tid in ids:
+        text, data = _render(d, tid, slug, state.get(str(tid)), new_only)
+        parts += ["", text]
+        if data is not None:
+            printed[str(tid)] = read_entry(data, now)
+    if missing:
+        parts += ["", "-- missing: read before, not in the last complete listing (deleted, moved, or skipped "
+                      "while paging) --"]
+        parts += [f"MISSING  {tid}  {(state.get(str(tid)) or {}).get('title') or ''}" for tid in missing]
+    with locked(d):
+        shown = load_shown(d)
+        shown["topics"].update(printed)
+        shown["gone"] = sorted(set(shown["gone"]) | set(missing))
+        write_json(Path(d) / SHOWN, dict(shown, at=now))
+    return "\n".join(parts)
 
 
 # ---- commit
@@ -663,50 +730,48 @@ def render_topic(d, tid, slug, entry=None, new_only=False):
 def commit(d, ids=None, now=None):
     """Record topics as read; returns (committed ids, ids marked gone, skipped [(id, why)]).
 
-    With no ids: the pending new and changed topics fetched since the last diff, and the pending missing
-    ones (marked gone, so they are reported once).
+    With no ids: exactly what show printed since the last commit - each topic up to the newest comment it
+    showed, and the missing topics it listed (marked gone, so they are reported once). A check that ran in
+    between cannot add topics or comments no one saw. With ids: those topics as show printed them, or else
+    as fetched. A topic whose listing showed more comments than were read stays pending.
     """
     now = now or utc_now()
     with locked(d):
-        state, pending = load_state(d), load_pending(d)
+        state, pending, shown = load_state(d), load_pending(d), load_shown(d)
         explicit = bool(ids)
-        want = list(ids) if explicit else [*pending["new"], *pending["changed"]]
-        try:
-            # a pending topic counts as read only when fetched after the diff that found it
-            since = when(pending["at"]).timestamp() - 1 if not explicit and pending.get("at") else None
-        except (TypeError, ValueError):
-            since = None
+        want = list(ids) if explicit else [int(k) for k in shown["topics"] if _int(k)]
         done, gone, skipped = [], [], []
         for tid in want:
-            path = Path(d) / "topics" / f"{tid}.json"
-            data = read_json(path, None)
-            if not isinstance(data, dict) or not isinstance(data.get("topic"), dict):
-                skipped.append((tid, "not fetched"))
-                continue
-            if since is not None and path.stat().st_mtime < since:
-                skipped.append((tid, "not fetched since the last diff"))
-                continue
-            comments = [c for c in data.get("comments") or [] if isinstance(c, dict)]
-            topic = data["topic"]
-            count = _int(topic.get("commentCount"))
-            dates = [day_key(c.get("postDate")) for c in comments if c.get("postDate")]
-            state[str(tid)] = {"title": " ".join(str(topic.get("title") or "").split()),
-                               "comments": len(comments) if count is None else count,
-                               "votes": _int(topic.get("votes")),
-                               "newest_comment": max(dates).replace(" ", "T") if dates else None,
-                               "read_at": now}
+            entry = shown["topics"].pop(str(tid), None)
+            if entry is None:
+                data = read_json(Path(d) / "topics" / f"{tid}.json", None)
+                if not isinstance(data, dict) or not isinstance(data.get("topic"), dict):
+                    skipped.append((tid, "not fetched"))
+                    continue
+                entry = read_entry(data, now)
+            state[str(tid)] = entry
             done.append(tid)
-        for tid in [] if explicit else pending["missing"]:
+        for tid in [] if explicit else shown["gone"]:
             s = state.get(str(tid))
             if s is not None and not s.get("gone"):
                 s["gone"] = now
                 gone.append(tid)
-        closed = set(done) | set(gone)
-        for key in ("new", "changed", "missing"):
-            pending[key] = [i for i in pending[key] if i not in closed]
+        if not explicit:
+            shown["gone"] = []
+        listed = pending.get("listed") if isinstance(pending.get("listed"), dict) else {}
+
+        def settled(tid):
+            # read at least as many comments as the listing showed
+            seen = _int((listed.get(str(tid)) or {}).get("comments"))
+            return seen is None or _int(state[str(tid)].get("comments"), -1) >= seen
+
+        for key in ("new", "changed"):
+            pending[key] = [i for i in pending[key] if not (i in done and settled(i))]
+        pending["missing"] = [i for i in pending["missing"] if i not in gone]
         write_json(Path(d) / STATE, state)
         if (Path(d) / PENDING).is_file():
             write_json(Path(d) / PENDING, pending)
+        write_json(Path(d) / SHOWN, shown)
     return done, gone, skipped
 
 
@@ -722,8 +787,8 @@ def _pending_ids(d):
 
 
 def cmd_list(a, d):
-    path, listing = take_listing(a.slug, d, files=getattr(a, "from_files", None), gateway=a.gateway,
-                                 max_pages=a.max_pages, pause=a.pause)
+    path, listing = take_listing(a.slug, d, files=getattr(a, "from_files", None), total_pages=a.pages,
+                                 gateway=a.gateway, max_pages=a.max_pages, pause=a.pause)
     state = "complete" if listing["complete"] else f"partial: {listing.get('note')}"
     print(f"{a.slug}: {listing['topic_count']} topics on {listing['pages']} pages from the {listing['source']} "
           f"({state}), {local(listing['fetched_at'])}; saved {_rel(path)}")
@@ -755,20 +820,16 @@ def cmd_fetch(a, d, ids=None):
 
 
 def cmd_show(a, d):
-    ids = a.ids or _pending_ids(d)
-    if not ids:
-        print("nothing pending: pass topic ids to show")
-        return 0
-    state = load_state(d)
-    print(DISCLAIMER)
-    for tid in ids:
-        print()
-        print(render_topic(d, tid, a.slug, state.get(str(tid)), new_only=a.new))
+    text = show_topics(d, a.slug, a.ids, a.new)
+    print(text if text is not None else "nothing pending: pass topic ids to show")
     return 0
 
 
 def cmd_commit(a, d):
     done, gone, skipped = commit(d, a.ids)
+    if not a.ids and not done and not gone and not skipped:
+        print("nothing shown since the last commit: run show first (or pass topic ids)")
+        return 0
     print(f"read: {len(done)} topics recorded in {_rel(Path(d) / STATE)}"
           + (f"; {len(gone)} missing marked gone" if gone else ""))
     for tid, why in skipped:
@@ -781,11 +842,9 @@ def cmd_check(a, d):
     cmd_diff(a, d, path)
     ids = _pending_ids(d)
     code = cmd_fetch(a, d, ids) if ids else 0
-    if ids:
+    if ids or load_pending(d)["missing"]:
         print(f"next: python3 {_tool()} show {a.slug} [--new], log what matters, then: "
-              f"python3 {_tool()} commit {a.slug}")
-    elif load_pending(d)["missing"]:
-        print(f"next: python3 {_tool()} commit {a.slug} (records the missing topics as gone)")
+              f"python3 {_tool()} commit {a.slug} (it records what show printed)")
     return code
 
 
@@ -803,6 +862,8 @@ def main(argv=None):
     listing = argparse.ArgumentParser(add_help=False)
     listing.add_argument("--from", dest="from_files", nargs="+", metavar="PAGE",
                          help="listing pages a browser saved (the kaggle_forum_list.js result), instead of the CLI")
+    listing.add_argument("--pages", type=int, metavar="N", help="with --from: the forum's page count (its "
+                         "pagination shows it); only files holding pages 1 to N make a complete listing")
     listing.add_argument("--max-pages", type=int, default=MAX_PAGES)
     ids = argparse.ArgumentParser(add_help=False)
     ids.add_argument("ids", nargs="*", type=int, help="topic ids (default: the pending new and changed topics)")
@@ -811,9 +872,10 @@ def main(argv=None):
     s = sub.add_parser("diff", parents=[common], help="new, changed and missing topics against what was read")
     s.add_argument("--listing", help="a saved listing file (default: the newest)")
     sub.add_parser("fetch", parents=[common, reads, ids], help="read topics through the gateway")
-    s = sub.add_parser("show", parents=[common, ids], help="print topics: opening post and every comment")
+    s = sub.add_parser("show", parents=[common, ids], help="print topics (opening post and every comment) and "
+                       "record what was printed for commit")
     s.add_argument("--new", action="store_true", help="only what is new since the last read")
-    sub.add_parser("commit", parents=[common, ids], help="record topics as read")
+    sub.add_parser("commit", parents=[common, ids], help="record as read what show printed (or the given topics)")
     a = p.parse_args(argv)
     commands = {"check": cmd_check, "list": cmd_list, "diff": cmd_diff, "fetch": cmd_fetch, "show": cmd_show,
                 "commit": cmd_commit}
