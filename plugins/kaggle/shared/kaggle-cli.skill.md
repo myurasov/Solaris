@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -58,9 +58,11 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
   read from the first line that starts with `[` or `{`.
 - **Hooks.** Inside a project or task the gateway also stamps each call in
   `~/.solaris/kaggle/activity/` for account sharing (the `kaggle-sharing` skill;
-  `KAGGLE_SHARE_QUIET=1` skips it), and it saves every `competitions leaderboard <slug> --show`
-  read as a snapshot (the `kaggle-leaderboard` skill; `KAGGLE_LB_RECORD=0` turns that off). The
-  output and the exit code stay the CLI's own; a hook that fails only notes it on stderr.
+  `KAGGLE_SHARE_QUIET=1` skips it), and it saves every `competitions leaderboard` read, `--show` or
+  `--download`, as a snapshot (the `kaggle-leaderboard` skill, which lists the few reads it cannot
+  save; `KAGGLE_LB_RECORD=0` turns that off). At the framework root it saves a read only when
+  `KAGGLE_LB_DIR` names a store. The output and the exit code stay the CLI's own; a hook that fails
+  only notes it on stderr.
 
 ## Signing In
 

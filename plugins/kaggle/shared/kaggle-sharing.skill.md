@@ -3,7 +3,7 @@ name: kaggle-sharing
 triggers: ["kaggle sessions", "share the kaggle account", "kaggle quota", "kaggle sharing", "kaggle gpu quota", "kaggle concurrent sessions"]
 summary: Share one Kaggle account between the projects using it - detects the active projects (account-wide queued and running kernels, local gateway activity), splits the concurrent CPU and GPU sessions and the weekly GPU hours equally or as the user directs, and hands out a lease around each kernel run. Covers kaggle_share.py (status, acquire, release, ledger, config, stamp) and the agent routine.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-sharing - One Kaggle Account, Several Projects <!-- omit in toc -->
 
@@ -20,8 +20,9 @@ _Rev. 1_
 Before every kernel run (`kernels push`, or its alias `kernels update`), after it ends, in each upkeep
 check, and whenever the user says how the account should be split. Several projects (or several
 agents) on one Kaggle account compete for the same few sessions and the same weekly GPU hours; this
-skill keeps them from starving or overbooking each other. It works on its own, with or without the
-general `resource-sharing` plugin.
+skill keeps them from starving or overbooking each other. It needs nothing outside this plugin:
+`resource-sharing`, for sharing hosts between agents and projects, is a separate plugin, installed on
+its own if wanted.
 
 ## What Is Shared
 
@@ -35,7 +36,8 @@ general `resource-sharing` plugin.
 ## Detection
 
 - **Account-wide, from any machine:** `quota`, `kernels list --mine --sort-by dateRun`, and
-  `kernels status` for each kernel run in the last 12 hours - all read-only, through the gateway.
+  `kernels status` for each kernel run in the last 12 hours (`scan_hours` in `sharing.json`) - all
+  read-only, through the gateway.
   Finished runs are remembered, so after the first check (about two calls plus one per recent kernel)
   a check costs about three calls.
 - **This machine:** the gateway stamps each call in `~/.solaris/kaggle/activity/` - one small JSON
@@ -46,8 +48,8 @@ general `resource-sharing` plugin.
 - **Active** means gateway calls in the last 24 hours (`config --active-hours`), a queued or running
   kernel, or a lease or waiting request.
 - **Kernels map to projects** through the `id` in each `kernel-metadata.json` under the projects of
-  the Solaris tree (pack `ai` or `aipack`) and under any folder a stamp names; hidden, `__*` and
-  package folders are skipped. `enable_gpu`, `enable_tpu` and `machine_shape` give each kernel's
+  the Solaris tree (pack `ai` or `aipack`, embedded repos included) and under any folder a stamp
+  names; hidden, `__*` and package folders are skipped. `enable_gpu`, `enable_tpu` and `machine_shape` give each kernel's
   kind. A running kernel that no local folder describes shows as "(no local folder)" with an unknown
   kind and counts against both pools until `status --probe` reads its metadata (a read-only
   `kernels pull -m` into a throwaway folder inside the project).
@@ -75,7 +77,9 @@ general `resource-sharing` plugin.
 | Kaggle's limits changed | `config --limit cpu=5 --limit gpu=2 --limit gpu_hours=30` |
 | Keep the direction in words | `config --note "<the user's words, with the date>"` |
 
-A project's name is its folder name; `status` lists them.
+A project's name is its folder name; where two folders share a name, each gets its parent folder
+added (`alpha (my)`, `alpha (nv)`). `status` lists them. Leases and the ledger follow the project
+folder itself, so two projects of one name never share a count.
 
 ## Commands
 
@@ -98,13 +102,17 @@ Run from the project root or task folder:
 `status` and `acquire` also take `--gateway <path>` (default: the `kaggle.py` beside the tool),
 `--offline` (no Kaggle calls: use the last account read), `--solaris <checkout>`, and `--state
 <folder>` (or `KAGGLE_SHARE_DIR`). A lease ends when it is released, when Kaggle shows its kernel's run
-finished (if the lease names the kernel), or after 12 hours.
+finished (if the lease names the kernel), or after 12 hours. The finished run must be a new one: not
+the run Kaggle showed when the lease was taken, and started no more than 10 minutes before the lease,
+since Kaggle's clock and this machine's can differ. A push that fails or is declined starts no run,
+so only a release ends that lease early.
 
 ## Agent Routine
 
 1. **Before each run:** `acquire --path <kernel dir>` (with `--wait 30` when waiting is fine). If it
    is refused, do not push: report the reason and retry later, or ask the owner to change the split.
-2. **Push** the kernel as usual, after the owner's go-ahead (the kaggle rule).
+2. **Push** the kernel as usual, after the owner's go-ahead (the kaggle rule). **If the push fails or
+   the owner declines it,** release the lease at once: `release --path <kernel dir>`.
 3. **When the run ends** (complete, failed or cancelled): `release --path <kernel dir>`. A lease that
    names its kernel also closes itself at the next `status` once Kaggle shows the run finished.
 4. **Upkeep** (hourly, or with each planning pass): `status` - is the project within its share, is a

@@ -41,6 +41,21 @@ def ctx(name, last=None, kernels=None):
             "kernels": kernels or {}}
 
 
+# a stand-in gateway run as a subprocess: no quota, the kernel list from a fixture file, every run complete
+GATEWAY_STANDIN = """\
+import json, sys
+a = sys.argv[1:]
+if a[0] == "quota":
+    print("[]")
+elif a[:2] == ["kernels", "list"]:
+    print(open({fixtures!r}).read())
+elif a[:2] == ["kernels", "status"]:
+    print(a[2] + ' has status "KernelWorkerStatus.COMPLETE"')
+else:
+    sys.exit(2)
+"""
+
+
 class FakeKaggle:
     """Stands in for the gateway: serves quota, the kernel list and statuses from fixtures."""
 
@@ -175,6 +190,60 @@ class DetectionTests(Tmp):
         self.assertFalse(acc["listed"])
         self.assertTrue(any("kernels list" in e for e in acc["errors"]))
         self.assertIsNotNone(acc["quota"])
+
+    def test_kernel_ids_that_contain_insert_are_real(self):
+        d = self.tmp / "k"
+        d.mkdir()
+        for kid, real in (("alice/insertion-sort-demo", True), ("Alice/Insert-Demo", True),
+                          ("alice/INSERT_KERNEL_SLUG_HERE", False), ("INSERT_USERNAME_HERE/demo", False),
+                          ("no-owner", False)):
+            (d / "kernel-metadata.json").write_text(json.dumps({"id": kid}))
+            if real:
+                self.assertEqual(S.read_kernel(d), (kid.lower(), "cpu"))
+            else:
+                with self.assertRaises(S.ShareError):
+                    S.read_kernel(d)
+        (d / "kernel-metadata.json").write_text("[1]")
+        with self.assertRaises(S.ShareError):
+            S.read_kernel(d)
+
+    def test_embedded_grouped_projects_are_found_without_a_stamp(self):
+        sol = self.tree()
+        repo = sol / "projects" / "my" / "delta" / "delta-repo"
+        (repo / "ai").mkdir(parents=True)
+        (repo / "ai" / "manifest.json").write_text("{}")
+        (repo / "kaggle" / "k").mkdir(parents=True)
+        (repo / "kaggle" / "k" / "kernel-metadata.json").write_text(json.dumps({"id": "alice/delta-gpu",
+                                                                               "enable_gpu": True}))
+        # a folder inside a project is never a project of its own
+        nested = sol / "projects" / "my" / "alpha" / "vendor"
+        (nested / "ai").mkdir(parents=True)
+        (nested / "ai" / "manifest.json").write_text("{}")
+        found = S.tree_projects(sol)
+        self.assertIn(repo, found)
+        self.assertNotIn(nested, found)
+        self.assertEqual(S.gather(sol, [])["delta-repo"]["kernels"], {"alice/delta-gpu": "gpu"})
+
+    def test_scan_hours_from_sharing_json_reach_the_account_scan(self):
+        now = S.now_utc()
+        runs = [{"ref": f"alice/{r}", "lastRunTime": (now - timedelta(hours=h)).strftime("%Y-%m-%dT%H:%M:%S.123000")}
+                for r, h in (("recent", 1), ("older", 20))]
+        fixtures = self.tmp / "kernels.json"
+        fixtures.write_text(json.dumps(runs))
+        gw = self.tmp / "gw.py"
+        gw.write_text(GATEWAY_STANDIN.format(fixtures=str(fixtures)))
+
+        def checked(**raw):
+            S.write_json(self.base / "sharing.json", raw)
+            out = io.StringIO()
+            with contextlib.redirect_stdout(out):
+                code = S.main(["status", "--json", "--gateway", str(gw), "--solaris", "none", "--state",
+                               str(self.base)])
+            self.assertEqual(code, 0)
+            return json.loads(out.getvalue())["recent"]
+
+        self.assertEqual(checked(), 1)
+        self.assertEqual(checked(scan_hours=24), 2)
 
     def test_status_line_parsing(self):
         self.assertEqual(S.parse_status('alice/x has status "KernelWorkerStatus.QUEUED"\n'), "QUEUED")
@@ -336,6 +405,24 @@ class LeaseTests(Tmp):
         old = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(3), "status": "COMPLETE"}]}
         self.assertEqual(S.tidy(self.base, state, old, NOW), [])
 
+    def test_a_run_on_a_slower_kaggle_clock_still_closes_the_lease(self):
+        lease = self.take("alpha", kernel="alice/alpha-gpu")[0]
+        state = S.load_state(self.base)
+        # Kaggle's clock is 5 minutes behind this machine's, so its run seems to start before the lease
+        done = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(5 / 60), "status": "COMPLETE"}]}
+        ((closed, _h),) = S.tidy(self.base, state, done, NOW + timedelta(hours=1))
+        self.assertEqual(closed["id"], lease["id"])
+
+    def test_the_run_kaggle_showed_before_the_lease_never_closes_it(self):
+        before = {"at": S.iso(NOW), "listed": True, "kinds": {}, "kernels": [
+            {"ref": "alice/alpha-gpu", "last_run": kaggle_time(3 / 60), "status": "ERROR"}]}
+        lease = self.take("alpha", kernel="alice/alpha-gpu", account=before)[0]
+        self.assertEqual(lease["prior_run"], kaggle_time(3 / 60))
+        state = S.load_state(self.base)
+        self.assertEqual(S.tidy(self.base, state, before, NOW + timedelta(minutes=5)), [])
+        after = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(-0.1), "status": "COMPLETE"}]}
+        self.assertEqual(len(S.tidy(self.base, state, after, NOW + timedelta(hours=1))), 1)
+
     def test_a_lease_and_its_running_kernel_are_one_session(self):
         self.take("alpha", kernel="alice/alpha-gpu")
         account = {"kinds": {}, "kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(0.1),
@@ -410,6 +497,34 @@ class CommandTests(Tmp):
         self.assertIn("released", out)
         code, out, _ = self.run_main("ledger")
         self.assertIn("alpha", out)
+
+    def test_two_projects_with_one_folder_name_keep_their_leases_apart(self):
+        sol = self.tree()
+        mine, twin = sol / "projects" / "my" / "alpha", sol / "projects" / "nv" / "alpha"
+        (twin / "ai").mkdir(parents=True)
+        (twin / "ai" / "manifest.json").write_text("{}")
+        (twin / "k").mkdir()
+        (twin / "k" / "kernel-metadata.json").write_text(json.dumps({"id": "alice/twin-gpu", "enable_gpu": True}))
+        self.assertEqual(sorted(S.gather(sol, [])), ["alpha (my)", "alpha (nv)", "beta", "gamma"])
+        code, out, _ = self.run_main("acquire", "--offline", "--solaris", str(sol), "--path", str(twin / "k"),
+                                     "--json")
+        self.assertEqual(code, 0)
+        lease = json.loads(out)
+        self.assertEqual((lease["project"], lease["root"]), ("alpha (nv)", str(twin)))
+        code, out, _ = self.run_main("status", "--offline", "--solaris", str(sol), "--json")
+        projects = json.loads(out)["projects"]
+        self.assertEqual((projects["alpha (nv)"]["used"]["gpu"], projects["alpha (my)"]["used"]["gpu"]), (1, 0))
+        # a lease stored under the bare folder name still follows its folder
+        state = S.load_state(self.base)
+        state["leases"][lease["id"]]["project"] = "alpha"
+        S.write_json(self.base / "state.json", state)
+        view = S.build_view(S.load_config(self.base), S.gather(sol, []), None, S.load_state(self.base), [], NOW)
+        self.assertEqual(view["projects"]["alpha (nv)"]["used"]["gpu"], 1)
+        # only its own folder releases it
+        self.assertEqual(S.release(self.base, project="alpha", root=mine), [])
+        ((closed, _h),) = S.release(self.base, project="alpha", root=twin)
+        self.assertEqual(closed["id"], lease["id"])
+        self.assertEqual(S.load_ledger(self.base)[0]["root"], str(twin))
 
     def test_acquire_refusal_exit_code(self):
         S.write_json(self.base / "sharing.json", {"only": ["beta"]})

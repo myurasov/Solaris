@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
@@ -22,9 +22,11 @@ ad-hoc tasks and the framework root) goes by the working directory only.
 Inside a project or task, two hooks from the tools beside this file run first,
 and neither can block or change a Kaggle command: an activity stamp for account
 sharing (kaggle_share.py; skipped under KAGGLE_SHARE_QUIET=1, which the plugin's
-own monitoring sets), and for a `competitions leaderboard <slug> --show` read, a
-tee through kaggle_lb.py that passes the output through unchanged and saves it
-(KAGGLE_LB_RECORD=0 turns that off). A failing hook only notes it on stderr.
+own monitoring sets), and for a `competitions leaderboard` read (--show or
+--download), a tee through kaggle_lb.py that passes the output through unchanged
+and saves the read (KAGGLE_LB_RECORD=0 turns that off). At the framework root
+the tee runs only when KAGGLE_LB_DIR names a store; otherwise the read is not
+saved and the gateway says so. A failing hook only notes it on stderr.
 
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
 exactly what the Kaggle CLI printed.
@@ -51,6 +53,8 @@ PACKS = ("ai", "aipack")
 # hook switches: monitoring calls leave no activity stamp; 0 stops saving leaderboard reads
 QUIET_ENV = "KAGGLE_SHARE_QUIET"
 RECORD_ENV = "KAGGLE_LB_RECORD"
+# a leaderboard store outside any project or task (kaggle_lb's --dir)
+LB_DIR_ENV = "KAGGLE_LB_DIR"
 
 
 def say(msg):
@@ -158,20 +162,24 @@ def stamp_activity(ctx, args):
         say(f"activity stamp skipped ({e!r})")
 
 
-def tee_leaderboard(ctx, kaggle, args):
-    """Run a leaderboard --show read through kaggle_lb, which saves it; None means exec as usual."""
+def tee_leaderboard(ctx, cmd, args):
+    """Run a leaderboard read (--show or --download) through kaggle_lb, which saves it; None means exec as usual."""
     if os.environ.get(RECORD_ENV, "1") == "0":
         return None
     try:
         lb = load_tool("kaggle_lb")
-        if not lb.leaderboard_slug(args):
+        if not lb.leaderboard_read(args):
             return None
     except (Exception, SystemExit) as e:
         say(f"leaderboard save skipped ({e!r})")
         return None
+    if ctx is None and not os.environ.get(LB_DIR_ENV):
+        # a store needs a project or task folder, or KAGGLE_LB_DIR
+        say("leaderboard read not saved: no project or task folder here (run from one, or set KAGGLE_LB_DIR)")
+        return None
     # the CLI runs inside the tee from here on, so it must never be run a second time
     try:
-        code = lb.tee_leaderboard([str(kaggle)], args, ctx)
+        code = lb.tee_leaderboard(cmd, args, ctx)
     except BrokenPipeError:
         # the reader left early (e.g. piped into head): stop quietly, as the CLI would
         os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
@@ -192,10 +200,14 @@ def main():
         uv = find_uv()
         say("no project or task folder here - running the pinned CLI from a throwaway uv environment")
         withs = [a for r in REQS for a in ("--with", r)]
-        os.execv(uv, [uv, "run", "--quiet", "--no-project", "--python", ">=3.11", *withs, "kaggle", *args])
+        cmd = [uv, "run", "--quiet", "--no-project", "--python", ">=3.11", *withs, "kaggle"]
+        code = tee_leaderboard(None, cmd, args)
+        if code is not None:
+            sys.exit(code)
+        os.execv(uv, [*cmd, *args])
     kaggle = ensure_env(ctx)
     stamp_activity(ctx, args)
-    code = tee_leaderboard(ctx, kaggle, args)
+    code = tee_leaderboard(ctx, [str(kaggle)], args)
     if code is not None:
         sys.exit(code)
     os.execv(str(kaggle), [str(kaggle), *args])

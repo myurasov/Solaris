@@ -3,7 +3,7 @@ name: kaggle-leaderboard
 triggers: ["leaderboard", "leaderboard history", "competitor progress", "monitor the leaderboard", "leaderboard snapshot", "who is climbing"]
 summary: Leaderboard history for any Kaggle competition - every leaderboard read is saved as a local snapshot of the public leaderboard fields, so each team's progress can be followed over time. Covers kaggle_lb.py (snapshot, show, history, movers, new-teams, summary, record-raw, import), the storage layout, an hourly cadence, privacy, and reading progress over time.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-leaderboard - Leaderboard History <!-- omit in toc -->
 
@@ -76,8 +76,20 @@ Only `snapshot` and `show` call Kaggle, read-only, about one call per 200 teams.
 `--gateway <path>` (default: the `kaggle.py` beside the tool), `--page-size` and `--max-pages`. A
 failed page ends the walk and the read is saved partial; a failed first page saves nothing. After a
 429, wait - never loop. `tee_leaderboard()` in the tool is a hook for the gateway: it passes a raw
-`competitions leaderboard <slug> --show` call through unchanged and saves what it printed
-(`KAGGLE_LB_RECORD=0` skips the save).
+`competitions leaderboard` call through unchanged and saves the read (`KAGGLE_LB_RECORD=0` skips the
+save):
+
+- **`--show`:** the rows it printed (one page: partial when Kaggle offers a next page).
+- **`--download`:** the zip it wrote, as a full read timed by the UTC stamp in its CSV name; the same
+  board file is saved once. The zip is looked for in the `-p` folder, else in
+  `$KAGGLE_PATH/competitions/<slug>/`, else in the working folder.
+- **No slug given:** the CLI's default competition, named on its `Using competition:` line, else
+  `KAGGLE_COMPETITION`.
+
+The hook reads no credential or config file, so it saves nothing (and says so on stderr) for a call
+at the framework root unless `KAGGLE_LB_DIR` names a store, for a `--quiet` call without a slug and
+without `KAGGLE_COMPETITION`, and for a download that went to a download folder set in the CLI's
+config. Name the competition, pass `-p`, and call from the project or task folder.
 
 ## Cadence
 

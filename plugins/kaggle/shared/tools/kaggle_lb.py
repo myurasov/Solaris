@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_lb: leaderboard history for any Kaggle competition.
 
@@ -23,7 +23,12 @@ this file); the other commands read saved snapshots. Snapshots live in
 index.jsonl - or in <base>/<slug>/ with --dir <base> or KAGGLE_LB_DIR=<base>.
 They are never overwritten; an incomplete read is kept, flagged "partial".
 tee_leaderboard() is the gateway's hook: it passes a raw `competitions
-leaderboard <slug> --show` call through unchanged and saves what it printed.
+leaderboard` call through unchanged and saves the read - what a --show printed,
+and the zip a --download wrote (-p <folder>, $KAGGLE_PATH, or the working
+folder). With no slug given, the competition is the one the CLI names on its
+"Using competition:" line, else $KAGGLE_COMPETITION; no credential or config
+file is ever read, so a --quiet read of the CLI's configured default, or a
+download sent to its configured folder, is not saved (the hook says so).
 Stdlib only.
 """
 
@@ -64,6 +69,11 @@ SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 TOKEN_RE = re.compile(r"^\s*next page token\s*[=:]\s*(\S+)\s*$", re.I | re.M)
 # a downloaded board names its CSV with the UTC time: <slug>-publicleaderboard-2026-09-27T22:54:20.csv
 STAMP_RE = re.compile(r"(\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d)")
+# with no slug given, the CLI prints this first (not under --quiet) for its configured default competition
+USING_RE = re.compile(r"^Using competition: (\S+)[ \t]*$", re.M)
+# the CLI's own environment overrides of its config: the default competition and the download folder
+ENV_COMPETITION = "KAGGLE_COMPETITION"
+ENV_PATH = "KAGGLE_PATH"
 # stored fields by source column name (lowercased, letters only); other columns are dropped
 FIELDS = {
     "teamid": "team_id", "teamname": "team_name", "score": "score",
@@ -424,6 +434,15 @@ def leaderboard_slug(argv):
     return slug if slug and SLUG_RE.fullmatch(slug) else None
 
 
+def leaderboard_read(argv):
+    """The options of a `competitions leaderboard` call that shows or downloads the board (slug optional), else None."""
+    ns = _lb_args(argv)
+    if not ns or not (ns.view or ns.download):
+        return None
+    slug = ns.competition or ns.competition_opt
+    return None if slug and not SLUG_RE.fullmatch(slug) else ns
+
+
 def record_raw(slug, text, *, argv=None, later_page=False, fetched_at=None, directory=None, root=None,
                source="record-raw"):
     """Save one leaderboard response already fetched (any CLI output format); returns the snapshot path.
@@ -441,15 +460,98 @@ def record_raw(slug, text, *, argv=None, later_page=False, fetched_at=None, dire
     return save_snapshot(store_dir(slug, directory, root), snap)
 
 
-def tee_leaderboard(cmd, argv, root):
-    """Gateway hook: run `cmd + argv`; for a leaderboard --show call, pass stdout through and save it.
+def _download_target(ns, slug):
+    """(folder, file pattern) of the zip a `leaderboard --download` writes; slug None matches any competition.
 
-    Returns None (the gateway runs everything else as before) or the CLI's exit code. Saving never
-    changes the output or the exit code; KAGGLE_LB_RECORD=0 turns it off.
+    -p <folder>, else $KAGGLE_PATH/competitions/<slug>/, else the working folder. A download folder set
+    in the CLI's config file is never read, so a zip sent there is not found.
     """
-    slug = leaderboard_slug(argv)
-    if not slug or os.environ.get(ENV_RECORD, "1") == "0":
+    s = slug or "*"
+    if ns.path:
+        return Path(ns.path), f"{s}.zip"
+    if os.environ.get(ENV_PATH):
+        return Path(os.environ[ENV_PATH]) / "competitions", f"{s}/{s}.zip"
+    return Path.cwd(), f"{s}.zip"
+
+
+def _stat(path):
+    # the CLI dates a download by the server's time, so a fresh one is told by any change, not by its mtime
+    try:
+        st = Path(path).stat()
+    except OSError:
         return None
+    return st.st_ino, st.st_size, st.st_mtime_ns, st.st_ctime_ns
+
+
+def _zips_before(ns, slug):
+    """{path: stat} of the zips a --download may overwrite, taken before the CLI runs; never raises."""
+    try:
+        folder, pattern = _download_target(ns, slug)
+        return {p: _stat(p) for p in folder.glob(pattern)}
+    except (OSError, ValueError):
+        return {}
+
+
+def record_download(slug, path, *, directory=None, root=None, source="gateway"):
+    """Save a board the CLI downloaded (the `leaderboard --download` zip or its CSV) as a read.
+
+    Timed by the UTC stamp in the CSV name. Returns the snapshot path, or None when that board file
+    was saved before (a download or an import of it).
+    """
+    name, text = _board_file(Path(path))
+    rows, token, fmt, dropped = parse_output(text)
+    stamp = STAMP_RE.search(name)
+    at = stamp.group(1) + "Z" if stamp else utc_now()
+    d = store_dir(slug, directory, root)
+    snap = build_snapshot(slug, [rows], fetched_at=at, source=source, fmt=fmt, partial=bool(token or dropped),
+                          note=f"{dropped} rows without a team id" if dropped else None, source_file=name)
+    if any(e["fetched_at"] == at and e["rows"] == snap["row_count"] and e.get("source") in (source, "import")
+           for e in load_index(d)):
+        return None
+    return save_snapshot(d, snap)
+
+
+def _save_read(ns, slug, text, argv, root, before):
+    """Save what a leaderboard call just read: the --show output and the --download zip; notes go to stderr."""
+    first = "\n".join(text.splitlines()[:5])
+    m = USING_RE.search(first)
+    slug = slug or (m.group(1) if m else None) or os.environ.get(ENV_COMPETITION)
+    if not slug or not SLUG_RE.fullmatch(slug):
+        print("kaggle_lb: leaderboard read not saved: no competition named (pass the slug; the CLI's default "
+              "competition shows only without --quiet)", file=sys.stderr)
+        return
+    if ns.view:
+        try:
+            path = record_raw(slug, text, argv=argv, root=root, source="gateway")
+            print(f"kaggle_lb: leaderboard read saved to {path}", file=sys.stderr)
+        except Exception as e:
+            print(f"kaggle_lb: leaderboard read not saved: {e}", file=sys.stderr)
+    if ns.download:
+        try:
+            folder, pattern = _download_target(ns, slug)
+            z = folder / pattern
+            if not z.is_file() or before.get(z) == _stat(z):
+                raise LeaderboardError(f"no new {z.name} in {folder} (a download folder set in the CLI's config "
+                                       "is not read: pass -p <folder>)")
+            path = record_download(slug, z, root=root)
+            print(f"kaggle_lb: leaderboard download saved to {path}" if path
+                  else "kaggle_lb: leaderboard download was saved before", file=sys.stderr)
+        except Exception as e:
+            print(f"kaggle_lb: leaderboard download not saved: {e}", file=sys.stderr)
+
+
+def tee_leaderboard(cmd, argv, root):
+    """Gateway hook: run `cmd + argv`; for a leaderboard read, pass stdout through and save the read.
+
+    A --show read is saved from what the CLI printed, a --download from the zip it wrote. Returns None
+    (the gateway runs everything else as before) or the CLI's exit code. Saving never changes the
+    output or the exit code; KAGGLE_LB_RECORD=0 turns it off.
+    """
+    ns = leaderboard_read(argv)
+    if not ns or os.environ.get(ENV_RECORD, "1") == "0":
+        return None
+    slug = ns.competition or ns.competition_opt
+    before = _zips_before(ns, slug) if ns.download else {}
     proc = subprocess.Popen([*cmd, *argv], stdout=subprocess.PIPE)
     out = sys.stdout.buffer
     chunks = []
@@ -460,9 +562,7 @@ def tee_leaderboard(cmd, argv, root):
     code = proc.wait()
     if code == 0:
         try:
-            path = record_raw(slug, b"".join(chunks).decode("utf-8", "replace"), argv=argv, root=root,
-                              source="gateway")
-            print(f"kaggle_lb: leaderboard read saved to {path}", file=sys.stderr)
+            _save_read(ns, slug, b"".join(chunks).decode("utf-8", "replace"), argv, root, before)
         except Exception as e:  # a failed save must never fail the read
             print(f"kaggle_lb: leaderboard read not saved: {e}", file=sys.stderr)
     return code

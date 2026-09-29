@@ -25,9 +25,11 @@ SLUG = "demo-competition"
 BOARD = json.dumps([{"teamId": 1, "teamName": "Alpha", "submissionDate": "2026-09-25T00:00:57", "score": "0.512"},
                     {"teamId": 2, "teamName": "Beta", "submissionDate": "2026-09-25T01:10:00", "score": "0.498"}],
                    indent=2) + "\n"
+CSV = ("Rank,TeamId,TeamName,LastSubmissionDate,Score,SubmissionCount,TeamMemberUserNames\n"
+       '1,1,Alpha,"2026-09-25 00:00:57",0.512,5,alpha_user\n2,2,Beta,"2026-09-25 01:10:00",0.498,3,beta_user\n')
 FAKE_CLI = """\
 #!{python}
-import json, os, sys
+import json, os, sys, zipfile
 a = sys.argv[1:]
 with open({log!r}, "a") as f:
     f.write(json.dumps(a) + "\\n")
@@ -36,11 +38,26 @@ if a == ["--version"]:
 elif a[:2] in (["competitions", "leaderboard"], ["c", "leaderboard"]) and "failing-board" in a:
     print("403 - Forbidden")
     sys.exit(3)
+elif a[:2] in (["competitions", "leaderboard"], ["c", "leaderboard"]) and "--download" in a:
+    # like the CLI: <-p folder>/<slug>.zip, dated by the server's clock
+    z = os.path.join(a[a.index("-p") + 1], a[2] + ".zip")
+    os.makedirs(os.path.dirname(z), exist_ok=True)
+    with zipfile.ZipFile(z, "w") as f:
+        f.writestr(a[2] + "-publicleaderboard-2026-09-27T22:54:20.csv", {csv!r})
+    os.utime(z, (1700000000, 1700000000))
 elif a[:2] in (["competitions", "leaderboard"], ["c", "leaderboard"]):
     sys.stdout.write({board!r})
 else:
     print("ARGS " + json.dumps(a))
     sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
+"""
+# stands in for `uv run ... kaggle <args>` at the framework root: the stand-in CLI gets the arguments after "kaggle"
+FAKE_UV = """\
+#!{python}
+import runpy, sys
+a = sys.argv[1:]
+sys.argv = [{cli!r}, *a[a.index("kaggle") + 1:]]
+runpy.run_path({cli!r}, run_name="__main__")
 """
 
 
@@ -72,7 +89,7 @@ class Env(unittest.TestCase):
         (env / "pyvenv.cfg").write_text("home = test\n")
         (env / "bin" / "python").symlink_to(sys.executable)
         cli = env / "bin" / "kaggle"
-        cli.write_text(FAKE_CLI.format(python=sys.executable, log=str(self.log), board=BOARD))
+        cli.write_text(FAKE_CLI.format(python=sys.executable, log=str(self.log), board=BOARD, csv=CSV))
         cli.chmod(0o755)
         # the stamp the gateway expects, so it uses this venv as installed
         (env / GW.STAMP).write_text("\n".join([*GW.REQS, str(env.resolve())]) + "\n")
@@ -194,11 +211,21 @@ class TeeTests(Env):
         root = self.project()
         self.assertEqual(self.run_gw(["competitions", "leaderboard", SLUG, "--show"], root,
                                      KAGGLE_LB_RECORD="0")[:2], (0, BOARD))
-        self.assertEqual(self.run_gw(["competitions", "leaderboard", SLUG, "--download", "-p", "x"], root)[0], 0)
+        self.assertEqual(self.run_gw(["competitions", "leaderboard", SLUG, "--download", "-p", "x"], root,
+                                     KAGGLE_LB_RECORD="0")[0], 0)
         code, out, _ = self.run_gw(["competitions", "files", SLUG], root, FAKE_EXIT="5")
         self.assertEqual((code, out), (5, f'ARGS ["competitions", "files", "{SLUG}"]\n'))
         self.assertFalse((root / "__data").exists())
         self.assertEqual(len(self.cli_runs()), 3)
+
+    def test_a_downloaded_board_is_saved(self):
+        root = self.project()
+        code, out, err = self.run_gw(["competitions", "leaderboard", SLUG, "--download", "-p", "lb"], root)
+        self.assertEqual((code, out), (0, ""))
+        self.assertIn("download saved", err)
+        self.assertEqual([(e["source"], e["rows"], e["fetched_at"]) for e in self.saved(root)],
+                         [("gateway", 2, "2026-09-27T22:54:20Z")])
+        self.assertEqual(len(self.cli_runs()), 1)
 
     def test_snapshot_through_the_gateway_is_saved_once_and_not_stamped(self):
         root = self.project()
@@ -234,8 +261,8 @@ class HookFailureTests(Env):
         root = self.project()
         gw = self.overlay(root, tools={"kaggle_lb.py": """\
             import subprocess
-            def leaderboard_slug(argv):
-                return "demo-competition"
+            def leaderboard_read(argv):
+                return True
             def tee_leaderboard(cmd, argv, root):
                 subprocess.run([*cmd, *argv], stdout=subprocess.DEVNULL)
                 raise RuntimeError("failed after the run")
@@ -244,6 +271,30 @@ class HookFailureTests(Env):
         self.assertEqual(code, 1)
         self.assertIn("failed after the run", err)
         self.assertEqual(len(self.cli_runs()), 1)
+
+
+class FrameworkRootTests(Env):
+    def test_a_read_at_the_framework_root_is_saved_only_to_a_named_store(self):
+        bindir = self.tmp / "bin"
+        bindir.mkdir()
+        cli = self.tmp / "cli.py"
+        cli.write_text(FAKE_CLI.format(python=sys.executable, log=str(self.log), board=BOARD, csv=CSV))
+        uv = bindir / "uv"
+        uv.write_text(FAKE_UV.format(python=sys.executable, cli=str(cli)))
+        uv.chmod(0o755)
+        path = {"PATH": f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}"}
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        args = ["competitions", "leaderboard", SLUG, "--show"]
+        code, out, err = self.run_gw(args, bare, **path)
+        self.assertEqual((code, out), (0, BOARD))
+        self.assertIn("leaderboard read not saved", err)
+        store = self.tmp / "store"
+        code, out, err = self.run_gw(args, bare, KAGGLE_LB_DIR=str(store), **path)
+        self.assertEqual((code, out), (0, BOARD))
+        self.assertEqual(len((store / SLUG / "index.jsonl").read_text().splitlines()), 1)
+        self.assertEqual(len(self.cli_runs()), 2)
+        self.assertEqual(self.stamps(), [])
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_share: share one Kaggle account's sessions and GPU quota between projects.
 
@@ -17,13 +17,15 @@ lease before each run.
 
 Detection. Account-wide, through the gateway (--gateway; default the kaggle.py
 beside this file): the GPU quota, the account's kernels, and the status of each
-one run in the last 12 hours - this covers projects on any machine. On this
-machine: activity stamps, one per project or task folder, that the gateway
-writes on each call (stamp()). A project is active when it made gateway calls
-in the last 24 hours, has a queued or running kernel, or holds a lease or a
-waiting request. Kernels map to projects through the ids in their
-kernel-metadata.json files (projects in the Solaris tree with an ai or aipack
-pack, and any folder a stamp names).
+one run in the last 12 hours (scan_hours in sharing.json) - this covers
+projects on any machine. On this machine: activity stamps, one per project or
+task folder, that the gateway writes on each call (stamp()). A project is
+active when it made gateway calls in the last 24 hours, has a queued or running
+kernel, or holds a lease or a waiting request. Kernels map to projects through
+the ids in their kernel-metadata.json files (projects in the Solaris tree with
+an ai or aipack pack, embedded repos included, and any folder a stamp names).
+Leases, waiting requests and ledger entries follow the project folder, so two
+projects with the same folder name never share a count.
 
 Split. Every active project gets an equal share of each session pool (rounded
 up) and of the weekly GPU hours; sharing.json overrides that with fixed
@@ -80,6 +82,8 @@ LIST_PAGE = 50
 MAX_STATUS = 25
 FRESH_SECONDS = 90
 EXIT_REFUSED = 3
+# Kaggle's clock and this machine's can differ: a run started this much before a lease can still be its run
+CLOCK_SLACK = timedelta(minutes=10)
 
 
 class ShareError(Exception):
@@ -195,9 +199,14 @@ def find_solaris(*starts):
 
 
 def tree_projects(solaris):
-    """Project roots under <solaris>/projects/, one or two levels down."""
+    """Project roots under <solaris>/projects/: <slug>, <group>/<slug>, and the embedded repos under them."""
     base = Path(solaris) / "projects"
-    found = [d for d in (*base.glob("*"), *base.glob("*/*")) if d.is_dir() and context_kind(d) == "project"]
+    found = []
+    # shallow first, so a folder inside a project already found is never a project of its own
+    for pattern in ("*", "*/*", "*/*/*"):
+        for d in sorted(base.glob(pattern)):
+            if d.is_dir() and not any(p in found for p in d.parents) and context_kind(d) == "project":
+                found.append(d)
     return sorted(found)
 
 
@@ -235,10 +244,11 @@ def read_kernel(path):
     """(ref, kind) of one kernel folder or kernel-metadata.json."""
     p = Path(path)
     meta = read_json(p / "kernel-metadata.json" if p.is_dir() else p, None)
-    ref = str((meta or {}).get("id") or "").strip().lower()
-    if not isinstance(meta, dict) or "/" not in ref or "insert" in ref:
+    raw = str(meta.get("id") or "").strip() if isinstance(meta, dict) else ""
+    # kernels init writes the placeholder <user>/INSERT_KERNEL_SLUG_HERE; real slugs may contain "insert"
+    if "/" not in raw or "INSERT_" in raw:
         raise ShareError(f"no kernel id in {p}")
-    return ref, meta_kind(meta)
+    return raw.lower(), meta_kind(meta)
 
 
 def context_kernels(root):
@@ -301,23 +311,42 @@ def load_stamps(base):
 
 
 def gather(solaris, stamps):
-    """Every Kaggle-using context: {name: {name, root, kind, last, calls, kernels {ref: kind}}}."""
+    """Every Kaggle-using context: {name: {name, root, kind, last, calls, kernels {ref: kind}}}.
+
+    A name is the folder name; where several folders share one, each gets its parent folder added
+    ("alpha (my)"). The root is the identity: leases and the ledger follow it, not the name.
+    """
     roots = {}
     for d in tree_projects(solaris) if solaris else []:
         roots[str(d.resolve())] = {"kind": "project"}
     for s in stamps:
         if Path(s["root"]).is_dir():
             roots.setdefault(s["root"], {"kind": s.get("kind") or "folder"})["stamp"] = s
-    contexts = {}
+    found = []
     for r, info in sorted(roots.items()):
         root, s = Path(r), info.get("stamp") or {}
         kernels = context_kernels(root)
         if not kernels and not s and not has_kaggle_plugin(root):
             continue  # nothing to do with Kaggle
-        name = root.name if root.name not in contexts else f"{root.name} ({root.parent.name})"
+        found.append((r, root, info, s, kernels))
+    counts = {}
+    for _r, root, *_rest in found:
+        counts[root.name] = counts.get(root.name, 0) + 1
+    contexts = {}
+    for r, root, info, s, kernels in found:
+        name = root.name if counts[root.name] == 1 else f"{root.name} ({root.parent.name})"
+        if name in contexts:
+            # the parent folder repeats too: a short id of the path keeps names apart
+            name = f"{name} {hashlib.sha1(r.encode()).hexdigest()[:4]}"
         contexts[name] = {"name": name, "root": r, "kind": info["kind"], "last": s.get("last"),
                           "calls": s.get("calls", 0), "kernels": kernels}
     return contexts
+
+
+def name_for(contexts, root, default):
+    """The name gather() gave the context folder root, else default."""
+    r = str(Path(root).resolve()) if root else None
+    return next((n for n, c in contexts.items() if r and c.get("root") == r), default)
 
 
 # ---- reading the account
@@ -399,7 +428,7 @@ def scan_account(gateway, cwd, *, run=_run, now=None, cache=None, scan_hours=12)
     except ShareError as e:
         errors.append(str(e))
     known = {k["ref"]: k for k in (cache or {}).get("kernels", [])}
-    cutoff = now - timedelta(hours=scan_hours)
+    cutoff = now - timedelta(hours=float(scan_hours))
     recent = []
     for r in rows or []:
         ref = str(r.get("ref") or "").lower()
@@ -440,14 +469,14 @@ def probe_kind(ref, gateway, cwd, run=_run):
 
 
 def get_account(base, gateway, cwd, *, max_age=FRESH_SECONDS, offline=False, probe_refs=None, run=_run,
-                now=None):
+                now=None, scan_hours=12):
     """The account read: the cached one when fresh (or offline), else a new read saved to account.json."""
     now = now or now_utc()
     cached = read_json(Path(base) / "account.json", None)
     cached = cached if isinstance(cached, dict) and cached.get("at") else None
     if offline or (cached and max_age and (now - parse_time(cached["at"])).total_seconds() < max_age):
         return cached
-    account = scan_account(gateway, cwd, run=run, now=now, cache=cached)
+    account = scan_account(gateway, cwd, run=run, now=now, cache=cached, scan_hours=scan_hours)
     for ref in probe_refs(account) if probe_refs else []:
         kind = probe_kind(ref, gateway, cwd, run)
         account["calls"] += 1
@@ -507,8 +536,8 @@ def close_lease(base, state, lease_id, how, now):
     start, until = parse_time(lease["acquired"]), parse_time(lease["expires"])
     end = min(now, until)
     hours = max(0.0, (end - start).total_seconds() / 3600)
-    entry = {"project": lease["project"], "kind": lease["kind"], "kernel": lease.get("kernel"),
-             "start": lease["acquired"], "end": iso(end), "hours": round(hours, 3),
+    entry = {"project": lease["project"], "root": lease.get("root"), "kind": lease["kind"],
+             "kernel": lease.get("kernel"), "start": lease["acquired"], "end": iso(end), "hours": round(hours, 3),
              "borrowed": bool(lease.get("borrowed")), "how": how}
     with open(Path(base) / "ledger.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
@@ -525,6 +554,20 @@ def _alive(pid):
     return True
 
 
+def run_finished(lease, run):
+    """Whether Kaggle shows the leased kernel's run as over.
+
+    The run must not be the one Kaggle showed when the lease was taken (prior_run, both times on
+    Kaggle's clock), and must have started no earlier than the lease less CLOCK_SLACK (Kaggle's
+    clock against this machine's).
+    """
+    if not run or run["status"] not in DONE:
+        return False
+    if "prior_run" in lease and run["last_run"] == lease["prior_run"]:
+        return False
+    return parse_time(run["last_run"]) >= parse_time(lease["acquired"]) - CLOCK_SLACK
+
+
 def tidy(base, state, account, now):
     """Close expired leases and leases whose kernel run has finished; drop gone waiters. Returns closed ones."""
     closed = []
@@ -533,7 +576,7 @@ def tidy(base, state, account, now):
         run = runs.get(str(lease.get("kernel") or "").lower())
         if now >= parse_time(lease["expires"]):
             closed.append(close_lease(base, state, lid, "expired", now))
-        elif run and run["status"] in DONE and parse_time(run["last_run"]) >= parse_time(lease["acquired"]):
+        elif run_finished(lease, run):
             closed.append(close_lease(base, state, lid, "finished", now))
     for wid, w in list(state["waiters"].items()):
         if now >= parse_time(w["until"]) or not _alive(w.get("pid")):
@@ -554,7 +597,16 @@ def _blank(name):
 def build_view(cfg, contexts, account, state, ledger, now, requester=None):
     """Who is active, what each uses, and each one's share of the sessions and the week's GPU hours."""
     contexts = {n: dict(c) for n, c in contexts.items()}
-    extra = [x["project"] for x in (*state["leases"].values(), *state["waiters"].values())]
+    # leases, waiting requests and ledger entries belong to their project folder (root), else their stored name
+    by_root = {c["root"]: n for n, c in contexts.items() if c.get("root")}
+
+    def owned(x):
+        return dict(x, project=by_root.get(x.get("root")) or x["project"])
+
+    leases = [owned(x) for x in state["leases"].values()]
+    waiters = [owned(w) for w in state["waiters"].values()]
+    ledger = [owned(e) for e in ledger]
+    extra = [x["project"] for x in (*leases, *waiters)]
     extra += list(cfg["only"]) + list(cfg["weights"]) + ([requester] if requester else [])
     for n in extra:
         contexts.setdefault(n, _blank(n))
@@ -563,7 +615,7 @@ def build_view(cfg, contexts, account, state, ledger, now, requester=None):
     for n, c in sorted(contexts.items(), key=lambda kv: kv[1].get("last") or ""):
         for ref in c["kernels"]:
             owner[ref] = n  # a kernel in two folders goes to the one used last
-    leased = {str(x.get("kernel")).lower(): x for x in state["leases"].values() if x.get("kernel")}
+    leased = {str(x.get("kernel")).lower(): x for x in leases if x.get("kernel")}
     running = []
     for k in account.get("kernels", []):
         if k["status"] not in RUNNING and k["status"] != "UNKNOWN":
@@ -576,7 +628,7 @@ def build_view(cfg, contexts, account, state, ledger, now, requester=None):
     names = sorted(contexts)
     leases_n = {n: {k: 0 for k in KINDS} for n in names}
     runs_n = {n: {k: 0 for k in KINDS} for n in names}
-    for x in state["leases"].values():
+    for x in leases:
         if x["kind"] in KINDS:
             leases_n[x["project"]][x["kind"]] += 1
     other = {"cpu": 0, "gpu": 0, "tpu": 0, "unknown": 0}
@@ -596,10 +648,10 @@ def build_view(cfg, contexts, account, state, ledger, now, requester=None):
         nrun = sum(1 for r in running if r["project"] == n)
         if nrun:
             why.append(f"{nrun} queued or running")
-        nl = sum(1 for x in state["leases"].values() if x["project"] == n)
+        nl = sum(1 for x in leases if x["project"] == n)
         if nl:
             why.append(f"{nl} lease" + ("s" if nl > 1 else ""))
-        if any(w["project"] == n for w in state["waiters"].values()):
+        if any(w["project"] == n for w in waiters):
             why.append("waiting")
         if n == requester:
             why.append("asking")
@@ -621,7 +673,7 @@ def build_view(cfg, contexts, account, state, ledger, now, requester=None):
     for e in ledger:
         if e.get("kind") == "gpu" and e["project"] in hours and parse_time(e["end"]) >= week_start:
             hours[e["project"]] += float(e.get("hours") or 0)
-    for x in state["leases"].values():
+    for x in leases:
         if x["kind"] == "gpu":
             start = max(parse_time(x["acquired"]), week_start)
             hours[x["project"]] += max(0.0, (now - start).total_seconds() / 3600)
@@ -641,8 +693,8 @@ def build_view(cfg, contexts, account, state, ledger, now, requester=None):
                        "gpu_hours": round(hours[n], 3), "gpu_budget": round(budget, 3),
                        "root": contexts[n].get("root"), "kernels": len(contexts[n].get("kernels") or {})}
     return {"at": iso(now), "mode": cfg["mode"], "cap": cap, "in_use": in_use, "other": other,
-            "projects": projects, "running": running, "leases": list(state["leases"].values()),
-            "waiters": list(state["waiters"].values()), "quota": account.get("quota"),
+            "projects": projects, "running": running, "leases": leases,
+            "waiters": waiters, "quota": account.get("quota"),
             "gpu_hours_total": total_h, "gpu_hours_left": left, "week_start": iso(week_start),
             "account_at": account.get("at"), "listed": account.get("listed", False),
             "errors": account.get("errors", []), "truncated": account.get("truncated", 0),
@@ -695,6 +747,10 @@ def try_acquire(base, cfg, contexts, account, project, kind, *, kernel=None, roo
                      "root": str(root) if root else None, "kind": kind, "kernel": kernel, "acquired": iso(now),
                      "expires": iso(now + timedelta(hours=float(cfg["lease_hours"]))), "borrowed": borrowed,
                      "hours": hours, "note": note}
+            if kernel and (account or {}).get("listed"):
+                # the kernel's last run as Kaggle showed it now: that run never closes this lease
+                lease["prior_run"] = next((k["last_run"] for k in account.get("kernels", []) if k["ref"] == kernel),
+                                          None)
             state["leases"][lease["id"]] = lease
         write_json(Path(base) / "state.json", state)
     return lease, why, view
@@ -710,7 +766,14 @@ def set_waiter(base, waiter=None, remove=None):
         write_json(Path(base) / "state.json", state)
 
 
-def release(base, *, ids=(), project=None, kernel=None, kind=None, all_=False, now=None):
+def _owner_is(lease, project, root):
+    # a lease taken inside a project folder matches that folder; one taken with --project matches the name
+    if root and lease.get("root"):
+        return lease["root"] == str(root)
+    return project is None or lease["project"] == project
+
+
+def release(base, *, ids=(), project=None, root=None, kernel=None, kind=None, all_=False, now=None):
     """Close matching leases into the ledger; returns [(lease, hours)]."""
     now = now or now_utc()
     with locked(base):
@@ -721,7 +784,7 @@ def release(base, *, ids=(), project=None, kernel=None, kind=None, all_=False, n
                 raise ShareError(f"no such lease: {', '.join(missing)}")
             match = list(ids)
         else:
-            match = [i for i, x in state["leases"].items() if (project is None or x["project"] == project)
+            match = [i for i, x in state["leases"].items() if _owner_is(x, project, root)
                      and (kernel is None or str(x.get("kernel") or "").lower() == kernel.lower())
                      and (kind is None or x["kind"] == kind)]
             if len(match) > 1 and not all_:
@@ -778,7 +841,8 @@ def _world(a, base, root, *, max_age, offline):
 
     # probes download into the context folder, so only from inside one
     probe = unknown_refs if getattr(a, "probe", False) and root else None
-    account = get_account(base, gw, root or Path.cwd(), max_age=max_age, offline=offline, probe_refs=probe)
+    account = get_account(base, gw, root or Path.cwd(), max_age=max_age, offline=offline, probe_refs=probe,
+                          scan_hours=float(cfg["scan_hours"]))
     return cfg, contexts, account
 
 
@@ -864,7 +928,10 @@ def cmd_status(a):
 
 
 def _target(a):
-    """(project name, root, kernel ref, kind) for acquire and release."""
+    """(project name, root, owner, kernel ref, kind) for acquire and release.
+
+    owner is the project folder a lease belongs to: the context folder, or None when --project names it.
+    """
     root = find_context(a.path) if getattr(a, "path", None) else find_context()
     kernel, kind = (a.kernel.lower() if getattr(a, "kernel", None) else None), getattr(a, "kind", None)
     if getattr(a, "path", None):
@@ -873,19 +940,21 @@ def _target(a):
     project = a.project or _ctx_name(root)
     if not project:
         raise ShareError("no project here - run from a project or task folder, or pass --project")
-    return project, root, kernel, kind
+    return project, root, None if a.project else root, kernel, kind
 
 
 def cmd_acquire(a):
     base = state_dir(a.state)
-    project, root, kernel, kind = _target(a)
+    project, root, owner, kernel, kind = _target(a)
     if kind not in KINDS:
         raise ShareError("pass --kind cpu|gpu (or --path to a kernel folder whose metadata says)")
     deadline, wid = time.time() + a.wait * 60, None
     try:
         while True:
             cfg, contexts, account = _world(a, base, root, max_age=FRESH_SECONDS, offline=a.offline)
-            lease, why, view = try_acquire(base, cfg, contexts, account, project, kind, kernel=kernel, root=root,
+            # the name status shows for this folder (two folders of one name are told apart)
+            project = name_for(contexts, owner, project)
+            lease, why, view = try_acquire(base, cfg, contexts, account, project, kind, kernel=kernel, root=owner,
                                            hours=a.hours, note=a.note)
             if lease:
                 if a.json:
@@ -901,8 +970,9 @@ def cmd_acquire(a):
             if wid is None:
                 wid = f"wait-{secrets.token_hex(3)}"
                 now = now_utc()
-                set_waiter(base, {"id": wid, "project": project, "kind": kind, "since": iso(now),
-                                  "until": iso(now + timedelta(minutes=a.wait)), "pid": os.getpid()})
+                set_waiter(base, {"id": wid, "project": project, "root": str(owner) if owner else None,
+                                  "kind": kind, "since": iso(now), "until": iso(now + timedelta(minutes=a.wait)),
+                                  "pid": os.getpid()})
                 print(f"waiting up to {a.wait:g} min: {why}", file=sys.stderr)
             time.sleep(max(1.0, min(a.poll, deadline - time.time())))
     finally:
@@ -913,11 +983,11 @@ def cmd_acquire(a):
 def cmd_release(a):
     base = state_dir(a.state)
     ids = list(a.lease or [])
-    project = kernel = kind = None
+    project = owner = kernel = kind = None
     if not ids:
-        project, _root, kernel, kind = _target(a)
+        project, _root, owner, kernel, kind = _target(a)
         kind = a.kind
-    closed = release(base, ids=ids, project=project, kernel=kernel, kind=kind, all_=a.all)
+    closed = release(base, ids=ids, project=project, root=owner, kernel=kernel, kind=kind, all_=a.all)
     if not closed:
         print("no matching lease")
         return 1

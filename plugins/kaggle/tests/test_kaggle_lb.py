@@ -98,8 +98,8 @@ class Tmp(unittest.TestCase):
         env = mock.patch.dict(os.environ, {}, clear=False)
         env.start()
         self.addCleanup(env.stop)
-        os.environ.pop(L.ENV_DIR, None)
-        os.environ.pop(L.ENV_RECORD, None)
+        for name in (L.ENV_DIR, L.ENV_RECORD, L.ENV_COMPETITION, L.ENV_PATH):
+            os.environ.pop(name, None)
 
     def snap(self, **kw):
         kw = {"gateway": self.gateway, "directory": self.base, "root": self.tmp, "pause": 0, **kw}
@@ -460,6 +460,65 @@ class RecordRawTests(Tmp):
                                    ["competitions", "leaderboard", SLUG, "--show"])
         self.assertEqual((code, out.decode()), (0, "something else entirely\n"))
         self.assertIn("not saved", err)
+
+    def test_leaderboard_read_detection(self):
+        cases = {
+            ("competitions", "leaderboard", "titanic", "--show"): True,
+            ("competitions", "leaderboard", "--show"): True,  # the CLI's default competition
+            ("c", "leaderboard", "-d", "-p", "x"): True,
+            ("competitions", "leaderboard", "titanic", "--download", "--show"): True,
+            ("competitions", "leaderboard", "titanic"): False,  # neither --show nor --download
+            ("competitions", "leaderboard", "../x", "-d"): False,
+            ("competitions", "leaderboard", "-s", "-h"): False,
+            ("competitions", "list"): False,
+        }
+        for argv, want in cases.items():
+            self.assertEqual(bool(L.leaderboard_read(list(argv))), want, argv)
+
+    def board_dir(self):
+        return self.tmp / "__data" / "kaggle" / SLUG / "leaderboard"
+
+    def test_a_read_of_the_default_competition_is_saved_under_its_name(self):
+        text = f"Using competition: {SLUG}\n" + PAGES["T2"]
+        code, out, err = self._tee(f"import sys\nsys.stdout.write({text!r})\n", ["competitions", "leaderboard", "-s"])
+        self.assertEqual((code, out.decode()), (0, text))
+        self.assertEqual([e["rows"] for e in L.load_index(self.board_dir())], [1])
+
+    def test_a_quiet_read_of_the_default_competition_needs_its_name_in_the_environment(self):
+        argv, script = ["competitions", "leaderboard", "--show", "-q"], f"print({PAGES['T2']!r})\n"
+        code, _, err = self._tee(script, argv)
+        self.assertEqual(code, 0)
+        self.assertIn("no competition named", err)
+        self.assertFalse((self.tmp / "__data").exists())
+        os.environ[L.ENV_COMPETITION] = SLUG
+        self.assertEqual(self._tee(script, argv)[0], 0)
+        self.assertEqual(len(L.load_index(self.board_dir())), 1)
+
+    def test_a_downloaded_board_is_saved_once_and_a_stale_zip_never(self):
+        folder = self.tmp / "dl"
+        script = textwrap.dedent(f"""\
+            import os, zipfile
+            os.makedirs({str(folder)!r}, exist_ok=True)
+            z = os.path.join({str(folder)!r}, {SLUG + ".zip"!r})
+            with zipfile.ZipFile(z, "w") as f:
+                f.writestr({SLUG + "-publicleaderboard-2026-09-27T22:54:20.csv"!r}, {DOWNLOAD_CSV!r})
+            # the CLI dates the file by the server's clock
+            os.utime(z, (1700000000, 1700000000))
+            print("Downloading {SLUG}.zip to {folder}")
+            """)
+        argv = ["competitions", "leaderboard", SLUG, "--download", "-p", str(folder)]
+        code, _, err = self._tee(script, argv)
+        self.assertEqual(code, 0, err)
+        (e,) = L.load_index(self.board_dir())
+        self.assertEqual((e["source"], e["rows"], e["fetched_at"], e["imported"]),
+                         ("gateway", 4, "2026-09-27T22:54:20Z", False))
+        # the same board file again is not saved twice
+        self.assertIn("saved before", self._tee(script, argv)[2])
+        # a call that writes nothing leaves the old zip alone and saves nothing
+        code, _, err = self._tee("pass\n", argv)
+        self.assertEqual(code, 0)
+        self.assertIn("download not saved", err)
+        self.assertEqual(len(L.load_index(self.board_dir())), 1)
 
 
 class ImportTests(Tmp):
