@@ -19,7 +19,9 @@ _Rev. 1_
 Anything that touches Kaggle: finding competitions and reading their pages, downloading data,
 submitting and reading scores, running notebooks (Kaggle calls them kernels) on Kaggle GPUs,
 datasets, models, discussions, benchmarks, GPU quota. The Kaggle CLI (Kaggle's official
-command-line client) is the only channel - this plugin does no browser automation.
+command-line client) is the only channel - this plugin does no browser automation. For how to
+run a competition (setup, validation, daily submissions, agent organization), follow the
+`how-to-kaggle` skill (`how-to-kaggle.skill.md` next to this file).
 
 ## Calling the Gateway
 
