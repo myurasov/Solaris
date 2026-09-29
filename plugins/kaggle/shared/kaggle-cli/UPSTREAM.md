@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Vendored Upstream: Kaggle CLI Agent Skill
 

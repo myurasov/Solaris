@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
