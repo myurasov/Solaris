@@ -19,11 +19,19 @@ its own location; the live copy in a Solaris checkout
 (<solaris>/plugins/kaggle/shared/tools/kaggle.py, used by linked projects,
 ad-hoc tasks and the framework root) goes by the working directory only.
 
+Inside a project or task, two hooks from the tools beside this file run first,
+and neither can block or change a Kaggle command: an activity stamp for account
+sharing (kaggle_share.py; skipped under KAGGLE_SHARE_QUIET=1, which the plugin's
+own monitoring sets), and for a `competitions leaderboard <slug> --show` read, a
+tee through kaggle_lb.py that passes the output through unchanged and saves it
+(KAGGLE_LB_RECORD=0 turns that off). A failing hook only notes it on stderr.
+
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
 exactly what the Kaggle CLI printed.
 """
 
 import fcntl
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -40,6 +48,9 @@ ENV_DIR = ".venv-kaggle"
 STAMP = ".solaris-kaggle-pin"
 # ai-pack folder names that mark a project root: the Solaris default and a renamed pack
 PACKS = ("ai", "aipack")
+# hook switches: monitoring calls leave no activity stamp; 0 stops saving leaderboard reads
+QUIET_ENV = "KAGGLE_SHARE_QUIET"
+RECORD_ENV = "KAGGLE_LB_RECORD"
 
 
 def say(msg):
@@ -124,6 +135,54 @@ def ensure_env(ctx):
     return env / "bin" / "kaggle"
 
 
+def load_tool(name):
+    """A tool module from this folder (kaggle_share, kaggle_lb), loaded by path."""
+    path = Path(__file__).resolve().parent / f"{name}.py"
+    spec = importlib.util.spec_from_file_location(f"kaggle_gateway_{name}", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"cannot load {path}")
+    mod = importlib.util.module_from_spec(spec)
+    # keep __pycache__ out of the plugin folder
+    sys.dont_write_bytecode = True
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def stamp_activity(ctx, args):
+    """Record this call for kaggle_share's view of which projects use the account."""
+    if os.environ.get(QUIET_ENV) == "1":
+        return
+    try:
+        load_tool("kaggle_share").stamp(ctx, args)
+    except (Exception, SystemExit) as e:
+        say(f"activity stamp skipped ({e!r})")
+
+
+def tee_leaderboard(ctx, kaggle, args):
+    """Run a leaderboard --show read through kaggle_lb, which saves it; None means exec as usual."""
+    if os.environ.get(RECORD_ENV, "1") == "0":
+        return None
+    try:
+        lb = load_tool("kaggle_lb")
+        if not lb.leaderboard_slug(args):
+            return None
+    except (Exception, SystemExit) as e:
+        say(f"leaderboard save skipped ({e!r})")
+        return None
+    # the CLI runs inside the tee from here on, so it must never be run a second time
+    try:
+        code = lb.tee_leaderboard([str(kaggle)], args, ctx)
+    except BrokenPipeError:
+        # the reader left early (e.g. piped into head): stop quietly, as the CLI would
+        os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+        return 1
+    except Exception as e:
+        say(f"leaderboard read stopped in the save hook ({e!r})")
+        return 1
+    # a CLI killed by a signal reports it the shell way
+    return None if code is None else (code if code >= 0 else 128 - code)
+
+
 def main():
     # arguments pass through untouched: the CLI decides which commands may run signed
     # out (auth login, --version, ...) by the raw command line, so no prefix flags
@@ -135,6 +194,10 @@ def main():
         withs = [a for r in REQS for a in ("--with", r)]
         os.execv(uv, [uv, "run", "--quiet", "--no-project", "--python", ">=3.11", *withs, "kaggle", *args])
     kaggle = ensure_env(ctx)
+    stamp_activity(ctx, args)
+    code = tee_leaderboard(ctx, kaggle, args)
+    if code is not None:
+        sys.exit(code)
     os.execv(str(kaggle), [str(kaggle), *args])
 
 

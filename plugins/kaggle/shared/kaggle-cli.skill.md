@@ -56,6 +56,11 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
   notices before the data: `Next Page Token = ...` on paginated commands, `Using competition:`,
   and an out-of-date warning once Kaggle ships past the pin. To parse, use `--format json` and
   read from the first line that starts with `[` or `{`.
+- **Hooks.** Inside a project or task the gateway also stamps each call in
+  `~/.solaris/kaggle/activity/` for account sharing (the `kaggle-sharing` skill;
+  `KAGGLE_SHARE_QUIET=1` skips it), and it saves every `competitions leaderboard <slug> --show`
+  read as a snapshot (the `kaggle-leaderboard` skill; `KAGGLE_LB_RECORD=0` turns that off). The
+  output and the exit code stay the CLI's own; a hook that fails only notes it on stderr.
 
 ## Signing In
 
