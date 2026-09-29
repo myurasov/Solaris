@@ -24,7 +24,7 @@
     },
     "shared/kaggle-cli/UPSTREAM.md": {
       "rev": 2,
-      "hash": "6acece37a2f641da27241fd84c5e670e9bc7dd4d07d1a07570d0f2661ed2d164",
+      "hash": "968f34c73a90b651261af27942a6154f863086a5dd5285fdc0a1b3ccca493a19",
       "history": [
         {
           "rev": 1,
@@ -33,6 +33,10 @@
         {
           "rev": 2,
           "hash": "6acece37a2f641da27241fd84c5e670e9bc7dd4d07d1a07570d0f2661ed2d164"
+        },
+        {
+          "rev": 2,
+          "hash": "968f34c73a90b651261af27942a6154f863086a5dd5285fdc0a1b3ccca493a19"
         }
       ]
     },
@@ -158,31 +162,21 @@
     },
     "shared/kaggle-cli.skill.md": {
       "rev": 2,
-      "hash": "59ed3b0e43d31f21a1b66609287150eaf20257e8dc596a18e7e0f1197666f5a0",
+      "hash": "80739fbc4c99396c18ee30c2d66ba171b6b1632c35777c04cfc7e6b35f046437",
       "history": [
         {
           "rev": 2,
           "hash": "59ed3b0e43d31f21a1b66609287150eaf20257e8dc596a18e7e0f1197666f5a0"
-        }
-      ]
-    },
-    "shared/kaggle.py": {
-      "rev": 2,
-      "hash": "da6f4b176b6585f43a76a957f2bbcc1eb0502148d749b6961405aa1df879ce48",
-      "history": [
-        {
-          "rev": 1,
-          "hash": "b9801e5c930d2e0bb4a6c71623b0b5984aaa2072f8270c9268e24300377c3e15"
         },
         {
           "rev": 2,
-          "hash": "da6f4b176b6585f43a76a957f2bbcc1eb0502148d749b6961405aa1df879ce48"
+          "hash": "80739fbc4c99396c18ee30c2d66ba171b6b1632c35777c04cfc7e6b35f046437"
         }
       ]
     },
     "shared/kaggle.rule.md": {
       "rev": 2,
-      "hash": "796c8d71f498aa76feb901337a2b87d437e6cd53af56c88a30104357102af55d",
+      "hash": "d73884536e9138815a0b8a55e3fe775b183505135c6f3425b5c106b7dc653b90",
       "history": [
         {
           "rev": 1,
@@ -191,6 +185,20 @@
         {
           "rev": 2,
           "hash": "796c8d71f498aa76feb901337a2b87d437e6cd53af56c88a30104357102af55d"
+        },
+        {
+          "rev": 2,
+          "hash": "d73884536e9138815a0b8a55e3fe775b183505135c6f3425b5c106b7dc653b90"
+        }
+      ]
+    },
+    "shared/tools/kaggle.py": {
+      "rev": 2,
+      "hash": "1adbfea1a33cbc780548a8383935c75ae708e03f5d22c8966d7e36302a510ac2",
+      "history": [
+        {
+          "rev": 2,
+          "hash": "1adbfea1a33cbc780548a8383935c75ae708e03f5d22c8966d7e36302a510ac2"
         }
       ]
     }

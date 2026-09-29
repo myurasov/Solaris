@@ -8,11 +8,11 @@ except this file and the rev markers the Solaris revs tool adds - Solaris-specif
 
 - **Source:** https://github.com/Kaggle/kaggle-cli - path `skills/` (Apache-2.0)
 - **Mirrored ref:** tag `v2.2.4`, commit `f0afa32699d28c97f82691728ada3ed8c16c5abf` - the release the
-  gateway (`../kaggle.py`) pins.
+  gateway (`../tools/kaggle.py`) pins.
 
 ## Refresh Procedure
 
-Move it together with the gateway pins (`PIN` and `SDK_PIN` in `../kaggle.py`), as one change:
+Move it together with the gateway pins (`PIN` and `SDK_PIN` in `../tools/kaggle.py`), as one change:
 
 1. Fetch the new tag:
    `git clone -q --depth 1 --branch v<X.Y.Z> --filter=blob:none --sparse https://github.com/Kaggle/kaggle-cli <scratch>/kc`,

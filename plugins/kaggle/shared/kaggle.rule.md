@@ -5,7 +5,7 @@ _Rev. 2_
 Always-on while this plugin is attached: what must hold whenever an agent touches Kaggle, even
 when no skill was triggered. The how-to lives in `kaggle-cli.skill.md`.
 
-- **Gateway only.** Every Kaggle command runs through this plugin's `kaggle.py`, started from
+- **Gateway only.** Every Kaggle command runs through this plugin's `tools/kaggle.py`, started from
   the project root or task folder - never a bare `kaggle`, `pip install kaggle`, or
   `uv tool install kaggle`. The gateway pins the CLI and keeps it inside the project or task.
 - **Writes to Kaggle are confirmed first.** Anything that creates, changes, runs, launches,

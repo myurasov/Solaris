@@ -11,13 +11,13 @@ arguments unchanged. With no project or task around (the framework root) it
 runs the same pinned CLI from a throwaway uv environment, so nothing is ever
 installed globally.
 
-    python3 <plugin-dir>/kaggle.py <kaggle args>
+    python3 <plugin-dir>/tools/kaggle.py <kaggle args>
 
 Run it from the project root or task folder. A copied overlay
-(<project>/<pack>/plugins/kaggle/kaggle.py) also finds its project from its
-own location; the live copy in a Solaris checkout
-(<solaris>/plugins/kaggle/shared/kaggle.py, used by linked projects and ad-hoc
-tasks) goes by the working directory only.
+(<project>/<pack>/plugins/kaggle/tools/kaggle.py) also finds its project from
+its own location; the live copy in a Solaris checkout
+(<solaris>/plugins/kaggle/shared/tools/kaggle.py, used by linked projects,
+ad-hoc tasks and the framework root) goes by the working directory only.
 
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
 exactly what the Kaggle CLI printed.
@@ -74,11 +74,12 @@ def find_context():
     for d in chain:
         if is_task(d):
             return d
-    # a copied overlay sits at <project>/<pack>/plugins/kaggle/kaggle.py
+    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle.py
     here = Path(__file__).resolve().parent
-    pack = here.parent.parent
-    if here.parent.name == "plugins" and pack.name in PACKS and (pack / "manifest.json").is_file():
-        return pack.parent
+    if len(here.parents) > 2:
+        plugins, pack = here.parents[1], here.parents[2]
+        if plugins.name == "plugins" and pack.name in PACKS and (pack / "manifest.json").is_file():
+            return pack.parent
     return None
 
 

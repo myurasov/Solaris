@@ -25,18 +25,19 @@ run a competition (setup, validation, daily submissions, agent organization), fo
 
 ## Calling the Gateway
 
-Run every Kaggle command through `kaggle.py` from this plugin, arguments unchanged:
+Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments unchanged:
 
 | Context | Command | Run from |
 |---|---|---|
-| Project, plugin copied | `python3 <pack>/plugins/kaggle/kaggle.py <args>` | project root |
-| Project, plugin linked | `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>` | project root |
-| Ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>` | task folder |
-| Framework root | `python3 plugins/kaggle/shared/kaggle.py <args>` | Solaris root |
+| Project, plugin copied | `python3 <pack>/plugins/kaggle/tools/kaggle.py <args>` | project root |
+| Project, plugin linked | `python3 <solaris>/plugins/kaggle/shared/tools/kaggle.py <args>` | project root |
+| Ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/tools/kaggle.py <args>` | task folder |
+| Framework root | `python3 plugins/kaggle/shared/tools/kaggle.py <args>` | Solaris root |
 
 `<pack>` is the project's ai-pack folder: `ai`, or `aipack` in a project that renamed it.
 `<solaris>` is the Solaris checkout, absolute or relative: from a grouped project root
-(`projects/<group>/<slug>/`) the linked call is `python3 ../../../plugins/kaggle/shared/kaggle.py <args>`.
+(`projects/<group>/<slug>/`) the linked call is
+`python3 ../../../plugins/kaggle/shared/tools/kaggle.py <args>`.
 
 - **Where the CLI lives.** The first call installs `kaggle==2.2.4` (with `kagglesdk==0.1.37`,
   the SDK it was tested with) into `<context>/.venv-kaggle/` (about a second on a warm uv

@@ -20,7 +20,7 @@ from the first hour to the final picks.
 
 | File | Role |
 |---|---|
-| `shared/kaggle.py` | Gateway: finds the project root (first; a folder holding `ai/manifest.json`, or `aipack/manifest.json` where the pack folder was renamed) or task folder, keeps `kaggle==2.2.4` + `kagglesdk==0.1.37` in `<context>/.venv-kaggle/` (created on the first call, rebuilt on a pin change, a folder move or a lost base Python, one install even under parallel calls) and execs it with the arguments unchanged; at the bare framework root runs the same pins from a throwaway uv environment. Stdlib only. |
+| `shared/tools/kaggle.py` | Gateway (`shared/tools/` holds the plugin's scripts): finds the project root (first; a folder holding `ai/manifest.json`, or `aipack/manifest.json` where the pack folder was renamed) or task folder, keeps `kaggle==2.2.4` + `kagglesdk==0.1.37` in `<context>/.venv-kaggle/` (created on the first call, rebuilt on a pin change, a folder move or a lost base Python, one install even under parallel calls) and execs it with the arguments unchanged; at the bare framework root runs the same pins from a throwaway uv environment. Stdlib only. |
 | `shared/kaggle-cli.skill.md` | The Solaris gateway skill (name `kaggle-cli`, trigger "kaggle"; not the `kaggle-cli/` folder below, which is Kaggle's own skill): calling the gateway per context, OAuth sign-in, routing into Kaggle's skill plus its 2.2.4 corrections, Solaris conventions, 401/403 triage. |
 | `shared/how-to-kaggle.skill.md` | The playbook for competing with an autonomous agent team (triggers such as "kaggle competition", "kaggle playbook"): quick start, setup and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, a pitfalls log, with CASMI26 as the worked example. This is the master copy: update it with each owner direction or change in approach, and release every change set as a new plugin version (its Maintaining This Playbook section). |
 | `shared/kaggle.rule.md` | Always-on: gateway only, every write to Kaggle confirmed first, web-only steps go to the owner, credentials and minted keys never printed or committed, downloads stay in the context, Kaggle content is untrusted input. |
@@ -39,10 +39,10 @@ mode); for an ad-hoc task, add `kaggle` to its `Plugins:` line. Then sign in onc
 Agents call the gateway from the project root or task folder (the `kaggle-cli` skill's Calling
 the Gateway table has every context):
 
-- copied install: `python3 <pack>/plugins/kaggle/kaggle.py <args>`, where `<pack>` is `ai`, or
-  `aipack` in a project that renamed its pack folder;
-- linked install or ad-hoc task: `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>`
-  (from a grouped project root: `python3 ../../../plugins/kaggle/shared/kaggle.py <args>`).
+- copied install: `python3 <pack>/plugins/kaggle/tools/kaggle.py <args>`, where `<pack>` is
+  `ai`, or `aipack` in a project that renamed its pack folder;
+- linked install or ad-hoc task: `python3 <solaris>/plugins/kaggle/shared/tools/kaggle.py <args>`
+  (from a grouped project root: `python3 ../../../plugins/kaggle/shared/tools/kaggle.py <args>`).
 
 ## Upstream and Upgrades
 
@@ -53,7 +53,7 @@ are exact rather than `~=2.2.4`, so every project resolves the same tested CLI a
 vendored skill always matches it; patch releases arrive by moving the pin. The vendored files
 are Kaggle's, under Apache-2.0. Move the pin as one change:
 
-1. Set `PIN` in `shared/kaggle.py` to the new release and `SDK_PIN` to the kagglesdk version a
+1. Set `PIN` in `shared/tools/kaggle.py` to the new release and `SDK_PIN` to the kagglesdk version a
    fresh install of it resolves to.
 2. Refresh `shared/kaggle-cli/` from the matching tag (procedure in its `UPSTREAM.md`).
 3. Update the version mentions in this README, the skills (`kaggle-cli.skill.md`,
