@@ -178,14 +178,20 @@ servers, optional project types - so any project can opt into it.
   macOS/Linux, read + send skill, always-on send-confirmation rule), `kaggle` (Kaggle through
   the official Kaggle CLI, CLI only: a gateway that pins the CLI and installs it per project or
   task, Kaggle's own agent skill vendored at the same version, always-on rule confirming every
-  write), `docker-home` (a per-project Linux container that runs the coding harness itself with
+  write; plus a generic competition playbook, a saved leaderboard history for following every
+  team's progress, one Kaggle account's sessions and GPU hours shared between projects, and an
+  hourly competition-forum watch), `docker-home` (a per-project Linux container that runs the coding harness itself with
   only the project folder and the container's home mounted, so nothing above the project exists
   for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
   strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
   tree), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
-  rendering via installed Chrome; per-project theme: fonts, accent color, page furniture).
+  rendering via installed Chrome; per-project theme: fonts, accent color, page furniture),
+  `resource-sharing` (hosts shared by agents and projects: per-host claim files with pinned,
+  watched jobs and yields; sharing links with one owner per host and guest requests; fit against
+  new paid instances; an owner audit so no machine is abandoned; shared pools for account-level
+  limits).
 
 ## 9. Keeping Solaris Projects Current
 
