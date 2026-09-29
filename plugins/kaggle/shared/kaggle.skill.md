@@ -27,18 +27,24 @@ Run every Kaggle command through `kaggle.py` from this plugin, arguments unchang
 
 | Context | Command | Run from |
 |---|---|---|
-| Project, plugin copied | `python3 ai/plugins/kaggle/kaggle.py <args>` | project root |
-| Project, plugin linked; ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>` | project root / task folder |
-| Framework root | the same live path | Solaris root |
+| Project, plugin copied | `python3 <pack>/plugins/kaggle/kaggle.py <args>` | project root |
+| Project, plugin linked | `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>` | project root |
+| Ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>` | task folder |
+| Framework root | `python3 plugins/kaggle/shared/kaggle.py <args>` | Solaris root |
+
+`<pack>` is the project's ai-pack folder: `ai`, or `aipack` in a project that renamed it.
+`<solaris>` is the Solaris checkout, absolute or relative: from a grouped project root
+(`projects/<group>/<slug>/`) the linked call is `python3 ../../../plugins/kaggle/shared/kaggle.py <args>`.
 
 - **Where the CLI lives.** The first call installs `kaggle==2.2.4` (with `kagglesdk==0.1.37`,
   the SDK it was tested with) into `<context>/.venv-kaggle/` (about a second on a warm uv
   cache; the venv git-ignores itself); later calls run it directly. The context is the nearest
-  project root above the working directory (a folder holding `ai/manifest.json`), else the
-  nearest task folder (its `notes.md` header names the ad-hoc-task skill) - so `cd` there
-  first. A copied overlay also finds its project from its own location. With neither (the
-  framework root, or an old task without that header) the gateway runs the same pinned CLI
-  from a throwaway uv environment and says so on stderr.
+  project root above the working directory (a folder holding `ai/manifest.json` or
+  `aipack/manifest.json`), else the nearest task folder (its `notes.md` header names the
+  ad-hoc-task skill) - so `cd` there first. A copied overlay also finds its project from its
+  own location; the live copy under `<solaris>/plugins/` goes by the working directory only.
+  With neither (the framework root, or an old task without that header) the gateway runs the
+  same pinned CLI from a throwaway uv environment and says so on stderr.
 - **Self-healing.** A changed pin (plugin update), a moved folder, or a removed base Python
   triggers a clean reinstall on the next call; parallel first calls wait for a single install;
   deleting `.venv-kaggle/` is a safe reset. Never `pip install kaggle`, `uv tool install

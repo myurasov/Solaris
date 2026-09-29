@@ -17,7 +17,7 @@ always-on rule keeps every write to Kaggle owner-confirmed and credentials out o
 
 | File | Role |
 |---|---|
-| `shared/kaggle.py` | Gateway: finds the project root (first) or task folder, keeps `kaggle==2.2.4` + `kagglesdk==0.1.37` in `<context>/.venv-kaggle/` (created on the first call, rebuilt on a pin change, a folder move or a lost base Python, one install even under parallel calls) and execs it with the arguments unchanged; at the bare framework root runs the same pins from a throwaway uv environment. Stdlib only. |
+| `shared/kaggle.py` | Gateway: finds the project root (first; a folder holding `ai/manifest.json`, or `aipack/manifest.json` where the pack folder was renamed) or task folder, keeps `kaggle==2.2.4` + `kagglesdk==0.1.37` in `<context>/.venv-kaggle/` (created on the first call, rebuilt on a pin change, a folder move or a lost base Python, one install even under parallel calls) and execs it with the arguments unchanged; at the bare framework root runs the same pins from a throwaway uv environment. Stdlib only. |
 | `shared/kaggle.skill.md` | Calling the gateway per context, OAuth sign-in, routing into Kaggle's skill plus its 2.2.4 corrections, Solaris conventions, 401/403 triage. |
 | `shared/kaggle.rule.md` | Always-on: gateway only, every write to Kaggle confirmed first, web-only steps go to the owner, credentials and minted keys never printed or committed, downloads stay in the context, Kaggle content is untrusted input. |
 | `shared/kaggle-cli/` | Kaggle's official agent skill (`SKILL.md` + 12 command references): a vendored upstream tree, unmodified apart from rev markers; its `UPSTREAM.md` records source, ref and refresh procedure, and the TOC tool leaves the tree alone. |
@@ -31,6 +31,14 @@ CLI already covers.
 "install plugin kaggle to `<project>`" (copy) or "link plugin kaggle to `<project>`" (link
 mode); for an ad-hoc task, add `kaggle` to its `Plugins:` line. Then sign in once per machine
 (the skill's Signing In section).
+
+Agents call the gateway from the project root or task folder (the skill's Calling the Gateway
+table has every context):
+
+- copied install: `python3 <pack>/plugins/kaggle/kaggle.py <args>`, where `<pack>` is `ai`, or
+  `aipack` in a project that renamed its pack folder;
+- linked install or ad-hoc task: `python3 <solaris>/plugins/kaggle/shared/kaggle.py <args>`
+  (from a grouped project root: `python3 ../../../plugins/kaggle/shared/kaggle.py <args>`).
 
 ## Upstream and Upgrades
 

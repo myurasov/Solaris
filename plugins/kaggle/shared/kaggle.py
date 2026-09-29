@@ -3,14 +3,21 @@
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
 Solaris agents run this instead of a bare `kaggle`. It finds the calling
-context - a project root (the folder holding ai/manifest.json) or an ad-hoc
-task folder (the one holding the task notes.md) - keeps a private venv there
-with exactly the pinned CLI installed, and execs that CLI with the arguments
-unchanged. With no project or task around (the framework root) it runs the
-same pinned CLI from a throwaway uv environment, so nothing is ever installed
-globally.
+context - a project root (the folder holding <pack>/manifest.json, where the
+ai-pack folder <pack> is ai, or aipack in a project that renamed it) or an
+ad-hoc task folder (the one holding the task notes.md) - keeps a private venv
+there with exactly the pinned CLI installed, and execs that CLI with the
+arguments unchanged. With no project or task around (the framework root) it
+runs the same pinned CLI from a throwaway uv environment, so nothing is ever
+installed globally.
 
     python3 <plugin-dir>/kaggle.py <kaggle args>
+
+Run it from the project root or task folder. A copied overlay
+(<project>/<pack>/plugins/kaggle/kaggle.py) also finds its project from its
+own location; the live copy in a Solaris checkout
+(<solaris>/plugins/kaggle/shared/kaggle.py, used by linked projects and ad-hoc
+tasks) goes by the working directory only.
 
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
 exactly what the Kaggle CLI printed.
@@ -31,6 +38,8 @@ SDK_PIN = "0.1.37"
 REQS = [f"kaggle=={PIN}", f"kagglesdk=={SDK_PIN}"]
 ENV_DIR = ".venv-kaggle"
 STAMP = ".solaris-kaggle-pin"
+# ai-pack folder names that mark a project root: the Solaris default and a renamed pack
+PACKS = ("ai", "aipack")
 
 
 def say(msg):
@@ -50,23 +59,26 @@ def is_task(d):
     return notes.is_file() and "ad-hoc-task" in notes.read_text(errors="replace")[:4096]
 
 
+def is_project(d):
+    return any((d / pack / "manifest.json").is_file() for pack in PACKS)
+
+
 def find_context():
     """Project root or task folder this call belongs to; None at the framework level."""
     cwd = Path.cwd()
     chain = (cwd, *cwd.parents)
     # a project wins over task-style notes inside it (e.g. graduated research notes)
     for d in chain:
-        if (d / "ai" / "manifest.json").is_file():
+        if is_project(d):
             return d
     for d in chain:
         if is_task(d):
             return d
-    # a copied overlay sits at <project>/ai/plugins/kaggle/kaggle.py
+    # a copied overlay sits at <project>/<pack>/plugins/kaggle/kaggle.py
     here = Path(__file__).resolve().parent
-    if len(here.parents) > 2 and here.parent.name == "plugins" and here.parents[1].name == "ai":
-        root = here.parents[2]
-        if (root / "ai" / "manifest.json").is_file():
-            return root
+    pack = here.parent.parent
+    if here.parent.name == "plugins" and pack.name in PACKS and (pack / "manifest.json").is_file():
+        return pack.parent
     return None
 
 
