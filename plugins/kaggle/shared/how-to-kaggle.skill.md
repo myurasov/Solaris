@@ -1,7 +1,7 @@
 ---
 name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
-summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with its evidence from a worked example (the CASMI26 code competition). Kaggle commands themselves go through the kaggle skill's gateway.
+summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with its evidence from a worked example (the CASMI26 code competition). Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
 _Rev. 1_
 
@@ -31,9 +31,9 @@ CASMI26 numbers in this playbook are examples: 5 submissions a day, a 00:00 UTC 
 internet, a code competition. Each competition's own rules set the real values. Read them into a facts sheet on day
 0, derive every cutoff and plan from that sheet, and re-read the rules whenever the hosts post an update.
 
-Kaggle commands go through the gateway in the `kaggle` skill (`kaggle.skill.md` next to this file), and every write
-to Kaggle follows `kaggle.rule.md`. Project facts (the facts sheet, hosts, ids, scores, plans) live in the project,
-not here.
+Kaggle commands go through the gateway in the `kaggle-cli` skill (`kaggle-cli.skill.md` next to this file), and
+every write to Kaggle follows `kaggle.rule.md`. Project facts (the facts sheet, hosts, ids, scores, plans) live in
+the project, not here.
 
 ## Quick Start for a New Competition
 
@@ -47,8 +47,8 @@ Follow this sequence from minute one; each step points to the section with the r
    - data in `__data/`, outputs in `__out/`.
    See [Setup](#setup).
 2. **Access:**
-   - the Kaggle CLI through the pinned gateway (the `kaggle` skill), on a long-lived API token the owner saves (the
-     agent never handles its value);
+   - the Kaggle CLI through the pinned gateway (the `kaggle-cli` skill), on a long-lived API token the owner saves
+     (the agent never handles its value);
    - a signed-in browser profile as the fallback for reading what the CLI cannot show;
    - the owner-only steps (rules acceptance, phone verification, teams) listed with their URLs.
    See [Kaggle Access](#kaggle-access).
@@ -120,7 +120,7 @@ Follow this sequence from minute one; each step points to the section with the r
 
 ## Kaggle Access
 
-- **CLI first, through the pinned gateway** (the `kaggle` skill; one CLI version installed per project): pages,
+- **CLI first, through the pinned gateway** (the `kaggle-cli` skill; one CLI version installed per project): pages,
   rules, data, leaderboard, submissions, kernels, datasets. A signed-in browser profile is the fallback for reading
   what the CLI cannot show; owner-only steps and every write follow `kaggle.rule.md`.
 - **Owner-only steps** stay with the owner: accepting rules, phone verification, teams, choosing final submissions,

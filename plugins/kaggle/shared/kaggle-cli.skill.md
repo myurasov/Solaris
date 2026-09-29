@@ -1,11 +1,11 @@
 ---
-name: kaggle
+name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
 _Rev. 1_
 
-# Skill: kaggle - Kaggle Through the Pinned CLI <!-- omit in toc -->
+# Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
 - [When to Use](#when-to-use)
 - [Calling the Gateway](#calling-the-gateway)
@@ -80,13 +80,14 @@ Once per machine: credentials live in `~/.kaggle/` and serve every project and t
 
 `kaggle-cli/` next to this file is Kaggle's official agent skill, copied unmodified (apart from
 rev markers) from `github.com/Kaggle/kaggle-cli` at tag `v2.2.4` - the version the gateway
-installs. `kaggle-cli/SKILL.md` holds the command tree and a reference map; read only the
-reference the task needs: `kaggle-cli/references/competitions.md`, `kernels.md`,
-`datasets.md`, `models.md`, `model_variations.md`, `model_variations_versions.md`, `files.md`,
-`forums.md`, `benchmarks.md`, `configuration.md`, `auth.md`, `quota.md`. Apply it with two
-substitutions: every `kaggle <args>` becomes the gateway command above, and its install step
-(`pip install kaggle`) is the gateway's job. Where a flag is unclear,
-`<gateway> <group> <command> --help` is authoritative for the pinned version.
+installs. Upstream names it `kaggle-cli` too: this file (`kaggle-cli.skill.md`) is the Solaris
+gateway skill, the folder is Kaggle's. `kaggle-cli/SKILL.md` holds the command tree and a
+reference map; read only the reference the task needs: `kaggle-cli/references/competitions.md`,
+`kernels.md`, `datasets.md`, `models.md`, `model_variations.md`,
+`model_variations_versions.md`, `files.md`, `forums.md`, `benchmarks.md`, `configuration.md`,
+`auth.md`, `quota.md`. Apply it with two substitutions: every `kaggle <args>` becomes the
+gateway command above, and its install step (`pip install kaggle`) is the gateway's job. Where
+a flag is unclear, `<gateway> <group> <command> --help` is authoritative for the pinned version.
 
 Corrections to it, verified against 2.2.4:
 

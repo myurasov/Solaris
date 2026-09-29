@@ -3,7 +3,7 @@ _Rev. 1_
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
 Always-on while this plugin is attached: what must hold whenever an agent touches Kaggle, even
-when no skill was triggered. The how-to lives in `kaggle.skill.md`.
+when no skill was triggered. The how-to lives in `kaggle-cli.skill.md`.
 
 - **Gateway only.** Every Kaggle command runs through this plugin's `kaggle.py`, started from
   the project root or task folder - never a bare `kaggle`, `pip install kaggle`, or
