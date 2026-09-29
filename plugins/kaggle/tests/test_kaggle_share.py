@@ -1,0 +1,431 @@
+"""Offline tests for shared/tools/kaggle_share.py (stdlib unittest; fixture kernel lists, no network).
+
+    python3 -m unittest discover -s plugins/kaggle/tests
+"""
+
+import contextlib
+import io
+import json
+import os
+import shutil
+import subprocess
+import sys
+import tempfile
+import unittest
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from unittest import mock
+
+TOOLS = Path(__file__).resolve().parents[1] / "shared" / "tools"
+sys.path.insert(0, str(TOOLS))
+import kaggle_share as S  # noqa: E402
+
+NOW = datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc)
+QUOTA = [{"resource": "GPU", "used": "12.00h", "remaining": "18.00h", "total": "30.00h",
+          "refreshAt": "2026-10-03T00:00:00"},
+         {"resource": "TPU", "used": "0.00h", "remaining": "20.00h", "total": "20.00h",
+          "refreshAt": "2026-10-03T00:00:00"}]
+
+
+def at(hours_ago):
+    return S.iso(NOW - timedelta(hours=hours_ago))
+
+
+def kaggle_time(hours_ago):
+    # the CLI's lastRunTime: naive UTC with microseconds
+    return (NOW - timedelta(hours=hours_ago)).strftime("%Y-%m-%dT%H:%M:%S.123000")
+
+
+def ctx(name, last=None, kernels=None):
+    return {"name": name, "root": None, "kind": "project", "last": last, "calls": 1 if last else 0,
+            "kernels": kernels or {}}
+
+
+class FakeKaggle:
+    """Stands in for the gateway: serves quota, the kernel list and statuses from fixtures."""
+
+    def __init__(self, kernels=(), statuses=None, quota=None, fail=()):
+        self.kernels, self.statuses = list(kernels), statuses or {}
+        self.quota, self.fail, self.calls = quota or QUOTA, set(fail), []
+
+    def __call__(self, cmd, cwd):
+        args = cmd[2:]
+        self.calls.append(args)
+        if " ".join(args[:2]) in self.fail:
+            return 1, "403 - Forbidden\n"
+        if args[0] == "quota":
+            return 0, json.dumps(self.quota, indent=2)
+        if args[:2] == ["kernels", "list"]:
+            return 0, "Next Page Token = abc\n" + json.dumps(self.kernels, indent=2)
+        if args[:2] == ["kernels", "status"]:
+            return 0, f'{args[2]} has status "KernelWorkerStatus.{self.statuses.get(args[2], "COMPLETE")}"\n'
+        return 2, "unexpected command"
+
+
+class Tmp(unittest.TestCase):
+    def setUp(self):
+        self.tmp = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.base = self.tmp / "state"
+        env = mock.patch.dict(os.environ, {}, clear=False)
+        env.start()
+        self.addCleanup(env.stop)
+        os.environ.pop(S.ENV_DIR, None)
+
+    def tree(self):
+        """A small Solaris checkout: alpha (aipack) and beta (ai) with kernels, gamma with only the plugin."""
+        sol = self.tmp / "sol"
+        (sol / "solaris").mkdir(parents=True)
+        (sol / "solaris" / "solaris.agent.md").write_text("x")
+        specs = {"my/alpha": ("aipack", {"source/kaggle/k1": {"id": "alice/alpha-gpu", "enable_gpu": True},
+                                         "source/kaggle/k2": {"id": "alice/alpha-cpu", "enable_gpu": False},
+                                         ".venv/x": {"id": "alice/hidden"}, "__out/y": {"id": "alice/local"}}),
+                 "nv/beta": ("ai", {"kernels/b1": {"id": "Alice/Beta-GPU", "machine_shape": "NvidiaTeslaT4"}}),
+                 "tmp/gamma": ("ai", {}), "tmp/plain": ("ai", {})}
+        for rel, (pack, kernels) in specs.items():
+            root = sol / "projects" / rel
+            (root / pack).mkdir(parents=True)
+            (root / pack / "manifest.json").write_text("{}")
+            for d, meta in kernels.items():
+                (root / d).mkdir(parents=True)
+                (root / d / "kernel-metadata.json").write_text(json.dumps(meta))
+        (sol / "projects" / "tmp" / "gamma" / "ai" / "plugins" / "kaggle").mkdir(parents=True)
+        return sol
+
+    def config(self, **raw):
+        S.write_json(self.base / "sharing.json", raw)
+        return S.load_config(self.base)
+
+
+class DetectionTests(Tmp):
+    def test_projects_and_kernels_come_from_the_tree(self):
+        contexts = S.gather(self.tree(), [])
+        self.assertEqual(sorted(contexts), ["alpha", "beta", "gamma"])
+        self.assertEqual(contexts["alpha"]["kernels"], {"alice/alpha-gpu": "gpu", "alice/alpha-cpu": "cpu"})
+        self.assertEqual(contexts["beta"]["kernels"], {"alice/beta-gpu": "gpu"})
+        self.assertEqual(contexts["gamma"]["kernels"], {})
+
+    def test_stamp_keeps_the_command_words_only(self):
+        root = self.tree() / "projects" / "my" / "alpha"
+        p = S.stamp(root, ["kernels", "push", "-p", "SECRETDIR/x"], now=NOW, base=self.base)
+        S.stamp(root, ["competitions", "submit", "slug", "-m", "SECRETNOTE"], now=NOW + timedelta(hours=1),
+                base=self.base)
+        s = json.loads(p.read_text())
+        self.assertEqual((s["calls"], s["command"], s["kind"], s["name"]), (2, "competitions submit", "project",
+                                                                            "alpha"))
+        self.assertEqual((s["first"], s["last"]), (S.iso(NOW), S.iso(NOW + timedelta(hours=1))))
+        self.assertNotIn("SECRET", p.read_text())
+        self.assertNotIn("slug", p.read_text())
+        self.assertEqual(p.parent, self.base / "activity")
+
+    def test_monitoring_calls_are_not_stamped(self):
+        root = self.tree() / "projects" / "my" / "alpha"
+        os.environ[S.QUIET_ENV] = "1"
+        self.assertIsNone(S.stamp(root, ["kernels", "status"], now=NOW, base=self.base))
+        self.assertEqual(S.load_stamps(self.base), [])
+        with mock.patch.object(S.subprocess, "run") as run:
+            run.return_value = mock.Mock(returncode=0, stdout="[]", stderr="")
+            os.environ.pop(S.QUIET_ENV)
+            S._run(["gw", "quota"], self.tmp)
+        self.assertEqual(run.call_args.kwargs["env"][S.QUIET_ENV], "1")
+
+    def test_default_state_folder_is_not_the_credentials_folder(self):
+        self.assertEqual(S.state_dir().parts[-2:], (".solaris", "kaggle"))
+        os.environ[S.ENV_DIR] = str(self.tmp / "x")
+        self.assertEqual(S.state_dir(), self.tmp / "x")
+
+    def test_recent_gateway_calls_make_a_project_active(self):
+        sol = self.tree()
+        root = sol / "projects" / "my" / "alpha"
+        S.stamp(root, ["kernels", "list"], now=NOW - timedelta(hours=23), base=self.base)
+        contexts = S.gather(sol, S.load_stamps(self.base))
+        cfg, state = S.load_config(self.base), S.load_state(self.base)
+        view = S.build_view(cfg, contexts, None, state, [], NOW)
+        self.assertTrue(view["projects"]["alpha"]["active"])
+        self.assertIsNone(view["projects"]["beta"]["active"])
+        later = S.build_view(cfg, contexts, None, state, [], NOW + timedelta(hours=2))
+        self.assertIsNone(later["projects"]["alpha"]["active"])
+
+    def test_a_stamp_outside_the_tree_is_a_context(self):
+        task = self.tmp / "task"
+        task.mkdir()
+        (task / "notes.md").write_text("Skill: ad-hoc-task\n")
+        S.stamp(task, ["kernels", "status"], now=NOW, base=self.base)
+        contexts = S.gather(None, S.load_stamps(self.base))
+        self.assertEqual(contexts["task"]["kind"], "task")
+
+    def test_scan_checks_only_kernels_run_in_the_last_hours(self):
+        fake = FakeKaggle([{"ref": "alice/a", "lastRunTime": kaggle_time(1)},
+                           {"ref": "alice/b", "lastRunTime": kaggle_time(5)},
+                           {"ref": "alice/c", "lastRunTime": kaggle_time(20)}], {"alice/a": "RUNNING"})
+        acc = S.scan_account(Path("gw.py"), self.tmp, run=fake, now=NOW)
+        self.assertEqual([(k["ref"], k["status"]) for k in acc["kernels"]],
+                         [("alice/a", "RUNNING"), ("alice/b", "COMPLETE")])
+        self.assertEqual(acc["calls"], 4)
+        self.assertEqual(acc["quota"]["gpu"], {"used": 12.0, "remaining": 18.0, "total": 30.0,
+                                               "refresh": "2026-10-03T00:00:00"})
+        again = S.scan_account(Path("gw.py"), self.tmp, run=fake, now=NOW, cache=acc)
+        self.assertEqual(again["calls"], 3)  # the finished run is not asked again
+        for cmd in fake.calls:
+            self.assertIn(cmd[0], ("quota", "kernels"))
+            self.assertNotIn(cmd[:2], (["kernels", "push"], ["kernels", "delete"]))
+
+    def test_failed_reads_are_reported_not_fatal(self):
+        acc = S.scan_account(Path("gw.py"), self.tmp, run=FakeKaggle(fail={"kernels list"}), now=NOW)
+        self.assertFalse(acc["listed"])
+        self.assertTrue(any("kernels list" in e for e in acc["errors"]))
+        self.assertIsNotNone(acc["quota"])
+
+    def test_status_line_parsing(self):
+        self.assertEqual(S.parse_status('alice/x has status "KernelWorkerStatus.QUEUED"\n'), "QUEUED")
+        self.assertEqual(S.parse_status('alice/x has status "ERROR"\nFailure message: "boom"\n'), "ERROR")
+        with self.assertRaises(S.ShareError):
+            S.parse_status("403 - Forbidden")
+
+    def test_running_kernels_map_to_projects_and_kinds(self):
+        contexts = S.gather(self.tree(), [])
+        account = {"at": S.iso(NOW), "listed": True, "kinds": {}, "kernels": [
+            {"ref": "alice/alpha-gpu", "last_run": kaggle_time(1), "status": "RUNNING"},
+            {"ref": "alice/beta-gpu", "last_run": kaggle_time(1), "status": "QUEUED"},
+            {"ref": "alice/alpha-cpu", "last_run": kaggle_time(2), "status": "COMPLETE"},
+            {"ref": "alice/elsewhere", "last_run": kaggle_time(1), "status": "RUNNING"}]}
+        view = S.build_view(S.load_config(self.base), contexts, account, S.load_state(self.base), [], NOW)
+        self.assertEqual(view["projects"]["alpha"]["used"], {"cpu": 0, "gpu": 1})
+        self.assertEqual(view["projects"]["beta"]["used"], {"cpu": 0, "gpu": 1})
+        self.assertEqual(view["other"]["unknown"], 1)
+        self.assertEqual(view["in_use"], {"cpu": 0, "gpu": 2})
+        self.assertIn("1 queued or running", view["projects"]["alpha"]["active"])
+        self.assertIsNone(view["projects"]["gamma"]["active"])
+
+
+class SplitTests(Tmp):
+    def view(self, cfg, contexts, **kw):
+        state = kw.pop("state", None) or S.load_state(self.base)
+        return S.build_view(cfg, contexts, kw.pop("account", None), state, kw.pop("ledger", []), NOW, **kw)
+
+    def three(self):
+        return {n: ctx(n, last=at(1)) for n in ("alpha", "beta", "gamma")}
+
+    def test_equal_shares_round_up_and_split_the_gpu_hours(self):
+        v = self.view(S.load_config(self.base), self.three())
+        for n in ("alpha", "beta", "gamma"):
+            self.assertEqual(v["projects"][n]["share"], {"cpu": 2, "gpu": 1})
+            self.assertAlmostEqual(v["projects"][n]["gpu_budget"], 10.0)
+
+    def test_weights_override_detection(self):
+        cfg = self.config(weights={"alpha": 3, "beta": 1})
+        contexts = {"alpha": ctx("alpha"), "beta": ctx("beta", last=at(1)), "gamma": ctx("gamma", last=at(1))}
+        v = self.view(cfg, contexts)
+        self.assertEqual(v["projects"]["alpha"]["share"], {"cpu": 4, "gpu": 2})
+        self.assertEqual(v["projects"]["beta"]["share"], {"cpu": 2, "gpu": 1})
+        self.assertEqual(v["projects"]["gamma"]["share"], {"cpu": 0, "gpu": 0})
+        self.assertAlmostEqual(v["projects"]["alpha"]["gpu_budget"], 22.5)
+        self.assertAlmostEqual(v["projects"]["beta"]["gpu_budget"], 7.5)
+
+    def test_only_caps_and_reserve(self):
+        cfg = self.config(only="beta", caps={"beta": {"gpu": 1, "gpu_hours": 12}}, reserve={"gpu": 1})
+        v = self.view(cfg, self.three())
+        self.assertEqual(v["cap"], {"cpu": 5, "gpu": 1})
+        self.assertEqual(v["projects"]["beta"]["share"], {"cpu": 5, "gpu": 1})
+        self.assertAlmostEqual(v["projects"]["beta"]["gpu_budget"], 12.0)
+        self.assertEqual(v["projects"]["alpha"]["share"], {"cpu": 0, "gpu": 0})
+        ok, _, why = S.decide(self.view(cfg, self.three(), requester="alpha"), cfg, "alpha", "cpu")
+        self.assertFalse(ok)
+        self.assertIn("only to beta", why)
+
+    def test_gpu_hours_this_week_come_from_the_ledger_and_open_leases(self):
+        account = {"at": S.iso(NOW), "quota": S.parse_quota(json.dumps(QUOTA)), "kernels": []}
+        ledger = [{"project": "alpha", "kind": "gpu", "end": at(24), "hours": 4.0},
+                  {"project": "alpha", "kind": "gpu", "end": at(24 * 5), "hours": 3.0},  # before the week began
+                  {"project": "alpha", "kind": "cpu", "end": at(2), "hours": 9.0}]
+        state = {"leases": {"l1": {"id": "l1", "project": "alpha", "kind": "gpu", "acquired": at(2),
+                                   "expires": at(-10)}}, "waiters": {}}
+        v = self.view(S.load_config(self.base), self.three(), account=account, ledger=ledger, state=state)
+        self.assertEqual(v["week_start"], "2026-09-26T00:00:00Z")
+        self.assertAlmostEqual(v["projects"]["alpha"]["gpu_hours"], 6.0)
+        self.assertAlmostEqual(v["gpu_hours_left"], 18.0)
+
+
+class LeaseTests(Tmp):
+    def setUp(self):
+        super().setUp()
+        self.cfg = S.load_config(self.base)
+        self.contexts = {"alpha": ctx("alpha", last=at(1)), "beta": ctx("beta", last=at(1))}
+
+    def take(self, project, kind="gpu", cfg=None, account=None, **kw):
+        return S.try_acquire(self.base, cfg or self.cfg, self.contexts, account, project, kind, now=NOW, **kw)
+
+    def test_share_then_borrow_then_refuse_then_release(self):
+        l1, why, _ = self.take("alpha")
+        self.assertEqual((bool(l1), why), (True, "within its share"))
+        l2, why, _ = self.take("alpha")
+        self.assertTrue(l2["borrowed"])
+        self.assertIn("borrowed", why)
+        l3, why, view = self.take("beta")
+        self.assertIsNone(l3)
+        self.assertIn("all 2 GPU sessions are in use", why)
+        self.assertEqual(view["in_use"]["gpu"], 2)
+        S.release(self.base, ids=[l2["id"]], now=NOW + timedelta(hours=2))
+        l4, why, _ = self.take("beta")
+        self.assertEqual(why, "within its share")
+        self.assertIsNone(self.take("alpha")[0])
+        (entry,) = S.load_ledger(self.base)
+        self.assertEqual((entry["project"], entry["borrowed"], entry["hours"], entry["how"]),
+                         ("alpha", True, 2.0, "released"))
+
+    def test_no_borrowing_while_another_project_uses_its_share(self):
+        cfg = self.config(limits={"gpu": 4})
+        self.assertTrue(self.take("beta", cfg=cfg)[0])
+        self.assertTrue(self.take("alpha", cfg=cfg)[0])
+        self.assertTrue(self.take("alpha", cfg=cfg)[0])
+        lease, why, _ = self.take("alpha", cfg=cfg)
+        self.assertIsNone(lease)
+        self.assertIn("beta still use or wait", why)
+
+    def test_a_waiting_project_blocks_borrowing(self):
+        self.assertTrue(self.take("alpha")[0])
+        S.set_waiter(self.base, {"id": "w1", "project": "beta", "kind": "gpu", "since": S.iso(NOW),
+                                 "until": S.iso(NOW + timedelta(minutes=30)), "pid": os.getpid()})
+        lease, why, _ = self.take("alpha")
+        self.assertIsNone(lease)
+        self.assertIn("beta", why)
+        S.set_waiter(self.base, remove="w1")
+        self.assertTrue(self.take("alpha")[0])
+
+    def test_a_gone_waiter_is_dropped(self):
+        S.set_waiter(self.base, {"id": "w1", "project": "beta", "kind": "gpu", "since": S.iso(NOW),
+                                 "until": S.iso(NOW + timedelta(minutes=30)), "pid": 2 ** 22 + 12345})
+        self.take("alpha")
+        self.assertEqual(S.load_state(self.base)["waiters"], {})
+
+    def test_caps_and_the_weekly_quota(self):
+        cfg = self.config(caps={"alpha": {"gpu": 1}})
+        self.assertTrue(self.take("alpha", cfg=cfg)[0])
+        lease, why, _ = self.take("alpha", cfg=cfg)
+        self.assertIn("capped at 1", why)
+        spent = {"at": S.iso(NOW), "kernels": [], "quota": {"gpu": {"used": 30.0, "remaining": 0.0, "total": 30.0,
+                                                                    "refresh": "2026-10-03T00:00:00"}}}
+        lease, why, _ = self.take("beta", account=spent)
+        self.assertIsNone(lease)
+        self.assertIn("GPU hours left", why)
+        self.assertTrue(self.take("beta", kind="cpu", account=spent)[0])
+
+    def test_a_used_up_gpu_budget_is_over_share(self):
+        self.base.mkdir(parents=True, exist_ok=True)
+        with open(self.base / "ledger.jsonl", "a") as f:
+            f.write(json.dumps({"project": "alpha", "kind": "gpu", "end": at(3), "hours": 15.5}) + "\n")
+        self.assertTrue(self.take("beta", kind="gpu")[0])
+        lease, why, _ = self.take("alpha")
+        self.assertIsNone(lease)  # beta is using its share, so alpha cannot borrow hours
+        self.assertIn("has used its share", why)
+
+    def test_finished_and_expired_leases_close_themselves(self):
+        a1 = self.take("alpha", kernel="alice/alpha-gpu")[0]
+        b1 = self.take("beta", kind="cpu")[0]
+        state = S.load_state(self.base)
+        state["leases"][b1["id"]]["expires"] = at(-0.5)
+        done = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(-0.25), "status": "COMPLETE"}]}
+        closed = S.tidy(self.base, state, done, NOW + timedelta(hours=1))
+        self.assertEqual({x["id"] for x, _h in closed}, {a1["id"], b1["id"]})
+        hows = {e["project"]: (e["how"], e["hours"]) for e in S.load_ledger(self.base)}
+        self.assertEqual(hows, {"alpha": ("finished", 1.0), "beta": ("expired", 0.5)})
+
+    def test_an_older_finished_run_does_not_close_a_new_lease(self):
+        self.take("alpha", kernel="alice/alpha-gpu")
+        state = S.load_state(self.base)
+        old = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(3), "status": "COMPLETE"}]}
+        self.assertEqual(S.tidy(self.base, state, old, NOW), [])
+
+    def test_a_lease_and_its_running_kernel_are_one_session(self):
+        self.take("alpha", kernel="alice/alpha-gpu")
+        account = {"kinds": {}, "kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(0.1),
+                                             "status": "RUNNING"}]}
+        view = S.build_view(self.cfg, self.contexts, account, S.load_state(self.base), [], NOW)
+        self.assertEqual(view["projects"]["alpha"]["used"]["gpu"], 1)
+        self.assertEqual(view["running"][0]["kind"], "gpu")
+
+    def test_release_needs_a_unique_match(self):
+        self.take("alpha", kernel="alice/k1")
+        self.take("alpha", kind="cpu", kernel="alice/k2")
+        with self.assertRaises(S.ShareError):
+            S.release(self.base, project="alpha")
+        (one,) = S.release(self.base, project="alpha", kernel="ALICE/K1")
+        self.assertEqual(one[0]["kernel"], "alice/k1")
+        self.assertEqual(len(S.release(self.base, project="alpha", all_=True)), 1)
+        with self.assertRaises(S.ShareError):
+            S.release(self.base, ids=["nope"])
+
+
+class ConcurrencyTests(Tmp):
+    def test_parallel_acquires_never_overbook_the_pool(self):
+        S.write_json(self.base / "sharing.json", {"limits": {"gpu": 2}})
+        cmd = [sys.executable, str(TOOLS / "kaggle_share.py"), "acquire", "--kind", "gpu", "--offline",
+               "--solaris", "none", "--state", str(self.base)]
+        procs = [subprocess.Popen([*cmd, "--project", f"p{i}"], cwd=self.tmp, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE) for i in range(6)]
+        codes = sorted(p.wait(timeout=60) for p in procs)
+        for p in procs:
+            p.stdout.close()
+            p.stderr.close()
+        self.assertEqual(codes, [0, 0, 3, 3, 3, 3])
+        state = json.loads((self.base / "state.json").read_text())
+        self.assertEqual(len(state["leases"]), 2)
+
+
+class CommandTests(Tmp):
+    def run_main(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = S.main([*argv, "--state", str(self.base)])
+        return code, out.getvalue(), err.getvalue()
+
+    def test_config_round_trip(self):
+        code, out, _ = self.run_main("config", "--weight", "alpha=3", "--weight", "beta=1",
+                                     "--cap", "beta:gpu=1", "--reserve", "gpu=1", "--note", "owner: favour alpha")
+        self.assertEqual(code, 0)
+        cfg = S.load_config(self.base)
+        self.assertEqual((cfg["mode"], cfg["weights"], cfg["caps"], cfg["reserve"]["gpu"]),
+                         ("weights", {"alpha": 3.0, "beta": 1.0}, {"beta": {"gpu": 1.0}}, 1.0))
+        self.run_main("config", "--only", "beta")
+        self.assertEqual(S.load_config(self.base)["only"], ["beta"])
+        self.run_main("config", "--equal")
+        self.assertEqual(S.load_config(self.base)["mode"], "auto")
+        self.assertEqual(self.run_main("config", "--cap", "beta:tpu=1")[0], 1)
+
+    def test_acquire_from_a_kernel_folder_then_status_and_release(self):
+        sol = self.tree()
+        kdir = sol / "projects" / "my" / "alpha" / "source" / "kaggle" / "k1"
+        code, out, _ = self.run_main("acquire", "--offline", "--solaris", str(sol), "--path", str(kdir), "--json")
+        self.assertEqual(code, 0)
+        lease = json.loads(out)
+        self.assertEqual((lease["project"], lease["kind"], lease["kernel"]), ("alpha", "gpu", "alice/alpha-gpu"))
+        code, out, _ = self.run_main("status", "--offline", "--solaris", str(sol))
+        self.assertEqual(code, 0)
+        self.assertIn("Sessions in use: CPU 0/5, GPU 1/2", out)
+        self.assertIn(lease["id"], out)
+        code, out, _ = self.run_main("status", "--offline", "--solaris", str(sol), "--json")
+        self.assertEqual(json.loads(out)["projects"]["alpha"]["used"]["gpu"], 1)
+        code, out, _ = self.run_main("release", "--path", str(kdir))
+        self.assertEqual(code, 0)
+        self.assertIn("released", out)
+        code, out, _ = self.run_main("ledger")
+        self.assertIn("alpha", out)
+
+    def test_acquire_refusal_exit_code(self):
+        S.write_json(self.base / "sharing.json", {"only": ["beta"]})
+        code, _, err = self.run_main("acquire", "--offline", "--solaris", "none", "--kind", "gpu",
+                                     "--project", "alpha")
+        self.assertEqual(code, S.EXIT_REFUSED)
+        self.assertIn("refused", err)
+
+    def test_stamp_command(self):
+        proj = self.tmp / "p"
+        (proj / "ai").mkdir(parents=True)
+        (proj / "ai" / "manifest.json").write_text("{}")
+        code, out, _ = self.run_main("stamp", "--path", str(proj))
+        self.assertEqual(code, 0)
+        self.assertEqual(S.load_stamps(self.base)[0]["root"], str(proj))
+
+
+if __name__ == "__main__":
+    unittest.main()
