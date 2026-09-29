@@ -406,12 +406,31 @@ class LeaseTests(Tmp):
         self.assertEqual(S.tidy(self.base, state, old, NOW), [])
 
     def test_a_run_on_a_slower_kaggle_clock_still_closes_the_lease(self):
-        lease = self.take("alpha", kernel="alice/alpha-gpu")[0]
+        read = {"at": S.iso(NOW), "listed": True, "kinds": {}, "kernels": []}
+        lease = self.take("alpha", kernel="alice/alpha-gpu", account=read)[0]
+        self.assertNotIn("prior_unknown", lease)
         state = S.load_state(self.base)
         # Kaggle's clock is 5 minutes behind this machine's, so its run seems to start before the lease
         done = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(5 / 60), "status": "COMPLETE"}]}
         ((closed, _h),) = S.tidy(self.base, state, done, NOW + timedelta(hours=1))
         self.assertEqual(closed["id"], lease["id"])
+
+    def test_without_an_account_read_at_acquire_only_a_later_run_closes_the_lease(self):
+        # the read failed (not listed), or only an old cached read was at hand (--offline)
+        failed = {"at": S.iso(NOW), "listed": False, "kinds": {}, "kernels": [], "errors": ["kernels list failed"]}
+        old = {"at": at(2), "listed": True, "kinds": {}, "kernels": []}
+        for account in (failed, old, None):
+            lease = self.take("alpha", kernel="alice/alpha-gpu", account=account)[0]
+            self.assertTrue(lease["prior_unknown"])
+            self.assertNotIn("prior_run", lease)
+            state = S.load_state(self.base)
+            # a run that finished within the clock slack before the lease is not this lease's run
+            before = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(5 / 60), "status": "COMPLETE"}]}
+            self.assertEqual(S.tidy(self.base, state, before, NOW + timedelta(minutes=30)), [])
+            after = {"kernels": [{"ref": "alice/alpha-gpu", "last_run": kaggle_time(-0.1), "status": "COMPLETE"}]}
+            ((closed, _h),) = S.tidy(self.base, state, after, NOW + timedelta(hours=1))
+            self.assertEqual(closed["id"], lease["id"])
+            S.write_json(self.base / "state.json", state)
 
     def test_the_run_kaggle_showed_before_the_lease_never_closes_it(self):
         before = {"at": S.iso(NOW), "listed": True, "kinds": {}, "kernels": [

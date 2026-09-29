@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle_share: share one Kaggle account's sessions and GPU quota between projects.
 
@@ -559,13 +559,15 @@ def run_finished(lease, run):
 
     The run must not be the one Kaggle showed when the lease was taken (prior_run, both times on
     Kaggle's clock), and must have started no earlier than the lease less CLOCK_SLACK (Kaggle's
-    clock against this machine's).
+    clock against this machine's). When Kaggle could not be read at acquire (prior_unknown), the
+    run it showed then is unknown, so the slack is dropped: only a run started after the lease counts.
     """
     if not run or run["status"] not in DONE:
         return False
     if "prior_run" in lease and run["last_run"] == lease["prior_run"]:
         return False
-    return parse_time(run["last_run"]) >= parse_time(lease["acquired"]) - CLOCK_SLACK
+    slack = timedelta(0) if lease.get("prior_unknown") else CLOCK_SLACK
+    return parse_time(run["last_run"]) >= parse_time(lease["acquired"]) - slack
 
 
 def tidy(base, state, account, now):
@@ -731,6 +733,16 @@ def decide(view, cfg, project, kind, hours=None):
     return True, True, "borrowed while the other projects are idle"
 
 
+def fresh_listing(account, now):
+    """Whether the account read listed the kernels just now (within FRESH_SECONDS), so it shows their last runs."""
+    if not (account or {}).get("listed") or not account.get("at"):
+        return False
+    try:
+        return abs((now - parse_time(account["at"])).total_seconds()) <= FRESH_SECONDS
+    except (TypeError, ValueError):
+        return False
+
+
 def try_acquire(base, cfg, contexts, account, project, kind, *, kernel=None, root=None, hours=None, note=None,
                 now=None):
     """One attempt under the lock; returns (lease or None, reason, view)."""
@@ -747,10 +759,13 @@ def try_acquire(base, cfg, contexts, account, project, kind, *, kernel=None, roo
                      "root": str(root) if root else None, "kind": kind, "kernel": kernel, "acquired": iso(now),
                      "expires": iso(now + timedelta(hours=float(cfg["lease_hours"]))), "borrowed": borrowed,
                      "hours": hours, "note": note}
-            if kernel and (account or {}).get("listed"):
+            if kernel and fresh_listing(account, now):
                 # the kernel's last run as Kaggle showed it now: that run never closes this lease
                 lease["prior_run"] = next((k["last_run"] for k in account.get("kernels", []) if k["ref"] == kernel),
                                           None)
+            elif kernel:
+                # the account read failed or is old: record that, so no run from before the lease closes it
+                lease["prior_unknown"] = True
             state["leases"][lease["id"]] = lease
         write_json(Path(base) / "state.json", state)
     return lease, why, view

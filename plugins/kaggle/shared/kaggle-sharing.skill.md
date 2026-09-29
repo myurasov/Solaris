@@ -3,7 +3,7 @@ name: kaggle-sharing
 triggers: ["kaggle sessions", "share the kaggle account", "kaggle quota", "kaggle sharing", "kaggle gpu quota", "kaggle concurrent sessions"]
 summary: Share one Kaggle account between the projects using it - detects the active projects (account-wide queued and running kernels, local gateway activity), splits the concurrent CPU and GPU sessions and the weekly GPU hours equally or as the user directs, and hands out a lease around each kernel run. Covers kaggle_share.py (status, acquire, release, ledger, config, stamp) and the agent routine.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: kaggle-sharing - One Kaggle Account, Several Projects <!-- omit in toc -->
 
@@ -104,8 +104,10 @@ Run from the project root or task folder:
 <folder>` (or `KAGGLE_SHARE_DIR`). A lease ends when it is released, when Kaggle shows its kernel's run
 finished (if the lease names the kernel), or after 12 hours. The finished run must be a new one: not
 the run Kaggle showed when the lease was taken, and started no more than 10 minutes before the lease,
-since Kaggle's clock and this machine's can differ. A push that fails or is declined starts no run,
-so only a release ends that lease early.
+since Kaggle's clock and this machine's can differ. When Kaggle could not be read at `acquire` (the
+read failed, or `--offline` had only an older read), the lease records that (`prior_unknown`), and
+only a run started after the lease closes it. A push that fails or is declined starts no run, so
+only a release ends that lease early.
 
 ## Agent Routine
 
