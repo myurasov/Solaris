@@ -1,0 +1,36 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/resource-sharing.rule.md": {
+      "rev": 1,
+      "hash": "603a12410494a4b6716e7f7341b1a5b88945a148b36f9226164a3900b9922b10",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "603a12410494a4b6716e7f7341b1a5b88945a148b36f9226164a3900b9922b10"
+        }
+      ]
+    },
+    "shared/resource-sharing.skill.md": {
+      "rev": 1,
+      "hash": "23e4301838880fbc98d8725c8fcdfdf35233a22713db726549de46419a9bfd5c",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "23e4301838880fbc98d8725c8fcdfdf35233a22713db726549de46419a9bfd5c"
+        }
+      ]
+    },
+    "shared/tools/hostclaims.py": {
+      "rev": 1,
+      "hash": "e956825e3b3edd24900167edc97b3ee57ee4e5cedd46047fcec31072d40d493e",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "e956825e3b3edd24900167edc97b3ee57ee4e5cedd46047fcec31072d40d493e"
+        }
+      ]
+    }
+  }
+}
