@@ -1,9 +1,9 @@
 ---
 name: browserctl
-triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page"]
+triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page", "bot check", "cloudflare challenge", "verify you are human", "headless is blocked"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -12,6 +12,7 @@ _Rev. 10_
 - [Command Reference](#command-reference)
 - [Typical Flows](#typical-flows)
 - [Scripting Anything Else: attach()](#scripting-anything-else-attach)
+- [Bot Checks, Headless Mode and Long Crawls](#bot-checks-headless-mode-and-long-crawls)
 - [Hard Rules and Known Constraints](#hard-rules-and-known-constraints)
 
 ## Why This Exists
@@ -134,6 +135,54 @@ leave them in the repo root. `attach()` disconnects on exit; the browser keeps r
 For SPA-heavy sites (Slack, SharePoint, ...) always `page.goto(url,
 wait_until="domcontentloaded")` - such apps often never fire `load` and the default wait times
 out.
+
+## Bot Checks, Headless Mode and Long Crawls
+
+Measured 2026-09-30 on 21 sites (retail, price comparison, fragrance databases) from one home
+connection: headless as launched got the real page on 5 of 21, headless with a desktop Chrome
+identity on 18, headed on 20.
+
+- **Headless announces itself.** Its user agent says `HeadlessChrome/<ver>`, so Cloudflare-style
+  bot checks ("Verify you are human", Turnstile) never clear, and some sites serve an empty
+  shell. For such sites use `--headed` (a minimized window is fine; a server needs a virtual
+  display such as Xvfb). `navigator.webdriver` is already false under browserctl.
+- **Headless with a desktop identity**, when there is no display: set the user agent AND the
+  matching client hints on each new tab, before navigating - the string alone is not enough:
+
+  ```python
+  with bctl.attach("default") as (pw, browser):
+      ctx = browser.contexts[0]
+      major = browser.version.split(".")[0]          # keep equal to the real Chromium major
+      ua = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+            f"(KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36")
+      page = ctx.new_page()
+      ctx.new_cdp_session(page).send("Emulation.setUserAgentOverride", {
+          "userAgent": ua, "acceptLanguage": "en-US,en", "platform": "MacIntel",
+          "userAgentMetadata": {
+              "brands": [{"brand": "Chromium", "version": major},
+                         {"brand": "Google Chrome", "version": major},
+                         {"brand": "Not.A/Brand", "version": "99"}],
+              "fullVersion": f"{major}.0.0.0", "platform": "macOS", "platformVersion": "15.0.0",
+              "architecture": "arm", "model": "", "mobile": False}})
+      page.goto(url, wait_until="domcontentloaded")
+  ```
+
+  A version that differs from the real browser's is itself a bot signal. Sites can change their
+  rules at any time: re-check before relying on headless.
+- **Plain HTTP clients** (`curl`, `requests`, web-fetch tools) never pass a managed bot check,
+  whatever user agent they send; sites often block AI crawler user agents outright. Read the
+  site's `robots.txt` and try one page before planning a crawl; whether to go ahead against a
+  site's rules is the owner's call - record it.
+- **Long crawls: one fresh tab per page** (`ctx.new_page()` ... `page.close()`). One tab reused
+  for many pages went blank ("Execution context was destroyed") and once followed a redirect
+  to an ad page.
+- **Lazy content**: scroll the page itself in steps (`window.scrollBy(0, 700)`) until the
+  labels you need exist, with a step cap. Mouse-wheel scrolling can land in a carousel instead,
+  and "scroll to the bottom" never ends on an endless feed and freezes the tab.
+- **Pace requests** (a few seconds apart, one page per lookup); site firewalls answer bursts
+  with HTTP 429. Sign-up overlays usually close with Escape, and the DOM stays readable
+  behind them.
+- A headless `screenshot` can hang after the file is written: give it a timeout.
 
 ## Hard Rules and Known Constraints
 
