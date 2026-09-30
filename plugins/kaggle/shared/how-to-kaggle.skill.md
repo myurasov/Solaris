@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 3_
+_Rev. 12_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -71,8 +71,8 @@ Follow this sequence from minute one; each step points to the section with the r
 5. **Phase 0 (day 1):** use the first day's full slot allowance (all five in a competition with five daily slots):
    the simplest baseline of your own, a faithful fork of the best public notebook, and one-change experiments on it.
    The goal is to learn the whole path. See [Phases](#phases).
-6. **Honest holdout:** build one that reproduces the board's order before trusting it, then calibrate each kind of
-   change against the board. See [Validation](#validation).
+6. **Honest holdout:** build one that reproduces the board's order before trusting it, confirm finalists on a second,
+   independent set, and calibrate each kind of change against the board. See [Validation](#validation).
 7. **Daily loop:**
    - plan all slots before the first submission: biggest gain or insight first, one experimental slot;
    - don't rush the slots: hold them for research that can finish in time, and fill any still open with the best
@@ -133,7 +133,8 @@ Follow this sequence from minute one; each step points to the section with the r
   limits, output format, metric definition, external-data and pretrained-model rules, team and merge limits, daily
   submission limit and reset time, deadlines. The competition listing JSON lacks most of these fields.
 - **Leaderboard reading:** page through all of it (`--page-size 200` plus page tokens); note ties (large tied groups
-  usually mean copies of one public notebook) and the host baseline.
+  usually mean copies of one public notebook) and the host baseline. A team's date on the board is that of its latest
+  scored submission, not of the one that set its score.
 - **Save every leaderboard read and watch the field over time** (owner direction; the `kaggle-leaderboard` skill):
   read the board with `tools/kaggle_lb.py show`, which saves each read, and snapshot at least hourly while the
   competition runs. The history shows who is climbing and how fast, bursts of new teams at one score (a public
@@ -168,21 +169,59 @@ Follow this sequence from minute one; each step points to the section with the r
 
 - **Placement:** no heavy computation on the owner's laptop; heavy CPU work on remote hosts; GPU training on leased
   GPU machines; Kaggle's own machines run only submission notebooks, never evaluations (they are slow and metered).
+  The control machine that hosts the agent sessions stays light too (owner direction): a stalled or out-of-memory
+  control machine takes every master session down with it, so its only jobs are the agents, git and small scripts.
 - **One Kaggle account serves every competition project** (owner direction): its concurrent sessions and weekly GPU
   hours are shared. Take a lease before each kernel push and release it when the run ends (the `kaggle-sharing`
   skill), stay within this project's share while others use or wait for theirs, and follow the owner's split.
+- **Use the whole lease pool the owner provides** (owner direction): every machine the owner holds joins the team's
+  pool, except the ones the owner reserves for other work and machines merely shared with you. Add a new lease as
+  soon as it is ready, and a future booking the moment it starts: root key, then a driver check (install the current
+  driver if it is missing or older, with the reboot and persistence mode), then the private host list, the claims
+  system (the `resource-sharing` plugin, if attached) and the dashboard. Drop retired machines from the host list
+  the same hour. Take exactly these steps without asking only under the owner's standing permission; releases
+  still ask.
 - **Leased machines need upkeep:**
-  - check leases hourly; when one still needed has 48 h or less left, extend it to 72 h from now if nobody else
-    booked it, else lease a replacement and move the work;
+  - check leases hourly; when one falls below 60 h left, extend it to 72 h from now. When an account-wide quota
+    refuses, the refusal usually states the projected total: the headroom is the quota minus (projected minus
+    requested). Extend by that headroom, split evenly across the leases that need time, and retry every hour, since
+    the headroom changes as bookings start and end. If someone else booked the machine next, extend to the maximum
+    allowed, then lease a replacement and move the work;
+  - when a lease ends (or is about to end with no extension possible), book a replacement of the same kind right away
+    (same GPU model and count, same CPU architecture) for the standard window, or the longest the quota allows, and
+    onboard it like any new machine; copy results off the old host before its lease ends. If the quota cannot cover
+    the same number of machines for at least 48 h each, book instead a single machine of the most powerful kind
+    available (by total GPU compute: GPU count and generation) for the longest the quota and the pool allow: quotas
+    usually count lease hours per machine, so one big machine turns little headroom into the most GPU time (booking
+    without asking needs the owner's standing permission, and covers these replacements only);
   - a host can drop off the network while the pool's API still says "ready" (a failing network card, for example):
     after about 15 min, power-cycle it (only under the owner's standing permission), read the previous boot's kernel
     log for the cause, and keep every job checkpointed and its inputs staged on a second host so a move takes
     minutes;
   - sync results back at each milestone, not at the end: hosts are wiped at release, and leases can shrink.
+- **Plan on leases being extended** (owner direction): owners extend leases far more often than they shorten them,
+  and keep adding new ones. Read every host's current lease end at each hourly audit and plan as if it will be
+  extended; collect finished results hourly so an ending lease costs at most the run in flight; stop work on a host
+  only when its end is under two hours away and its owner confirms no extension.
+- **Paid cloud instances: lifecycle decisions are the agent's** under the owner's standing permission (otherwise
+  ask). Copy results off first. Where the provider's run skill sets the teardown (`brev-run` always deletes), follow
+  it; otherwise stop an idle instance that will likely be needed again within about a day and delete one that is
+  unlikely to be needed soon (a stopped disk still bills, and recreating one costs a couple of hours, cheap next to
+  days of idle charges). Review every paid instance at each hourly audit so none is forgotten. Prefer shared or
+  leased hardware whenever it fits the job; launch paid capacity only when none does, within the owner's daily cap.
 - **Match Kaggle's environment where it matters:** Kaggle runs x86 with a pinned image; local ARM runs can match
   Kaggle on the top answer but not on full ranked lists (numpy's SIMD kernels: sort tie order, last-bit exp/log), so
   compare variants on one platform and use an x86 box when exact parity matters. Pin the libraries that change model
   fits (scikit-learn, pandas).
+- **Check a new GPU type's numerics on realistic inputs.** Before evaluating a model on a GPU type the scorer does not
+  use, compare its outputs with a reference GPU's on realistic prompts (the model's chat format with its
+  beginning-of-sequence token, typical lengths): it passes when the drift stays within the reference's own spread
+  (loaded against idle) and greedy replies match. Raw text without the beginning-of-sequence token is no fidelity
+  test: it amplifies any change in reduction order, so two GPUs of one type already disagree on it. Compile caches
+  move the numbers as well: cold starts (inference and compile caches empty) reproduce each other exactly, while a
+  warm restart can differ from them as much as another GPU type. Drift of this size sits far below sampling noise at
+  a nonzero temperature: it matters for exact reproduction (start cold, as a fresh scoring session does), not for
+  comparisons on one host.
 - **Shared boxes:** cap threads per worker (`OMP_NUM_THREADS`) so jobs don't starve each other; one stalled job ran
   several times faster once capped.
 - **Verify repairs with real GPU work:** a visible device in `nvidia-smi` is not proof CUDA initialization and
@@ -191,7 +230,8 @@ Follow this sequence from minute one; each step points to the section with the r
   CUDA initialization until it is really fixed.
 - **More machines help only when long GPU jobs queue up;** check actual utilisation before asking for more. The
   usual bottleneck is experiment setup, honest evaluation, and the daily submission limit. When the owner offers a
-  machine, say what job would use it. Take it only then: every machine adds lease upkeep.
+  machine outside the pool, say what job would use it. Idle machines in the pool can be lent to the owner's other
+  projects through the claims system.
 - **A live dashboard** (owner request) shows every job and the CPU, GPU and memory load on every host, plus recent
   submissions. It refreshes every few seconds over reused ssh connections, with the host list kept in the pack's
   private memory folder. Build it on day 0, so the owner can see what the agents are doing at a glance.
@@ -269,7 +309,12 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Leaderboard noise:** estimate it from the size of the public split (on a public board of about a hundred items,
   one answer moves the score by several thousandths); treat smaller differences as ties and decide from
   paired-bootstrap holdout intervals. Estimate the noise per change from the holdout's paired differences: a model
-  swap that changes a large share of answers is noisier on a small board than one answer's worth.
+  swap that changes a large share of answers is noisier on a small board than one answer's worth. When scoring runs a
+  sampled model or agent, identical submissions differ too: one byte-identical public package, resubmitted by
+  several teams, scored anywhere in a band that spanned the board's whole top group (about 5% of the public split).
+  Measure that band from identical resubmissions (public copies of one package, found with `kernels list --parent
+  <ref>` and checked byte-identical by pulling and diffing them, give it for free), treat gaps inside it as ties, and
+  rank candidates by many local runs, not by one board score.
 - **Don't spend slots on changes smaller than the board's noise for their kind.** Judge them on the holdout and bring
   them to the board only inside larger changes. Several model variants of similar quality can spread across a range
   of public scores wider than their true differences, so single scores cannot rank them.
@@ -277,27 +322,60 @@ Follow this sequence from minute one; each step points to the section with the r
   switched a model off for a large share of a holdout's rows. Assert finite model outputs in every evaluation
   harness.
 - **Tune on half A, confirm on half B;** report per-stratum numbers and a predicted leaderboard delta.
+- **Confirm on a second, independent set.** Choosing every candidate on one small public set overfits it. Add a set in
+  the same format from other sources (other repositories, sites or years; license checked, for evaluation only, never
+  in a shipped package), read every finalist on both, and when they disagree, trust the one that orders the scored
+  submissions as the board does: a set built from other repositories ranked two agent families in the board's order
+  while the public set had them level. A second set also exercises environment paths the first never touched.
 - **Calibrate each kind of change on the board:** a holdout that ranks submissions correctly can still misjudge one
   kind of change.
   - Swaps of one model component can score consistently below the holdout's prediction, and an add-on's holdout gain
     can shrink to almost nothing on the board.
   - After a miss, treat the holdout's number for that kind of change as an upper bound and look for the mechanism;
     measure each explanation's size before acting on it (a plausible one can explain only a small part of the gap).
+- **When the holdouts and the board disagree on one kind of change, fit the disagreement.** Add a term for that kind
+  of change (its size, a weight's step, say) to the board fit of per-class holdout differences over scored pairs:
+  the term measures the misread with an interval, and the fit predicts new pairs of that kind, each newly scored one
+  testing it out of sample. For each answer class, keep the holdout that tracks the board on that class, and gate
+  that class's changes on it.
 - **Check whether the holdout can see a mechanism before spending a slot on it.** A suspected train/serve mismatch can
   be ruled out in minutes when the holdout runs the pipeline exactly as the kernel does, since it then already
   contains the mismatch. A robustness ablation still needs a paired read against matched retrained controls:
   removing a suspected feature can also remove useful confidence information; it is not automatically an
   improvement.
 - **Public components carry the public board's selection bias.** A public notebook's model was often picked on the
-  same public slice among several variants, so its public score is optimistic, and small public-board losses against
-  it can be winner's curse. Decide private-board questions (final picks) on an honest holdout: your models can trail
-  such a component slightly on the public board while the holdout predicts gains.
+  same public slice among several variants, and its stated score is often the best of several submissions, so its
+  public score is optimistic, and small public-board losses against it can be winner's curse. Where many teams
+  resubmit one public package, their ranks track how many draws each took as much as any difference in quality.
+  Decide private-board questions (final picks) on an honest holdout: your models can trail such a component slightly
+  on the public board while the holdout predicts gains.
 - **Use a matched base for every added model.** A variant can clear a headline gain while contributing nothing: a
   pilot can gain against the public baseline yet nothing against its own base model. Also audit missing-feature
   patterns: columns absent only from one training source encode that source.
+- **Calibrate the local evaluator on public submissions' board scores** (owner direction): run the exact packages of
+  public notebooks with known board scores on your evaluator, then fit board score against local score. Packages that
+  fail to load score zero on both sides and inflate the fit's apparent quality: judge it on the working points only,
+  and with a handful of them expect it to separate broad levels, not neighbouring scores.
+- **Evaluate for the scorer as it is, not as announced.** Announced fixes to the scoring environment can land late,
+  apply only to new submissions, or never land. Simulate one to learn what it changes, but choose submissions on runs
+  that match the scorer as it is, and let the simulated change break ties only. When the first board scores
+  contradict the local ranking, look for what the local setup assumes that the scorer does not (a setting, a patch,
+  an environment difference) before tuning further: local runs that had adopted an announced scorer fix ranked the
+  agents that relied on it first, and the board scored them below public agents that did not.
+- **Pick among many variants with repeats.** The best of several runs of one family on the same tasks sits about one
+  standard deviation above that family's mean; require a repeat run and a non-negative holdout read before claiming
+  one variant beats another, and compare task by task (identical totals can hide many differing tasks).
+- **Judge a new evaluation host only after several paired runs.** Run the same packages on it and on an established
+  host several times before trusting or dismissing it: two new hosts trailed by 5-10 of about a hundred items on
+  their first two runs, then matched over the next four pairs, with every input (model files, server command line,
+  environment, GPU health) identical. Before blaming a host, compare what it does on identical work: the verdicts on
+  the same outputs, the results of the same calls.
 - **Protecting the top answer does not protect the rest of the ranking.** A re-ranker that keeps every first
   candidate can still demote correct answers further down and fail its confirmation. For ranked outputs, measure
   the whole list, not only top-1 agreement.
+- **Read a change on the class it can move.** A change that by construction cannot touch some answer classes (it acts
+  only on a candidate list their answers never enter) is safe for them: check that they read exactly zero, then
+  judge it on a holdout of the class it can move.
 
 ## Daily Submission Discipline
 
@@ -362,6 +440,13 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Never idle:** an hourly check starts research on the next idea, launches experiments on free compute, keeps
   leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and refreshes the
   live report.
+- **Script the hourly check:** one command that reads the board, the public notebooks, the forum, the compute (hosts,
+  leases, jobs) and the Kaggle account (sessions, quota) and prints a few lines of flags saves most of an autonomous
+  loop's tokens; the agent acts on the flags. Track AI token spend per project per day from the harness's own usage
+  logs, and set budgets. Script routine run-watching and result collection the same way: long-lived agents that
+  polled hosts and fed an evaluation queue were among a day's most expensive jobs, ahead of the analysis and build
+  work, because every turn re-reads the agent's growing context, so its cost grows with how long it lives, not with
+  what it decides. Wake an agent only to decide.
 - **Give each worker a private scratch subfolder;** a shared scratch folder lets one worker delete another's files.
 - **Interruption tolerance** (owner direction). Assume the agent session can vanish at any moment: an accidental
   interrupt, a network outage, a harness restart, under any harness.
@@ -438,14 +523,25 @@ Follow this sequence from minute one; each step points to the section with the r
 ## Kernel Engineering
 
 - **Fork faithfully:** keep every original cell, pin the original's Docker image and machine shape, detach unused
-  datasets, credit the authors in a header cell, and compare outputs with the original's. Take the image from a
-  version that actually ran (its run log, or a byte-identical copy's run): `kernels pull -m` takes the image of the
-  latest version, and a version saved without a run records the CPU image even for a GPU notebook, so a GPU step
-  can silently fall back to the CPU and into its time limits.
+  datasets, credit the authors in a header cell, and compare the commit run's output with the author's own output:
+  expect identical rows. Take the image from a version that actually ran (its run log, or a byte-identical copy's
+  run): `kernels pull -m` takes the image of the latest version, and a version saved without a run records the CPU
+  image even for a GPU notebook, so a GPU step can silently fall back to the CPU and into its time limits.
+- **Smoke-only commit runs:** some public notebooks run a smoke subset on the commit run (a few rows whenever the test
+  is the visible one) and the full set only on the hidden rerun. Verify such a fork on the smoke rows and markers
+  only, and plan the hidden run's time from full-run timings (the author's logs, or those of the notebooks it
+  combines), never from the commit run.
+- **Say what a commit run cannot show:** a change whose gate never opens on the visible test (it acts only on cases
+  the visible test lacks) can be checked there only for loading: its inputs found, its markers printed, rows equal to
+  the base's. Record it as checked for loading only, and let the board read its effect.
 - **Coupled fallbacks:** every new input or step falls back, all-or-nothing, to the last evaluated configuration,
   with a logged marker; worker pools use timeouts (`map_async(...).get(timeout)`) so a crash cannot hang the run.
 - **Private datasets:** create them before the kernel push and wait for "ready" (subtitle 20-80 characters); mount
   paths vary (`/kaggle/input/datasets/<owner>/<slug>/`), so search recursively.
+- **Rebuild a public notebook's private inputs:** arrays it reads from someone's private dataset can often be rebuilt
+  from public sources (per-candidate counts from a public database, say), aligned row for row with the notebook's
+  own tables. Check the alignment at the notebook's own indexing, and record the upstream files' checksums: the
+  alignment holds only for those files.
 - **Hardware banner** at the start of every kernel (CPU count, RAM, GPU) to learn the real environment.
 - **Evaluate the exact shipped bytes;** after any rebase, re-smoke.
 - **Replay every candidate kernel in Kaggle's exact image on an x86 host before pushing** (disabling numpy's AVX-512
@@ -471,7 +567,16 @@ Follow this sequence from minute one; each step points to the section with the r
   model already ranked those cases well. Compare a new signal against the whole system on the same cases, not
   against the part it replaces, before building it.
 - Popularity priors look strong on benchmarks whose answers are famous and reverse on obscure ones; guard with
-  test-like strata before trusting them.
+  test-like strata before trusting them. It recurred with a public notebook's popularity prior: a holdout drawn from
+  public libraries read a large gain (its answers beat their decoys on popularity almost always), while the holdout
+  drawn like the hidden test had answers less popular than their decoys.
+- A public notebook that beat the team's base sat unnoticed for most of a day because the hourly check read the board
+  and the forum but not the notebook list. List the public notebooks in score order at every check, diff against the
+  last list, and treat a newer public base as a fork candidate at once.
+- Knobs that another author tuned on the small public board ("LB explorations") can be noise: an honest holdout read
+  one such weight change as a loss on every set, and the board favoured it. When the board and a holdout disagree on
+  a knob, pre-register a decision rule keyed on a calibration submission that isolates the disputed component, and
+  spend a paired one-factor probe (same base, only that knob changed) to settle it.
 - A kernel slug that equals a dataset slug fails to push (409 Conflict); keep the two names distinct.
 - A GPU commit run queued for hours while its CPU twin finished within the hour.
 - A two-ref push loop failed transiently; push one ref per command.
@@ -479,6 +584,14 @@ Follow this sequence from minute one; each step points to the section with the r
 - A GPU driver install through a pool's tooling can take several commands (start, poll until done, reboot); a reboot
   flag alone may only reboot. Read the tool's own steps before relying on one flag.
 - Report times estimated in a brief went wrong; take times from the clock.
+- A public notebook with a few prompt lines changed and no measured effect is still the public notebook: when the
+  owner wants every submission to be the team's own work, a candidate's notes must name its own mechanism and that
+  mechanism's measured effect.
+- For agent competitions judged under a per-run time limit, microbenchmarks misjudged the scorer's speed: measure the
+  local-to-scorer time factor from real traces under realistic load, time the finalist on a twin of the scoring
+  machine, and plan for the worst case (every task at its cap). An overrun can score nothing.
+- Prompt rules against a mid-size model's loops, call budgets or tool-call formatting slips were ignored: fixes that
+  worked were structural (fewer or bounded tools, output caps, hard budgets in the harness's own config).
 - Before adopting an external pretrained model (a simulator or a generator), measure its accuracy on inputs outside
   its own training split: such models can be far weaker outside their home domain. Adoptions that skip this check
   can burn a day of GPU time each before an honest set says NO-GO, when a short check on held-out inputs would have

@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 4_
+_Rev. 6_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -120,6 +120,17 @@ Corrections to it, verified against 2.2.4:
   after 2.2.4). For someone else's kernel, list the files with `kernels files` first and fetch
   only listed names without `/` or `..`, anchored: `--file-pattern '^<name>$'` (the pattern is
   an unanchored regex search).
+- **`kernels output` on a kernel with thousands of output files** (one that writes a whole
+  Python environment, say) answers 429 from its first page, every time and at any
+  `--page-size`, while `kernels files` still pages: not a rate limit. Take a `Next Page Token`
+  from `kernels files <kernel> --page-size 1`: it is base64 (padding may be dropped) of
+  `{"GcsPageToken":"<session>/output/<name>"}`. Keep the `<session>/output/` prefix, append the
+  wanted file's name minus its last character (the page starts after that name), re-encode,
+  and pass it as `--page-token` with the anchored `--file-pattern`.
+- **`kernels list` has no score field** in any format: `--sort-by scoreDescending` gives the
+  order only, so read scores from the notebook's text. **`kernels logs <owner>/<kernel>`** also
+  works on other users' public kernels and returns the last run's timed stdout: use it for
+  runtimes and stage timings.
 
 ## Solaris Conventions
 
@@ -142,7 +153,8 @@ Corrections to it, verified against 2.2.4:
 - **"Authentication required" / 401:** not signed in, or the login expired - redo Signing In.
 - **429:** rate limited. The CLI retries on its own only for uploads, dataset/model creation
   and benchmarks calls; after a 429 from anything else (lists, downloads, submit, leaderboard)
-  back off yourself - never loop.
+  back off yourself - never loop. A `kernels output` 429 on every try is the many-files case
+  under Kaggle's Own Skill, not a rate limit.
 - **Versioned kernel refs** (`<user>/<kernel>/<N>`): in 2.2.4, `kernels output`, `status`,
   `files` and `logs` may silently use the latest version instead of N - confirm the version
   in what comes back.
