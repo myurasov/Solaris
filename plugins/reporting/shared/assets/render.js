@@ -1,4 +1,4 @@
-// rev. 3
+// rev. 4
 
 // Render a report HTML to PDF in the Co-SA document style - ZERO npm deps.
 // Drives the installed Google Chrome over the DevTools protocol using Node's
@@ -9,10 +9,13 @@
 //
 // Page furniture (all pages unless noted), parsed from the HTML + config:
 //   header: page numbers top-right; top-left = italic "<prepared_by> on ..."
-//           on page 1 ("Rendered on ..." when no prepared_by), "<H1 title> —
+//           on page 1 ("Rendered on ..." when no byline; just the render time
+//           when prepared_by is ""), "<H1 title> —
 //           <subtitle>" on pages 2+
 //   footer: watermark bottom-left (from config; none by default), report date
-//           bottom-right as `Mon DD YYYY` (from the MMDD H1 prefix)
+//           bottom-right as `Mon DD YYYY` (from <meta name="report-date"
+//           content="YYYY-MM-DD">, else a legacy MMDD H1 prefix, else today)
+// After rendering, check.js reports half-empty pages and runts (non-fatal).
 // Project-owned config `report.json` next to the OUTPUT pdf (all optional):
 //   { "prepared_by": "...", "watermark": "...", "furniture_font": "..." }
 // Chrome binary: $CHROME overrides the default macOS path.
@@ -40,8 +43,8 @@ try {
   cfg = JSON.parse(fs.readFileSync(path.join(path.dirname(pdfPath), 'report.json'), 'utf8'));
 } catch (e) { /* no config - use defaults */ }
 if (watermark === null) watermark = cfg.watermark || '';
-// Byline: explicit prepared_by override, else the rendering developer's git
-// identity (so reports name their actual author), else none.
+// Byline: explicit prepared_by override ("" = no byline), else the rendering
+// developer's git identity (so reports name their actual author), else none.
 function gitByline() {
   try {
     const opts = { cwd: path.dirname(htmlPath), encoding: 'utf8' };
@@ -51,16 +54,19 @@ function gitByline() {
   } catch (e) { /* not a git repo or no identity configured */ }
   return '';
 }
-const preparedBy = cfg.prepared_by || gitByline();
+const preparedBy = cfg.prepared_by ?? gitByline();
 const furnitureFont = cfg.furniture_font || 'Helvetica Neue';
 
 const html = fs.readFileSync(htmlPath, 'utf8');
 
-// Report date from the "0802 ..." title prefix; year from file mtime.
+// Report date: the report-date meta tag; else a legacy "0802 ..." title
+// prefix (year from file mtime); else today.
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const md = html.match(/<meta\s+name="report-date"\s+content="(\d{4})-(\d{2})-(\d{2})"/i);
 const m = html.match(/<h1[^>]*>\s*(\d{2})(\d{2})\s/);
 const year = new Date(fs.statSync(htmlPath).mtime).getFullYear();
-const d = m ? new Date(year, parseInt(m[1], 10) - 1, parseInt(m[2], 10)) : new Date();
+const d = md ? new Date(+md[1], +md[2] - 1, +md[3])
+  : m ? new Date(year, parseInt(m[1], 10) - 1, parseInt(m[2], 10)) : new Date();
 const date = `${MONTHS[d.getMonth()]} ${String(d.getDate()).padStart(2, '0')} ${d.getFullYear()}`;
 
 // Pages-2+ header title: H1 main line + .h1-subtitle, em-dash joined.
@@ -114,7 +120,7 @@ const renderedAt =
 
 const firstLeft = preparedBy
   ? `${esc(preparedBy)} on ${esc(renderedAt)}`
-  : `Rendered on ${esc(renderedAt)}`;
+  : cfg.prepared_by === '' ? esc(renderedAt) : `Rendered on ${esc(renderedAt)}`;
 const headerFirst = headerBox(
   `<span style="flex:1;text-align:left;font-style:italic;${fontCss}">${firstLeft}</span>${pagesRight}`);
 const headerRest = headerBox(
@@ -218,4 +224,10 @@ function cdp(ws) {
     console.error(`warning: could not remove scratch dir ${tmp}: ${e.message}`);
   }
   console.log('rendered', pdfPath, '| footer:', watermark || '(no watermark)', date, '| header 2+:', title);
+  try {
+    const { check, summary } = require('./check.js');
+    console.log(summary(check(pdfPath)));
+  } catch (e) {
+    console.log(`layout check skipped: ${String(e.message).split('\n')[0]}`);
+  }
 })().catch(e => { console.error(e); process.exit(1); });

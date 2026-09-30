@@ -1,4 +1,4 @@
-/* rev. 5 */
+/* rev. 6 */
 
 /* ==========================================================================
    Report stylesheet - the plugin-managed base for report styling.
@@ -109,8 +109,12 @@ h2::before { content: counter(section) ". "; color: var(--accent); font-weight: 
 /* ==========================================================================
    4. PROVENANCE LINE + INLINE TOC
    ========================================================================== */
-.sub { color: var(--ink-2); font-size: var(--fs-sub); margin-bottom: 12pt; }
-.toc { margin: 0 0 -5pt 0; padding: 0; break-inside: avoid; }
+.sub { color: var(--ink-2); font-size: var(--fs-sub); font-style: italic; margin-bottom: 12pt; }
+/* equal space above and below the TOC: .sub's 12pt + item margin above, 14pt
+   + item margin below (collapses with the next block's top margin, so a
+   first-section H2 right after the TOC drops its own) */
+.toc { margin: 0 0 14pt 0; padding: 0; break-inside: avoid; }
+.toc + section > h2:first-child { margin-top: 0; }
 .toc-label { display: none; }
 .toc-list {
   margin: 0;
@@ -130,8 +134,9 @@ h2::before { content: counter(section) ". "; color: var(--accent); font-weight: 
 /* ==========================================================================
    5. TABLES
    Cells center by default; add class="lft" to prose/row-label cells and
-   width hints (style="width:N%") to header cells. class="hl" on a <tr>
-   highlights it; table.split may break across pages (header repeats).
+   width hints (style="width:N%") to header cells. table.split may break
+   across pages (header repeats). class="hl" (highlighted row) is kept for
+   older reports only - new reports use no highlighted rows.
    ========================================================================== */
 table { border-collapse: collapse; width: 100%; font-size: var(--fs-table); margin: 1.1em 0 1.1em 0; }
 table.headline { margin: 10pt 0 4pt; }     /* the top metrics table */
@@ -159,9 +164,30 @@ caption {
 }
 
 /* ==========================================================================
-   6. DIAGRAMS (SVG figures that DO print, unlike data charts)
+   6. FIGURES + DIAGRAMS (print; unlike the interactive .chart-block charts)
+   <figure> holds a static inline-SVG chart, a screenshot or a diagram, with a
+   <figcaption> below. Space around figures is MARGIN, never padding: Chrome
+   drops margins that touch a page break, so a figure opening a page, or a
+   caption closing one, sits flush. Margins inside a grid row are not
+   dropped, so .fig-row (two figures side by side) carries them itself.
    ========================================================================== */
 svg text { font-family: var(--font-sans); }
+figure:not(.chart-block) { margin: 14pt 0 16pt; break-inside: avoid; }
+figure:not(.chart-block) > svg { display: block; width: 100%; height: auto; }
+figure:not(.chart-block) img {
+  display: block;
+  max-width: 100%;
+  max-height: 3.3in;                       /* lower it per image for tall screenshots */
+  width: auto;
+  height: auto;
+  margin: 0 auto;
+  border: var(--table-border-w) solid var(--rule);
+  border-radius: 2pt;
+}
+figure:not(.chart-block) figcaption { font-size: var(--fs-small); color: var(--ink-muted); font-style: italic; text-align: center; margin-top: 7pt; }
+.fig-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10pt; align-items: start; margin: 14pt 0 16pt; break-inside: avoid; }
+.fig-row.wide-left { grid-template-columns: 2fr 1fr; }
+.fig-row > figure:not(.chart-block) { margin: 0; }
 .diagram { margin: 10pt 0 4pt; }
 .diagram-caption { font-size: var(--fs-small); color: var(--ink-muted); font-style: italic; text-align: center; margin-top: 3pt; }
 .diagram-key { display: flex; flex-wrap: wrap; gap: 10pt; font-size: var(--fs-table); color: var(--ink-2); margin: 6pt 0 1pt; }
@@ -184,7 +210,7 @@ svg text { font-family: var(--font-sans); }
   tr { break-inside: avoid; }              /* rows stay whole */
   thead { break-inside: avoid; break-after: avoid; }  /* header never hangs alone */
   h2 { break-after: avoid; }
-  .diagram, .diagram-key { break-inside: avoid; }
+  .diagram, .diagram-key, figure:not(.chart-block), .fig-row { break-inside: avoid; }
 }
 
 /* ==========================================================================
