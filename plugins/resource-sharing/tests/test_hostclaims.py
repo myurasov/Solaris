@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 3
 
 """Tests for shared/tools/hostclaims.py (stdlib unittest).
 
@@ -15,6 +15,7 @@ import importlib.util
 import io
 import json
 import os
+import shlex
 import shutil
 import signal
 import subprocess
@@ -1267,6 +1268,268 @@ class TestOwnerIdentity(TestDiscovery):
     test_owner_installs_and_guests_claim_and_ask = None
 
 
+class TestSharedHosts(TestDiscovery):
+    # owners add and retire machines; guests pick the changes up with shared, owners share at once with install --all
+    def shared(self, *args, **kw):
+        return self.cli("shared", *args, base=["--project", kw.pop("project", self.b)], **kw)
+
+    def plain(self, *args, **kw):
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            rc = hc.main(["--project", kw.get("project", self.b)] + list(args))
+        return rc, buf.getvalue()
+
+    def a_inventory(self, edit):
+        path = os.path.join(self.a, "ai", ".memory", "hosts.json")
+        hosts = load(path)
+        hosts = edit(hosts) or hosts
+        with open(path, "w") as f:
+            json.dump(hosts, f)
+
+    def a_shares(self, *slugs):
+        with open(os.path.join(self.a, "ai", ".memory", "resource-sharing.json"), "w") as f:
+            json.dump({"project": "proj-a", "share_with": list(slugs)}, f)
+
+    def new_root(self, name):
+        root = os.path.join(self.tmp, "hosts", "proj-a-" + name)
+        os.makedirs(root)
+        self.write_sim(sim(gpus=[{"index": i, "name": "NVIDIA H200 NVL", "mem_total_gb": 140.0} for i in range(2)]), root)
+        return root
+
+    def test_new_changed_gone_until_acknowledged(self):
+        seen = os.path.join(self.b, "aipack", ".memory", "resource-sharing-seen.json")
+        r = self.shared(code=hc.CHANGES)
+        # only what proj-a owns is shared; its gpu-1 clashes with proj-b's own gpu-1, so it takes the project prefix
+        self.assertEqual([(h["key"], h["name"], h["owner"], h["target"], h["lease_kind"]) for h in r["new"]],
+                         [("proj-a/gpu-1", "proj-a/gpu-1", "proj-a", "local", None)])
+        self.shared(code=hc.CHANGES)
+        self.assertFalse(os.path.exists(seen))
+        self.assertTrue(self.shared("--ack")["acknowledged"])
+        self.assertEqual(list(load(seen)["hosts"]), ["proj-a/gpu-1"])
+        r = self.shared()
+        self.assertEqual((r["new"], r["gone"], r["changed"], [h["key"] for h in r["unchanged"]]),
+                         ([], [], [], ["proj-a/gpu-1"]))
+        # the owner adds a 2x H200 box and moves gpu-1 to a paid lease
+        root = self.new_root("h200")
+
+        def grow(hosts):
+            hosts[0]["lease"] = {"kind": "paid", "planned_end": "2026-10-01T06:00Z", "usd_per_hour": 7.5}
+            hosts.append({"name": "h200", "target": "local", "root": root, "gpus": "2x H200 NVL",
+                          "lease": {"kind": "free", "planned_end": "2026-10-02T00:00-07:00"}})
+        self.a_inventory(grow)
+        r = self.shared(code=hc.CHANGES)
+        self.assertEqual([(h["key"], h["name"], h["gpus"], h["lease_kind"], h["planned_end"]) for h in r["new"]],
+                         [("proj-a/h200", "h200", "2x H200 NVL", "free", "2026-10-02T07:00:00Z")])
+        self.assertEqual(r["changed"][0]["changes"], {"lease_kind": [None, "paid"],
+                                                      "planned_end": [None, "2026-10-01T06:00:00Z"]})
+        rc, out = self.plain("shared")
+        self.assertEqual(rc, hc.CHANGES)
+        for s in ("NEW     h200 [owner proj-a]", "GPUs 2x H200 NVL", "CHANGED proj-a/gpu-1", "lease ? -> paid",
+                  "shared --ack"):
+            self.assertIn(s, out)
+        self.shared("--ack")
+        # it retires the box, then stops sharing with proj-b altogether
+        self.a_inventory(lambda hosts: hosts[:1])
+        self.assertEqual([h["key"] for h in self.shared(code=hc.CHANGES)["gone"]], ["proj-a/h200"])
+        self.assertIn("GONE    h200", self.plain("shared")[1])
+        self.shared("--ack")
+        self.a_shares("proj-c")
+        r = self.shared(code=hc.CHANGES)
+        self.assertEqual(([h["key"] for h in r["gone"]], r["new"]), (["proj-a/gpu-1"], []))
+
+    def test_unreadable_files_never_count_as_gone(self):
+        self.shared("--ack")
+        inv = os.path.join(self.a, "ai", ".memory", "hosts.json")
+        good = text(inv)
+        with open(inv, "w") as f:
+            f.write('[{"name": "gpu-1", ')
+        r = self.shared()
+        self.assertEqual((r["gone"], [h["key"] for h in r["unread"]]), ([], ["proj-a/gpu-1"]))
+        self.assertTrue(any("cannot read" in n and "proj-a are skipped" in n for n in r["notes"]))
+        self.shared("--ack")
+        with open(inv, "w") as f:
+            f.write(good)
+        self.assertEqual([h["key"] for h in self.shared()["unchanged"]], ["proj-a/gpu-1"])
+        with open(os.path.join(self.a, "ai", ".memory", "resource-sharing.json"), "w") as f:
+            f.write("{")
+        self.assertEqual([h["key"] for h in self.shared()["unread"]], ["proj-a/gpu-1"])
+        with open(os.path.join(self.b, "aipack", ".memory", "resource-sharing-seen.json"), "w") as f:
+            f.write("not json")
+        self.a_shares("proj-b")
+        r = self.shared(code=hc.CHANGES)
+        self.assertEqual([h["key"] for h in r["new"]], ["proj-a/gpu-1"])
+        self.assertTrue(any("seen list" in n for n in r["notes"]))
+
+    def test_probe_install_all_and_the_audit_sync_flags(self):
+        own = ["--project", self.a]
+        live = self.shared("--probe", code=hc.CHANGES)["live"]["proj-a/gpu-1"]
+        self.assertEqual((live["ok"], live["installed"]), (True, False))
+        au = self.cli("audit", base=own)["hosts"]
+        self.assertEqual([(r["host"], r["fix"]["why"]) for r in au], [("gpu-1", "in the inventory but not installed")])
+        self.assertIn("install --host gpu-1", au[0]["fix"]["cmd"])
+        self.cli("install", "--all", "--host", "gpu-1", base=own, code=hc.USAGE)
+        self.cli("install", "--all", "--owner", "proj-c", base=own, code=hc.USAGE)
+        self.cli("install", "--all", "--lease", "kind=free", base=own, code=hc.USAGE)
+        r = self.cli("install", "--all", "--launcher", "setsid", base=own)
+        # only what proj-a owns: not proj-x's borrowed host, nor proj-c's cpu-1 that proj-c shares with proj-a
+        self.assertEqual((sorted(r["hosts"]), r["hosts"]["gpu-1"]["new"]), (["gpu-1"], True))
+        for other in ("proj-a-borrowed", "proj-c-cpu-1"):
+            self.assertFalse(os.path.exists(os.path.join(self.tmp, "hosts", other, "host.json")))
+        self.assertFalse(self.cli("install", "--all", base=own)["hosts"]["gpu-1"]["new"])
+        self.assertIsNone(self.cli("audit", base=own)["hosts"][0]["fix"])
+        live = self.shared("--probe", code=hc.CHANGES)["live"]["proj-a/gpu-1"]
+        self.assertEqual((live["installed"], live["admitted"], live["tag"]), (True, True, "free"))
+        self.assertEqual([g["name"] for g in live["free"]["gpus"]], ["Tesla T4", "Tesla T4"])
+        # proj-b is dropped and synced, then listed again without a sync: it sees the host, which does not admit it yet
+        self.a_shares("proj-c")
+        self.cli("install", "--all", base=own)
+        self.a_shares("proj-c", "proj-b")
+        live = self.shared("--probe", code=hc.CHANGES)["live"]["proj-a/gpu-1"]
+        self.assertFalse(live["admitted"])
+        self.assertIn("not shared with proj-b", live["why"][0])
+        fix = self.cli("audit", base=own)["hosts"][0]["fix"]
+        self.assertIn("differs from resource-sharing.json", fix["why"])
+        self.assertIn("install --host gpu-1", fix["cmd"])
+        # a new machine in the owner's inventory: flagged with its command, then installed and synced in one step
+        root = self.new_root("h200")
+        self.a_inventory(lambda hosts: hosts + [{"name": "h200", "target": "local", "root": root}])
+        rc, out = self.plain("audit", project=self.a)
+        self.assertIn("install --host h200", out)
+        self.assertIn("install --all", out)
+        rc, out = self.plain("install", "--all", "--launcher", "setsid", project=self.a)
+        self.assertEqual(rc, 0, out)
+        self.assertIn("shared with proj-c, proj-b: tell them", out)
+        self.assertEqual([r["fix"] for r in self.cli("audit", base=own)["hosts"]], [None, None])
+        live = self.shared("--probe", code=hc.CHANGES)["live"]
+        self.assertEqual([live[k]["admitted"] for k in sorted(live)], [True, True])
+        self.assertEqual(live["proj-a/h200"]["free"]["gpus"][0]["name"], "NVIDIA H200 NVL")
+        self.assertIn("admits you", self.plain("shared", "--probe")[1])
+
+    def test_inventory_files_and_refusals(self):
+        self.cli("shared", code=hc.USAGE)
+        roots = dict((n, os.path.join(self.tmp, "inv-" + n)) for n in ("p1", "p2", "q1"))
+        for root in roots.values():
+            os.makedirs(root)
+            self.write_sim(sim(), root)
+        inv = os.path.join(self.tmp, "inv.json")
+        with open(inv, "w") as f:
+            json.dump([{"name": "p1", "target": "local", "root": roots["p1"], "owner": "p"},
+                       {"name": "p2", "target": "local", "root": roots["p2"]},
+                       {"name": "q1", "target": "local", "root": roots["q1"], "owner": "q"},
+                       {"name": "far", "target": "user@far", "owner": "q", "lease": {"kind": "none"}}], f)
+        base = ["--hosts", inv]
+        # install --all: the caller's hosts (an entry without an owner counts as the caller's, as in audit)
+        r = self.cli("--agent", "p", "install", "--all", "--launcher", "setsid", base=base)
+        self.assertEqual(sorted(r["hosts"]), ["p1", "p2"])
+        self.assertFalse(os.path.exists(os.path.join(roots["q1"], "host.json")))
+        self.cli("--agent", "p", "install", "--all", base=base, as_owner=False, code=hc.DENIED)
+        # shared with an inventory file: the hosts another project owns, against an explicit seen list
+        self.cli("--agent", "p", "shared", base=base, code=hc.USAGE)
+        seen = os.path.join(self.tmp, "seen.json")
+        r = self.cli("--agent", "p", "shared", "--seen", seen, base=base, code=hc.CHANGES)
+        self.assertEqual([(h["key"], h["lease_kind"]) for h in r["new"]], [("q/far", "none"), ("q/q1", None)])
+        self.cli("--agent", "p", "shared", "--seen", seen, "--ack", base=base)
+        self.assertEqual(self.cli("--agent", "p", "shared", "--seen", seen, base=base)["new"], [])
+
+    def test_seen_lists_written_before_folders_still_load(self):
+        # a seen list from before records kept the owner's folder: no false NEW, GONE or CHANGED after the upgrade
+        seen = os.path.join(self.b, "aipack", ".memory", "resource-sharing-seen.json")
+        self.shared("--ack")
+        doc = load(seen)
+        self.assertEqual(doc["hosts"]["proj-a/gpu-1"]["folder"], os.path.join("projects", "my", "proj-a"))
+        for r in doc["hosts"].values():
+            del r["folder"]
+        with open(seen, "w") as f:
+            json.dump(doc, f)
+        r = self.shared()
+        self.assertEqual((r["new"], r["gone"], r["changed"], [h["key"] for h in r["unchanged"]]),
+                         ([], [], [], ["proj-a/gpu-1"]))
+        self.assertIn("no changes since the last ack", self.plain("shared")[1])
+        # such a record still stays as seen while its owner cannot be read, matched by slug
+        with open(os.path.join(self.a, "ai", ".memory", "hosts.json"), "w") as f:
+            f.write("[")
+        r = self.shared()
+        self.assertEqual((r["gone"], [h["key"] for h in r["unread"]]), ([], ["proj-a/gpu-1"]))
+
+    def test_unreadable_sharing_file_of_an_owner_whose_folder_is_not_its_slug(self):
+        # embedded layout: the slug comes only from the sharing file, so a broken one must not make its hosts GONE
+        alpha = self.project("my/alpha/alpha-repo", "ai", "alpha", ["proj-b"], [])
+        # a remote target: shared reads no host without --probe
+        with open(os.path.join(alpha, "ai", ".memory", "hosts.json"), "w") as f:
+            json.dump([{"name": "gpu-7", "target": "user@alpha-7"}], f)
+        self.assertEqual([h["key"] for h in self.shared("--ack")["new"]], ["alpha/gpu-7", "proj-a/gpu-1"])
+        with open(os.path.join(alpha, "ai", ".memory", "resource-sharing.json"), "w") as f:
+            f.write('{"project": "alpha", "share_')
+        r = self.shared()
+        self.assertEqual((r["gone"], [h["key"] for h in r["unread"]]), ([], ["alpha/gpu-7"]))
+        folder = os.path.join("projects", "my", "alpha", "alpha-repo")
+        self.assertTrue(any(n.endswith("the hosts of the project in %s are skipped" % folder) for n in r["notes"]),
+                        r["notes"])
+        self.assertFalse(any("the hosts of alpha-repo" in n for n in r["notes"]))
+        rc, out = self.plain("shared")
+        self.assertEqual(rc, 0, out)
+        self.assertIn("UNREAD  gpu-7 [owner alpha] user@alpha-7; lease ?; GPUs ?: alpha's files cannot be read now", out)
+
+    def test_broken_own_sharing_file_is_refused(self):
+        # read as missing it would mean no sharing: install, audit and shared stop and name the file instead
+        cfg = os.path.join(self.a, "ai", ".memory", "resource-sharing.json")
+        with open(cfg, "w") as f:
+            f.write('{"project": "proj-a", "share_with": ["proj-b", "proj-c",]}')
+        own = ["--project", self.a]
+        r = self.cli("install", "--all", "--launcher", "setsid", base=own, code=hc.USAGE)
+        self.assertIn("cannot read %s" % cfg, r["error"])
+        self.assertFalse(os.path.exists(os.path.join(self.tmp, "hosts", "proj-a-gpu-1", "host.json")))
+        self.assertIn("cannot read %s" % cfg, self.cli("audit", base=own, code=hc.USAGE)["error"])
+        self.assertIn("cannot read %s" % cfg, self.shared(project=self.a, code=hc.USAGE)["error"])
+
+    def test_printed_follow_up_commands_run_as_printed(self):
+        # outside a project: the acknowledge line keeps --seen and --agent, the audit's fixes --agent and --as-owner
+        root = os.path.join(self.tmp, "inv-p1")
+        os.makedirs(root)
+        self.write_sim(sim(), root)
+        inv, seen = os.path.join(self.tmp, "inv.json"), os.path.join(self.tmp, "seen.json")
+        with open(inv, "w") as f:
+            json.dump([{"name": "p1", "target": "local", "root": root, "owner": "p"},
+                       {"name": "far", "target": "user@far", "owner": "q"}], f)
+
+        def run_printed(marker, *args):
+            buf = io.StringIO()
+            with redirect_stdout(buf):
+                hc.main(["--hosts", inv] + list(args))
+            cmd = [ln for ln in buf.getvalue().splitlines() if marker in ln][0].split(marker, 1)[1]
+            self.assertTrue(cmd.startswith("python3 "), cmd)
+            p = subprocess.run([sys.executable] + shlex.split(cmd)[1:], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.assertEqual(p.returncode, 0, (cmd, p.stdout, p.stderr))
+            return cmd
+
+        self.assertIn("--seen", run_printed("Then acknowledge: ", "--agent", "p", "shared", "--seen", seen))
+        self.assertEqual(self.cli("--agent", "p", "shared", "--seen", seen, base=["--hosts", inv])["new"], [])
+        self.assertIn("--as-owner", run_printed("(then tell the projects you share with): ", "--agent", "p",
+                                                "--as-owner", "audit"))
+        self.assertTrue(os.path.exists(os.path.join(root, "host.json")))
+
+    @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads files whatever their mode")
+    def test_peer_files_without_read_permission(self):
+        # a peer file that exists but cannot be opened counts as unreadable, not as a crash
+        self.shared("--ack")
+        mem = os.path.join(self.a, "ai", ".memory")
+        for name, who in (("resource-sharing.json", "the project in " + os.path.join("projects", "my", "proj-a")),
+                          ("hosts.json", "proj-a")):
+            path = os.path.join(mem, name)
+            os.chmod(path, 0)
+            try:
+                r = self.shared()
+                self.assertEqual((r["gone"], [h["key"] for h in r["unread"]]), ([], ["proj-a/gpu-1"]))
+                self.assertTrue(any(n.startswith("cannot read %s" % path) and
+                                    n.endswith("the hosts of %s are skipped" % who) for n in r["notes"]), r["notes"])
+                self.assertIn("gpu-1", self.cli("status", base=["--project", self.b])["hosts"])
+            finally:
+                os.chmod(path, 0o644)
+
+    test_one_way_and_mutual_sharing = None
+    test_owner_installs_and_guests_claim_and_ask = None
+
+
 class RealBase(Base):
     # the machine's own readings: no simulate.json in effect (only readers named in a test are patched)
     def setUp(self):
@@ -1469,6 +1732,18 @@ class TestRevisedDocs(unittest.TestCase):
         self.assertIn("`--gpu-mem` matches them by share", skill)
         self.assertIn("request --host H --withdraw ID", skill)
         self.assertIn("- `decline`: a guest's extension request is older than a new instance takes to be ready", skill)
+
+    def test_sharing_changes_docs(self):
+        root = os.path.dirname(HERE)
+        rule = " ".join(text(os.path.join(root, "shared", "resource-sharing.rule.md")).split())
+        skill = " ".join(text(os.path.join(root, "shared", "resource-sharing.skill.md")).split())
+        self.assertIn("Guests run `shared` at every audit and at least hourly", rule)
+        self.assertIn("Owners run `install --all` right after adding machines or changing `share_with`", rule)
+        self.assertIn("6 the hosts shared with this project changed since the last `shared --ack`", skill)
+        self.assertIn("resource-sharing-seen.json", skill)
+        self.assertIn("6 the hosts shared with this project changed since the last `shared --ack`",
+                      " ".join(hc.__doc__.split()))
+        self.assertEqual(hc.CHANGES, 6)
 
 
 @unittest.skipUnless(sys.platform.startswith("linux") and os.path.isdir("/proc/self"), "real /proc readings: Linux only")

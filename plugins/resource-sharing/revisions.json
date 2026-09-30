@@ -3,32 +3,60 @@
   "schema_version": 1,
   "files": {
     "shared/resource-sharing.rule.md": {
-      "rev": 1,
-      "hash": "603a12410494a4b6716e7f7341b1a5b88945a148b36f9226164a3900b9922b10",
+      "rev": 3,
+      "hash": "84f2301604ebb805b73c4a075c7f22d9bb3e8d454daac307df870ad7d86e46e3",
       "history": [
         {
           "rev": 1,
           "hash": "603a12410494a4b6716e7f7341b1a5b88945a148b36f9226164a3900b9922b10"
+        },
+        {
+          "rev": 2,
+          "hash": "3642ec93e40b6c5ee0b21983440184dcc9adb04d8f3c3d8f6d1e290b3b1a353a"
+        },
+        {
+          "rev": 3,
+          "hash": "84f2301604ebb805b73c4a075c7f22d9bb3e8d454daac307df870ad7d86e46e3"
         }
       ]
     },
     "shared/resource-sharing.skill.md": {
-      "rev": 1,
-      "hash": "23e4301838880fbc98d8725c8fcdfdf35233a22713db726549de46419a9bfd5c",
+      "rev": 5,
+      "hash": "5d01199ca95533c0ab418756520d18a767da8cba065a707c513cf844a57e5fc0",
       "history": [
         {
           "rev": 1,
           "hash": "23e4301838880fbc98d8725c8fcdfdf35233a22713db726549de46419a9bfd5c"
+        },
+        {
+          "rev": 2,
+          "hash": "69b23a1aae8164d2a20b11902ab0d7fa4bfe0b445f76f36acf6027d29520d19a"
+        },
+        {
+          "rev": 4,
+          "hash": "ae9db2029d7e7cc69a734f0d16a6fc28680542f7ffacd327c1b7241ecadf84ed"
+        },
+        {
+          "rev": 5,
+          "hash": "5d01199ca95533c0ab418756520d18a767da8cba065a707c513cf844a57e5fc0"
         }
       ]
     },
     "shared/tools/hostclaims.py": {
-      "rev": 1,
-      "hash": "e956825e3b3edd24900167edc97b3ee57ee4e5cedd46047fcec31072d40d493e",
+      "rev": 3,
+      "hash": "0c707ef61eb2a53a963f14abf25b4c4e9ad4edf610c9396fbba4a5f5f40cbac5",
       "history": [
         {
           "rev": 1,
           "hash": "e956825e3b3edd24900167edc97b3ee57ee4e5cedd46047fcec31072d40d493e"
+        },
+        {
+          "rev": 2,
+          "hash": "5c2d04e21b8702585b0fca33aaf6698d786d546cb02a0e6e319ee2b0c82a80c2"
+        },
+        {
+          "rev": 3,
+          "hash": "0c707ef61eb2a53a963f14abf25b4c4e9ad4edf610c9396fbba4a5f5f40cbac5"
         }
       ]
     }

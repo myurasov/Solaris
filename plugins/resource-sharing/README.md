@@ -21,9 +21,9 @@ counters for account-level limits. No daemon, no central server, no root.
 
 | File | Role |
 |---|---|
-| `shared/tools/hostclaims.py` | The tool, stdlib only, Python 3.8 or newer. Runs on the controller and sends itself to each host over ssh (`python3 -`, script on stdin). Commands: `install`, `uninstall`, `status`, `claim`, `run`, `release`, `reap`, `yield`, `usage`, `pool`, `lease`, `extend`, `request`, `approve`, `decline`, `fit`, `audit`. |
-| `shared/resource-sharing.skill.md` | Setup, commands, launching jobs, priorities and yield, owners and guests, paid hosts and fit, the owner audit, pools, conventions, troubleshooting. |
-| `shared/resource-sharing.rule.md` | Always-on: launch through claims and stay within them, never touch another project's claim, one owner per host, no self-extension of paid hosts, honour yields, done markers. |
+| `shared/tools/hostclaims.py` | The tool, stdlib only, Python 3.8 or newer. Runs on the controller and sends itself to each host over ssh (`python3 -`, script on stdin). Commands: `install` (`--all` for every owned host), `uninstall`, `status`, `shared`, `claim`, `run`, `release`, `reap`, `yield`, `usage`, `pool`, `lease`, `extend`, `request`, `approve`, `decline`, `fit`, `audit`. |
+| `shared/resource-sharing.skill.md` | Setup, commands, launching jobs, priorities and yield, owners and guests, picking up shared hosts, paid hosts and fit, the owner audit, pools, conventions, troubleshooting. |
+| `shared/resource-sharing.rule.md` | Always-on: launch through claims and stay within them, never touch another project's claim, one owner per host (guests keep what they write on a host inside their own folder there), pick up sharing changes (guests run `shared`, owners `install --all`), no self-extension of paid hosts, honour yields, done markers. |
 | `tests/test_hostclaims.py` | Unit tests (stdlib `unittest`), run against temp folders with simulated host readings; not copied into projects. |
 
 `manifest.json` and `revisions.json` (rev ledger, managed by `solaris.tools.revs`) complete the plugin.
@@ -36,8 +36,11 @@ Then, in the project:
 1. List hosts in `<pack>/.memory/hosts.json` as `{name, target, opts}`, with optional `owner` and `lease`.
 2. Optionally create `<pack>/.memory/resource-sharing.json`:
    `{"project": "<slug>", "share_with": ["<other-slug>"], "policy": {}}`.
-3. For each host the project owns: `python3 <pack>/plugins/resource-sharing/tools/hostclaims.py install --host <name>`,
-   and record the footprint (`~/.solaris/claims/` on that host) in `<pack>/.memory/resources.md`.
+3. Install every host the project owns: `python3 <pack>/plugins/resource-sharing/tools/hostclaims.py install --all`
+   (again right after adding machines or changing `share_with`), and record the footprint (`~/.solaris/claims/`
+   on each host) in `<pack>/.memory/resources.md`.
+4. Guests run `hostclaims.py shared` at least hourly: it lists new, gone and changed hosts shared with the project
+   (exit 6 until `shared --ack`).
 
 ## How It Works
 
@@ -59,7 +62,9 @@ Then, in the project:
   by scanning the Solaris tree; the host mirrors the owner and the list and refuses others (no list: owner
   only). Owner actions run as the calling project, never as an `--agent` naming another. Only the owner
   changes a host; guests file extension, maintenance and objection requests (and withdraw their own) that
-  the owner approves or declines.
+  the owner approves or declines. Owners share new machines at once with `install --all` (the audit flags
+  hosts not installed or out of sync); guests see new, gone and changed shared hosts with `shared`, against
+  a seen list in `<pack>/.memory/resource-sharing-seen.json` (no ssh unless `--probe`).
 
 ## Tests
 
@@ -69,10 +74,11 @@ use, stale reaping (dead PID, changed boot id), orphan detection, yield request,
 after the grace, the watcher's environment, pinning and done marker, status tags, the usage ledger, pools
 (caps, borrowing, budgets, expiry), uninstall refusals, lease kinds, the request flow (request, approve,
 decline, timeout, then launch-new), fit ranking with a fake inventory, discovery in a fake Solaris tree (both
-pack folder names, one-way and mutual sharing), ownership rules, the owner audit, the ssh path through a fake
-ssh program, hardening cases from a code review (a released claim is never revived, yield admission, pending
-yields, stop signals, an unwritable run folder, machine binding and network homes, pool definers), and
-Python 3.8 grammar.
+pack folder names, one-way and mutual sharing), shared-host changes (new, gone, changed, unreadable owner
+files, the seen list, `--probe` admission), `install --all` and the audit's sync flags, ownership rules, the
+owner audit, the ssh path through a fake ssh program, hardening cases from a code review (a released claim is
+never revived, yield admission, pending yields, stop signals, an unwritable run folder, machine binding and
+network homes, pool definers), and Python 3.8 grammar.
 
 ## Limits
 

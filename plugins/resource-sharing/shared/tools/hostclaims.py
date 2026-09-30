@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 3
 
 """hostclaims: share hosts between agents through claim files kept on each host.
 
@@ -10,14 +10,15 @@ the jobs started with `run` and their watchers (in tmux) run on a host.
 
     python3 hostclaims.py [--hosts FILE] [--ssh PROG] [--agent NAME] <command> ...
 
-Commands: install, uninstall, status, claim, run, release, reap, yield, usage,
-pool, lease, extend, request, approve, decline, fit, audit (`<command> -h`
+Commands: install, uninstall, status, shared, claim, run, release, reap, yield,
+usage, pool, lease, extend, request, approve, decline, fit, audit (`<command> -h`
 lists options). Host footprint: ~/.solaris/claims/ (host.json, status.json,
 history.jsonl, .lock, claims/, stale/, run/<claim-id>/, requests/, pools/).
 Stdlib only; Python 3.8 or newer on the controller and on every host.
 Exit codes: 0 ok, 1 error, 2 bad usage, 3 does not fit, 4 host unreachable
 (a claim or launch may still have happened: check status), 5 refused by a
-sharing rule.
+sharing rule, 6 the hosts shared with this project changed since the last
+`shared --ack`.
 """
 
 import argparse
@@ -43,6 +44,8 @@ SCHEMA = 1
 DEFAULT_ROOT = "~/.solaris/claims"
 MARK = "@@hostclaims@@ "
 OK, ERROR, USAGE, NOFIT, UNREACHABLE, DENIED = 0, 1, 2, 3, 4, 5
+# shared: the hosts other projects share with this one changed since its last `shared --ack`
+CHANGES = 6
 CLASSES = ("P0", "P1", "P2", "P3")
 DEFAULT_CLASSES = {
     "P0": {"share": 1.0, "preemptible": False},
@@ -83,6 +86,9 @@ LEASE_KINDS = ("none", "free", "paid")
 LEASE_KEYS = ("kind", "planned_end", "usd_per_hour", "gpu_type", "instance", "provider", "started", "note")
 REQUEST_TYPES = ("extension", "maintenance", "objection")
 CONFIG_NAME = "resource-sharing.json"
+SEEN_NAME = "resource-sharing-seen.json"
+# what a guest compares between its seen list and the hosts shared with it now
+SHARED_FIELDS = ("name", "owner", "target", "lease_kind", "planned_end", "gpus")
 THREAD_VARS = ("OMP_NUM_THREADS", "MKL_NUM_THREADS", "OPENBLAS_NUM_THREADS",
                "NUMEXPR_NUM_THREADS", "NUMEXPR_MAX_THREADS", "VECLIB_MAXIMUM_THREADS",
                "BLIS_NUM_THREADS", "RAYON_NUM_THREADS", "POLARS_MAX_THREADS")
@@ -2540,9 +2546,12 @@ def find_project(start=None):
 
 
 def project_info(root, pack):
-    cfg = read_json(os.path.join(root, pack, ".memory", CONFIG_NAME), {}) or {}
+    path = os.path.join(root, pack, ".memory", CONFIG_NAME)
+    raw = read_json(path)
+    cfg = raw if isinstance(raw, dict) else {}
     return {"root": root, "pack": pack, "slug": cfg.get("project") or os.path.basename(root), "config": cfg,
-            "share_with": [str(x) for x in cfg.get("share_with") or []], "has_config": bool(cfg)}
+            "share_with": [str(x) for x in cfg.get("share_with") or []], "has_config": bool(cfg),
+            "config_error": os.path.exists(path) and not isinstance(raw, dict)}
 
 
 def solaris_root_of(root):
@@ -2595,8 +2604,9 @@ def read_inventory(path):
     return out
 
 
-def peer_hosts(me):
-    # hosts that other projects in this Solaris tree own and share with this project
+def peer_hosts(me, unread=None):
+    # hosts that other projects in this Solaris tree own and share with this project;
+    # unread (a dict) maps the folder of each project whose sharing file or inventory could not be read to its slug
     out, notes, found = [], [], set()
     sroot = solaris_root_of(me["root"])
     if not sroot:
@@ -2604,20 +2614,34 @@ def peer_hosts(me):
     for root, pack in scan_projects(sroot):
         if os.path.abspath(root) == os.path.abspath(me["root"]):
             continue
-        p = project_info(root, pack)
-        found.add(p["slug"])
-        if me["slug"] not in p["share_with"] and "*" not in p["share_with"]:
-            continue
+        # the folder under the Solaris root names a project even when its sharing file, and so its slug, is unreadable
+        folder = os.path.relpath(root, sroot)
+        path = os.path.join(root, pack, ".memory", "hosts.json")
+        p = None
         try:
-            inv = read_inventory(os.path.join(root, pack, ".memory", "hosts.json")) or []
-        except Fail as e:
-            notes.append(str(e))
+            p = project_info(root, pack)
+            found.add(p["slug"])
+            if p["config_error"]:
+                raise Fail("cannot read %s" % os.path.join(root, pack, ".memory", CONFIG_NAME))
+            if me["slug"] not in p["share_with"] and "*" not in p["share_with"]:
+                continue
+            inv = read_inventory(path)
+            if inv is None and os.path.exists(path):
+                raise Fail("cannot read %s" % path)
+        except (Fail, OSError) as e:
+            # OSError: a file that exists but cannot be opened (permissions)
+            err = e if isinstance(e, Fail) else "cannot read %s: %s" % (e.filename, e.strerror)
+            who = p["slug"] if p and not p["config_error"] else "the project in " + folder
+            notes.append("%s: the hosts of %s are skipped" % (err, who))
+            if unread is not None:
+                unread[folder] = p["slug"] if p else os.path.basename(root)
             continue
-        for h in inv:
+        for h in inv or []:
             owner = h.get("owner") or p["slug"]
             # only what the peer owns is shared; hosts it merely uses are not passed on
             if owner == p["slug"]:
-                out.append(dict(h, project=p["slug"], owner=owner, owner_explicit=True))
+                out.append(dict(h, project=p["slug"], owner=owner, owner_explicit=True,
+                                shared_key="%s/%s" % (p["slug"], h["name"]), project_folder=folder))
     for s in me["share_with"]:
         if s != "*" and s not in found:
             notes.append("share_with names %s, which is not a project in this Solaris tree" % s)
@@ -2837,6 +2861,12 @@ class Ctx(object):
                        "the owning project instead where you can" % me, DENIED)
         return me
 
+    def need_config(self):
+        # a broken sharing file of this project would read as none: no sharing, and the folder's name as its slug
+        if self.project and self.project["config_error"]:
+            raise Fail("cannot read %s: fix it first (it must hold a JSON object)" % os.path.join(
+                self.project["root"], self.project["pack"], ".memory", CONFIG_NAME), USAGE)
+
 
 def emit(ctx, obj, lines):
     if ctx.json:
@@ -2974,6 +3004,21 @@ def request_text(r, host):
                fmt_gb(fit.get("ram_gb")), alt, cmds, local_time(parse_iso(r["expires"]))))
 
 
+def tool_cmd(ctx, *args):
+    # a command to run as printed: this tool, the caller's --project/--hosts/--local-root and any explicit
+    # --agent and --as-owner, then args
+    parts = ["python3", os.path.abspath(__file__)]
+    for flag, v in (("--project", getattr(ctx.args, "project", None)), ("--hosts", ctx.hosts_path),
+                    ("--local-root", ctx.local_root)):
+        if v:
+            parts += [flag, os.path.abspath(os.path.expanduser(v))]
+    if getattr(ctx.args, "agent", None):
+        parts += ["--agent", ctx.args.agent]
+    if ctx.as_owner:
+        parts.append("--as-owner")
+    return " ".join(shlex.quote(str(x)) for x in parts + list(args))
+
+
 def host_label(h, r=None):
     owner = (r or {}).get("owner") or h.get("owner")
     return "%s [project %s, owner %s]" % (h["name"], h.get("project") or "-", owner or "-")
@@ -3029,15 +3074,25 @@ def cmd_install(ctx, a):
                 "reserve_ram_gb": parse_gb(a.reserve_ram) if a.reserve_ram else None,
                 "reserve_disk_free_pct": a.disk_free_pct, "disk_path": a.disk_path, "launcher": a.launcher,
                 "rules": kv_pairs(a.rule, "--rule"), "lease": kv_pairs(a.lease, "--lease"), "owner": a.owner}
-    ctx.need_owner_identity()
+    me = ctx.need_owner_identity()
+    ctx.need_config()
     req = {"op": "install", "settings": settings}
     if a.share_with is not None:
         sw = a.share_with.strip()
         req["share_with"] = [] if sw in ("", "none", "-") else [x.strip() for x in sw.split(",") if x.strip()]
     elif ctx.project and ctx.project["has_config"]:
         req["share_with"] = ctx.project["share_with"]
-    results = ctx.call_many(ctx.hosts(a.host or [], default_all=False), req)
-    lines = []
+    if a.all:
+        if a.host:
+            raise Fail("pass --all or --host, not both", USAGE)
+        if a.owner or a.lease:
+            raise Fail("--owner and --lease differ per host: pass them with --host, not with --all", USAGE)
+        # every host this project owns in its inventory; the hosts others share with it stay theirs
+        hosts = [h for h in ctx.inventory() if h.get("owner") in (me, None)]
+    else:
+        hosts = ctx.hosts(a.host or [], default_all=False)
+    results = ctx.call_many(hosts, req)
+    lines = [] if hosts else ["no hosts owned by %s in the inventory" % me]
     for h, r in results:
         if not r.get("ok"):
             lines += fail_lines(h["name"], r)
@@ -3049,7 +3104,11 @@ def cmd_install(ctx, a):
             fmt_gb(f["disk_gb"]), ", ".join("%d %s" % (g["index"], g["name"]) for g in f["gpus"]) or "none"))
         for w in f.get("warnings") or []:
             lines.append("  warning: " + w)
-    emit(ctx, {"hosts": dict((h["name"], r) for h, r in results)}, lines)
+    sw = req.get("share_with")
+    if sw and any(r.get("ok") for _, r in results):
+        lines.append("shared with %s: tell them (their `shared` lists new and changed hosts)"
+                     % ("every project" if "*" in sw else ", ".join(sw)))
+    emit(ctx, {"hosts": dict((h["name"], r) for h, r in results), "share_with": sw}, lines)
     return exit_code(results)
 
 
@@ -3072,6 +3131,218 @@ def cmd_status(ctx, a):
         lines.append("note: " + n)
     emit(ctx, {"hosts": dict((h["name"], r) for h, r in results), "notes": ctx.notes}, lines)
     return exit_code(results)
+
+
+def shared_record(h, key):
+    # what a guest tracks about a host shared with it, from the owner's inventory alone (no ssh)
+    lease = h.get("lease") if isinstance(h.get("lease"), dict) else None
+    end = (lease or {}).get("planned_end") or None
+    if end:
+        try:
+            end = iso(parse_iso(end))
+        except ValueError:
+            end = str(end)
+    gpus = h.get("gpus")
+    if gpus in (None, "", []):
+        gpus = (lease or {}).get("gpu_type")
+    if isinstance(gpus, (list, tuple)):
+        gpus = ", ".join(str(g) for g in gpus)
+    return {"key": key, "name": h["name"], "project": h.get("project"), "owner": h.get("owner"),
+            "target": h.get("target"), "lease_kind": None if lease is None else (lease.get("kind") or "none"),
+            "planned_end": end, "usd_per_hour": (lease or {}).get("usd_per_hour"),
+            "gpus": None if gpus in (None, "") else str(gpus), "folder": h.get("project_folder")}
+
+
+def shared_now(ctx, inv_file, me):
+    # records and inventory hosts by key (owner/name) for what other projects share with this one now, and the
+    # projects whose files could not be read, folder to slug (their hosts count neither as shared nor as gone)
+    cur, hosts, unread = {}, {}, {}
+    if inv_file:
+        # exactly this inventory: the hosts in it that another project owns
+        for h in ctx.inventory():
+            if h.get("owner") and h["owner"] != me:
+                key = "%s/%s" % (h["owner"], h["name"])
+                cur[key], hosts[key] = shared_record(dict(h, project=h["owner"]), key), h
+        return cur, hosts, unread
+    p = ctx.project
+    if not solaris_root_of(p["root"]):
+        raise Fail("%s is not in a Solaris tree (projects/<group>/<slug>/), so no sharing links can be read" % p["root"])
+    own = [dict(h, project=p["slug"], owner=h.get("owner") or p["slug"])
+           for h in read_inventory(os.path.join(p["root"], p["pack"], ".memory", "hosts.json")) or []]
+    peers, notes = peer_hosts(p, unread)
+    merged, more = merge_hosts(own, peers)
+    ctx.notes = notes + more
+    # the names status and claim take: a clash becomes <project>/<name>; a host this project lists keeps its name
+    by_key = dict((h["shared_key"], h) for h in merged if h.get("shared_key"))
+    by_target = dict((h["target"], h) for h in merged if h["target"] != "local")
+    for h in peers:
+        k = h["shared_key"]
+        host = by_key.get(k) or by_target.get(h["target"]) or h
+        cur[k], hosts[k] = shared_record(dict(h, name=host["name"]), k), host
+    return cur, hosts, unread
+
+
+def safe_lease_text(lease, t):
+    try:
+        return lease_text(lease, t)
+    except (ValueError, TypeError):
+        return "%s, ends %s" % ((lease or {}).get("kind") or "?", (lease or {}).get("planned_end") or "?")
+
+
+def gpu_summary(gpus):
+    # "2x NVIDIA H200 NVL (1.50 free)": GPUs by model with their summed free share
+    by = {}
+    for g in gpus or []:
+        n = g.get("name") or "?"
+        c, fr = by.get(n, (0, 0.0))
+        by[n] = (c + 1, fr + float(g.get("free_share") or 0.0))
+    return ", ".join("%dx %s (%.2f free)" % (c, n, fr) for n, (c, fr) in sorted(by.items())) or "none"
+
+
+def shared_line(r, t):
+    lease = "?" if r.get("lease_kind") is None else safe_lease_text(
+        {"kind": r["lease_kind"], "planned_end": r.get("planned_end"), "usd_per_hour": r.get("usd_per_hour")}, t)
+    return "%s [owner %s] %s; lease %s; GPUs %s" % (r.get("name"), r.get("owner") or "-", r.get("target") or "-", lease,
+                                                    r.get("gpus") or "?")
+
+
+def when_text(v):
+    try:
+        return local_time(parse_iso(v))
+    except ValueError:
+        return str(v)
+
+
+def shared_value(f, v):
+    if v is None:
+        return "?"
+    return when_text(v) if f == "planned_end" else str(v)
+
+
+def shared_live(r, me):
+    # the part of a status answer a guest needs: tag, free capacity, GPUs, the host's own lease, admission
+    if not r.get("ok"):
+        return {"ok": False, "code": r.get("code"), "error": r.get("error")}
+    if not r.get("installed"):
+        return {"ok": True, "installed": False}
+    why = [m for _, m in admission({"share_with": r.get("share_with"), "owner": r.get("owner"),
+                                    "mode": r.get("mode") or "shared"}, me, False, False)]
+    return {"ok": True, "installed": True, "now": r.get("now"), "tag": r.get("tag"), "free": r.get("free"),
+            "lease": r.get("lease"), "owner": r.get("owner"), "share_with": r.get("share_with"), "mode": r.get("mode"),
+            "admitted": not why, "why": why}
+
+
+def live_line(v, t):
+    if not v.get("ok"):
+        return "  live: %s" % v.get("error")
+    if not v.get("installed"):
+        return "  live: not installed yet (its owner runs install --all)"
+    f = v.get("free") or {}
+    return "  live: %s; free %s cores, %s RAM, %s disk; GPUs %s; lease %s; %s" % (
+        v.get("tag"), f.get("cores"), fmt_gb(f.get("ram_gb")), fmt_gb(f.get("disk_gb")), gpu_summary(f.get("gpus")),
+        safe_lease_text(v.get("lease"), v.get("now") or t),
+        "admits you" if v.get("admitted") else "does not admit you: " + "; ".join(v.get("why") or []))
+
+
+def cmd_shared(ctx, a):
+    # guest side: the hosts other projects share with this one against the seen list; no ssh unless --probe
+    inv_file = ctx.hosts_path or os.environ.get("HOSTCLAIMS_HOSTS")
+    if ctx.local_root or not (ctx.project or inv_file):
+        raise Fail("shared lists the hosts other projects share with this one: run it in a project (or pass "
+                   "--hosts FILE with --seen FILE)", USAGE)
+    if a.seen:
+        seen_path = os.path.abspath(os.path.expanduser(a.seen))
+    elif inv_file:
+        raise Fail("with --hosts, pass --seen FILE as well (the project's seen list tracks the hosts found through "
+                   "sharing links)", USAGE)
+    else:
+        seen_path = os.path.join(ctx.project["root"], ctx.project["pack"], ".memory", SEEN_NAME)
+    ctx.need_config()
+    me = ctx.need_agent()
+    t = time.time()
+    cur, hosts, unread = shared_now(ctx, inv_file, me)
+    raw = read_json(seen_path)
+    if os.path.exists(seen_path) and not isinstance(raw, dict):
+        ctx.notes.append("cannot read the seen list %s: every host counts as new" % seen_path)
+    seen = raw if isinstance(raw, dict) else {}
+    old = seen.get("hosts") if isinstance(seen.get("hosts"), dict) else {}
+    old = dict((k, v) for k, v in old.items() if isinstance(v, dict))
+
+    def unreadable(r):
+        # by the owner's folder; a record from a seen list written before folders were kept matches by slug
+        return r["folder"] in unread if r.get("folder") else r.get("project") in unread.values()
+
+    new = [cur[k] for k in sorted(cur) if k not in old]
+    gone = [old[k] for k in sorted(old) if k not in cur and not unreadable(old[k])]
+    kept = [old[k] for k in sorted(old) if k not in cur and unreadable(old[k])]
+    changed, same = [], []
+    for k in sorted(set(cur) & set(old)):
+        diff = dict((f, [old[k].get(f), cur[k].get(f)]) for f in SHARED_FIELDS if old[k].get(f) != cur[k].get(f))
+        if diff:
+            changed.append(dict(cur[k], changes=diff))
+        else:
+            same.append(cur[k])
+    live, results = {}, []
+    if a.probe and cur:
+        # one status call per host, over ssh: tag, free capacity, GPUs, and whether the host admits this project
+        todo = dict((hosts[k]["name"], hosts[k]) for k in sorted(cur))
+        results = ctx.call_many(list(todo.values()), {"op": "status"})
+        by_name = dict((h["name"], shared_live(r, me)) for h, r in results)
+        live = dict((k, by_name[hosts[k]["name"]]) for k in cur)
+    last = seen.get("acked")
+    projects = sorted(set(r.get("project") or "-" for r in cur.values()))
+    lines = ["shared with %s: %d host(s)%s; last ack %s" % (
+        me, len(cur), (" from " + ", ".join(projects)) if projects else "", when_text(last) if last else "never")]
+    labels = {"name": "name", "owner": "owner", "target": "target", "lease_kind": "lease", "planned_end": "planned end",
+              "gpus": "GPUs"}
+    for tag, recs in (("NEW", new), ("CHANGED", changed)):
+        for r in recs:
+            lines.append("%-7s %s" % (tag, shared_line(r, t)))
+            if r.get("changes"):
+                lines.append("  was: " + "; ".join("%s %s -> %s" % (labels[f], shared_value(f, r["changes"][f][0]),
+                                                                     shared_value(f, r["changes"][f][1]))
+                                                   for f in SHARED_FIELDS if f in r["changes"]))
+            if live:
+                lines.append(live_line(live[r["key"]], t))
+    for r in gone:
+        lines.append("GONE    %s: no longer shared with you" % shared_line(r, t))
+    for r in kept:
+        lines.append("UNREAD  %s: %s's files cannot be read now, so it stays as seen" % (shared_line(r, t),
+                                                                                         r.get("project")))
+    if live:
+        for r in same:
+            lines.append("same    " + shared_line(r, t))
+            lines.append(live_line(live[r["key"]], t))
+    elif same:
+        lines.append("unchanged: " + ", ".join(r["name"] for r in same))
+    for n in ctx.notes:
+        lines.append("note: " + n)
+    pending = bool(new or gone or changed)
+    if a.ack:
+        doc = {"schema": SCHEMA, "project": me, "acked": iso(t), "hosts": dict((r["key"], r) for r in kept)}
+        doc["hosts"].update(cur)
+        try:
+            os.makedirs(os.path.dirname(seen_path), exist_ok=True)
+            write_json(seen_path, doc)
+        except OSError as e:
+            raise Fail("cannot write the seen list %s: %s" % (seen_path, e))
+        lines.append("acknowledged %d host(s) in %s" % (len(doc["hosts"]), seen_path))
+    elif pending:
+        lines.append("%d new, %d gone, %d changed since the last ack. NEW: `status --host H` (or `fit`), then `claim` or "
+                     "`run`; GONE: start nothing there and release your claims there; CHANGED: check lease ends and "
+                     "targets against your claims. Then acknowledge: %s" % (
+                         len(new), len(gone), len(changed),
+                         tool_cmd(ctx, "shared", "--ack", *(["--seen", seen_path] if a.seen else []))))
+    else:
+        lines.append("no changes since the last ack")
+    out = {"project": me, "seen_file": seen_path, "last_ack": last, "new": new, "gone": gone, "changed": changed,
+           "unchanged": same, "unread": kept, "notes": ctx.notes, "acknowledged": bool(a.ack)}
+    if a.probe:
+        out["live"] = live
+    emit(ctx, out, lines)
+    if a.ack:
+        return OK
+    return CHANGES if pending else exit_code(results)
 
 
 def cmd_request(ctx, a):
@@ -3164,19 +3435,32 @@ def audit_recommend(r, ap):
 
 def cmd_audit(ctx, a):
     me = ctx.need_agent()
+    ctx.need_config()
     # an extension request older than a new instance's ready time is advised for decline
     ap = dict(ctx.policy["audit"], request_stale_min=new_instance(ctx.policy["fit"], 0.0, None)["wait_min"])
     window = parse_hours(a.window) if a.window else float(ctx.policy["audit"]["window_hours"])
     hosts = [h for h in ctx.hosts(a.host) if h.get("owner") in (me, None)]
     results = ctx.call_many(hosts, {"op": "audit", "window_hours": window})
-    rows, lines = [], []
+    want_sw = ctx.project["share_with"] if ctx.project and ctx.project["has_config"] else None
+    rows, lines, fixes = [], [], 0
     for h, r in results:
         if r.get("ok") and r.get("installed") and r.get("owner") not in (me, None):
             continue
         rec = audit_recommend(dict(r, lease=r.get("lease") or h.get("lease")), ap)
-        rows.append({"host": h["name"], "result": r, "recommendation": rec})
+        # an owned host that guests cannot see correctly yet: not installed, or its sharing list is out of date
+        fix = None
+        if r.get("ok") and not r.get("installed"):
+            fix = {"why": "in the inventory but not installed", "cmd": tool_cmd(ctx, "install", "--host", h["name"])}
+        elif r.get("ok") and want_sw is not None and sorted(want_sw) != sorted(r.get("share_with") or []):
+            fix = {"why": "sharing on the host (%s) differs from resource-sharing.json (%s)" % (
+                ", ".join(r.get("share_with") or []) or "unset", ", ".join(want_sw) or "nobody"),
+                "cmd": tool_cmd(ctx, "install", "--host", h["name"])}
+        fixes += 1 if fix else 0
+        rows.append({"host": h["name"], "result": r, "recommendation": rec, "fix": fix})
         if not r.get("ok") or not r.get("installed"):
             lines.append("%s: %s - %s" % (host_label(h, r), rec["action"], rec["why"]))
+            if fix:
+                lines.append("  fix: " + fix["cmd"])
             continue
         lease = r.get("lease") or {}
         cost = (", cost so far $%.2f" % r["cost_so_far_usd"]) if r.get("cost_so_far_usd") is not None else ""
@@ -3185,10 +3469,8 @@ def cmd_audit(ctx, a):
         use = "; ".join("%s %s%.2f CPU-h" % (ag, "".join("%.2f %s GPU-h, " % (v, k) for k, v in sorted(u["gpu_hours"].items())),
                                                 u["cpu_hours"]) for ag, u in sorted((r.get("usage") or {}).items()))
         lines.append("  use, last %g h: %s" % (window, use or "none"))
-        want_sw = ctx.project["share_with"] if ctx.project and ctx.project["has_config"] else None
-        if want_sw is not None and sorted(want_sw) != sorted(r.get("share_with") or []):
-            lines.append("  sharing on the host (%s) differs from resource-sharing.json (%s): run install to sync" % (
-                ", ".join(r.get("share_with") or []) or "unset", ", ".join(want_sw) or "nobody"))
+        if fix:
+            lines.append("  %s: sync it with %s" % (fix["why"], fix["cmd"]))
         for q in r.get("requests") or []:
             lines.append("  open request: " + request_text(q, h["name"]))
         if r.get("old_runs"):
@@ -3197,6 +3479,9 @@ def cmd_audit(ctx, a):
         lines.append("  recommend: %s - %s" % (rec["action"], rec["why"]))
     if not results:
         lines.append("no hosts owned by %s in the inventory" % me)
+    if fixes:
+        lines.append("install or sync every owned host at once (then tell the projects you share with): %s"
+                     % tool_cmd(ctx, "install", "--all"))
     emit(ctx, {"owner": me, "window_hours": window, "hosts": rows}, lines)
     return exit_code(results)
 
@@ -3671,6 +3956,8 @@ def build_parser():
 
     sp = cmd("install", "owner: create or update the claims folder on hosts (idempotent)")
     sp.add_argument("--host", action="append", help="inventory host (repeat; default: the only host)")
+    sp.add_argument("--all", action="store_true", help="every host this project owns in its inventory, with the "
+                    "current share_with: run it right after adding machines or changing share_with")
     sp.add_argument("--owner", help="hand the host to another project (the new owner)")
     sp.add_argument("--share-with", help="comma list of projects admitted besides the owner ('*' for all, 'none'); "
                     "default: share_with from resource-sharing.json")
@@ -3686,6 +3973,12 @@ def build_parser():
     sp.add_argument("--host")
     sp = cmd("status", "host tags, free capacity, claims, requests")
     sp.add_argument("--host", action="append")
+    sp = cmd("shared", "guest: the hosts other projects share with this one against the seen list: new, gone and "
+             "changed hosts (exit 6 until --ack); no ssh unless --probe")
+    sp.add_argument("--ack", action="store_true", help="record the current set as seen, after acting on the changes")
+    sp.add_argument("--probe", action="store_true", help="also read each host's tag, free capacity and GPUs, and "
+                    "whether it admits this project (ssh)")
+    sp.add_argument("--seen", help="the seen list (default <pack>/.memory/%s; required with --hosts)" % SEEN_NAME)
     for name, text in (("claim", "reserve capacity for a job you start yourself (idempotent per agent and job)"),
                        ("run", "claim, then start the job in tmux, pinned and watched (put the command after --)")):
         sp = cmd(name, text)
@@ -3779,7 +4072,7 @@ def build_parser():
 COMMANDS = {"install": cmd_install, "uninstall": cmd_uninstall, "status": cmd_status, "claim": cmd_claim,
             "run": lambda ctx, a: cmd_claim(ctx, a, launch=True), "release": cmd_release, "reap": cmd_reap,
             "yield": cmd_yield, "usage": cmd_usage, "pool": cmd_pool, "lease": cmd_lease, "extend": cmd_extend,
-            "fit": cmd_fit, "request": cmd_request, "audit": cmd_audit,
+            "fit": cmd_fit, "request": cmd_request, "audit": cmd_audit, "shared": cmd_shared,
             "approve": lambda ctx, a: cmd_decide(ctx, a, "approve"),
             "decline": lambda ctx, a: cmd_decide(ctx, a, "decline")}
 

@@ -1,9 +1,9 @@
 ---
 name: resource-sharing
-triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance"]
-summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield, moves stale claims aside, reports usage, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects, one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit.
+triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance"]
+summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield, moves stale claims aside, reports usage, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit.
 ---
-_Rev. 1_
+_Rev. 5_
 
 # Skill: resource-sharing - Hosts Shared by Many Agents <!-- omit in toc -->
 
@@ -13,6 +13,7 @@ _Rev. 1_
 - [Launching Jobs](#launching-jobs)
 - [Priorities and Yield](#priorities-and-yield)
 - [Owners, Guests and Requests](#owners-guests-and-requests)
+- [Picking Up Shared Hosts](#picking-up-shared-hosts)
 - [Paid Hosts and Fit](#paid-hosts-and-fit)
 - [Owner Audit](#owner-audit)
 - [Pools](#pools)
@@ -40,9 +41,10 @@ run or session.
 
 1. **Inventory.** The project's `<pack>/.memory/hosts.json` (`<pack>` is `ai` or `aipack`) lists hosts as
    `{name, target, opts}` (`target` is `user@address`, `opts` the ssh options). Optional per host: `owner`
-   (a project slug; default: this project), `lease` (below) and `root` (the claims folder, default
-   `~/.solaris/claims`). `--hosts FILE` uses exactly that file instead; `--local-root DIR` works on a folder
-   on this machine (tests, dry runs).
+   (a project slug; default: this project), `lease` (below), `root` (the claims folder, default
+   `~/.solaris/claims`) and `gpus` (free text such as `2x H200 NVL`, which `shared` shows guests).
+   `--hosts FILE` uses exactly that file instead; `--local-root DIR` works on a folder on this machine
+   (tests, dry runs).
 2. **Sharing links.** `<pack>/.memory/resource-sharing.json` (private) names this project and whom it
    shares its own hosts with:
 
@@ -65,11 +67,14 @@ run or session.
    or `--share-with a,b`, `'*'` or `none`). The host itself then admits only the owner and the projects on
    that list; with no list it admits only the owner. Options: `--mode shared|draining|dedicated:<project>`,
    `--reserve-cores N`, `--reserve-ram SIZE`, `--disk-free-pct P`, `--lease key=value`, `--rule key=value`
-   (host rules below), `--owner <slug>` (hand the host over). Re-run it after changing `share_with`.
-   `uninstall` (owner only) removes the folder and is refused while claims or pool holds are open. The
-   folder is bound to its machine, and install refuses a home folder on a network filesystem (a home shared
-   between hosts would mix their claims): give such hosts a `root` on local disk in the inventory. Record
-   the install (host and path) in the project's `resources.md`, as for any remote footprint.
+   (host rules below), `--owner <slug>` (hand the host over). `install --all` does every host the project
+   owns in its inventory at once (idempotent; it takes no `--owner` or `--lease`, which differ per host): run
+   it right after adding machines to `hosts.json` or changing `share_with`, then tell the projects you share
+   with (see Picking Up Shared Hosts). `uninstall` (owner only) removes the folder and is refused while
+   claims or pool holds are open. The folder is bound to its machine, and install refuses a home folder on a
+   network filesystem (a home shared between hosts would mix their claims): give such hosts a `root` on
+   local disk in the inventory. Record the install (host and path) in the project's `resources.md`, as for
+   any remote footprint.
 5. **Policy (optional)**, in the `policy` block of the sharing file or `--policy FILE`: `weights` per
    project (for `usage`), `classes` (default GPU share and preemptibility per class), `fit` (new-instance
    wait, prices per GPU type, extension thresholds) and `audit` (idle limits). Host rules live in the host's
@@ -84,6 +89,7 @@ run or session.
 | Command | Does |
 |---|---|
 | `status [--host H]` | Per host: tag, owner, lease, free cores/RAM/disk and per-GPU free share and memory, claims (live, orphan, stale), unclaimed GPU processes, requests, recent ends, stale files. All hosts by default. Other projects' commands show only their program name. |
+| `shared [--probe] [--ack] [--seen FILE]` | Guest: the hosts other projects share with this one against the seen list: `NEW`, `GONE` and `CHANGED` hosts; exits 6 until `--ack` records the current set. No ssh unless `--probe`. `--seen FILE` names the seen list (required with `--hosts`). See Picking Up Shared Hosts. |
 | `claim --host H --job J --cores N --ram SIZE [--gpu SPEC] [--class P1] [--hours H]` | Reserve capacity for a job you start yourself. Idempotent per project and job: a repeat returns the same claim and renews it, and a repeat with `--pid P` ties it to your job's process. Untied, the claim lapses 15 minutes after its last renewal; the answer prints that time. A process another claim holds is refused. |
 | `run ... -- CMD ARGS` | Claim, then start the job in tmux (see Launching Jobs). A repeat returns the running claim; a job that ended in the last 15 min needs `--rerun`. Over an earlier bare claim of the same job it re-fits that claim to the run's size. |
 | `release --host H --job J` | Release your claim; `--stop` first stops a running job (through its watcher: TERM, then KILL after the grace; a claim tied with `--pid` gets TERM to its process group and is released once the process is gone). |
@@ -93,13 +99,14 @@ run or session.
 | `fit --hours H [--gpus N --gpu-type T --gpu-mem SIZE] --cores N --ram SIZE [--can-wait]` | Rank hosts for a job against a new paid instance, and recommend. |
 | `extend`, `request`, `approve`, `decline` | Guest requests (and `request --withdraw ID`) and owner decisions (below). |
 | `lease --host H [--set key=value]` | Show the lease; the owner sets it. |
-| `audit` | Owner: lease, idle time, use by project, cost so far, open requests, recommendation. |
+| `audit` | Owner: lease, idle time, use by project, cost so far, open requests, hosts not installed or whose sharing list differs from `resource-sharing.json` (each with its `install` command), recommendation. |
 | `pool show|define|acquire|release --file PATH|HOST:PATH` | Shared counters with per-project caps. |
 
 GPU `SPEC` is `INDEX|any[:SHARE[:MEM]]`, e.g. `--gpu 1`, `--gpu any:0.25`, `--gpu 0::12G`; `--gpus N` picks N.
 Sizes take `M`, `G` or `T`; durations `90m`, `2h` or `1d`. `--json` prints machine-readable output. Exit
 codes: 0 ok, 1 error, 2 bad usage, 3 does not fit (try another host, or ask to yield), 4 host unreachable
-(the claim or launch may still have happened: run `status` on that host first), 5 refused by a sharing rule.
+(the claim or launch may still have happened: run `status` on that host first), 5 refused by a sharing rule,
+6 the hosts shared with this project changed since the last `shared --ack` (act on them, then ack).
 
 Capacity is the host's totals minus live claims minus what runs outside claims: an unclaimed GPU process (or
 at least 1 GiB of unexplained GPU memory) takes its whole GPU, unclaimed RAM use and CPU load count as used,
@@ -124,6 +131,10 @@ each; the system's own memory, caches and `/dev/shm` are not work.
 - on exit writes `run/<claim-id>/done.json` (exit code, signal, reason `finished`, `failed`, `yielded` or
   `stopped`, times), a copy at `--done-file PATH` if given, a ledger line in `history.jsonl`, and releases
   the claim.
+
+The thread variables suit one multi-threaded process. A job that starts many single-threaded worker processes (a
+process pool, parallel runners) hands the count to each, so N workers on an N-core claim start N threads apiece and
+oversubscribe it: set one thread per process (the variables at 1 in each worker, or the runner's own thread option).
 
 Output goes to `run/<claim-id>/job.log` (follow it with `tail -f`); watcher events go to `wrapper.log`. Claim
 files and run folders are readable by the host's login only. The owner's `reap` removes finished run folders
@@ -182,6 +193,45 @@ elsewhere. A guest that launches elsewhere while its request is pending withdraw
 `request --host H --withdraw ID` (only the requesting project may; the ledger records it), so the owner is
 not left deciding a request nobody needs.
 
+A guest onboarding that worked: the owner installs its hosts with the sharing list (`install --all`) and messages
+the guest the hosts, their lease ends and its terms; the guest files each setup need (a container runtime, a GPU
+reset) as `request --type maintenance`; the owner, with its human's yes (standing or per request), does the work,
+checks it, and only then approves the request, so an approval also tells the guest the work is done.
+
+A guest leaves a host as it found it, apart from its own folder there (for example `~/.solaris/<project>/`,
+listed in its `resources.md`). Before its first job on the host it points every cache and config home into
+that folder, from an env file each job sources: `XDG_CACHE_HOME`, `XDG_CONFIG_HOME`, `XDG_DATA_HOME`,
+`CUDA_CACHE_PATH`, `TRITON_CACHE_DIR`, `TORCHINDUCTOR_CACHE_DIR`, `HF_HOME`, `UV_CACHE_DIR`, `PIP_CACHE_DIR`
+and each framework's own (`VLLM_CACHE_ROOT`, for example). The defaults land in the login's home, often the
+owner's own: a GPU stack meeting a new GPU architecture JIT-compiles hundreds of megabytes into the CUDA cache
+on its first start, and installers write to `~/.config` and `~/.local/share`. Check once after the first job:
+`touch` a marker before it, then `find "$HOME" / -xdev -newer <marker>` should list nothing outside the folder
+but the claims folder and temporary files (`$HOME` is named because `-xdev` keeps `find /` out of a home on
+another filesystem). Problems found later (leftover GPU memory, a missing package, a stray
+process that is not yours) go to the owner the same way, as a maintenance `request` plus a message; a guest
+never fixes the owner's host itself.
+
+## Picking Up Shared Hosts
+
+Owners add and retire machines; their guests must notice without being told. `shared` reads only the Solaris
+tree (no ssh): the hosts other projects own and share with this one, named as `status` names them, compared with
+the seen list `<pack>/.memory/resource-sharing-seen.json` (private, per project). It prints `NEW`, `GONE` and
+`CHANGED` hosts with owner, target, lease kind and planned end as the owner's inventory lists them (`?` when it
+lists no lease; the host's own copy wins) and GPUs when the inventory names them (`gpus`, else the lease's
+`gpu_type`), and exits 6 until `shared --ack` records the current set. A project whose files cannot be read
+keeps its hosts as seen (`UNREAD`), never `GONE`. `--probe` adds each host's live tag, free capacity and GPUs,
+and whether it admits you (a host its owner has not synced yet does not).
+
+- **Guests** run `shared` at every audit and at least hourly, beside their other scheduled checks (an automated
+  check prints and never acks). On `NEW`: `status --host H` or `fit`, then bring the host into use through
+  `claim` or `run`; one that is not installed or does not admit you yet waits for its owner (ask them). On
+  `GONE`: start nothing new there, and release your claims there (let running jobs finish, or stop them). On
+  `CHANGED`: check lease ends and targets against your claims and scripts. Then `shared --ack`.
+- **Owners** run `install --all` right after adding machines to `hosts.json` or changing `share_with`: it
+  installs the new hosts and syncs the sharing list on the others. Then they tell the projects they share with
+  (whose next `shared` finds the change anyway). `audit` flags owned hosts that are not installed, or whose
+  sharing list differs from `resource-sharing.json`, each with the exact command to fix it.
+
 ## Paid Hosts and Fit
 
 A host's lease (inventory `lease` or `install --lease key=value`, owner only) has a `kind`:
@@ -220,7 +270,8 @@ and its guests are told why.
 
 `audit` lists the hosts this project owns: lease and time left, idle time since the last claim, work
 outside claims, GPU-hours and CPU-hours by project, cost so far for paid hosts (rate times hours since
-`started`), open requests, a sharing mismatch with `resource-sharing.json`, old run folders, and a
+`started`), open requests, hosts not installed yet or whose sharing list differs from `resource-sharing.json`
+(each with the exact `install` command; `install --all` fixes them all), old run folders, and a
 recommendation:
 
 - `extend`: live claims run past the end, a guest asks for more time, or a free lease is in use and ends
@@ -261,6 +312,11 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
 
 - Check `status` before heavy work; start every host job with `run` (or `claim` it first) and stay inside
   the claim: its cores, GPUs, RAM, disk and hours.
+- A server that serves other jobs' runs (an inference engine behind an evaluation queue, say) is part of
+  their claim: send it no diagnostic or experimental requests. Start your own under your own claim, or use it
+  only while its runs are held between batches: one memory-heavy request can kill it and every run it serves
+  (asking vLLM for prompt log-probabilities over a 5k-token prompt allocated about 5 GiB of logits, and its
+  engine died).
 - Give every `claim` a `--pid`, or re-run it within 15 minutes, or it lapses and its capacity goes to
   others.
 - Never release, edit or delete another project's claim or hold; `reap` moves stale claims to `stale/`
@@ -271,6 +327,10 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
 - Put the claim id, tmux session and done marker in your notes and job ledger.
 - Honour yield requests: checkpoint on `SIGTERM` in long jobs.
 - Owners audit their hosts and answer requests promptly; guests relay requests to the owner and wait.
+- Guests run `shared` at least hourly and act on `NEW` and `GONE` hosts before `shared --ack`; owners run
+  `install --all` after adding machines or changing `share_with`, and tell the projects they share with.
+- Guests keep everything they write on a host, caches included, inside their own folder there, and report
+  host problems to the owner instead of fixing them (see Owners, Guests and Requests).
 
 ## Troubleshooting
 
@@ -283,6 +343,9 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
 - **Exit 4**: the host did not answer in time. The claim or launch may still have happened: run `status` on
   that host before trying another one (repeating the same `claim` or `run` only returns the existing
   claim). Claims on the host stay valid and its jobs keep running.
+- **Exit 6**: the hosts shared with this project changed since the last `shared --ack`: act on the `NEW`,
+  `GONE` and `CHANGED` lines, then ack. A `NEW` host that is not installed or does not admit you (`--probe`)
+  is its owner's to sync with `install --all`.
 - **`orphan`**: the watcher died but the job lives; the claim is kept. When the job ends, the claim goes
   stale after 15 minutes with no done marker; read `job.log`.
 - **`stale/`**: the host rebooted (boot id changed), the job died unwatched, or a claim without `--pid` was
