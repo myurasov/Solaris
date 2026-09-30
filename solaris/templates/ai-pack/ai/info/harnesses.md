@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Info: Harness Capabilities <!-- omit in toc -->
 
@@ -13,23 +13,23 @@ harness with no subagent tool"); this file says which harness that is today. Com
 
 ## Capability Matrix
 
-As of **2026-08-13**, for the harnesses this pack is tested on:
+As of **2026-09-29**, for the harnesses this pack is tested on:
 
 | Capability | Claude Code | Cursor |
 |---|---|---|
 | Instruction auto-load | `CLAUDE.md` `@`-import of `AGENTS.md` | reads `AGENTS.md` natively |
-| Subagents | Agent tool (`general-purpose`, read-only `Explore`; `model:`/`effort:` params) | none |
+| Subagents | Agent tool (`general-purpose`, read-only `Explore` and `Plan`): per-call `model:`, else the session model (`Explore` capped at Opus); no per-call effort (subagents inherit the session's) | Task tool (2.4+; built-in Explore, Bash, Browser, plus custom agents): the parent names a model per launch, effort as a model-ID suffix; parallel |
 | Parallel tool calls | yes | partial, model-dependent |
 | Per-command sandbox escalation | permission prompt per command | approval card |
 | MCP config | `.mcp.json` | `.cursor/mcp.json` |
 
 ## Notes
 
-- No subagent tool in Cursor means the subagents rule falls back to its checkpointed-inline
-  contract there: the lookup still runs, sliced/grepped within the read budget, notes to a scratch
-  file, only conclusions restated (the bulk-read floor is never disabled).
-- Any other harness: check its own docs for the same capabilities; the rules degrade the same way
-  (no subagent tool -> checkpointed-inline).
+- Both harnesses have a subagent tool (Cursor since 2.4).
+- Any other harness: check its own docs for the same capabilities. Without a subagent tool the
+  subagents rule runs its checkpointed-inline contract: the lookup still runs, sliced/grepped within
+  the read budget, notes to a scratch file, only conclusions restated (the bulk-read floor is never
+  disabled).
 
 ## Keeping This Current
 
