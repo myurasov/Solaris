@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page", "bot check", "cloudflare challenge", "verify you are human", "headless is blocked"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 11_
+_Rev. 12_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -145,7 +145,9 @@ identity on 18, headed on 20.
 - **Headless announces itself.** Its user agent says `HeadlessChrome/<ver>`, so Cloudflare-style
   bot checks ("Verify you are human", Turnstile) never clear, and some sites serve an empty
   shell. For such sites use `--headed` (a minimized window is fine; a server needs a virtual
-  display such as Xvfb). `navigator.webdriver` is already false under browserctl.
+  display such as Xvfb). Headless sessions can also report `navigator.webdriver` as true
+  (browserctl does not hide it): check it in the page (`page.evaluate("navigator.webdriver")`)
+  before relying on the desktop-identity recipe below.
 - **Headless with a desktop identity**, when there is no display: set the user agent AND the
   matching client hints on each new tab, before navigating - the string alone is not enough:
 
