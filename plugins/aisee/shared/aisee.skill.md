@@ -17,17 +17,17 @@ summary: Capture the UI (or take provided media), then have AISee's VLM eyes ans
   assert an expectation, or watch a recording, or its audio models transcribe one - MCP first,
   REST/CLI fallback.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: aisee - visual verification and transcription with AISee <!-- omit in toc -->
 
-- [0. Reach the server](#0-reach-the-server)
-- [1. Capture](#1-capture)
-- [2. Query](#2-query)
+0. [Reach the server](#0-reach-the-server)
+1. [Capture](#1-capture)
+2. [Query](#2-query)
   - [2a. MCP (preferred)](#2a-mcp-preferred)
   - [2b. REST fallback](#2b-rest-fallback)
   - [2c. CLI fallback](#2c-cli-fallback)
-- [3. Report](#3-report)
+3. [Report](#3-report)
 - [Setting up a server](#setting-up-a-server)
 - [Troubleshooting](#troubleshooting)
 
