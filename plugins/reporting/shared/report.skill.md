@@ -10,7 +10,7 @@ summary: Author and render a project findings report - HTML source in
   pages, runts). Styling/rendering tooling is this plugin's assets/; theme and page
   furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
@@ -69,7 +69,7 @@ they fold back on the next plugin update (import-plugin Mode A picks up the high
 |---|---|
 | `style.css` | The stylesheet every report links. Organized in commented sections (tokens, typography, headings, TOC, tables, figures + diagrams, print, screen). **Defaults: Helvetica Neue body font; 8pt body, 7.75pt summary line, 7.5pt tables, 7.25pt small text, headings larger; Solaris purple accent (#6A1B9A)**. Owns the spacing rules below (TOC, figures, captions) - do not override them per report |
 | `render.js` | Zero-npm-dep PDF renderer: drives installed Chrome over the DevTools protocol (plain Node >= 22, built-in WebSocket; `$CHROME` overrides the binary path), merges two passes with poppler `pdfunite`, then runs `check.js`. Owns page geometry (Letter, margins) and the page furniture: page-1 header "<byline> on <render date, HH:MM TZ>" (byline: `report.json` `prepared_by`, else the rendering developer's git identity, else "Rendered"; `""` = no byline), pages-2+ header "<H1 title> - <subtitle>", footer watermark (from `report.json`; none by default) + report date (from the `report-date` meta; legacy reports: the H1's MMDD prefix) |
-| `check.js` | Zero-npm-dep layout check (poppler `pdftoppm` + `pdftotext`): lists half-empty pages and runts; `render.js` prints it after every render; standalone `node check.js <pdf> [--json]` (exit 1 when anything is flagged) |
+| `check.js` | Zero-npm-dep layout check (poppler `pdftoppm` + `pdftotext`): lists half-empty pages and runts; `render.js` prints it after every render; standalone `node check.js <pdf> [--json]` (exit 1 when anything is flagged, 2 when it cannot run) |
 | `render.sh` | The single render entry point, run from the project root or `reports/`: `render.sh` (all), `render.sh <slug> ...` (some), `render.sh --live [slug ...]` (watch sources + theme, re-render on change) |
 
 **Theming** is two-layer, so the plugin copy stays generic and project identity lives in
@@ -174,8 +174,8 @@ The reader was not in the session. Write so a newcomer follows every sentence:
 ## Figures and Charts
 
 **Which reports get graphs in the PDF.** Research, analysis and recommendation reports must
-include graphs and visuals in the PDF - charts, screenshots, diagrams (owner directive,
-2026-09-29). Benchmark/experiment reports stay tables-only in the PDF (Content Rules); their
+include graphs and visuals in the PDF - charts, screenshots, diagrams.
+Benchmark/experiment reports stay tables-only in the PDF (Content Rules); their
 interactive charts sit in `<div class="chart-block">` (or `<figure class="chart-block">`)
 with styles in the report's inline `<style>`, hidden under `@media print` there.
 
@@ -231,7 +231,9 @@ re-render after each round.
   vanishes at the top and bottom of a page and the figure stays on its page. Margins inside
   a grid row are not dropped - `.fig-row` carries its own. Neighboring margins collapse (the
   larger wins), so judge a spacing change in the PDF, not in the CSS.
-- **Optional visual check**: rasterize the pages (`pdftoppm -r 100 -png report.pdf /tmp/p`)
+- **Optional visual check**: rasterize the pages into a scratch folder
+  (`mkdir -p $HOME/.solaris/tmp/<slug>-pages`, then
+  `pdftoppm -r 100 -png reports/<slug>.pdf $HOME/.solaris/tmp/<slug>-pages/p`)
   and have a vision model (the `aisee` or `visual-qa` plugin) assert "No text on this page
   overlaps other text or graphics" for each page (about 1-2 s per page).
 

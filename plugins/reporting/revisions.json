@@ -2,9 +2,19 @@
   "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
   "schema_version": 1,
   "files": {
+    "shared/assets/check.js": {
+      "rev": 2,
+      "hash": "db35970882465d4bc431c42419d0d106c341312baf21db628a66ccf25b94163f",
+      "history": [
+        {
+          "rev": 2,
+          "hash": "db35970882465d4bc431c42419d0d106c341312baf21db628a66ccf25b94163f"
+        }
+      ]
+    },
     "shared/assets/render.js": {
-      "rev": 3,
-      "hash": "5e54a09c968c844c9c1c392dae18d2a8d83d96399f7a18a5575294c2b19087fb",
+      "rev": 4,
+      "hash": "e97289d6037543b1a27cd00c1583521ca480a7675007703609677475fa0bd19b",
       "history": [
         {
           "rev": 1,
@@ -17,6 +27,10 @@
         {
           "rev": 3,
           "hash": "5e54a09c968c844c9c1c392dae18d2a8d83d96399f7a18a5575294c2b19087fb"
+        },
+        {
+          "rev": 4,
+          "hash": "e97289d6037543b1a27cd00c1583521ca480a7675007703609677475fa0bd19b"
         }
       ]
     },
@@ -35,8 +49,8 @@
       ]
     },
     "shared/assets/style.css": {
-      "rev": 5,
-      "hash": "23690226575e1b9aa0ee9e9c576fa8b5326648afde7ea4509f4068975dfe3b3b",
+      "rev": 6,
+      "hash": "e218e74ff1150b3f2b09664f0f546806e119b6428197f64de3898d43e8699087",
       "history": [
         {
           "rev": 1,
@@ -57,12 +71,16 @@
         {
           "rev": 5,
           "hash": "23690226575e1b9aa0ee9e9c576fa8b5326648afde7ea4509f4068975dfe3b3b"
+        },
+        {
+          "rev": 6,
+          "hash": "e218e74ff1150b3f2b09664f0f546806e119b6428197f64de3898d43e8699087"
         }
       ]
     },
     "shared/report.skill.md": {
-      "rev": 6,
-      "hash": "ae9f597550d4a80011f6f2c8e63949149a66bd46092d7d11b99c861a8fc607b0",
+      "rev": 8,
+      "hash": "030320ed3f4c83d7dec477b68b2a37adb2df57e721670c6b3a29ecbcd874def7",
       "history": [
         {
           "rev": 1,
@@ -87,6 +105,10 @@
         {
           "rev": 6,
           "hash": "ae9f597550d4a80011f6f2c8e63949149a66bd46092d7d11b99c861a8fc607b0"
+        },
+        {
+          "rev": 8,
+          "hash": "030320ed3f4c83d7dec477b68b2a37adb2df57e721670c6b3a29ecbcd874def7"
         }
       ]
     }

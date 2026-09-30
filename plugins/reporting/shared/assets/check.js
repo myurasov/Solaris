@@ -1,10 +1,11 @@
-// rev. 1
+// rev. 2
 
 // Layout check for a rendered report PDF - ZERO npm deps; needs poppler's
 // pdftoppm + pdftotext (brew install poppler, which the renderer already
 // needs for pdfunite). render.js runs it after every render; standalone:
 //
-//   node check.js <report.pdf> [--json]      exit 1 when anything is flagged
+//   node check.js <report.pdf> [--json]      exit 1 when anything is flagged,
+//                                            2 when the check cannot run
 //
 // Two checks:
 //   half-empty pages - the page body ends more than 10% above the bottom
@@ -13,7 +14,7 @@
 //           the body area inside render.js's page margins.
 //   runts  - wrapped text (paragraph, list item, caption, table cell) whose
 //           last line is one word or at most 10 letters. Found in pdftotext's
-//           word boxes: a short line right after a full-width one.
+//           word boxes: a short last line right after a full-width one.
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
@@ -26,6 +27,8 @@ const PAGE_IN = { w: 8.5, h: 11 };
 const BODY_IN = { top: 0.70, bottom: 10.30, side: 0.45 };
 // word boxes shorter than this (pt) are chart labels, not prose
 const MIN_TEXT_H = 8.0;
+// scratch for the page images, outside the project (same place as render.js)
+const TMP_ROOT = path.join(os.homedir(), '.solaris', 'tmp');
 
 const isSpace = b => b === 0x20 || b === 0x0a || b === 0x0d || b === 0x09;
 
@@ -46,7 +49,8 @@ function readPgm(file) {
 
 // Empty fraction at the bottom of each page body, in page order.
 function pageGaps(pdf) {
-  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'report-check-'));
+  fs.mkdirSync(TMP_ROOT, { recursive: true });
+  const tmp = fs.mkdtempSync(path.join(TMP_ROOT, 'report-check-'));
   try {
     execFileSync('pdftoppm', ['-gray', '-r', String(DPI), pdf, path.join(tmp, 'p')]);
     return fs.readdirSync(tmp).filter(f => f.endsWith('.pgm')).sort().map(f => {
@@ -87,6 +91,9 @@ function runts(pdf) {
         const h = cur.y1 - cur.y0;
         if (h < MIN_TEXT_H) continue;
         if (cur.y0 - prev.y1 > 0.8 * h) continue;
+        // only the last line of its text counts: skip when the next line continues it
+        const next = lines[i + 1];
+        if (next && next.y0 - cur.y1 <= 0.8 * h) continue;
         const text = cur.words.join(' ');
         const letters = (text.match(/[\p{L}\p{N}]/gu) || []).length;
         if (!(cur.words.length === 1 || letters <= 10)) continue;
@@ -128,7 +135,15 @@ if (require.main === module) {
   const args = process.argv.slice(2);
   const pdf = args.find(a => !a.startsWith('--'));
   if (!pdf) { console.error('usage: node check.js <report.pdf> [--json]'); process.exit(2); }
-  const r = check(path.resolve(pdf));
+  let r;
+  try {
+    fs.accessSync(path.resolve(pdf), fs.constants.R_OK);
+    r = check(path.resolve(pdf));
+  } catch (e) {
+    // missing poppler tool or unreadable PDF: exit 2, so 1 keeps meaning "flagged"
+    console.error(`layout check failed: ${String(e.message).split('\n')[0]}`);
+    process.exit(2);
+  }
   console.log(args.includes('--json') ? JSON.stringify(r, null, 2) : summary(r));
   process.exit(r.halfEmpty.length || r.runts.length ? 1 : 0);
 }
