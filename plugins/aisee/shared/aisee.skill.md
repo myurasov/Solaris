@@ -17,7 +17,7 @@ summary: Capture the UI (or take provided media), then have AISee's VLM eyes ans
   assert an expectation, or watch a recording, or its audio models transcribe one - MCP first,
   REST/CLI fallback.
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: aisee - visual verification and transcription with AISee <!-- omit in toc -->
 
@@ -54,11 +54,15 @@ evidence, media rules) are in [`aisee.rule.md`](aisee.rule.md) - they always app
 
 Skip if the user already provided media.
 
-- **Web:** Playwright MCP (`browser_navigate`, `browser_take_screenshot`; record interactions
-  as video if the check is temporal).
+- **Web:** browserctl `screenshot` (the `browserctl` plugin), or the Playwright MCP where a
+  project still configures it (`browser_navigate`, `browser_take_screenshot`; record
+  interactions as video if the check is temporal).
 - **Native / TUI:** `screencapture` (macOS) / `import`/`grim` (Linux) for stills; ffmpeg or OS
   screen recording for video.
 - **Mobile:** simulator/device screen recording.
+- **Documents (rendered PDF reports):** one PNG per page with poppler,
+  `pdftoppm -r 100 -png report.pdf <dir>/p`, then one assert per page, e.g. "No text on this
+  page overlaps other text or graphics" (about 1-2 s per page on `qwen3-6-35b-a3b`).
 
 Save per the evidence rule: `ai/.memory/visual/<area>-<state>-<YYYYMMDD>.png` (or the active
 task folder).
@@ -155,6 +159,21 @@ uv sync && ./aisee install            # checks docker/NVIDIA toolkit/ffmpeg, cre
 ./aisee api start                     # REST + MCP on 0.0.0.0:4444
 ```
 
+**On a shared multi-GPU host** (another project uses the other GPUs):
+
+- AISee (1.1.0b1, commit 876357d) starts model containers with `--gpus all` (two places in
+  `src/dockerctl.py`) and has no GPU-selection setting, and its free-memory check reads only
+  the first GPU. To stay on one GPU, patch both to `--gpus device=0` locally (GPU 0 is the one
+  the memory check measures), record the patch with the server entry, and report the gap
+  upstream.
+- With no consumer token set, bind the API to localhost (`./aisee api start --host 127.0.0.1`)
+  and reach it through an ssh tunnel: `ssh -N -L 14444:127.0.0.1:4444 <host>`, then
+  `http://127.0.0.1:14444` (REST; MCP at `/mcp`).
+- Sizing seen 2026-09-30: `qwen3-6-35b-a3b` on one 84 GiB GPU ran at `gpu_frac` 0.933 with a
+  262k context; the weights (67 GB) and the vLLM image (38.4 GB) downloaded in about 4
+  minutes, the first request waited 84 s for the model to load, then answers took about 1 s
+  per photo.
+
 Then record the URL in `ai/.memory/resources.md` (`aisee_server`), the consumer token (if
 enabled) in `ai/.memory/credentials.md`, and update the `aisee` MCP entry in both `.mcp.json` and
 `.cursor/mcp.json` (keep the two identical; under a Solaris checkout,
@@ -172,3 +191,5 @@ enabled) in `ai/.memory/credentials.md`, and update the `aisee` MCP entry in bot
 | model marked retired in describe | still served while installed; prefer the successor describe names (1.1 retired the Qwen3-VL and Nemotron entries) |
 | MCP tools missing from session | project MCP config lacks the `aisee` entry or session predates it - fix the entry in both MCP configs, reload; use REST meanwhile |
 | verdict looks wrong | read `reason`/`evidence`, tighten the expectation, add `context`, or retry with a stronger model from `describe` |
+| a JSON answer does not parse | the model wrapped it in a ```` ```json ```` fence - strip the fence before parsing |
+| model fills every GPU on a shared host | see "On a shared multi-GPU host" under Setting up a server |
