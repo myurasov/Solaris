@@ -29,9 +29,13 @@ As of **2026-09-29** (re-verify per "Keeping This Current"):
 | Tier | Claude Code (Agent tool `model:`) | Cursor | OpenAI / xAI (API model id) |
 |---|---|---|---|
 | cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) | `gpt-6-luna` |
-| mid | `sonnet` (Sonnet 5.5) | Sonnet 5.5 / Grok 4.7 | `grok-4.7` |
+| mid | `opus` (Opus 5.5; not Sonnet 5.5, see below) | Grok 4.7 (not Sonnet 5.5) | `grok-4.7` |
 | high | `opus` (Opus 5.5) | Opus 5.5 | `gpt-6.1-sol` |
 | frontier | `fable` (Fable 5.1) or the session model | Fable 5.1 (may need data-retention approval; else Opus 5.5 at `xhigh`) | `gpt-6-astra` |
+
+**Avoid Sonnet 5.5**: on Artificial Analysis's intelligence-vs-cost charts (read 2026-09-30 from the page's data),
+Sonnet 5.5 costs more per task than Opus 5.5 ($7.60 vs $5.98) while scoring lower (56.0 vs 57.6), so Opus dominates
+it; in Claude Code mid-tier work goes to `opus`, and truly mechanical sweeps to `haiku`.
 
 Notes: Anthropic's own guidance is to start with Opus 5.5 for most work and step up to Fable 5.1 for
 demanding reasoning and long-horizon agentic work, or when Opus 5.5 at higher effort still falls

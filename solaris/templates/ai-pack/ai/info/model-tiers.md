@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 5_
 
 # Info: Model Tiers <!-- omit in toc -->
 
@@ -29,7 +29,7 @@ As of **2026-09-29** (re-verify per "Keeping This Current"):
 | Tier | Claude Code (Agent tool `model:`) | Cursor | OpenAI / xAI (API model id) |
 |---|---|---|---|
 | cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) | `gpt-6-luna` |
-| mid | `sonnet` (Sonnet 5.5) | Sonnet 5.5 / Grok 4.7 | `grok-4.7` |
+| mid | `opus` (Opus 5.5; not Sonnet 5.5, which scores lower and costs more per task) | Grok 4.7 (not Sonnet 5.5) | `grok-4.7` |
 | high | `opus` (Opus 5.5) | Opus 5.5 | `gpt-6.1-sol` |
 | frontier | `fable` (Fable 5.1) or the session model | Fable 5.1 (may need data-retention approval; else Opus 5.5 at `xhigh`) | `gpt-6-astra` |
 
