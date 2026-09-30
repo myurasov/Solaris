@@ -185,7 +185,7 @@ servers, optional project types - so any project can opt into it.
   for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
   strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
   tree), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
-  testing), `aisee` (AISee visual QA: rule + skill + MCP servers), `nvidia-brev` (autonomous
+  testing), `aisee` (AISee eyes and ears: visual QA and transcription; rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
   rendering via installed Chrome; per-project theme: fonts, accent color, page furniture),
   `resource-sharing` (hosts shared by agents and projects: per-host claim files with pinned,
