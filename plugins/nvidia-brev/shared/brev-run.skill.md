@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 14_
+_Rev. 16_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -42,8 +42,10 @@ read the upstream directly at `github.com/brevdev/brev-cli` under `.agents/skill
    when the data's handling rules require NVIDIA-provisioned hosts, then cheapest with
    acceptable boot time. `--dry-run` on `create` to preview when unsure. Filter syntax:
    `brev-cli/reference/search-filters.md`.
-3. `brev create <name> --type <type>` (waits for ready; default timeout 300s - pass
-   `--timeout 900` for slow bootors). Name convention: `<project-or-org-prefix>-<job>`.
+3. `brev create <name> --type <type>`, always with one explicit type from the search
+   output (never pipe `brev search` into `brev create`; see Field Gotchas), then confirm
+   the instance and its type with `brev ls`. It waits for ready (default timeout 300s -
+   pass `--timeout 900` for slow boots). Name convention: `<project-or-org-prefix>-<job>`.
 4. Record start time + $/h at creation. **Every instance gets a row in
    `ai/.memory/brev-costs.md`** (created/deleted UTC, rate, hours, cost, purpose) - appended
    at teardown, including aborted attempts. The run report must state the actual cost.
@@ -200,6 +202,12 @@ until their rows land at teardown.
 - `brev create` launched non-interactively (no tty, backgrounded) can fail silently - it
   printed nothing and no instance appeared; the identical foreground retry worked. Verify
   with `brev ls` after every create rather than trusting the create call.
+- `brev search` lists types the org cannot create: in one org only half of the listed
+  types were creatable - `brev create` checks the org's own instance-type list, and every
+  marketplace-brokered type (often the cheapest listings) failed as "not a recognized
+  type". A piped `brev search ... | brev create <name>`, as the upstream examples show,
+  then falls back silently to create's default types, so the instance is not the one
+  picked. Pass one explicit `--type`, and check the type `brev ls` shows.
 - A `brev delete` can be lost without a trace when the agent session/harness restarts around
   the call (field incident: a lost delete billed ~50 extra minutes). Verify every delete with
   `brev ls` in the SAME turn it is issued, and make the stray-instance check the first action
