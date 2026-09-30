@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Info: Model Tiers <!-- omit in toc -->
 
@@ -26,21 +26,26 @@ Four abstract tiers, matched to task complexity, harness-independent:
 
 As of **2026-09-29** (re-verify per "Keeping This Current"):
 
-| Tier | Claude Code (Agent tool `model:`) | Cursor |
-|---|---|---|
-| cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) |
-| mid | `sonnet` (Sonnet 5.5) | Sonnet 5.5 |
-| high | `opus` (Opus 5.5) | Opus 5.5 / GPT-5.6 Sol |
-| frontier | `fable` (Fable 5.1) or the session model | Fable 5.1 (may need data-retention approval; else Opus 5.5 at `xhigh`) |
+| Tier | Claude Code (Agent tool `model:`) | Cursor | OpenAI / xAI (API model id) |
+|---|---|---|---|
+| cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) | `gpt-6-luna` |
+| mid | `sonnet` (Sonnet 5.5) | Sonnet 5.5 / Grok 4.7 | `grok-4.7` |
+| high | `opus` (Opus 5.5) | Opus 5.5 | `gpt-6.1-sol` |
+| frontier | `fable` (Fable 5.1) or the session model | Fable 5.1 (may need data-retention approval; else Opus 5.5 at `xhigh`) | `gpt-6-astra` |
 
 Notes: Anthropic's own guidance is to start with Opus 5.5 for most work and step up to Fable 5.1 for
 demanding reasoning and long-horizon agentic work, or when Opus 5.5 at higher effort still falls
 short; at 40% of Fable 5.1's base price ($4/$20 vs $10/$50 per million tokens; cache reads $0.20 vs
 $0.25), in Claude Code the `opus` selector is the best price/performance pick for high-tier and
-budget-frontier work. In Claude Code, use the read-only `Explore` agent type for search sweeps, and
-pass `model:` whenever the tier differs from the session model - the built-in agent types otherwise
-run on the session model (`Explore` capped at Opus). Cursor's subagent tool also takes a model per
-launch (see `ai/info/harnesses.md`), so its column picks subagent models as well as the session model.
+budget-frontier work. OpenAI positions GPT-6.1 Sol as near-Astra performance at a fifth of GPT-6
+Astra's price ($2/$10 vs $10/$50). On Terminal-Bench 4.0 xAI's flagship Grok 4.7 ($2/$6) scores 37.6%,
+level with GPT-5.6 Sol (Cursor's newest OpenAI model) and far below Opus 5.5 and Fable 5.1 (66.4% and
+55.8%; vendor-reported), hence mid. In Claude Code, use the read-only `Explore` agent type for search
+sweeps, and pass `model:` whenever the tier differs from the session model - the built-in agent types
+otherwise run on the session model (`Explore` capped at Opus). Cursor's subagent tool also takes a
+model per launch (see `ai/info/harnesses.md`), so its column picks subagent models as well as the
+session model. The OpenAI / xAI column gives API model ids for harnesses that take those APIs directly
+(for example OpenCode, or Codex for the GPT models); Cursor does not list the GPT-6 models yet.
 
 ## Effort + Thinking
 

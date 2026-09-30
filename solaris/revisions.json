@@ -279,8 +279,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/info/model-tiers.md": {
-      "rev": 2,
-      "hash": "f4f33c3d379f8ad1ccc6d9a0cd6f836eee9d5cb5c3af43cda60831c3bb80ca50",
+      "rev": 3,
+      "hash": "d2e4d4f7c871d6d2edecaecb68c954d017880c486ef924af30304ff5c04e6895",
       "history": [
         {
           "rev": 1,
@@ -289,6 +289,10 @@
         {
           "rev": 2,
           "hash": "f4f33c3d379f8ad1ccc6d9a0cd6f836eee9d5cb5c3af43cda60831c3bb80ca50"
+        },
+        {
+          "rev": 3,
+          "hash": "d2e4d4f7c871d6d2edecaecb68c954d017880c486ef924af30304ff5c04e6895"
         }
       ]
     }
