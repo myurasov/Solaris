@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 # Rule: aisee conventions <!-- omit in toc -->
 
@@ -64,11 +64,14 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
 ## Models and patience
 
 - Do not hardcode a model: omit it for the server default, or choose from `list_models` and the
-  per-model strengths/weaknesses/pitfalls in `GET /v1/describe?flavor=mcp`.
+  per-model strengths/weaknesses/pitfalls in `GET /v1/describe?flavor=mcp`. A model marked
+  retired there still works, but prefer its named successor when it is installed.
 - Mind each model's `Thinking:` line in describe: reasoning models always think (slower,
-  deeper; cannot be disabled), thinking-toggle models think by default but take
-  `thinking: false` for fast direct answers, and plain models never think. Thinking counts
-  against the answer budget (`max_tokens`) - give thinking calls headroom.
+  deeper; cannot be disabled); thinking-toggle models (`Thinking: optional`) follow the
+  host's default, which the line states (off unless the admin turned it on), and take
+  `thinking: true` per call for hard questions (`false` forces a direct answer); plain
+  models never think. Thinking counts against the answer budget (`max_tokens`) and runs
+  long - keep it for hard questions and give those calls headroom.
 - A cold or idle-unloaded model takes minutes to load; query tools block through it. Do not
   resubmit - that only queues more work. For long `watch`/`transcribe`/`diarize` jobs pass
   `wait=false` and poll `get_task` (ASR runs at roughly realtime/30 or faster once loaded).
@@ -77,11 +80,22 @@ audio "ears" served on a GPU host (see [`aisee.skill.md`](aisee.skill.md) for th
   guessing from elapsed time.
 - Long meeting videos: `look`/`assert` with native video are safe at any length (the server
   re-encodes down to the model's frame budget), but detail-over-time questions still belong
-  to `watch`. On unified-memory hosts avoid hour-scale transcriptions while a large VLM is
-  resident - the audio engine is sacrificed by design and the task fails with a clear
-  "engine connection failed" (retry after the VLM idle-unloads).
-- Contexts are large (256k tokens on the Qwen3-VL / Cosmos family, 128k elsewhere - see
-  `max_model_len` in describe) and image budgets are sized to fill them (`max_images`,
+  to `watch`, which takes at most 64 chunks per call - on a 96-frame model about 50 min at
+  the default 2 fps, about 100 min at fps 1; for longer recordings lower `fps` or raise
+  `chunk_seconds`, and the whole run must finish within the host's request timeout
+  (default 1 h). On unified-memory hosts avoid transcribing recordings of tens of minutes
+  while a large VLM is resident - the audio engine is sacrificed by design and the task
+  fails with a clear "engine connection failed" (retry after the VLM idle-unloads, by
+  default after 60 idle minutes, or ask the operator to stop it).
+- Video detail: on the catalog's Qwen and Cosmos models the frames of one video share one
+  pixel budget (a 1080p frame keeps ~1344x768 at 24 frames, ~672x384 at the default
+  96-frame cap), so for fine text send a still or sampled `frames`, or pass a low `fps`
+  with `native` (the clip is re-encoded at that rate first). `watch` samples 2 fps by
+  default: 1 suits "what happens", 8-15 hunts flicker with targeted questions or
+  expectations (above 2, free-form narration gets less reliable), and a shorter
+  `chunk_seconds` gives each frame more detail at the cost of more chunks.
+- Contexts are large (up to 256k tokens on every catalog model, fitted to the host's GPU -
+  see `max_model_len` in describe) and image budgets are sized to fill them (`max_images`,
   often ~100+ stills per request), so prefer one big batched call over many small ones.
 - Models state their GPU-memory need in GiB (`mem_gib` in describe/models). A start that
   does not fit next to the running models is refused up front with a GiB-denominated

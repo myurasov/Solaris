@@ -9,10 +9,12 @@ _Rev. 1_
 
 ## What it is
 
-Gives a project's engineer agent **eyes** via [AISee](https://github.com/myurasov/AISee) - a
-standalone tool that serves vision-language models on a GPU host and answers questions about
-images and video: `look` (free-form / OCR), `assert_visual` (machine-checkable pass/fail
-verdicts), `watch` (chunked whole-video analysis with time-localized findings).
+Gives a project's engineer agent **eyes and ears** via [AISee](https://github.com/myurasov/AISee) -
+a standalone tool that serves vision-language and audio models on a GPU host. It answers
+questions about images and video: `look` (free-form / OCR), `assert_visual` (machine-checkable
+pass/fail verdicts), `watch` (chunked whole-video analysis with time-localized findings); and
+it transcribes recordings: `transcribe` (per-lane transcripts, optionally speaker-attributed),
+`diarize` (who spoke when).
 
 Access order: **MCP** (streamable HTTP at `<server>/mcp`; local media uploaded once via
 `POST /v1/blobs` and referenced as `sha256:<hex>`), then plain **REST**, then the **aisee
