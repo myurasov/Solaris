@@ -187,11 +187,12 @@ servers, optional project types - so any project can opt into it.
   tree), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee eyes and ears: visual QA and transcription; rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
-  rendering via installed Chrome; per-project theme: fonts, accent color, page furniture),
+  rendering via installed Chrome, with a layout check after every render; per-project theme:
+  fonts, accent color, page furniture),
   `resource-sharing` (hosts shared by agents and projects: per-host claim files with pinned,
   watched jobs and yields; sharing links with one owner per host and guest requests; fit against
-  new paid instances; an owner audit so no machine is abandoned; shared pools for account-level
-  limits).
+  new paid instances; an owner audit so no machine is abandoned; guests told of new, gone and
+  changed shared hosts; shared pools for account-level limits).
 
 ## 9. Keeping Solaris Projects Current
 
