@@ -293,7 +293,7 @@ EOF
 
 PASS: both exit 0; the keys are `calls`, `errors`, `fetched_at`, `kernels`, `quota` and `since`;
 `quota` lists `gpu` (and `tpu`), or is empty when Kaggle reports none; at most 20 kernels, each with
-`kind`, `lastRunTime`, `ref` and `status`; `errors: 0` (each error is a failed call).
+`lastRunTime`, `ref` and `status`; `errors: 0` (each error is a failed call).
 
 ### 8. Live Plan Preview, Offline
 
