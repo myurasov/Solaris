@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # Info: Model Tiers <!-- omit in toc -->
 
@@ -24,16 +24,22 @@ Four abstract tiers, matched to task complexity, harness-independent:
 
 ## Per-Harness Mapping
 
-As of **2026-09-29** (re-verify per "Keeping This Current"):
+As of **2026-09-30** (re-verify per "Keeping This Current"):
 
 | Tier | Claude Code (Agent tool `model:`) | Cursor | OpenAI / xAI (API model id) |
 |---|---|---|---|
 | cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) | `gpt-6-luna` |
 | mid | `opus` (Opus 5.5; not Sonnet 5.5, which scores lower and costs more per task) | Grok 4.7 (not Sonnet 5.5) | `grok-4.7` |
 | high | `opus` (Opus 5.5) | Opus 5.5 | `gpt-6.1-sol` |
-| frontier | `fable` (Fable 5.1) or the session model | Fable 5.1 (may need data-retention approval; else Opus 5.5 at `xhigh`) | `gpt-6-astra` |
+| frontier | `opus` (Opus 5.5) at effort `max`; not Fable 5.x (see below) | Opus 5.5 at `max` (not Fable 5.1) | `gpt-6-astra` |
 
-Notes: Anthropic's own guidance is to start with Opus 5.5 for most work and step up to Fable 5.1 for
+**Avoid Fable 5.x** (owner direction 2026-09-30, standing): Fable 5 and 5.1 are not used unless the owner explicitly
+asks. The owner rates them less capable than Opus 5.5, and they cost more ($10/$50 vs $4/$20 per million tokens).
+Frontier-tier work runs on Opus 5.5 at `xhigh` or `max` effort; in Claude Code pass `model: opus` (an agent
+definition can also pin `effort:`).
+
+Notes: Anthropic's own guidance (overridden here by the owner: see Avoid Fable 5.x) is to start with Opus 5.5 for
+most work and step up to Fable 5.1 for
 demanding reasoning and long-horizon agentic work, or when Opus 5.5 at higher effort still falls
 short; at 40% of Fable 5.1's base price ($4/$20 vs $10/$50 per million tokens; cache reads $0.20 vs
 $0.25), in Claude Code the `opus` selector is the best price/performance pick for high-tier and
