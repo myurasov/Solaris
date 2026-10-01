@@ -33,42 +33,42 @@ def cli_list(rows, next_page=None, notice=None):
     return "\n".join(head + [json.dumps(rows, indent=2)] + tail) + "\n"
 
 
-def comment(cid, author, date, content):
-    return {"id": cid, "authorName": author, "votes": 0, "postDate": date, "content": content}
+def comment(cid, author, date, content, replies=()):
+    # a comment as the SDK read prints it, its replies nested
+    return {"id": cid, "authorName": author, "postDate": date, "votes": 0, "content": content,
+            "replies": list(replies)}
 
 
-def topic_json(tid, title, comments):
+def count(comments):
+    return sum(1 + count(c.get("replies") or []) for c in comments)
+
+
+def sdk_topic(tid, title, comments, post="<p>Is X allowed?</p>"):
+    """What `kaggle.py --sdk topic <id>` prints: the topic with its opening post, the comments with replies nested."""
+    return json.dumps({"topic": {"id": tid, "title": title, "authorName": "Asker",
+                                 "postDate": "2026-09-19T06:13:46.728000", "votes": 2,
+                                 "commentCount": count(comments), "content": post},
+                       "comments": comments}, indent=2) + "\n"
+
+
+def old_topic_json(tid, title, comments):
+    # what an earlier version saved from `forums topics show <id> --format json`: no opening post, comments flat
     return json.dumps({"topic": {"id": tid, "title": title, "authorName": "Asker", "commentCount": len(comments),
                                  "votes": 2, "postDate": "2026-09-19T06:13:46.728000"},
                        "comments": comments}, indent=2) + "\n"
 
 
-def table(tid, title, post, tree):
-    """What `forums topics show <id>` prints: header, opening post, then the reply tree (text cut to 200)."""
-    out = [f"Topic #{tid}: {title}", "  Author: Asker", "  Posted: 2026-09-19 06:13:46.728000",
-           f"  Votes: 2  Comments: {len(tree)}", "", post, ""]
-    if tree:
-        out.append("Comments:")
-        for depth, c in tree:
-            pad = "  " * depth
-            text = F.strip_html(c["content"])
-            text = text if len(text) <= 200 else text[:197] + "..."
-            out.append(f"{pad}├─ {c['authorName']} ({c['postDate'].replace('T', ' ')}) [+{c['votes']}]")
-            out += [f"{pad}│  {line}" for line in text.split("\n")]
-    else:
-        out.append("No comments")
-    return "\n".join(out) + "\n"
-
-
-C1 = comment(11, "Host Person", "2026-09-20T01:00:00.100000", "<p>Yes, <b>allowed</b> &amp; fine.</p>")
+# a thread: C1 <- C2 <- C4, then C3
+C4 = comment(14, "Third", "2026-09-22T03:00:00.400000", "<p>Same here.</p>")
 C2 = comment(12, "Asker", "2026-09-21T02:00:00.200000",
-             '<p>Thanks, see <a href="https://example.org/doc">the doc</a>:</p><ul><li>one</li><li>two</li></ul>')
+             '<p>Thanks, see <a href="https://example.org/doc">the doc</a>:</p><ul><li>one</li><li>two</li></ul>', [C4])
+C1 = comment(11, "Host Person", "2026-09-20T01:00:00.100000", "<p>Yes, <b>allowed</b> &amp; fine.</p>", [C2])
 C3 = comment(13, "Other", "2026-09-19T08:00:00.300000", "<p>Also asking.</p>")
-THREAD = [(0, C1), (1, C2), (0, C3)]
+POST = '<p>Is X allowed? See <a href="https://example.org/rules">the rules</a>.</p>'
 
 
 class FakeGateway:
-    """Stands in for `python3 kaggle.py ...`: topic list pages by -p, topics by id."""
+    """Stands in for `python3 kaggle.py ...`: topic list pages by -p, SDK topic reads by id."""
 
     def __init__(self, pages=None, topics=None, fail=()):
         self.pages, self.topics, self.fail, self.calls = pages or {}, topics or {}, dict(fail), []
@@ -82,9 +82,8 @@ class FakeGateway:
                 return code, out
         if args[:3] == ["competitions", "topics", "list"]:
             return 0, self.pages[int(args[args.index("-p") + 1])]
-        if args[:3] == ["forums", "topics", "show"]:
-            tid = int(args[3])
-            return 0, self.topics[tid][0 if "--format" in args else 1]
+        if args[:2] == ["--sdk", "topic"]:
+            return 0, self.topics[int(args[2])]
         return 2, "unexpected command"
 
 
@@ -234,7 +233,7 @@ class DiffTests(Tmp):
         (self.d / "topics").mkdir()
         for tid, n in ((2, 3), (4, 0)):
             comments = [comment(i, "A", f"2026-09-2{i}T00:00:00", "x") for i in range(n)]
-            (self.d / "topics" / f"{tid}.json").write_text(topic_json(tid, f"Topic {tid}", comments))
+            (self.d / "topics" / f"{tid}.json").write_text(sdk_topic(tid, f"Topic {tid}", comments))
         # nothing was shown yet, so a plain commit records nothing
         self.assertEqual(F.commit(self.d), ([], [], []))
         text = F.show_topics(self.d, SLUG)
@@ -259,80 +258,108 @@ class DiffTests(Tmp):
         self.state({"5": {"comments": 1, "last_seen": "2026-09-28T20:45-07:00", "title": "Topic 5"}})
         _l, new, changed, _m = F.run_diff(self.d, self.listed({5: 1}))
         self.assertEqual((new, changed), ([], []))
-        comments = [C3, C1, C2]
         (self.d / "topics").mkdir()
-        (self.d / "topics" / "5.json").write_text(topic_json(5, "Topic 5", comments))
+        (self.d / "topics" / "5.json").write_text(sdk_topic(5, "Topic 5", [C3, C1]))
         text = F.render_topic(self.d, 5, SLUG, F.load_state(self.d)["5"], new_only=True)
         # without dates in the state, the newest comments beyond the count read then are the new ones
+        self.assertIn("3 new since the last read", text)
         self.assertIn("NEW Asker", text)
         self.assertIn("NEW Host Person", text)
         self.assertNotIn("Other", text)
 
 
 def fake_topics():
-    return {7: (topic_json(7, "A question", [C1, C2, C3]), table(7, "A question", "Is X allowed?", THREAD)),
-            8: (topic_json(8, "Quiet", []), table(8, "Quiet", "Nothing yet.", []))}
+    return {7: sdk_topic(7, "A question", [C1, C3], POST), 8: sdk_topic(8, "Quiet", [], "<p>Nothing yet.</p>")}
 
 
 class FetchShowTests(Tmp):
-    def test_fetch_saves_both_reads_and_keeps_old_files_after_a_failure(self):
+    def test_fetch_reads_each_topic_once_and_a_failed_read_keeps_the_file(self):
         fake = FakeGateway(topics=fake_topics())
         done, failed, left = F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=fake, pause=0)
-        self.assertEqual((done, failed, left), ([(7, 3), (8, 0)], [], []))
-        self.assertEqual(fake.calls[:2], [["forums", "topics", "show", "7", "--format", "json"],
-                                          ["forums", "topics", "show", "7"]])
-        self.assertEqual(json.loads((self.d / "topics" / "7.json").read_text())["topic"]["title"], "A question")
-        self.assertTrue((self.d / "topics" / "7.txt").read_text().startswith("Topic #7: A question"))
-        bad = FakeGateway(topics=fake_topics(), fail={"show 7": (1, "404 - Not Found")})
-        done, failed, _ = F.fetch_topics([7], self.d, self.gateway, self.tmp, run=bad, pause=0)
-        self.assertEqual((done, failed[0][0]), ([], 7))
-        self.assertIn("A question", (self.d / "topics" / "7.json").read_text())
+        self.assertEqual((done, failed, left), ([(7, 4), (8, 0)], [], []))
+        self.assertEqual(fake.calls, [["--sdk", "topic", "7"], ["--sdk", "topic", "8"]])
+        saved = json.loads((self.d / "topics" / "7.json").read_text())
+        self.assertEqual((saved["topic"]["content"], saved["comments"][0]["replies"][0]["id"]), (POST, 12))
+        self.assertEqual(sorted(p.name for p in (self.d / "topics").iterdir()), ["7.json", "8.json"])
+        before = (self.d / "topics" / "7.json").read_text()
+        reads = {"kaggle_sdk: 404 Not Found": FakeGateway(fail={"topic 7": (1, "kaggle_sdk: 404 Not Found: no topic")}),
+                 "topic 8, not 7": FakeGateway(topics={7: sdk_topic(8, "Quiet", [])}),
+                 "no opening post": FakeGateway(topics={7: old_topic_json(7, "A question", [])})}
+        for why, gw in reads.items():
+            done, failed, _ = F.fetch_topics([7], self.d, self.gateway, self.tmp, run=gw, pause=0)
+            self.assertEqual((done, [t for t, _ in failed]), ([], [7]))
+            self.assertIn(why, failed[0][1])
+            self.assertEqual((self.d / "topics" / "7.json").read_text(), before)
 
     def test_a_rate_limit_stops_the_loop(self):
-        fake = FakeGateway(topics=fake_topics(), fail={"show 7 --format": (1, "429 Client Error: Too Many Requests")})
+        fake = FakeGateway(topics=fake_topics(), fail={"topic 7": (1, "kaggle_sdk: 429 Too Many Requests: slow down")})
         done, failed, left = F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=fake, pause=0)
         self.assertEqual((done, [t for t, _ in failed], left), ([], [7], [8]))
         self.assertEqual(len(fake.calls), 1)
 
-    def test_show_puts_comments_in_thread_order_and_marks_new_ones(self):
+    def test_show_prints_the_opening_post_and_the_reply_tree_with_new_comments_marked(self):
         F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
         text = F.render_topic(self.d, 7, SLUG)
         self.assertIn("never read before", text)
         self.assertIn(f"https://www.kaggle.com/competitions/{SLUG}/discussion/7", text)
-        self.assertIn("\nIs X allowed?\n", text)
-        order = [text.index(s) for s in ("* Host Person", "    * Asker", "* Other")]
+        self.assertIn("\nIs X allowed? See the rules <https://example.org/rules>.\n", text)
+        self.assertIn("-- 4 comments --", text)
+        lines = text.splitlines()
+        tree = ["* Host Person (2026-09-20 01:00) [0]", "  Yes, allowed & fine.", "    * Asker (2026-09-21 02:00) [0]",
+                "      Thanks, see the doc <https://example.org/doc>:", "        * Third (2026-09-22 03:00) [0]",
+                "          Same here.", "* Other (2026-09-19 08:00) [0]"]
+        order = [lines.index(s) for s in tree]
         self.assertEqual(order, sorted(order))
-        self.assertIn("      Thanks, see the doc <https://example.org/doc>:", text)
-        self.assertIn("Yes, allowed & fine.", text)
         read = {"comments": 2, "newest_comment": "2026-09-20T01:00:00.100000"}
+        text = F.render_topic(self.d, 7, SLUG, read)
+        self.assertIn("2 new since the last read", text)
+        self.assertIn("\n* Host Person (2026-09-20 01:00) [0]\n", text)
+        self.assertIn("\n    * NEW Asker (2026-09-21 02:00) [0]\n", text)
         text = F.render_topic(self.d, 7, SLUG, read, new_only=True)
-        self.assertIn("1 new since the last read", text)
-        self.assertIn("* NEW Asker (2026-09-21 02:00) [0] (reply to Host Person)", text)
-        self.assertNotIn("Is X allowed?", text)
-        self.assertNotIn("Other", text)
+        self.assertIn("-- 4 comments, 2 new (only the new ones below) --", text)
+        self.assertIn("\n    * NEW Asker (2026-09-21 02:00) [0] (reply to Host Person)\n", text)
+        self.assertIn("\n        * NEW Third (2026-09-22 03:00) [0] (reply to Asker)\n", text)
+        for old in ("Is X allowed?", "* Host Person", "Other"):
+            self.assertNotIn(old, text)
         self.assertIn("-- 0 comments --", F.render_topic(self.d, 8, SLUG))
 
-    def test_a_comment_posted_between_the_two_reads_is_still_shown(self):
-        late = comment(14, "Late", "2026-09-22T00:00:00.400000", "<p>Late reply.</p>")
-        topics = {7: (topic_json(7, "A question", [C1, C2, C3, late]), table(7, "A question", "Q", THREAD))}
-        F.fetch_topics([7], self.d, self.gateway, self.tmp, run=FakeGateway(topics=topics), pause=0)
-        text = F.render_topic(self.d, 7, SLUG)
-        self.assertIn("* Late (2026-09-22 00:00) [0] (place in the thread unknown)", text)
-        self.assertGreater(text.index("Late reply."), text.index("Also asking."))
+    def test_a_topic_an_earlier_version_saved_is_kept_until_a_fetch_reads_it_again(self):
+        # the earlier fetch saved <id>.json without the opening post (comments flat) and the table view in <id>.txt
+        flat = [{k: v for k, v in c.items() if k != "replies"} for c in (C1, C2, C4, C3)]
+        old_json, old_txt = old_topic_json(7, "A question", flat), "Topic #7: A question\n\nIs X allowed?\n"
+        (self.d / "topics").mkdir(parents=True)
+        (self.d / "topics" / "7.json").write_text(old_json)
+        (self.d / "topics" / "7.txt").write_text(old_txt)
+        F.run_diff(self.d, self.listing(FakeGateway(pages={1: cli_list([row(7, "A question", 4)])}))[0])
+        self.assertIn("==== 7: fetched by an earlier version (run fetch to read it again)", F.show_topics(self.d, SLUG))
+        # nothing of it was shown: nothing is recorded, and it stays pending
+        self.assertEqual((F.load_shown(self.d)["topics"], F.commit(self.d)), ({}, ([], [], [])))
+        self.assertEqual(F.load_pending(self.d)["new"], [7])
+        # commit by id still reads its flat comments
+        self.assertEqual(F.read_entry(json.loads(old_json), "now")["newest_comment"], "2026-09-22T03:00:00.400000")
+        bad = FakeGateway(fail={"topic 7": (1, "kaggle_sdk: 404 Not Found: no topic")})
+        F.fetch_topics([7], self.d, self.gateway, self.tmp, run=bad, pause=0)
+        self.assertEqual([(self.d / "topics" / f).read_text() for f in ("7.json", "7.txt")], [old_json, old_txt])
+        # the next check fetches the pending topic again; the .txt is left as it was
+        F.fetch_topics(F.load_pending(self.d)["new"], self.d, self.gateway, self.tmp,
+                       run=FakeGateway(topics=fake_topics()), pause=0)
+        text = F.show_topics(self.d, SLUG)
+        self.assertIn("\nIs X allowed? See the rules <https://example.org/rules>.\n", text)
+        self.assertIn("\n        * Third (2026-09-22 03:00) [0]\n", text)
+        self.assertEqual(F.commit(self.d)[0], [7])
+        self.assertEqual((self.d / "topics" / "7.txt").read_text(), old_txt)
 
     def test_a_check_between_show_and_commit_adds_nothing_unseen(self):
-        # the agent shows topic 101 with one comment; a scheduled check then lists 202 and a second comment on 101
+        # the agent shows topic 101 with one comment; a later check then lists 202 and a second comment on 101
         c1 = comment(1, "First", "2026-09-20T01:00:00.100000", "<p>first</p>")
         c2 = comment(2, "Second", "2026-09-21T01:00:00.100000", "<p>second</p>")
         before = FakeGateway(pages={1: cli_list([row(101, "Topic 101", 1)])},
-                             topics={101: (topic_json(101, "Topic 101", [c1]), table(101, "Topic 101", "Q", [(0, c1)]))})
+                             topics={101: sdk_topic(101, "Topic 101", [c1])})
         F.run_diff(self.d, self.listing(before)[0])
         F.fetch_topics(F.load_pending(self.d)["new"], self.d, self.gateway, self.tmp, run=before, pause=0)
         self.assertIn("==== 101", F.show_topics(self.d, SLUG))
         after = FakeGateway(pages={1: cli_list([row(202, "Topic 202", 0), row(101, "Topic 101", 2)])},
-                            topics={101: (topic_json(101, "Topic 101", [c1, c2]),
-                                          table(101, "Topic 101", "Q", [(0, c1), (0, c2)])),
-                                    202: (topic_json(202, "Topic 202", []), table(202, "Topic 202", "Hi", []))})
+                            topics={101: sdk_topic(101, "Topic 101", [c1, c2]), 202: sdk_topic(202, "Topic 202", [])})
         F.run_diff(self.d, self.listing(after)[0])
         self.assertEqual(F.load_pending(self.d)["new"], [202, 101])
         F.fetch_topics([202, 101], self.d, self.gateway, self.tmp, run=after, pause=0)
@@ -354,7 +381,7 @@ class FetchShowTests(Tmp):
         F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
         F.show_topics(self.d, SLUG, [8])
         self.assertEqual(F.commit(self.d, [7, 8, 9]), ([7, 8], [], [(9, "not fetched")]))
-        self.assertEqual(F.load_state(self.d)["7"]["comments"], 3)
+        self.assertEqual(F.load_state(self.d)["7"]["comments"], 4)
         self.assertEqual(F.load_shown(self.d)["topics"], {})
 
 
@@ -365,8 +392,8 @@ a = sys.argv[1:]
 fx = json.load(open({fixtures!r}))
 if a[:3] == ["competitions", "topics", "list"]:
     sys.stdout.write(fx["pages"][a[a.index("-p") + 1]])
-elif a[:3] == ["forums", "topics", "show"]:
-    sys.stdout.write(fx["topics"][a[3]][0 if "--format" in a else 1])
+elif a[:2] == ["--sdk", "topic"]:
+    sys.stdout.write(fx["topics"][a[2]])
 else:
     sys.exit(2)
 """
@@ -381,14 +408,14 @@ class CommandTests(Tmp):
 
     def test_check_show_and_commit_with_a_subprocess_gateway(self):
         fixtures = self.tmp / "fixtures.json"
-        pages = {"1": cli_list([row(7, "A question", 3), row(8, "Quiet", 0)])}
+        pages = {"1": cli_list([row(7, "A question", 4), row(8, "Quiet", 0)])}
         topics = {str(k): v for k, v in fake_topics().items()}
         fixtures.write_text(json.dumps({"pages": pages, "topics": topics}))
         self.gateway.write_text(GATEWAY_STANDIN.format(fixtures=str(fixtures)))
         code, out, err = self.run_main("check", SLUG, "--gateway", str(self.gateway), "--pause", "0")
         self.assertEqual(code, 0, err)
         self.assertIn("2 new, 0 changed, 0 missing", out)
-        self.assertIn("fetched 7 (3 comments)", out)
+        self.assertIn("fetched 7 (4 comments)", out)
         self.assertIn("next: python3", out)
         code, out, _ = self.run_main("show", SLUG)
         self.assertEqual(code, 0)

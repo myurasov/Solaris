@@ -3,7 +3,7 @@ name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
 summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -25,26 +25,19 @@ gateway, read-only. Posting, replying and voting are web-only steps for the owne
 ## Hourly Routine
 
 1. **`check <slug>`** lists every page of the forum (sorted by recent comments), diffs the listing with what was
-   read, and fetches the new and changed topics: about one call per 20 topics, plus two per topic fetched.
+   read, and fetches the new and changed topics: about one call per 20 topics, plus one per topic fetched.
 2. **`show <slug> --new`** prints what is new: new topics whole, and for changed topics only the comments
    posted since the last read, each with the comment it replies to, then the topics that went missing.
    `show <slug>` prints changed topics whole. Either way it records what it printed.
 3. **Log what matters** (below) with topic ids and actions. Act at once on rule, eligibility or data-bug
    findings.
 4. **`commit <slug>`** records as read exactly what `show` printed since the last commit: each topic up to the
-   newest comment it showed, and the missing topics it listed (as gone). A scheduled check that runs between
-   `show` and `commit` cannot make unseen topics or comments count as read: they stay pending for the next
-   `show`.
+   newest comment it showed, and the missing topics it listed (as gone). A check that runs between `show` and
+   `commit` cannot make unseen topics or comments count as read: they stay pending for the next `show`.
 
-The check needs no agent: cron, launchd or the harness scheduler can run it in the context folder, and the
-agent reads at its own hourly pass. For example (crontab, a few minutes off the hour):
-
-```text
-23 * * * * cd <project> && PATH=<uv dir>:$PATH python3 <pack>/plugins/kaggle/tools/kaggle_forum.py check <slug> >> __out/kaggle-forum.log 2>&1
-```
-
-The gateway needs `uv` on PATH, and unattended checks need the long-lived API token (the `kaggle-cli` skill's
-Signing In).
+Run `check` at the agent's hourly pass, inside the session. A host scheduler (cron, launchd) runs it only when
+the owner approved one; such unattended checks need `uv` on PATH and the long-lived API token (the `kaggle-cli`
+skill's Signing In).
 
 ## Commands
 
@@ -60,8 +53,8 @@ Run from the project root or task folder:
 | `check <slug>` | `list`, `diff` and `fetch` in one: the hourly check. Takes the options of `list`. |
 | `list <slug>` | Reads the topic list through the gateway (`competitions topics list <slug> --sort-by recent --format json -p <N>`, 20 topics a page, every page up to `--max-pages`, default 50) and saves it. `--from <page.json>... --pages <N>` takes pages a browser saved instead (below). |
 | `diff <slug>` | Compares the newest listing (or `--listing <file>`) with what was read: NEW topics, CHANGED ones (the comment count moved), BACK (a missing topic listed again) and MISSING ones (read before, not listed now; reported once, and only from a complete listing). Saves their ids to `pending.json`. |
-| `fetch <slug> [<id>...]` | Reads each topic (default: the pending new and changed ones) twice: `forums topics show <id> --format json` (every comment, as HTML) and the table view (the opening post and the reply tree). A failed read keeps the earlier files; after a 429 the rest waits for the next check. |
-| `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones, then the pending missing ones): title, author, date, link, the opening post, and every comment in thread order, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. Records what it printed in `shown.json`. |
+| `fetch <slug> [<id>...]` | Reads each topic (default: the pending new and changed ones) once, through the gateway's SDK read (`kaggle.py --sdk topic <id>`): the opening post and every comment in full, as HTML, each reply nested under the comment it answers. A failed read keeps the earlier file; after a 429 the rest waits for the next check. |
+| `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones, then the pending missing ones): title, author, date, link, the opening post, and the reply tree, each reply indented under its comment, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. Records what it printed in `shown.json`. |
 | `commit <slug> [<id>...]` | Records as read what `show` printed since the last commit (each topic up to the newest comment it showed; the missing topics it listed, as gone). A topic whose listing showed more comments than were read stays pending. With ids: those topics as shown, or else as fetched. |
 
 `check`, `list` and `fetch` take `--gateway <path>` (default: the `kaggle.py` beside the tool) and `--pause
@@ -69,9 +62,7 @@ Run from the project root or task folder:
 which moves the store to `<base>/<slug>/`. After a 429, wait - never loop.
 
 What the CLI does here (2.2.4): `competitions topics list <slug>` lists a competition's forum, while `forums
-topics list <slug>` answers 403 (it takes a global forum's name). `forums topics show <id>` reads any topic, but
-its JSON has neither the opening post nor the reply structure, and its table view cuts each comment to 200
-characters: so `fetch` saves both and `show` joins them.
+topics list <slug>` answers 403 (it takes a global forum's name).
 
 ## What Is Stored
 
@@ -81,14 +72,16 @@ characters: so `fetch` saves both and `show` joins them.
     pending.json        what the last diff found: the new, changed and missing topic ids
     shown.json          what show printed since the last commit: each topic's comment count and newest comment
     listings/           every listing, named by its UTC time (-browser, -partial when so), never overwritten
-    topics/<id>.json    the topic and every comment (the CLI's JSON)
-    topics/<id>.txt     the table view: the opening post and the reply tree
+    topics/<id>.json    the topic as the SDK read gives it: the opening post and every comment, replies nested
 ```
 
 `<context>` is the project root or task folder; the store is local-only and git-ignored under Solaris's `__*/`
 convention. A topic that went missing gets `gone` in its state entry. A state file that an earlier script wrote
 as `{"<id>": {comments, last_seen, title}}` is read as it is: until a topic is read again, `show` marks its
-newest comments beyond the count read then.
+newest comments beyond the count read then. A topic an earlier version fetched (its `<id>.json` without the
+opening post, the table view beside it in `<id>.txt`) is kept as it is until a fetch reads it again: `show`
+prints a note to fetch it instead of the topic and records nothing for it, and the next `check` re-reads it
+while it is pending. The `<id>.txt` stays, unread.
 
 ## Listing Without the CLI
 
@@ -106,7 +99,7 @@ options); pages go in the order of the URL each file records. The listing is com
 every page from 1 to the count given; otherwise (no `--pages`, or a page skipped) it is partial: it still shows
 new and changed topics, but never reports one missing. Any browser automation will do - the plugin itself never
 drives a browser, and nothing needs one. Rows without a date are the featured strip or recently viewed links and are
-dropped; a browser title can carry the author's name at its end (the title `fetch` saves is the CLI's). Use a
+dropped; a browser title can carry the author's name at its end (the title `fetch` saves is the topic's own). Use a
 signed-in profile only if the forum needs one, and only to read: never post, vote or reply from it.
 
 ## Logging What Matters
@@ -123,7 +116,7 @@ signed-in profile only if the forum needs one, and only to read: never post, vot
 
 ## Privacy
 
-- Public forum content only, read through Kaggle's CLI (or its pages, as above): no profile lookups, no following
-  people across the site, no joining forum text with other data about people.
+- Public forum content only, read through the gateway (or the forum's pages, as above): no profile lookups, no
+  following people across the site, no joining forum text with other data about people.
 - The store stays local in `__data/` (git-ignored): never commit, publish or paste it outside the project. Quote
   only what a finding needs, with its topic id.
