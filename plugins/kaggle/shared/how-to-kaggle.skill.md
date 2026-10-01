@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 12_
+_Rev. 16_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -40,7 +40,7 @@ Follow this sequence from minute one; each step points to the section with the r
 1. **Setup (first hour):**
    - a private repo with the ai-pack;
    - the standing files: directions, instructions (with the competition facts sheet), submission plan, ideas
-     backlog, and a live phase report;
+     backlog, a live phase report, and a live plan for the owner;
    - owner-facing times in the owner's timezone;
    - data in `__data/`, outputs in `__out/`.
    See [Setup](#setup).
@@ -75,6 +75,8 @@ Follow this sequence from minute one; each step points to the section with the r
    independent set, and calibrate each kind of change against the board. See [Validation](#validation).
 7. **Daily loop:**
    - plan all slots before the first submission: biggest gain or insight first, one experimental slot;
+   - build and verify the day's candidates, and the follow-ups their scores would trigger, before the reset; write
+     each slot's prediction and the rule its score triggers;
    - don't rush the slots: hold them for research that can finish in time, and fill any still open with the best
      verified fallback before the day ends;
    - reviewed kernels finish their runs before a cutoff set from the reset time and the kernel runtime;
@@ -112,7 +114,12 @@ Follow this sequence from minute one; each step points to the section with the r
     every persona);
   - `submissions/PLAN.md`: today's and tomorrow's submission slots with purposes;
   - `research/ideas.md`: the ranked ideas backlog with statuses and feasibility notes;
-  - a live progress report (PDF) per phase.
+  - a live progress report (PDF) per phase;
+  - a live plan (PDF) for the owner (owner direction): the Kaggle day's slots with status, prediction and decision
+    rule, the later slots and fallbacks, research with gates and compute, settled questions and recent decisions,
+    beside live figures (board place and medal lines, slots used, GPU week, lease ends). Rebuild it in the same turn
+    as any plan change, submission, score, verdict or launch, and hourly for the live figures;
+    `tools/kaggle_live_plan.py` (next to this file) builds it from a hand-edited plan JSON.
   General lessons go into this playbook ([Maintaining This Playbook](#maintaining-this-playbook)). Keep the research
   folder tidy: documents at the top, scripts, images and data in `research/assets/`.
 - **Owner-facing times in the owner's timezone** (convert UTC deadlines and resets); machine logs stay UTC. Every
@@ -135,6 +142,11 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Leaderboard reading:** page through all of it (`--page-size 200` plus page tokens); note ties (large tied groups
   usually mean copies of one public notebook) and the host baseline. A team's date on the board is that of its latest
   scored submission, not of the one that set its score.
+- **Medal lines and ties:** medals follow the team count (with 1,000 or more teams: gold for the top 10 plus one place
+  per 500 teams, silver for the top 5%, bronze for the top 10%), and teams tied on score rank by submission time,
+  earliest first. A public notebook at a medal line draws a cluster of forks tied at its score, so a fork submitted
+  later lands behind all of them: the medal needs a score above the cluster, which only your own change on top of
+  that notebook can give. At each board read, note the line's score and how many teams sit at or above it.
 - **Save every leaderboard read and watch the field over time** (owner direction; the `kaggle-leaderboard` skill):
   read the board with `tools/kaggle_lb.py show`, which saves each read, and snapshot at least hourly while the
   competition runs. The history shows who is climbing and how fast, bursts of new teams at one score (a public
@@ -177,7 +189,9 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Use the whole lease pool the owner provides** (owner direction): every machine the owner holds joins the team's
   pool, except the ones the owner reserves for other work and machines merely shared with you. Add a new lease as
   soon as it is ready, and a future booking the moment it starts: root key, then a driver check (install the current
-  driver if it is missing or older, with the reboot and persistence mode), then the private host list, the claims
+  driver if it is missing or older, with the reboot and persistence mode), performance settings (CPU governor
+  `performance`, since images often boot with a power-saving one, and each GPU's power limit at its maximum; both reset
+  on reboot, so the hourly check re-applies them), then the private host list, the claims
   system (the `resource-sharing` plugin, if attached) and the dashboard. Drop retired machines from the host list
   the same hour. Take exactly these steps without asking only under the owner's standing permission; releases
   still ask.
@@ -185,8 +199,12 @@ Follow this sequence from minute one; each step points to the section with the r
   - check leases hourly; when one falls below 60 h left, extend it to 72 h from now. When an account-wide quota
     refuses, the refusal usually states the projected total: the headroom is the quota minus (projected minus
     requested). Extend by that headroom, split evenly across the leases that need time, and retry every hour, since
-    the headroom changes as bookings start and end. If someone else booked the machine next, extend to the maximum
-    allowed, then lease a replacement and move the work;
+    the headroom changes as bookings start and end. Learn the headroom before granting anything (a request larger
+    than it could be, but within the pool's maximum lease length, is refused with the total), because extending
+    leases one by one in full can use it all on the first ones. Aim for equal end times: the first lease to expire
+    is the one that may not come back, so where the pool can set an exact end, rebalance by shrinking the longest
+    (total hours unchanged). If someone else booked the machine next, extend to the maximum allowed, then lease a
+    replacement and move the work;
   - when a lease ends (or is about to end with no extension possible), book a replacement of the same kind right away
     (same GPU model and count, same CPU architecture) for the standard window, or the longest the quota allows, and
     onboard it like any new machine; copy results off the old host before its lease ends. If the quota cannot cover
@@ -270,8 +288,11 @@ Follow this sequence from minute one; each step points to the section with the r
   (credited, same pinned image, output compared with the original's), then (3 onward) one-change experiments on that
   base. Keep it local and cheap. The baseline shows the ceiling of its approach; the fork should reproduce the
   public notebook's score exactly.
-- **Later phases** have a numeric goal (a target public score). Start with a gap analysis: where are the points (per
-  data class or error type), what caps the current approach, what the top teams do differently.
+- **Later phases** have a goal on the board: a target score, or better a place, since the field moves (owner
+  direction: a medal place on the public board, then a top-10 place that holds on the private board, then top 3
+  reliably, then first), each paired with an understanding goal (a written account of how the scorer works and what
+  moves it). Start with a gap analysis: where are the points (per data class or error type), what caps the current
+  approach, what the top teams do differently.
 - **Each phase keeps its own plan, live report, and a closing conclusion** that the owner reviews before the next.
 - **Exploration phases, then a clean phase** (owner direction):
   - Until the owner calls the clean phase, research and submissions may use non-clean data and models:
@@ -338,6 +359,13 @@ Follow this sequence from minute one; each step points to the section with the r
   the term measures the misread with an interval, and the fit predicts new pairs of that kind, each newly scored one
   testing it out of sample. For each answer class, keep the holdout that tracks the board on that class, and gate
   that class's changes on it.
+- **Write two predictions for each candidate, and let each serve its own goal:** the board-calibrated one (the
+  holdout's number corrected by the fitted board term for its kind of change) and the honest holdout's own. A
+  public-board goal follows the board calibration: a gain that public notebooks show on the board while the honest
+  holdout calls it flat can be taken by forking the notebook that carries it, with the honest verdict kept on record.
+  The final picks for the private board follow the honest holdout. When the two disagree on a lever, spend a paired
+  probe on the calibration's main claim, with the step its score triggers written in advance (say, the next step on
+  that lever when the probe beats its base by more than the board's noise).
 - **Check whether the holdout can see a mechanism before spending a slot on it.** A suspected train/serve mismatch can
   be ruled out in minutes when the holdout runs the pipeline exactly as the kernel does, since it then already
   contains the mismatch. A robustness ablation still needs a paired read against matched retrained controls:
@@ -389,10 +417,24 @@ Follow this sequence from minute one; each step points to the section with the r
   that later candidates build on, hold the other slots for stronger ones still being built, and keep the weaker
   one-factor probes as fallbacks.
 - **Order:** open with the candidates of largest expected gain and/or largest insight, then finer improvements. One
-  slot a day (more once a solid baseline exists) is an **experimental probe** of a prospective approach.
+  slot a day (more once a solid baseline exists) is an **experimental probe** of a prospective approach. A slot whose
+  score decides whether a long job starts (a days-long retrain, say) goes first, ahead of one whose value is its score
+  alone: its signal is needed first.
 - **Runway:** every open slot needs a reviewed kernel whose commit run finished cleanly before a fixed cutoff, set
   from the reset time and the slowest observed run; an erroring submission still spends a slot. A candidate that
   misses its check is replaced by the next most informative one (an ablation), never skipped.
+- **Pre-build the day's ladder and verify it before the reset:** build every candidate and the follow-ups its result
+  would trigger (the next step on a lever that reads up, the combination of two that both read up), and verify each
+  commit run before the reset; write each slot's prediction with an interval, and the rule its score triggers,
+  before the first submission. The reset then submits only verified versions, and a follow-up goes up the moment its
+  trigger's score lands. In a code competition the hidden rerun can take hours to score, so the slots that depend on
+  the reset's scores come late in the day.
+- **Right before every submission, check the forum and announcements, and re-decide the pick:** new or changed
+  topics, host posts and pinned threads, the competition pages, other teams' reported results, new or re-scored public
+  notebooks, and board moves. The check exists to change your mind: a scorer or harness change, a host ruling, a
+  reported failure mode, a better public package on the board, or evidence against the pick's design each call for
+  switching to a better version, building one, or delaying the slot. Record the decision (keep, switch or delay, and
+  why) in the submission record, and build the check into the submit step so it cannot be skipped.
 - **Before submitting, read the kernel log** for the change's own "ON" marker: a silent fallback would submit a copy
   of an earlier version. Record the version number `kernels push` prints, since the CLI may not name a private
   kernel's version later, and budget the runway on the slowest observed run: identical code on identical sessions
@@ -400,7 +442,7 @@ Follow this sequence from minute one; each step points to the section with the r
   every cutoff on the slowest hardware that will run it, and log how often it triggers.
 - **Parallel submissions are fine** (Kaggle scores each independently; leave a few minutes between submits).
 - **Watch runs and scores** with background pollers. When a score lands, update the submission's README, the plan,
-  and the live report in the same turn, and feed what it taught into the ideas backlog. Live reports go stale fast
+  the live plan and the live report in the same turn, and feed what it taught into the ideas backlog. Live reports go stale fast
   (one missed several scores before the owner noticed): check at every push that the report's Updated time is later
   than the newest result.
 - **GPU queues can stall** for hours while CPU sessions start at once: default kernels to CPU when the GPU isn't
@@ -527,6 +569,13 @@ Follow this sequence from minute one; each step points to the section with the r
   expect identical rows. Take the image from a version that actually ran (its run log, or a byte-identical copy's
   run): `kernels pull -m` takes the image of the latest version, and a version saved without a run records the CPU
   image even for a GPU notebook, so a GPU step can silently fall back to the CPU and into its time limits.
+- **Stack your changes on the strongest base, and move them when a stronger one appears.** Fork each new strongest
+  public notebook within the hour and port every pending change onto it as the same patch, checked hunk for hunk
+  against the older base's variant, so the reads measured on the old base carry over; a change stacked on an older
+  base forfeits the newer base's public gains. A faithful fork of a deterministic notebook scores exactly what the
+  original scored (unless time budgets inside it bind on a slower scoring machine), so its variants can read against
+  the author's public score, and the fork's own slot buys the team a floor at that score but no information. An older
+  fork whose score is already known needs no slot, and its one-change probes become fallbacks.
 - **Smoke-only commit runs:** some public notebooks run a smoke subset on the commit run (a few rows whenever the test
   is the visible one) and the full set only on the hidden rerun. Verify such a fork on the smoke rows and markers
   only, and plan the hidden run's time from full-run timings (the author's logs, or those of the notebooks it
