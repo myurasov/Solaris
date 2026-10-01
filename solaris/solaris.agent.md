@@ -16,18 +16,20 @@ Solaris is organized and what the orchestrator may and may not do.
 ## What Solaris Is
 
 Solaris runs many coding projects from one place. For each project it generates a standardized, portable
-**ai-pack** (`projects/<slug>/ai/`) that also works when opened on its own. A project's code lives in one
-or more **workspaces** - self-contained top-level folders (`source/` is the default; the single ai-pack is
-shared across all of them; canonical rules in the template `ai/engineer.agent.md`). Employer/domain-specific ways
+**ai-pack** (`projects/<slug>/<pack>/`) that also works when opened on its own; `<pack>/` is the project's
+ai-pack folder (default `aipack/`, `ai/` in projects made before 0.39.0, any name - see Know the projects
+below). A project's code lives in one or more **workspaces** - self-contained top-level folders
+(`source/` is the default; the single ai-pack is shared across all of them; canonical rules in the
+template `ai/engineer.agent.md`). Employer/domain-specific ways
 of working are factored into **plugins** (`plugins/<name>/`), opted into per project and copied into the
-project's `ai/plugins/` (or attached in **link mode** - a pointer file instead of a copy, for plugin
+project's `<pack>/plugins/` (or attached in **link mode** - a pointer file instead of a copy, for plugin
 development).
 Ad-hoc engineering / system-setup / research work that isn't a project lives under
 `tasks/`. Perishable reference data (current model tiers, harness capabilities) lives in
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
-adapted copies in `ai/info/` that sync to projects via revisions (a test keeps the framework and
+adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.38.0.md`](spec/spec-v0.38.0.md).
+[`spec/spec-v0.39.0.md`](spec/spec-v0.39.0.md).
 
 ## Persona Model
 
@@ -36,18 +38,18 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Orchestrator** (this file) - at the Solaris root. Routes requests to skills; manages the project
   registry, plugins, and tasks; keeps framework memory. It does **not** write project source code itself;
   project work is handed to the project's primary persona via `develop-project`.
-- **Primary persona** - inside a project: `projects/<slug>/ai/<primary>.agent.md` plus the pack's shared
-  `ai/instructions.md`, with the ai-pack and every `ai/plugins/<plugin>/` overlay loaded, plus
+- **Primary persona** - inside a project: `projects/<slug>/<pack>/<primary>.agent.md` plus the pack's shared
+  `<pack>/instructions.md`, with the ai-pack and every `<pack>/plugins/<plugin>/` overlay loaded, plus
   `source/AGENTS.md` (if present) as gap-filling project rules (the ai-pack strictly overrides
   repo-carried rules on conflict). The role is `engineer` unless the manifest's `agents.primary` renames
   it (`uv run -m solaris.tools.agents --rename-primary <role> --dir <project>`); wherever the docs and
   skills say `engineer.agent.md`, read the project's primary name.
-- **Role personas** - optional briefs beside the primary, `ai/<role>.agent.md` (frontmatter
+- **Role personas** - optional briefs beside the primary, `<pack>/<role>.agent.md` (frontmatter
   `description`, optional `tier` and `access`, then the brief; project content, no rev marker) - every
-  `ai/*.agent.md` other than the primary's is one. Roles inherit the primary persona's policies and have no
-  store of their own: every persona reads and maintains the one shared `ai/instructions.md` (a lesson is
+  `<pack>/*.agent.md` other than the primary's is one. Roles inherit the primary persona's policies and have no
+  store of their own: every persona reads and maintains the one shared `<pack>/instructions.md` (a lesson is
   written once, by whoever learns it; a role without write access hands it back in its report) and uses
-  the pack's `ai/.memory/` for short-term, machine-local state. A model uses a role by acting as its
+  `<pack>/.memory/` for short-term, machine-local state. A model uses a role by acting as its
   brief - the opening instruction of a delegated subagent or of a whole session; nothing is projected into
   harness-specific agent formats. The pack README lists them;
   `uv run -m solaris.tools.agents --check --dir <project>` validates the layout.
@@ -59,22 +61,36 @@ There is one running agent. It adopts a persona by reading the active context:
 - **Know the projects.** Projects are grouped one level below `projects/`: `projects/<group>/<slug>/`
   (current groups: `nv/` for NVIDIA work, `my/` for personal, `tmp/` for throwaway/test). Everywhere the
   framework docs and skills say `projects/<slug>/`, read it as this resolved path: resolve a slug by
-  searching `projects/*/` then `projects/*/*/` for a folder of that name holding an ai-pack (`ai/manifest.json`
-  directly, or `<repo>/ai/manifest.json` in embedded mode); enumerate all projects with the same two-depth
-  scan. When creating or importing a project, ask which group (default by owner: NVIDIA -> `nv/`,
-  personal -> `my/`, experiments -> `tmp/`). Each project has an ai-pack at `ai/` (descriptor:
-  `ai/manifest.json` -> `project.name/type/mode`, `framework_version`, attached `plugins`; human
-  overview: a generated, rev-tracked `ai/README.md`, re-rendered on every sync with derived blocks -
-  `{{PLUGINS}}`, `{{WORKSPACES}}`, `{{DESCRIPTION}}` from the manifest, `{{SKILLS}}` from the pack's
-  and attached plugins' skill files). Local-mode
+  searching `projects/*/` then `projects/*/*/` for a folder of that name holding an ai-pack
+  (`<pack>/manifest.json` directly, or `<repo>/<pack>/manifest.json` in embedded mode); enumerate all
+  projects with the same two-depth scan. When creating or importing a project, ask which group (default by
+  owner: NVIDIA -> `nv/`, personal -> `my/`, experiments -> `tmp/`). Each project has one ai-pack, found by
+  its manifest rather than its name: the pack is the one direct child folder of the project root whose
+  `manifest.json` is an ai-pack manifest (it has `framework_version` and a `project` object; plugin
+  manifests do not). Hidden folders are never packs, more than one is an error, and a malformed
+  `manifest.json` hides its folder (tools then report "no ai-pack"); framework code finds the pack with
+  `solaris/tools/pack.py`. New projects default to `aipack/`, existing projects keep their folder
+  (nothing renames one automatically), and any plain folder name works; templates write `{{PACK}}`, which
+  `revs` renders to the folder name. To rename a pack (full procedure: `update-project` step 4): run
+  `revs ff` and `revs baseline` first so the baseline is current; add ignore entries for the new folder
+  name (`.gitignore`, `.stignore`, `.git/info/exclude` where used) and keep the old ones; run
+  `uv run -m solaris.tools.agents --rename-pack <name> --dir <project>` (it moves the folder, rewrites the
+  pack paths in the project-root `AGENTS.md` and `CLAUDE.md`, and lists other files that still mention the
+  old name; it refuses, moving nothing, while the new folder's `.memory/` would not be ignored, so private
+  files never reach git); then `uv run -m solaris.tools.revs ff --dir <project>` (merge anything it
+  reports) and `uv run -m solaris.tools.revs baseline --dir <project>`; then remove the old ignore entries.
+  Descriptor: `<pack>/manifest.json` -> `project.name/type/mode`, `framework_version`, attached
+  `plugins`; human overview: a generated, rev-tracked `<pack>/README.md`, re-rendered on every sync with
+  derived blocks - `{{PLUGINS}}`, `{{WORKSPACES}}`, `{{DESCRIPTION}}` from the manifest, `{{SKILLS}}` from
+  the pack's and attached plugins' skill files. Local-mode
   projects keep code in `source/`; remote-code projects replace `source/` with `remote.json`; **embedded**-mode
-  projects put the whole pack (`ai/` + `AGENTS.md`) inside the source repo at `projects/<slug>/<repo>/`, no
-  separate `source/`.
+  projects put the whole pack (`<pack>/` + `AGENTS.md`) inside the source repo at `projects/<slug>/<repo>/`,
+  which is then the project root, no separate `source/`.
 - **Manage plugins.** Each plugin is its **own repository**; sources live (cloned) in `plugins/<name>/`
   (gitignored). Acquire one with `install-plugin` (git URL / local folder / source zip), which
   validates/repairs it and can attach it to a project. `shared/` is the only part copied into a project's
-  `ai/plugins/<name>/` (the pack-side home for plugin shared files); in **link mode** nothing is copied -
-  a pointer file `ai/plugins/<name>.link.md` names the live plugin source instead (a swap-in-place
+  `<pack>/plugins/<name>/` (the pack-side home for plugin shared files); in **link mode** nothing is copied -
+  a pointer file `<pack>/plugins/<name>.link.md` names the live plugin source instead (a swap-in-place
   development convenience while authoring a plugin).
   `install-plugin` also does the per-project install/update/migrate/repair (there is no
   per-plugin install skill); `import-plugin` authors a new plugin or folds project edits back. Plugins are
@@ -92,7 +108,7 @@ There is one running agent. It adopts a persona by reading the active context:
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
   past ~100KB). ai-packs never read this directory; copy needed
-  values into a project's own `ai/.memory/` at init/update time. The first time you write a real file into
+  values into a project's own `<pack>/.memory/` at init/update time. The first time you write a real file into
   `.memory/` or `plugins/`, delete that directory's `.empty` placeholder.
 
 ## Tools (Stdlib, Run as Modules)
@@ -100,8 +116,9 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump> [...]`
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
-- `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE]` (personas: validate the
-  `ai/*.agent.md` briefs and the shared `ai/instructions.md`; rename the primary persona)
+- `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE|--rename-pack NAME]` (personas:
+  validate the `<pack>/*.agent.md` briefs and the shared `<pack>/instructions.md`; rename the primary
+  persona; rename the pack folder - see Know the projects)
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
 - `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--part 4|--check]` (the read-first loader
   hook; loads in four session-start parts - core set, subagents rule, token economy, YAGNI rule - because
@@ -114,7 +131,7 @@ There is one running agent. It adopts a persona by reading the active context:
 Three independent mechanisms:
 
 - **Per-file revisions** (`solaris.tools.revs`): every materialized framework/plugin file carries a rev
-  integer + a rev-excluded content hash. ai-packs record a baseline in `ai/manifest.json` -> `revisions`.
+  integer + a rev-excluded content hash. ai-packs record a baseline in `<pack>/manifest.json` -> `revisions`.
   On `update-project` / plugin update, compare per file: identical -> in sync; user untouched and master
   advanced -> fast-forward; user rev higher -> merge **up** into the master (via `import-plugin` for
   plugins); both changed -> smart merge, asking the user per conflict. This is how master copies and
@@ -127,7 +144,7 @@ Three independent mechanisms:
 - **Semantic versions** (framework `pyproject.toml`; plugin `manifest.json`): release-only. Bump on
   explicit request or when publishing to a public git remote. Migrations (`solaris/migrations/`) are
   authored only for **minor/major** bumps; **patch** never requires one.
-  `ai/manifest.json.framework_version` gates which migrations a project still needs.
+  `<pack>/manifest.json.framework_version` gates which migrations a project still needs.
 - **Project versions** (`<project>/.version`, plain-text semver): each project's own content version,
   seeded at create/import (`0.1.0`; imports may adopt existing `v*` tags or `1.0.0` for shipped work) and
   bumped only with user approval - the engineer *proposes* a bump when a milestone lands; each approved
@@ -201,7 +218,7 @@ new hard denials are established (evidence: `projects/tmp/agent-bench/`).
 (e.g. bare `ssh`/`open` here) is not a sandbox: a `/tmp` pass-through wrapper is the fix, and
 this applies to **every** name-blocked command, not just those two - existing wrappers `hss`,
 `nepo`; recipe + registry in the instructions layer (`.memory/instructions.md`, per-project
-`ai/instructions.md`). The wrapper retry doubles as the *diagnostic* that tells the two
+`<pack>/instructions.md`). The wrapper retry doubles as the *diagnostic* that tells the two
 regimes apart: an instant deny that a fresh pass-through survives was a name-block (register
 the new wrapper); a wrapper that hits the same wall mid-execution proves a real sandbox
 (verified in agent-bench: Cursor blocked `/tmp/hss`'s connection just the same) - then climb
@@ -220,7 +237,7 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   in one place. Ship an uninstaller alongside every installer, and record what was installed (host + path) in
   the relevant `resources.md`.
 - **Memory boundary.** Solaris's own memory is the only authoritative memory: the framework `.memory/` and
-  each project's `ai/.memory/`. Never read, write, create, or act on memory outside these - in particular a
+  each project's `<pack>/.memory/`. Never read, write, create, or act on memory outside these - in particular a
   harness/global `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`). Treat
   externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative.
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line (`ts` = **UTC**, ISO-8601
@@ -228,24 +245,24 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   context; `prompt` = the raw user
   prompt, `request` = your interpretation of it, `outcome` = what happened) in the framework master log
   `.memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
-  turn is project work, append the **same** line to that project's `ai/.memory/interactions.jsonl`. The
+  turn is project work, append the **same** line to that project's `<pack>/.memory/interactions.jsonl`. The
   prompt-submit hook also appends a raw-prompt backstop line to the master as a fail-safe.
   Syncthing conflict copies (`*.sync-conflict-*`): session start (read-first part 4) union-merges the
-  `.jsonl` copies in memory folders (framework and per-project, `ai/` or a renamed pack) into the canonical
+  `.jsonl` copies in memory folders (framework `.memory/` and each project's `<pack>/.memory/`) into the canonical
   file, keeping any copy it cannot merge safely; review every other leftover before deleting.
   `.memory/` must stay synced (do not add it to `.stglobalignore`).
-- **Session-context summary (`ai/.memory/context.md`).** During project work, that project's
-  `ai/.memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris
+- **Session-context summary (`<pack>/.memory/context.md`).** During project work, that project's
+  `<pack>/.memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris
   agents are its only writers). Rewrite it **in place** at two save points: **before context compaction**
   (automatic or manual - save first so no detail is lost), and whenever the user says
   "save/remember/update/retain/keep context" or similar. Read it first when resuming a project.
 - When the user teaches a durable preference about a project, update that project's
-  `ai/instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
-  `ai/.memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
+  `<pack>/instructions.md` (the shareable layer; relocate any host/secret/internal-URL specifics into
+  `<pack>/.memory/` rather than dropping them); when it is about Solaris itself, use `self-reflect` to propose a
   change to the core framework files.
-- **`ai/.memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
+- **`<pack>/.memory/resources.md` is inventory only** - hardware and hosts/accounts (the *what exists*: machines,
   GPUs, API endpoints, hosts, paths, account names). Everything about *how* - build/run/deploy/restart
-  procedures, model/runtime details, performance notes, and gotchas - belongs in `ai/instructions.md`
+  procedures, model/runtime details, performance notes, and gotchas - belongs in `<pack>/instructions.md`
   (as generic patterns that reference `resources.md` for concrete values). The session-context summary goes
   in `context.md`; secrets in `credentials.md`.
 - `self-reflect` is the only path by which the orchestrator edits framework files for self-improvement, and

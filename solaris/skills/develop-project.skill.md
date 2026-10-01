@@ -25,71 +25,75 @@ path). If absent, list the projects from the same two-depth scan and ask. (If th
 existing codebase that is not yet a project, suggest `import-project`; for something brand new, suggest
 `create-project`.)
 
+`<pack>/` below is the project's ai-pack folder (default `aipack/`, `ai/` in projects made before 0.39.0,
+any name): the one direct child folder of the project root whose `manifest.json` is an ai-pack manifest
+(it has `framework_version` and a `project` object; plugin manifests do not).
+
 ## 2. Load the Engineer Context
 
 Read, in this order, and then obey them:
 
-1. `projects/<slug>/ai/<primary>.agent.md` - the project's **primary persona**, a combined coder + planner +
+1. `projects/<slug>/<pack>/<primary>.agent.md` - the project's **primary persona**, a combined coder + planner +
    runner (includes the embedded commit + safety policies). `<primary>` is `engineer` unless
-   `ai/manifest.json` -> `agents.primary` renames it; every `engineer.*` name below means that file.
-2. `projects/<slug>/ai/manifest.json` - name/type/mode + attached plugins.
-3. `projects/<slug>/ai/instructions.md` (the one shared know-how store every persona reads and maintains:
-   build/run/test, conventions, gotchas, lessons), `ai/spec.md`, and `ai/.memory/*` (private:
+   `<pack>/manifest.json` -> `agents.primary` renames it; every `engineer.*` name below means that file.
+2. `projects/<slug>/<pack>/manifest.json` - name/type/mode + attached plugins.
+3. `projects/<slug>/<pack>/instructions.md` (the one shared know-how store every persona reads and maintains:
+   build/run/test, conventions, gotchas, lessons), `<pack>/spec.md`, and `<pack>/.memory/*` (private:
    `resources.md`, `credentials.md`).
-4. Every `projects/<slug>/ai/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI mode);
-   their switches read `ai/defaults.json` overridden per key by `ai/.memory/config.json`, and the
-   perishable reference data they point at (model tiers, harness capabilities) lives in `ai/info/*.md` -
-   read the pointed-at file, never substitute memory. Treat each `ai/skills/*.skill.md` as
+4. Every `projects/<slug>/<pack>/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI mode);
+   their switches read `<pack>/defaults.json` overridden per key by `<pack>/.memory/config.json`, and the
+   perishable reference data they point at (model tiers, harness capabilities) lives in `<pack>/info/*.md` -
+   read the pointed-at file, never substitute memory. Treat each `<pack>/skills/*.skill.md` as
    trigger-invoked.
-5. Every `projects/<slug>/ai/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
-   `*.skill.md` as an additional trigger-invoked skill. Follow every `ai/plugins/<name>.link.md` (a **linked**
+5. Every `projects/<slug>/<pack>/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each
+   `*.skill.md` as an additional trigger-invoked skill. Follow every `<pack>/plugins/<name>.link.md` (a **linked**
    plugin - see `install-plugin` step 5): load the plugin's `shared/` rules and skills from the path it
    names, the same way.
 6. If `mode` is `local`: `projects/<slug>/source/AGENTS.md` (if present) as gap-filling project rules
    (the ai-pack strictly overrides repo-carried rules on any conflict - flag, never silently defer). If `remote-code`:
    `projects/<slug>/remote.json` for the host/path; read the live `source/AGENTS.md` from the remote.
-7. Every other `projects/<slug>/ai/<role>.agent.md` role brief, if present: personas the primary delegates
+7. Every other `projects/<slug>/<pack>/<role>.agent.md` role brief, if present: personas the primary delegates
    to (or runs a whole session as) by telling the model to act as that file, at the brief's `tier` and
    read-only when its `access` says so; they inherit the primary persona's policies and share the same
-   `ai/instructions.md` - when a read-only role returns lessons in its report, the primary writes them
+   `<pack>/instructions.md` - when a read-only role returns lessons in its report, the primary writes them
    there.
 
 **Embedded mode** (manifest `mode: embedded`): the ai-pack + `AGENTS.md` live *inside* the repo, so read the
-context above from `projects/<slug>/<repo>/` (e.g. `projects/<slug>/<repo>/ai/engineer.agent.md`); there is no
+context above from `projects/<slug>/<repo>/` (e.g. `projects/<slug>/<repo>/<pack>/engineer.agent.md`); there is no
 separate `source/`.
 
 Set the working directory to `projects/<slug>/source/` (local), `projects/<slug>/<repo>/` (embedded), or
 operate over Remote-SSH against `remote.json` (remote-code).
 
 **Workspaces:** when the project has more than one workspace (manifest `project.workspaces`, or the
-workspace table in `ai/instructions.md`), determine which one the request targets - from the
+workspace table in `<pack>/instructions.md`), determine which one the request targets - from the
 prompt, or ask when ambiguous - and work inside that folder, honoring the self-containment rules in
-`ai/engineer.agent.md` (Workspaces): no file references into sibling workspaces; that workspace's
+`<pack>/engineer.agent.md` (Workspaces): no file references into sibling workspaces; that workspace's
 `setup.md`/`spec.md` are part of the deliverable.
 
 ## 3. Act
 
 Follow the engineer agent's workflows:
 
-- **Plan** (user wants design/changes scoped first): update `ai/spec.md` through dialogue; keep
-  `ai/.memory/spec-v0.md` untouched. Hand to implementation only when the user approves.
+- **Plan** (user wants design/changes scoped first): update `<pack>/spec.md` through dialogue; keep
+  `<pack>/.memory/spec-v0.md` untouched. Hand to implementation only when the user approves.
 - **Implement:** write code against the spec; run/test (locally or on the remote per mode); honor the
   embedded safety policy before any remote-mutating or outward action.
 - **Learn:** when the user teaches a durable project preference, or any persona learns a durable lesson,
-  update `ai/instructions.md` (keep it shareable - put any host/secret/internal-URL specifics in
-  `ai/.memory/` instead, never dropped).
+  update `<pack>/instructions.md` (keep it shareable - put any host/secret/internal-URL specifics in
+  `<pack>/.memory/` instead, never dropped).
   When the knowledge is a trigger-shaped, occasionally-run multi-step procedure, **propose a project-local
-  skill** (`ai/skills/<name>.skill.md`) instead of growing the instructions - create it only after the user
+  skill** (`<pack>/skills/<name>.skill.md`) instead of growing the instructions - create it only after the user
   agrees; the routing criteria live in the template `ai/engineer.agent.md` (Memory).
-- **Personas:** when the user wants a new or changed role, create or edit `ai/<role>.agent.md` beside the
+- **Personas:** when the user wants a new or changed role, create or edit `<pack>/<role>.agent.md` beside the
   primary (stub: `solaris/templates/agents/role.agent.md`; its know-how goes into the shared
-  `ai/instructions.md`), validate with
-  `uv run -m solaris.tools.agents --check --dir projects/<slug>`, and run `revs ff` so `ai/README.md` lists
+  `<pack>/instructions.md`), validate with
+  `uv run -m solaris.tools.agents --check --dir projects/<slug>`, and run `revs ff` so `<pack>/README.md` lists
   it; renaming the primary persona is `agents --rename-primary <role>`.
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) in **both** the project's
-  `ai/.memory/interactions.jsonl` and the framework master `.memory/interactions.jsonl` (all work).
-- **Save context:** keep the project's `ai/.memory/context.md` (the detailed session-context summary,
+  `<pack>/.memory/interactions.jsonl` and the framework master `.memory/interactions.jsonl` (all work).
+- **Save context:** keep the project's `<pack>/.memory/context.md` (the detailed session-context summary,
   rewritten in place) current at its save points: before context compaction (automatic or manual), and
   whenever the user says "save/remember/update/retain/keep context" or similar.
 

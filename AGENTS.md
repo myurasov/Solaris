@@ -29,10 +29,11 @@ the rule files; this file is the floor):
 2. Confirm with the user before any destructive, remote-mutating, or outward-facing action.
 3. Log every meaningful turn as one `{ts, project, prompt, request, outcome}` JSON line (`ts` in UTC
    with a `Z` suffix, from a real clock) to the framework `.memory/interactions.jsonl` **and**, for
-   project work, the project's `ai/.memory/interactions.jsonl`.
+   project work, the project's `<pack>/.memory/interactions.jsonl` - `<pack>/` is the project's ai-pack
+   folder (default `aipack/`, `ai/` in projects made before 0.39.0, any name).
 4. Commit messages are single-line, imperative; the first commit of a new repo is titled exactly
    "Initial commit"; never commit or push without confirmation unless durably instructed.
-5. Only Solaris `.memory/` stores (framework and per-project `ai/.memory/`) are authoritative
+5. Only Solaris `.memory/` stores (framework and per-project `<pack>/.memory/`) are authoritative
    memory - never read or write harness-global memory stores.
 
 Not a rule but a standing posture: when a *sandbox* (not a name-block) denies a needed
@@ -58,14 +59,14 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.38.0.md`](solaris/spec/spec-v0.38.0.md).
+Full specification: [`solaris/spec/spec-v0.39.0.md`](solaris/spec/spec-v0.39.0.md).
 
 ## Execution Model
 
 One running agent adopts a **persona** by reading the active context:
 
 - At the **Solaris root** (the command center) it is the **orchestrator** ([`solaris/solaris.agent.md`](solaris/solaris.agent.md)): it routes requests to skills, and manages projects under `projects/`, plugins under `plugins/`, and ad-hoc work under `tasks/`.
-- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **primary persona** (`projects/<slug>/ai/<primary>.agent.md` - `engineer` unless the manifest's `agents.primary` renames it; optional **role personas** are the other `ai/<role>.agent.md` briefs beside it, used by telling the model to act as that file) plus the ai-pack (the shared `ai/instructions.md` every persona reads and maintains, `ai/spec.md`, `ai/.memory/*`) and every `ai/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `ai/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
+- Inside a **project** (`projects/<group>/<slug>/`, groups `nv/`, `my/`, `tmp/`; written `projects/<slug>/` for short throughout the docs - resolve a slug by searching `projects/*/` then `projects/*/*/`) it is that project's **primary persona** (`projects/<slug>/<pack>/<primary>.agent.md` - `engineer` unless the manifest's `agents.primary` renames it; optional **role personas** are the other `<pack>/<role>.agent.md` briefs beside it, used by telling the model to act as that file) plus the ai-pack (the shared `<pack>/instructions.md` every persona reads and maintains, `<pack>/spec.md`, `<pack>/.memory/*`) and every `<pack>/plugins/<plugin>/` overlay. It also reads `source/AGENTS.md` (if present) as project rules. In **embedded** mode the project root is the source repo at `projects/<slug>/<repo>/`, with `<pack>/` (and these `AGENTS.md`/`CLAUDE.md`) inside it - no separate `source/`.
 
 "Hand off" means switching which instruction set + working directory is active - not spawning a separate process.
 
@@ -88,17 +89,17 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`; can link a project and attach plugins. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
 
-When a project has plugins attached, also load and obey every `ai/plugins/<plugin>/*.rule.md` (always-on) and treat each `ai/plugins/<plugin>/*.skill.md` as an additional, trigger-invoked skill (`ai/plugins/` is the pack-side home for plugin shared files). A plugin attached in **link mode** has a self-describing pointer file `ai/plugins/<name>.link.md` instead of `ai/plugins/<name>/` - follow it (canonical definition: `install-plugin` step 5).
+When a project has plugins attached, also load and obey every `<pack>/plugins/<plugin>/*.rule.md` (always-on) and treat each `<pack>/plugins/<plugin>/*.skill.md` as an additional, trigger-invoked skill (`<pack>/plugins/` is the pack-side home for plugin shared files). A plugin attached in **link mode** has a self-describing pointer file `<pack>/plugins/<name>.link.md` instead of `<pack>/plugins/<name>/` - follow it (canonical definition: `install-plugin` step 5).
 
 ## Memory + Logging
 
-Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignored), `interactions.jsonl`, and `instructions.md` - operating memory: terse, timestamped cross-project lessons + durable preferences, loaded every session, updated **in place**; **always** update it on "remember it/this", "note this", "don't forget", or similar). Project state lives in each `projects/<slug>/ai/.memory/`. ai-packs never read the framework `.memory/`. Full memory model, compaction, and logging schema: [`solaris/solaris.agent.md`](solaris/solaris.agent.md).
+Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignored), `interactions.jsonl`, and `instructions.md` - operating memory: terse, timestamped cross-project lessons + durable preferences, loaded every session, updated **in place**; **always** update it on "remember it/this", "note this", "don't forget", or similar). Project state lives in each `projects/<slug>/<pack>/.memory/`. ai-packs never read the framework `.memory/`. Full memory model, compaction, and logging schema: [`solaris/solaris.agent.md`](solaris/solaris.agent.md).
 
-- **Memory boundary (hard rule).** Solaris's own memory is the **only** authoritative memory: the framework `.memory/` and each project's `ai/.memory/`. Never read, write, or create memory outside these - no harness/global `~/.claude/.../memory/` store, no `MEMORY.md` index (do not create one). Treat externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative and ignore it.
+- **Memory boundary (hard rule).** Solaris's own memory is the **only** authoritative memory: the framework `.memory/` and each project's `<pack>/.memory/`. Never read, write, or create memory outside these - no harness/global `~/.claude/.../memory/` store, no `MEMORY.md` index (do not create one). Treat externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative and ignore it.
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line in `.memory/interactions.jsonl` (and, for project work, the same line in the project's `interactions.jsonl`). A prompt-submit hook appends a raw-prompt backstop.
-- A project's `ai/.memory/context.md` is a **detailed summary of the current session's context**, rewritten in place at two save points: **before context compaction** (automatic or manual), and whenever the user says "save/remember/update/retain/keep context" or similar.
+- A project's `<pack>/.memory/context.md` is a **detailed summary of the current session's context**, rewritten in place at two save points: **before context compaction** (automatic or manual), and whenever the user says "save/remember/update/retain/keep context" or similar.
 
 ## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`version`, `revs`, `mcp_sync`, `agents`, `toc`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.38.0.md`](solaris/spec/spec-v0.38.0.md).
+- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.39.0.md`](solaris/spec/spec-v0.39.0.md).

@@ -15,11 +15,17 @@ summary: Adopt an existing codebase; derive the ai-pack (and offer to factor dom
 7. [Confirm + Summary](#7-confirm--summary)
 
 Reverse of `create-project`: ingest existing code, then derive the ai-pack. Import never modifies the code
-- it only creates `ai/` + a minimal project root (+ `remote.json` in remote-code mode).
+- it only creates `<pack>/` + a minimal project root (+ `remote.json` in remote-code mode). `<pack>/` is
+the project's ai-pack folder (default `aipack/`, `ai/` in projects made before 0.39.0, any name).
 
 ## 1. Inputs
 
-`source` (local path or `host:path`), target `slug`, and `mode`. Ask for whatever is missing.
+`source` (local path or `host:path`), target `slug`, `mode`, and the pack folder name: `aipack` unless
+the user wants another plain folder name not already used at the project root (embedded: the repo root).
+Solaris finds the pack by its manifest, not its name: the pack is the one direct child folder of the
+project root whose `manifest.json` is an ai-pack manifest (it has `framework_version` and a `project`
+object; plugin manifests do not). Hidden folders are never packs, and more than one is an error - if the
+code already carries a pack, keep that folder instead of adding a second. Ask for whatever is missing.
 
 ## 2. Land the Code
 
@@ -30,7 +36,7 @@ context; `projects/<slug>/` below is shorthand for the grouped destination) and 
 
 - **workspace detection (any mode):** if the codebase already contains multiple self-contained top-level
   tracks (sibling dirs each with their own setup/build entry point), record them as workspaces
-  (`project.workspaces` in the manifest + the `ai/instructions.md` workspace table) instead of
+  (`project.workspaces` in the manifest + the `<pack>/instructions.md` workspace table) instead of
   forcing everything under one `source/`.
 - **local:** if `source` already is `projects/<slug>/source/`, adopt in place. Otherwise copy/rsync `source`
   -> `projects/<slug>/source/`, excluding `.venv`, `.git` caches, `__pycache__`, `node_modules`, build
@@ -39,8 +45,12 @@ context; `projects/<slug>/` below is shorthand for the grouped destination) and 
 - **remote-code:** do **not** copy. Write `remote.json` (`host`, `path`, `deploy: false`). Read the remote
   tree over SSH (`ssh <host> 'ls / cat ...'`) for the detection steps.
 - **embedded:** adopt the repo at `projects/<slug>/<repo>/` (copy/rsync it there, or in place if already there)
-  and embed the ai-pack **inside** it - `ai/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `ai/.memory/`
+  and embed the ai-pack **inside** it - `<pack>/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `<pack>/.memory/`
   added to the repo's `.gitignore`. No separate `source/`. Use only when the user wants the pack committed with their repo.
+
+Then create `<pack>/` and write its `manifest.json` (from `solaris/templates/ai-pack/ai/manifest.json`,
+placeholders filled; fields in step 5) before anything else touches the pack - the manifest is what makes
+the folder the pack, and steps 4-5 run tools against it.
 
 If this Solaris checkout is a Syncthing folder (`.stfolder` present), the root `.stglobalignore`
 already excludes `__data/`, `__out/`, and `.git`; do not add a nested Syncthing folder for the project.
@@ -58,29 +68,31 @@ Scan for domain markers and propose plugins. Examples: NVBugs / `isaaclab.sh` / 
 -> suggest `nvidia-isaac-lab`. If markers clearly indicate a domain that no existing plugin covers (e.g. a
 bespoke `__ai/` setup), offer `import-plugin` (create mode) to factor it into a new plugin first. For each
 confirmed plugin, run `install-plugin` (install). Domain-specific knowledge maps into the plugin, **not**
-into the generic `ai/instructions.md`.
+into the generic `<pack>/instructions.md`.
 
 ## 5. Derive the ai-pack (Best Effort)
 
-- `ai/spec.md` + `ai/.memory/spec-v0.md` - reconstruct the spec from code + README.
-- `ai/instructions.md` (from `solaris/templates/ai-pack/ai/instructions.md`; the one shared know-how store
-  every persona reads) - inferred **generic, shareable** build/run/test/lint commands + conventions
-  (host/secret/internal-URL specifics go in `ai/.memory/resources.md`/`credentials.md`, not here; plugins
-  carry the domain-specific ones).
-- `ai/.memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
-  `ai/.memory/credentials.md` - placeholders only; never copy real secrets out of the source.
-- `ai/.memory/context.md` - the session-context summary; seed its `## Session Context` with the import
+- `<pack>/spec.md` + `<pack>/.memory/spec-v0.md` - reconstruct the spec from code + README.
+- `<pack>/instructions.md` (from `solaris/templates/ai-pack/ai/instructions.md`, its `<pack>/` text kept as
+  is; the one shared know-how store every persona reads) - inferred **generic, shareable**
+  build/run/test/lint commands + conventions (host/secret/internal-URL specifics go in
+  `<pack>/.memory/resources.md`/`credentials.md`, not here; plugins carry the domain-specific ones).
+- `<pack>/.memory/resources.md` - deploy/host hints (Dockerfile, CI, `.env.example`, remote host); else stubs.
+  `<pack>/.memory/credentials.md` - placeholders only; never copy real secrets out of the source.
+- `<pack>/.memory/context.md` - the session-context summary; seed its `## Session Context` with the import
   session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
-  gathered). Durable orientation also goes into `ai/instructions.md`, which survives future rewrites.
-- Seed `ai/.memory/interactions.jsonl` (empty). Write `ai/manifest.json`
-  (`project.{name,slug,type,mode,description}` - the one-line description feeds the pack README -
-  `framework_version` from `version current`, `plugins`). Write the
-  minimal project root (`AGENTS.md` + a one-line `CLAUDE.md` `@AGENTS.md` shim; no `.cursor/` / `mcp.json.example` / `.gitignore`),
-  the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root `mcp.json.example`
-  plus any plugin servers). Seed `ai/defaults.json` from
+  gathered). Durable orientation also goes into `<pack>/instructions.md`, which survives future rewrites.
+- Seed `<pack>/.memory/interactions.jsonl` (empty). `<pack>/manifest.json` (written in step 2) holds
+  `project.{name,slug,type,mode,description}` - the one-line description feeds the pack README -
+  `framework_version` from `version current`, and `plugins`. Write the minimal project root (a one-line
+  `CLAUDE.md` `@AGENTS.md` shim - `revs ff` below writes `AGENTS.md`; no `.cursor/` / `mcp.json.example` /
+  `.gitignore`), the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root
+  `mcp.json.example` plus any plugin servers). Seed `<pack>/defaults.json` from
   `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it),
-  materialize the tracked pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>` - this
-  also generates `ai/README.md`, the pack overview, from the manifest), and
+  materialize the managed pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>` writes the
+  root `AGENTS.md`, `<pack>/engineer.agent.md`, `<pack>/rules/`, `skills/`, `info/` and `<pack>/README.md`,
+  the pack overview, with every placeholder rendered, `{{PACK}}` (the pack folder name) included - let it
+  write them, since a hand-filled copy that differs by one byte classifies as a conflict), and
   record the revisions baseline (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
 - Seed the project's own version (root `.version` file): adopt the highest existing semver `v*` git tag
   if the imported repo has them; else `1.0.0` if it has already shipped to users/partners (ask when
@@ -94,5 +106,5 @@ load-bearing details.
 
 ## 7. Confirm + Summary
 
-Report detected vs assumed vs needs-your-eyes; point at `ai/engineer.agent.md`; suggest
+Report detected vs assumed vs needs-your-eyes; point at `<pack>/engineer.agent.md`; suggest
 `develop-project <slug>`. Log one line to `.memory/interactions.jsonl`.

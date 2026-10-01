@@ -31,9 +31,10 @@ When more than one git/GitHub identity exists on the machine, the active one dri
 account can silently flip between sessions and even between turns). So, **immediately before every outward
 git/gh action** - commit, push, PR, issue, comment - verify the identity, not just once per session:
 
-- **Which identity:** the project's `ai/manifest.json` may record it (`"identity": {"gh_account": ...,
-  "git_email": ..., "git_name": ...}`); else the operating memory (`.memory/instructions.md` /
-  `ai/.memory/`) or the remote owner decides. When neither says, ask once and record the answer.
+- **Which identity:** the project's ai-pack manifest (`<pack>/manifest.json`) may record it
+  (`"identity": {"gh_account": ..., "git_email": ..., "git_name": ...}`); else the operating memory
+  (`.memory/instructions.md` / `<pack>/.memory/`) or the remote owner decides. When neither says, ask
+  once and record the answer.
 - **Check + fix:** `gh auth status` and switch if wrong (`gh auth switch -h <host> -u <account>`); author
   commits with per-command overrides (`git -c user.name=... -c user.email=... commit`), never by editing
   git config.

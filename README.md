@@ -53,7 +53,7 @@ One agent runs everything; it adopts a persona from wherever it is working:
   procedures) and manages `projects/`, `plugins/`, and `tasks/`.
 - Inside a project folder (`projects/<group>/<slug>/`, grouped e.g. `projects/my/<slug>/`; written
   `projects/<slug>/` for short) it is that project's **primary persona** (`engineer` by default; a
-  project can rename it and add role personas as `ai/<role>.agent.md` briefs beside it) - it plans, builds, and
+  project can rename it and add role personas as `<role>.agent.md` briefs beside it) - it plans, builds, and
   runs the project against the project's *ai-pack*.
 
 You do not manage this switch; saying *"work on `<project>`"* hands off automatically.
@@ -86,8 +86,11 @@ Solaris supports several modes of use; each has its own workflow, and they mix f
 
 Say *"create a new project"* (the agent will ask for what it needs) or *"import project
 `<path>`"* to adopt an existing codebase. Either way you get an *ai-pack* at
-`projects/<slug>/ai/` - the bundle that tells any AI agent how to develop that project (its
-generated `ai/README.md` explains the pack to humans: contents, configuration, everyday how-tos).
+`projects/<slug>/<pack>/` - the bundle that tells any AI agent how to develop that project (its
+generated `<pack>/README.md` explains the pack to humans: contents, configuration, everyday how-tos).
+`<pack>/` is the project's ai-pack folder (default `aipack/`, `ai/` in projects made before 0.39.0,
+any name); Solaris finds it by its `manifest.json`, so you can pick the name at creation and rename
+it later.
 
 A project can be anything - a service, a research codebase, a firmware tree, a content pipeline,
 a doc site; nothing limits you to the bundled kinds. Choices you make at creation:
@@ -109,7 +112,7 @@ What lands in the pack:
   git collaboration: developer branches + PR-based back-contribution) with their
   committed defaults in `defaults.json`, perishable reference data the rules read in `info/` (model
   tiers, harness capabilities), and `init` / `refresh` skill stubs in `skills/` for teammates.
-- **Private, short-term / machine-local** (`ai/.memory/`, gitignored): hosts, secrets, session
+- **Private, short-term / machine-local** (`<pack>/.memory/`, gitignored): hosts, secrets, session
   context, logs. Drop this layer to share the project.
 
 Every project also carries its own semver in a root `.version` file (new projects start at `0.1.0`;
@@ -122,7 +125,7 @@ the framework master at any time (*"update `<project>`"*) to pick up the latest 
 
 ## 6. Developing a Solaris Project
 
-Say *"work on `<project>`"* and make requests; the engineer plans against `ai/spec.md`,
+Say *"work on `<project>`"* and make requests; the engineer plans against `<pack>/spec.md`,
 implements, runs, and remembers what it learns in the pack.
 
 **Workspaces.** When a project grows parallel tracks (say a data pipeline, a UI, and an evaluation
@@ -164,7 +167,7 @@ A *plugin* packages a domain or employer workflow - always-on rules, trigger-inv
 servers, optional project types - so any project can opt into it.
 
 - **Attach one:** *"install plugin `<git url | folder | zip>`"*, then *"add plugin `<name>` to
-  `<project>`"*. Its `shared/` files are copied into the project's `ai/plugins/<name>/` and its MCP
+  `<project>`"*. Its `shared/` files are copied into the project's `<pack>/plugins/<name>/` and its MCP
   servers merged. While developing a plugin, use **link mode** (*"link plugin `<name>` to `<project>`"*) -
   a pointer to the live source instead of a copy.
 - **Author one:** *"make a plugin from `<project>`"* factors that project's ways of working into a
@@ -176,11 +179,12 @@ servers, optional project types - so any project can opt into it.
   browser skill for the flows the API cannot reach, build archive + upload skill, always-on
   rule), `gmail` (Gmail through `gws`, the Google Workspace CLI: install + sign-in skill for
   macOS/Linux, read + send skill, always-on send-confirmation rule), `kaggle` (Kaggle through
-  the official Kaggle CLI, CLI only: a gateway that pins the CLI and installs it per project or
-  task, Kaggle's own agent skill vendored at the same version, always-on rule confirming every
-  write; plus a generic competition playbook, a saved leaderboard history for following every
-  team's progress, one Kaggle account's sessions and GPU hours shared between projects, and an
-  hourly competition-forum watch), `docker-home` (a per-project Linux container that runs the coding harness itself with
+  the official Kaggle CLI and three read-only SDK reads for what the CLI drops: a gateway that
+  pins the CLI and installs it per project or task, Kaggle's own agent skill vendored at the same
+  version, always-on rule confirming every write; plus a generic competition playbook, a saved
+  leaderboard history for following every team's progress, public notebooks saved with their
+  scores, one Kaggle account's sessions and GPU hours shared between projects, an hourly
+  competition-forum watch, and a live plan page for the owner), `docker-home` (a per-project Linux container that runs the coding harness itself with
   only the project folder and the container's home mounted, so nothing above the project exists
   for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
   strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
@@ -207,7 +211,7 @@ work together:
   without touching your code; plugins carry their own.
 
 Memory stays scoped while all this happens: the framework's `.memory/` (operating lessons,
-inventory, logs) and each pack's `ai/.memory/` are the only stores, and packs never read the
+inventory, logs) and each project's `<pack>/.memory/` are the only stores, and packs never read the
 framework's. Run *"health-check"* any time for a one-screen status of projects, revisions,
 versions, and tasks.
 
@@ -233,5 +237,5 @@ and `log_interaction` are hooks - never run by hand.
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.38.0.md`](solaris/spec/spec-v0.38.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.39.0.md`](solaris/spec/spec-v0.39.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.

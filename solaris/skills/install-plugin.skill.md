@@ -17,8 +17,10 @@ summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/f
 The single **plugin lifecycle** skill. It acquires a plugin (each plugin is its **own repository**) from a
 git URL, a local folder, or a source zip into `plugins/<name>/`, validates/repairs it, and - for a named
 project - installs / updates / migrates / repairs it. Installs come in two modes: **copy** (the default:
-`shared/` is materialized into `ai/plugins/<name>/`) and **link** (a single `ai/plugins/<name>.link.md` points at the live
-plugin source - used while developing a plugin, see step 5). There is **no per-plugin install skill**; this
+`shared/` is materialized into `<pack>/plugins/<name>/`) and **link** (a single
+`<pack>/plugins/<name>.link.md` points at the live plugin source - used while developing a plugin, see
+step 5); `<pack>/` is the project's ai-pack folder (default `aipack/`, `ai/` in projects made before
+0.39.0, any name). There is **no per-plugin install skill**; this
 generic skill drives every plugin, reading plugin-specific setup from the plugin's `manifest.json`
 (`setup`). Distinct from `import-plugin`, which *authors* a new plugin or folds project edits back.
 
@@ -35,9 +37,9 @@ generic skill drives every plugin, reading plugin-specific setup from the plugin
   actively developing the plugin itself; `copy` for everything else, and always before a project is
   shared or detached (a link cannot resolve outside the Solaris tree).
 
-**Canonical overlay layout:** `ai/plugins/` is the pack-side home for plugin shared files. A copy install
-always materializes into the directory form `ai/plugins/<name>/<file>` - never flat rule/skill files at
-the top of `ai/` or `ai/plugins/`. (The skill-loader overlay index tolerates flat rule files at the pack
+**Canonical overlay layout:** `<pack>/plugins/` is the pack-side home for plugin shared files. A copy install
+always materializes into the directory form `<pack>/plugins/<name>/<file>` - never flat rule/skill files at
+the top of `<pack>/` or `<pack>/plugins/`. (The skill-loader overlay index tolerates flat rule files at the pack
 root when *reading*, for hand-rolled project-local rules; plugin installs and the revs classifier use the
 directory form only. Do not move files between the two layouts - it churns revisions for no gain.)
 
@@ -82,38 +84,40 @@ ref, and refresh procedure; inside `shared/` its rev markers are the only local 
   validate (`revs status`; for the project `revs classify --dir projects/<slug>`, `version check-plugins`,
   `mcp_sync --check`). Report problems + the fix. If valid but not yet attached, attach it (below).
 - **Project named, plugin absent / not yet attached -> install:**
-  1. Copy `shared/*` into `projects/<slug>/ai/plugins/<name>/`, creating `ai/plugins/` on the project's
-     first plugin attach (**link mode:** write `ai/plugins/<name>.link.md` instead - step 5 - and skip
+  1. Copy `shared/*` into `projects/<slug>/<pack>/plugins/<name>/`, creating `<pack>/plugins/` on the project's
+     first plugin attach (**link mode:** write `<pack>/plugins/<name>.link.md` instead - step 5 - and skip
      the copy).
   2. Merge the plugin's `mcps.json` `mcpServers` into the project runtime MCP (`.mcp.json` +
-     `.cursor/mcp.json`); verify `mcp_sync --check`.
+     `.cursor/mcp.json`), replacing every `<pack>` in the merged entries (e.g. a command path
+     `<pack>/plugins/<name>/...`) with the project's actual pack folder name and keeping any project path
+     prefix the entry already uses; verify `mcp_sync --check`. Every later re-merge does the same.
   3. Run the plugin's **`setup`** (from `manifest.json`): surface each `setup.notes` line; for each
      `setup.resources` entry, prompt (`prompt`, with `default`) and write the answer into
-     `ai/.memory/resources.md` (or `credentials.md` if `secret: true`).
-  4. Record `{name, version}` in `ai/manifest.json` -> `plugins` (link mode: `{name, "mode": "link"}` -
+     `<pack>/.memory/resources.md` (or `credentials.md` if `secret: true`).
+  4. Record `{name, version}` in `<pack>/manifest.json` -> `plugins` (link mode: `{name, "mode": "link"}` -
      **no** `version`: a linked plugin always runs the live source, so a recorded version would only go
      stale). Then `uv run -m solaris.tools.revs ff --dir projects/<slug>` - it re-renders
-     `ai/README.md`'s attached-plugins list from the manifest (run it after ANY change to the
+     `<pack>/README.md`'s attached-plugins list from the manifest (run it after ANY change to the
      `plugins` array: attach, detach, link/copy conversion) - and
      `uv run -m solaris.tools.revs baseline --dir projects/<slug>` (both safe in both modes - the
      revs tools skip linked plugins).
 
 ## 5. Link Mode (Development Installs)
 
-Link mode attaches a plugin **without copying it**: instead of `ai/plugins/<name>/`, the project gets a single
-pointer file `ai/plugins/<name>.link.md` that tells the engineer agent to load the plugin's `shared/` files
+Link mode attaches a plugin **without copying it**: instead of `<pack>/plugins/<name>/`, the project gets a single
+pointer file `<pack>/plugins/<name>.link.md` that tells the engineer agent to load the plugin's `shared/` files
 directly from `plugins/<name>/`. Use it while **developing a plugin** - edits to the plugin source take
 effect in the project immediately, with no copy-back-and-forth (no `import-plugin` fold-back, and no `revs`
-drift: the revs tools skip `"mode": "link"` entries, so linked files are never expected in `ai/plugins/<name>/`).
+drift: the revs tools skip `"mode": "link"` entries, so linked files are never expected in `<pack>/plugins/<name>/`).
 MCP merge, `setup`, and the manifest record (with `"mode": "link"`, no `version`) still happen exactly as
 in a copy install, so behavior is identical at runtime. This section is the **canonical definition** of
 link mode - other skills and docs point here.
 
-Write `ai/plugins/<name>.link.md` from this template (fill `<name>` and the path; the path is **relative to the
-ai-pack root** - the directory holding `ai/`, two levels **above** this file - and the rendered line must
-say so). **Compute the depth, do not copy it:** count the levels from the ai-pack root up to the Solaris
-root - a grouped project `projects/<group>/<slug>/` needs `../../../plugins/<name>/` (embedded mode adds
-one more `../` for `<repo>/`); verify the rendered path resolves (`ls <ai-pack root>/<path>`) before
+Write `<pack>/plugins/<name>.link.md` from this template (fill `<name>`, `<pack>` (the pack folder's name)
+and the path; the path is **relative to the ai-pack root** - the directory holding `<pack>/`, two levels
+**above** this file - and the rendered line must say so). **Compute the depth, do not copy it:** count the
+levels from the ai-pack root up to the Solaris root - a grouped project `projects/<group>/<slug>/` needs
+`../../../plugins/<name>/` (embedded mode adds one more `../` for `<repo>/`); verify the rendered path resolves (`ls <ai-pack root>/<path>`) before
 finishing. A link file breaks silently if the project folder later moves - re-verify it on
 `update-project`:
 
@@ -122,11 +126,11 @@ finishing. A link file breaks silently if the project folder later moves - re-ve
 
 # Linked Plugin: <name>
 
-This project uses the **<name>** plugin in **link mode**: nothing is copied into `ai/plugins/<name>/`; the live
+This project uses the **<name>** plugin in **link mode**: nothing is copied into `<pack>/plugins/<name>/`; the live
 plugin source is loaded directly. On every turn, treat the plugin as if it were materialized here:
 
 - **Plugin root:** `<path to plugins/<name>/>` - relative to this ai-pack's root, the directory **above**
-  `ai/` (not to this file). Shared files are in `shared/` there; the live version is in its `manifest.json`.
+  `<pack>/` (not to this file). Shared files are in `shared/` there; the live version is in its `manifest.json`.
 - Load each `shared/*.rule.md` as always-on; treat each `shared/*.skill.md` as trigger-invoked.
 - Edits to those files change the **plugin source** for every consumer - only edit them when the user is
   deliberately developing the plugin.
@@ -139,7 +143,7 @@ Notes:
 
 - The link file carries **no rev marker** (it is per-project generated content, like `remote.json`, not a
   framework/plugin master), and neither ledger tracks it.
-- **Embedded** projects: add `ai/plugins/<name>.link.md` to the repo's `.gitignore` - the pointer is machine-local.
+- **Embedded** projects: add `<pack>/plugins/<name>.link.md` to the repo's `.gitignore` - the pointer is machine-local.
 - `version check-plugins` reports linked plugins as `linked, source <v> (live)` - there is no recorded
   version to drift; a missing `plugins/<name>/` source is reported as a hard break (no materialized copy
   to fall back on).
@@ -147,32 +151,32 @@ Notes:
 **Converting and detaching** (swaps happen in place; MCP merge and recorded `setup` answers stay as they
 are unless noted):
 
-- **link -> copy** ("install plugin <name> to <project>" on a linked plugin): delete `ai/plugins/<name>.link.md`,
-  copy `shared/*` into `ai/plugins/<name>/`, replace the manifest entry with `{name, version}` (the source's
+- **link -> copy** ("install plugin <name> to <project>" on a linked plugin): delete `<pack>/plugins/<name>.link.md`,
+  copy `shared/*` into `<pack>/plugins/<name>/`, replace the manifest entry with `{name, version}` (the source's
   current version), then `revs baseline --dir projects/<slug>`.
 - **copy -> link** ("link plugin <name> to <project>" on a copied install): first
-  `revs classify --dir projects/<slug>` - fold any `merge-up`/`conflict` in `ai/plugins/<name>/` back into the
-  plugin (`import-plugin`) so no project-local edit is lost; then delete `ai/plugins/<name>/` (confirm - this is
+  `revs classify --dir projects/<slug>` - fold any `merge-up`/`conflict` in `<pack>/plugins/<name>/` back into the
+  plugin (`import-plugin`) so no project-local edit is lost; then delete `<pack>/plugins/<name>/` (confirm - this is
   destructive), write the link file, set the manifest entry to `{name, "mode": "link"}`, and
   `revs baseline --dir projects/<slug>` (it rebuilds the `revisions` map and drops the deleted files).
 - **unlink / detach** ("unlink plugin <name>", "detach plugin <name> from <project>"): fully remove the
-  attachment - delete `ai/plugins/<name>.link.md`, remove the plugin's entry from `ai/manifest.json` -> `plugins`,
+  attachment - delete `<pack>/plugins/<name>.link.md`, remove the plugin's entry from `<pack>/manifest.json` -> `plugins`,
   and remove its `mcps.json` servers from the project runtime MCP (unless another attached plugin also
-  provides them); keep any `setup` answers already in `ai/.memory/`. Confirm first (destructive). If the
+  provides them); keep any `setup` answers already in `<pack>/.memory/`. Confirm first (destructive). If the
   user instead wants the plugin kept but copied, that is **link -> copy** above - ask when ambiguous.
 
 ## 6. Update, Migrate, Repair an Attached Plugin
 
 For a plugin already attached to a project (driven here or by `update-project`). **Linked** plugins (step
 5) need none of this - they always run the live source, record no version, and migrations against
-`ai/plugins/<name>/` do not apply since nothing is materialized:
+`<pack>/plugins/<name>/` do not apply since nothing is materialized:
 
 - **update** (source advanced): `uv run -m solaris.tools.revs classify --dir projects/<slug>`. For any
-  `ai/plugins/<name>/` file with verdict `merge-up` or `conflict`, resolve first (`import-plugin`
+  `<pack>/plugins/<name>/` file with verdict `merge-up` or `conflict`, resolve first (`import-plugin`
   update-from-project for `merge-up`; smart-merge + ask for `conflict`). Then `revs ff` the safe files,
   re-merge `mcps.json`, and bump the recorded plugin `version` only on a minor/major plugin release.
 - **migrate** (plugin minor/major bump with `migrations/`): apply `plugins/<name>/migrations/<to>.md`
-  against `ai/plugins/<name>/`, then update the recorded version.
+  against `<pack>/plugins/<name>/`, then update the recorded version.
 - **repair** (attached but broken): `revs ff` restores missing files, re-merge `mcps.json`, then
   `revs baseline`.
 

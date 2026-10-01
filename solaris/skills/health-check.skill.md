@@ -17,12 +17,16 @@ demand.
 ## Default (Status Overview)
 
 1. **Projects** - enumerate with the two-depth scan (`projects/*/` and `projects/*/*/` - projects are
-   grouped, e.g. `projects/nv/<slug>/`; a project folder is one holding `ai/manifest.json`, or
-   `<repo>/ai/manifest.json` in embedded mode). For each: read `ai/manifest.json` and show `name`, `type`, `mode`,
-   `framework_version`, attached plugins, workspaces (`project.workspaces` when present), and the personas
-   (the primary, `agents.primary` or `engineer`, plus any other `ai/<role>.agent.md` role briefs beside it). (An **embedded**-mode project keeps its ai-pack one level deeper, inside the repo - use the repo
-   root `projects/<slug>/<repo>/` (the directory holding `ai/`) as `--dir` in the checks below; the
-   tools resolve `ai/manifest.json` and `.version` relative to it.)
+   grouped, e.g. `projects/nv/<slug>/`; a project folder is one holding `<pack>/manifest.json`, or
+   `<repo>/<pack>/manifest.json` in embedded mode, where `<pack>/` is the project's ai-pack folder (default
+   `aipack/`, `ai/` in projects made before 0.39.0, any name): the child folder whose `manifest.json` is an
+   ai-pack manifest; a malformed manifest hides its pack, so the project drops out of the scan and its
+   tools report "no ai-pack" - flag a known project that goes missing). For each: read
+   `<pack>/manifest.json` and show `name`, `type`, `mode`, `framework_version`, attached plugins,
+   workspaces (`project.workspaces` when present), and the personas
+   (the primary, `agents.primary` or `engineer`, plus any other `<pack>/<role>.agent.md` role briefs beside it). (An **embedded**-mode project keeps its ai-pack one level deeper, inside the repo - use the repo
+   root `projects/<slug>/<repo>/` (the directory holding `<pack>/`) as `--dir` in the checks below; the
+   tools resolve `<pack>/manifest.json` and `.version` relative to it.)
 2. **Revisions** - `uv run -m solaris.tools.revs status` (framework files changed without a rev bump); per
    project, `uv run -m solaris.tools.revs classify --dir projects/<slug>` flags files needing sync/merge
    (fix: `update-project <slug>`).
@@ -51,11 +55,11 @@ Everything above, plus:
   `version project --dir projects/<slug>` (root `.version` present + valid semver; missing = a pre-0.29
   pack - flag it, the 0.29.0 migration seeds it);
   `uv run -m solaris.tools.agents --check --dir projects/<slug>` (the primary persona file exists; every
-  other `ai/*.agent.md` brief is valid; the shared `ai/instructions.md` is present and non-empty; no
-  pre-0.37 leftovers such as `ai/agents/` or `ai/<name>.instructions.md`);
-  confirm `AGENTS.md` exists and, for each attached plugin, `ai/plugins/<plugin>/` is present (legacy
-  pre-0.28 packs: `ai/<plugin>/` until migrated) - or, for a
-  **linked** plugin (`"mode": "link"`), `ai/plugins/<name>.link.md` exists and its path resolves to
+  other `<pack>/*.agent.md` brief is valid; the shared `<pack>/instructions.md` is present and non-empty; no
+  pre-0.37 leftovers such as `<pack>/agents/` or `<pack>/<name>.instructions.md`);
+  confirm `AGENTS.md` exists and, for each attached plugin, `<pack>/plugins/<plugin>/` is present (legacy
+  pre-0.28 packs: `<pack>/<plugin>/` until migrated) - or, for a
+  **linked** plugin (`"mode": "link"`), `<pack>/plugins/<name>.link.md` exists and its path resolves to
   `plugins/<name>/`. (A project root carries only `AGENTS.md`, `.version`, and the runtime `.mcp.json`/`.cursor/mcp.json`.)
 - **Plugins** - each attached plugin has a source under `plugins/<name>/` (else it cannot be updated;
   for a linked plugin a missing source is a hard break - it has no materialized copy to fall back on).
@@ -68,7 +72,7 @@ Everything above, plus:
   is missing, write `// Device-only rules for this machine go above the include.` and then
   `#include .stglobalignore`; otherwise put the include (adding it if absent) on the last line,
   keeping every existing line above it. Scan the memory folders the session-start sweep covers
-  (`.memory/`, `projects/*/ai/.memory/`, `projects/*/*/*/.memory/`, `projects/*/*/*/ai/.memory/`) for
+  (`.memory/` and each project's `<pack>/.memory/`, embedded packs included) for
   leftover `*.sync-conflict-*`: the sweep merges every `.jsonl` copy (any log, not only
   `interactions.jsonl`) and keeps one it cannot merge safely for the next start; other copies need a
   review. `.git` on this machine is expected (each device keeps its own clone; commit only here if

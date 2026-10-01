@@ -51,15 +51,16 @@ A task can be marked as belonging to a project (at creation, e.g. "task for `<pr
 
 When linked, layer the project's ai-pack **read-only** on top of this skill (do not adopt the project's
 primary persona or switch working directory - the task folder stays the write target, and the primary
-persona file `ai/<primary>.agent.md` (`engineer` unless the manifest's `agents.primary` says otherwise)
-itself is not read). First read `projects/<slug>/ai/manifest.json` for `mode` and any `workspaces`: in
-`embedded` mode the ai-pack lives at `projects/<slug>/<repo>/ai/` instead - resolve every path below
+persona file `<pack>/<primary>.agent.md` (`engineer` unless the manifest's `agents.primary` says otherwise)
+itself is not read); `<pack>/` is the project's ai-pack folder (default `aipack/`, `ai/` in projects made
+before 0.39.0, any name). First read `projects/<slug>/<pack>/manifest.json` for `mode` and any `workspaces`: in
+`embedded` mode the ai-pack lives at `projects/<slug>/<repo>/<pack>/` instead - resolve every path below
 against that root. Ignore workspaces (they scope where an *implementation* lands; a linked task never
 writes into the project, so no workspace applies - if the request is workspace-specific, hand off to
-`develop-project`). Then read, from the resolved `ai/` root: `instructions.md`, `spec.md`, every
+`develop-project`). Then read, from the resolved `<pack>/` root: `instructions.md`, `spec.md`, every
 `rules/*.rule.md`, every `skills/*.skill.md` (trigger-invoked), and every `plugins/<plugin>/` overlay
 (`*.rule.md` always-on, `*.skill.md` trigger-invoked), following any `plugins/<name>.link.md` pointer to
-its `shared/` rules and skills the same way `develop-project` step 2 does. Skip `ai/.memory/*`
+its `shared/` rules and skills the same way `develop-project` step 2 does. Skip `<pack>/.memory/*`
 (project-private) and, in `local`/`remote-code` mode, `source/AGENTS.md` (repo-carried rules for
 implementation work, not relevant to a task that never touches the source tree).
 
@@ -90,14 +91,14 @@ plugin. Two pieces of a project install adapt to the task context:
   `.cursor/mcp.json` at the Solaris root; verify with `mcp_sync --check`) - note that this applies to
   every command-center session on this machine. Before merging, check each server's command resolves from
   the Solaris root: an entry written for a copy install (a project-relative path like
-  `ai/plugins/<name>/...`) must be re-pointed at the live source (`plugins/<name>/shared/...`) or the
+  `<pack>/plugins/<name>/...`) must be re-pointed at the live source (`plugins/<name>/shared/...`) or the
   merged server cannot start. Record what was merged on the `Plugins:` line (e.g. `Plugins: <name>
   (mcp: <server>, <server>)`) - that record is what makes removal safe later: only remove servers a task
   merge added, and only once no `Plugins:` line across `tasks/*/*/*/notes.md` still names them.
 - **Setup** (`manifest.json` `setup`): surface each `setup.notes` line; write `setup.resources` answers to
-  the framework `.memory/resources.md` (or `credentials.md` if `secret: true`) - a task has no `ai/.memory/`.
+  the framework `.memory/resources.md` (or `credentials.md` if `secret: true`) - a task has no `<pack>/.memory/`.
   The same mapping applies on the read side: where a live-loaded plugin rule/skill reads
-  `ai/.memory/resources.md` or `ai/.memory/credentials.md`, use the framework `.memory/` equivalents.
+  `<pack>/.memory/resources.md` or `<pack>/.memory/credentials.md`, use the framework `.memory/` equivalents.
 
 The section 2 authority contract applies unchanged: plugin rules and skills add context and conventions,
 not authority - all writes stay inside the task folder, and this skill wins on any conflict. Plugins
@@ -118,7 +119,7 @@ at once.
 
 Keep `notes.md` current (steps tried, findings, outcome) - it is the durable record. Append a line to
 `.memory/interactions.jsonl`; if the task is linked to a project, append the same line to that project's
-`ai/.memory/interactions.jsonl` too.
+`<pack>/.memory/interactions.jsonl` too.
 
 ## 6. Graduate (Optional)
 

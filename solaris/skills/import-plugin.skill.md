@@ -10,15 +10,16 @@ summary: Author a plugin from a project's domain specifics, or fold project-loca
 - [Mode B - create-from-aipack](#mode-b---create-from-aipack)
 
 Two modes. Both keep the source plugin at `plugins/<name>/` as the editing source of truth; the materialized
-copy in `ai/plugins/<name>/` is disposable (wholesale-overwritten on update). Tip: while actively developing a
-plugin against a project, attach it in **link mode** instead (`install-plugin`: "link plugin <name> to
-<project>") - edits hit the plugin source directly and Mode A's fold-back becomes unnecessary.
+copy in `<pack>/plugins/<name>/` is disposable (wholesale-overwritten on update); `<pack>/` is the project's
+ai-pack folder (default `aipack/`, `ai/` in projects made before 0.39.0, any name). Tip: while actively
+developing a plugin against a project, attach it in **link mode** instead (`install-plugin`: "link plugin
+<name> to <project>") - edits hit the plugin source directly and Mode A's fold-back becomes unnecessary.
 
 ## Mode A - update-from-project
 
-The user edited the materialized copy `projects/<slug>/ai/plugins/<name>/`. Capture it:
+The user edited the materialized copy `projects/<slug>/<pack>/plugins/<name>/`. Capture it:
 
-1. Diff `projects/<slug>/ai/plugins/<name>/` against `plugins/<name>/shared/`, skipping vendored
+1. Diff `projects/<slug>/<pack>/plugins/<name>/` against `plugins/<name>/shared/`, skipping vendored
    upstream trees (folders holding an `UPSTREAM.md`): project-side edits there are never folded
    back - fix the plugin's own skills instead, or refresh the tree from upstream.
 2. Show the changes; confirm with the user.
@@ -28,16 +29,16 @@ The user edited the materialized copy `projects/<slug>/ai/plugins/<name>/`. Capt
 4. Re-record the project's revisions baseline: `uv run -m solaris.tools.revs baseline --dir projects/<slug>`.
 
 This is the mechanism behind the **pre-overwrite check**: `install-plugin` (update) calls Mode A before it
-overwrites `ai/plugins/<name>/`, so local edits are never lost.
+overwrites `<pack>/plugins/<name>/`, so local edits are never lost.
 
 ## Mode B - create-from-aipack
 
 Build a **new** `plugins/<name>/` from domain-specific content in an existing project's ai-pack (or an
 external `__ai/`-style setup):
 
-1. Read the source (e.g. an imported project's `ai/`, or files the user points at). Separate **domain /
+1. Read the source (e.g. an imported project's `<pack>/`, or files the user points at). Separate **domain /
    employer / repo-specific** material (NVBugs workflow, house git/PR conventions, CI specifics, a domain
-   MCP) from **generic** dev preferences (which stay in `ai/instructions.md`).
+   MCP) from **generic** dev preferences (which stay in `<pack>/instructions.md`).
 2. Show the proposed split and the plugin name; confirm.
 3. Create `plugins/` if needed, write the plugin to `plugins/<name>/`, then delete the `plugins/.empty`
    placeholder (the directory now has content). Flat; only `migrations/` may be a subfolder, plus

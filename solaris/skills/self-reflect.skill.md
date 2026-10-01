@@ -17,8 +17,9 @@ framework files for self-improvement. No separate tailor/coder split.
 ## 1. Gather Signal
 
 Read `.memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
-and `.memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/*/ai/.memory/interactions.jsonl`
-(projects are grouped one level below `projects/`) and `tasks/*/*/*/notes.md` (tasks live under
+and `.memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/*/<pack>/.memory/interactions.jsonl`
+(projects are grouped one level below `projects/`; `<pack>/` is the project's ai-pack folder - default
+`aipack/`, `ai/` in projects made before 0.39.0, any name) and `tasks/*/*/*/notes.md` (tasks live under
 `tasks/<YYYY>/<MM>/`). Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 
@@ -29,7 +30,7 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 
 - **Framework changes** - generic, benefit any project: edit `solaris/` (agent, skills, rules, templates,
   tools, spec).
-- **Project-specific** - belongs in that project's `ai/instructions.md`, not the framework.
+- **Project-specific** - belongs in that project's `<pack>/instructions.md`, not the framework.
 - **Plugin-worthy** - a domain workflow that recurs: suggest `import-plugin` (create) or extending an
   existing plugin.
 

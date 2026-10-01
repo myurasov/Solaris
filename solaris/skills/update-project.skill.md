@@ -10,16 +10,18 @@ summary: Sync an ai-pack with framework/plugin master copies by per-file revisio
 1. [Classify + Sync Files by Revision](#1-classify--sync-files-by-revision)
 2. [Apply Minor/Major Migrations](#2-apply-minormajor-migrations)
 3. [Update Plugins](#3-update-plugins)
-4. [Summary + Revert](#4-summary--revert)
+4. [Rename the Pack Folder (Optional)](#4-rename-the-pack-folder-optional)
+5. [Summary + Revert](#5-summary--revert)
 
 Bring a project's ai-pack in sync with the current framework + plugin master copies. **Routine sync is
 per-file (revisions); semantic-version migrations run only for minor/major framework bumps.** Never touches
-the project's `source/` code.
+the project's `source/` code. `<pack>/` is the project's ai-pack folder (default `aipack/`, `ai/` in projects
+made before 0.39.0, any name).
 
 ## 1. Classify + Sync Files by Revision
 
 `uv run -m solaris.tools.revs classify --dir projects/<slug>` gives a per-materialized-file verdict (the
-template's `engineer.agent.md` maps onto the project's primary persona file `ai/<primary>.agent.md`, per the
+template's `engineer.agent.md` maps onto the project's primary persona file `<pack>/<primary>.agent.md`, per the
 manifest's `agents.primary`):
 
 - **in-sync / fast-forward / missing** -> `uv run -m solaris.tools.revs ff --dir projects/<slug>` applies
@@ -41,21 +43,46 @@ Finish by re-recording the baseline: `uv run -m solaris.tools.revs baseline --di
 A migration exists only when a **minor/major** framework bump needed one (patch never does). If so,
 `version chain` lists the steps; apply each `solaris/migrations/<to_version>.md` in order (Pre-flight /
 Migrate / Validate), then `version set --dir projects/<slug> <to_version>`. On failure, stop at the last
-good step and surface its Revert.
+good step and surface its Revert. Migrations written before 0.39.0 say `ai/`; read that as the project's
+`<pack>/`.
 
 ## 3. Update Plugins
 
-Step 1's revisions sync already reconciled each `ai/plugins/<plugin>/`. Additionally, for any plugin with a
+Step 1's revisions sync already reconciled each `<pack>/plugins/<plugin>/`. Additionally, for any plugin with a
 minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to apply
-`plugins/<name>/migrations/` and record the new plugin version in `ai/manifest.json`.
+`plugins/<name>/migrations/` and record the new plugin version in `<pack>/manifest.json`.
 
 **Linked** plugins (`"mode": "link"` entries) need no sync or migration - they always run the live source;
 see `install-plugin` step 5 (the canonical link-mode definition). The revs tools skip them in step 1
 automatically.
 
-## 4. Summary + Revert
+## 4. Rename the Pack Folder (Optional)
+
+Only on request: nothing renames a pack automatically, and a project made before 0.39.0 may keep `ai/`.
+The new name is any plain folder name not already used at the project root (no slash, backslash,
+whitespace, `*`, `?` or `[`, and not starting with `.`, `#` or `!`).
+
+1. Bring the pack in sync first, so the baseline is current:
+   `uv run -m solaris.tools.revs ff --dir projects/<slug>`, resolve anything it reports as in section 1,
+   then `uv run -m solaris.tools.revs baseline --dir projects/<slug>`.
+2. Add ignore entries for the **new** folder name (in `.gitignore`, `.stignore` and `.git/info/exclude`,
+   wherever the old name has one - such as `<name>/.memory/` beside `<pack>/.memory/`), and keep the old
+   entries until the rename is done.
+3. `uv run -m solaris.tools.agents --rename-pack <name> --dir projects/<slug>` moves `<pack>/` to
+   `<name>/`, rewrites the pack paths in the project-root `AGENTS.md` and `CLAUDE.md`, and lists other files
+   that still mention the old name - review that list and update the references that mean the pack. It
+   refuses (exit 1), moving nothing, while the new folder's `.memory/` would not be ignored (the private
+   files, credentials included, would reach git), and likewise for anything else git ignores in the pack
+   now, for files git keeps now that a rule would start ignoring, and for a `.stignore` that names only the
+   old folder; if a step after the move fails, it puts everything back.
+4. `uv run -m solaris.tools.revs ff --dir projects/<slug>` re-renders `{{PACK}}` in the managed files;
+   merge anything it reports (`merge-up` / `conflict`, resolved as in section 1 above), then
+   `uv run -m solaris.tools.revs baseline --dir projects/<slug>`.
+5. Remove the old ignore entries (the rename's last output line lists the ones it found).
+
+## 5. Summary + Revert
 
 Report what synced, what merged, and any versions set. Run
 `uv run -m solaris.tools.agents --check --dir projects/<slug>` too (personas and the shared
-`ai/instructions.md`; it flags pre-0.37 layout leftovers). `revs ff` is idempotent; migrations
+`<pack>/instructions.md`; it flags pre-0.37 layout leftovers). `revs ff` is idempotent; migrations
 revert via their Revert section. Log one line to `.memory/interactions.jsonl`.

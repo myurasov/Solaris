@@ -17,7 +17,8 @@ summary: Scaffold a new project + portable ai-pack (type, mode, plugins) from te
 
 Scaffold a new project under `projects/<group>/<slug>/` with a standardized ai-pack, then stop so the user
 starts planning via `develop-project`. This skill does **not** write application source code.
-(`projects/<slug>/` below is shorthand for the grouped destination.)
+`projects/<slug>/` below is shorthand for the grouped destination, and `<pack>/` is the project's ai-pack
+folder (default `aipack/`, `ai/` in projects made before 0.39.0, any name).
 
 ## 1. Gather Inputs
 
@@ -36,11 +37,16 @@ Use the question tool (one batch) for anything not already given:
   or `embedded` (opt-in: the ai-pack lives **inside** the source repo at `projects/<slug>/<repo>/`, no separate
   `source/`, so it commits with the repo). Offer `embedded` only when the user wants the pack to travel inside their repo.
 - **plugins** - any additional plugins to attach (names under `plugins/`).
+- **pack folder** (optional) - the name of the ai-pack folder: `aipack` unless the user wants another
+  plain folder name that no other folder at the project root uses. Solaris finds the pack by its
+  manifest, not its name: the pack is the one direct child folder of the project root (embedded: the
+  repo root) whose `manifest.json` is an ai-pack manifest (it has `framework_version` and a `project`
+  object; plugin manifests do not). Hidden folders are never packs, and more than one is an error.
 - **primary persona** (optional) - the role name of the project's primary agent: `engineer` unless the
   user wants a project-specific one (e.g. `master`); `^[a-z][a-z0-9-]*$`.
 - **role personas** (optional) - names for additional persona briefs beside the primary
-  (`ai/<role>.agent.md`, e.g. `reviewer`, `worker`); offer this only when the user describes distinct
-  agent roles. All personas share the one `ai/instructions.md`.
+  (`<pack>/<role>.agent.md`, e.g. `reviewer`, `worker`); offer this only when the user describes distinct
+  agent roles. All personas share the one `<pack>/instructions.md`.
 - **workspaces** (optional) - names of additional self-contained work tracks beyond the default
   (`source/`). Most projects start flat (just `source/`, the default workspace) and add workspaces later;
   offer this only when the user describes multiple parallel tracks.
@@ -49,25 +55,34 @@ Read the chosen `templates/projects/<type>.md` for how that type is structured (
 
 ## 2. Confirm the Plan
 
-Print a one-screen summary (slug, name, type, mode, plugins, destination `projects/<slug>/`, host/path if
-remote). Ask to proceed / edit / cancel. If `projects/<slug>/` exists and is non-empty, stop and say so.
+Print a one-screen summary (slug, name, type, mode, plugins, pack folder, destination `projects/<slug>/`,
+host/path if remote). Ask to proceed / edit / cancel. If `projects/<slug>/` exists and is non-empty, stop and say so.
 
 ## 3. Materialize the ai-pack Template
 
-Create `projects/` if it does not exist (gitignored, lazily created), then copy
-`solaris/templates/ai-pack/` -> `projects/<slug>/` and substitute placeholders in every copied text file:
-`{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO),
-`{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`), and `{{PRIMARY}}` /
-`{{PRIMARY_TITLE}}` (the chosen primary role and its Title Case - `engineer` / `Engineer` by default - so
-seeded-only files such as `ai/.memory/context.md` and `source/README.md` carry the right name from the
-start; the copied `ai/engineer.*` file names stay until step 6 renames them, never by hand). Do not hand-substitute
-`ai/README.md` - delete the copied stub (or skip copying it): it is fully derived (its `{{PLUGINS}}`
-block renders from the manifest) and step 6 materializes it via `revs ff`.
+Create `projects/` if it does not exist (gitignored, lazily created). The template keeps its pack in
+`solaris/templates/ai-pack/ai/`; the project's copy goes to `projects/<slug>/<pack>/`:
 
-The project root is intentionally minimal: `AGENTS.md` + a one-line `CLAUDE.md` (`@AGENTS.md`, copied from
-the template) plus `ai/` and (local mode) `source/`. There is no `.cursor/`, no `mcp.json.example`, and no
-`.gitignore` - the folder is not committed. Cursor reads `AGENTS.md` natively; Claude Code reads the
-`CLAUDE.md` shim. If a project type adds a `source/AGENTS.md`, drop a sibling `source/CLAUDE.md` (`@AGENTS.md`) too.
+1. Write `<pack>/manifest.json` first, from the template's, with its placeholders filled - the manifest is
+   what makes the folder the pack.
+2. Copy the files `revs` never renders - `<pack>/instructions.md`, `spec.md`, `defaults.json` and
+   `.memory/*`, the root `CLAUDE.md`, and the `source/` stub - and substitute placeholders in each:
+   `{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO),
+   `{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`), `{{PACK}}` (the pack folder
+   name from step 1, `aipack` by default), and `{{PRIMARY}}` / `{{PRIMARY_TITLE}}` (the chosen primary
+   role and its Title Case - `engineer` / `Engineer` by default - so seeded-only files such as
+   `<pack>/.memory/context.md` and `source/README.md` carry the right name from the start). Text that
+   says `<pack>/` stays as it is.
+3. Do **not** copy or hand-fill the managed files - the root `AGENTS.md`, `<pack>/engineer.agent.md`,
+   `<pack>/README.md`, and `<pack>/rules/`, `skills/`, `info/`: step 6's `revs ff` writes them with every
+   placeholder rendered, `{{PACK}}` included, and a hand-filled copy that differs from its output by one
+   byte classifies as a conflict. The primary persona arrives as `<pack>/engineer.agent.md`; step 6
+   renames it when step 1 chose another role, never by hand.
+
+The project root is intentionally minimal: `AGENTS.md` (from `revs ff`) + a one-line `CLAUDE.md`
+(`@AGENTS.md`, copied from the template) plus `<pack>/` and (local mode) `source/`. There is no `.cursor/`,
+no `mcp.json.example`, and no `.gitignore` - the folder is not committed. Cursor reads `AGENTS.md`
+natively; Claude Code reads the `CLAUDE.md` shim. If a project type adds a `source/AGENTS.md`, drop a sibling `source/CLAUDE.md` (`@AGENTS.md`) too.
 Copied files keep their `_Rev. N_` rev markers (line 1; in files with YAML frontmatter, right after the closing ---). For **embedded** mode the destination is the
 repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is dropped) - see step 4.
 
@@ -75,12 +90,12 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
 
 - **local:** keep `source/`; `git init -b main` inside `source/` is deferred to the engineer agent (never commit
   yet; when it happens, seed the repo's `.gitignore` with `__*/` - the local-only-folders convention in
-  `ai/instructions.md`).
+  `<pack>/instructions.md`).
 - **workspaces** (any mode): `source/` is the **default workspace**. For each additional workspace named in
   step 1, create `<name>/` beside it (embedded: at the repo root) and materialize
   `solaris/templates/workspace/{setup.md,spec.md}` into it, substituting `{{WORKSPACE}}` (the folder name)
   and `{{NAME}}`; register each in the manifest `project.workspaces` array and in the
-  `ai/instructions.md` workspace table. Workspaces are self-contained (own setup/deps, no file
+  `<pack>/instructions.md` workspace table. Workspaces are self-contained (own setup/deps, no file
   references into siblings; shared inputs live outside) - the canonical rules are in the template
   `ai/engineer.agent.md` (Workspaces).
 - **remote-code:** delete `source/`; write `projects/<slug>/remote.json`:
@@ -88,48 +103,49 @@ repo root `projects/<slug>/<repo>/` (and the template's `source/` stub is droppe
   { "_comment": "do not edit by hand", "mode": "remote-code", "host": "<HOST>", "path": "<REMOTE_PATH>",
     "deploy": false, "sync": { "excludes": [".venv", ".git", "__pycache__", "outputs/", "logs/"] } }
   ```
-  Set `project.mode` to `remote-code` in `ai/manifest.json`.
+  Set `project.mode` to `remote-code` in `<pack>/manifest.json`.
 - **embedded:** the code repo lives at `projects/<slug>/<repo>/` (e.g. `source`; an existing repo, or one
-  you `git init` there) and holds the **whole** project - code, `ai/`, `AGENTS.md` + `CLAUDE.md`, `README`,
-  dotfiles. Materialize `AGENTS.md` + `CLAUDE.md` + `ai/` at that repo's root (not at `projects/<slug>/`);
+  you `git init` there) and holds the **whole** project - code, `<pack>/`, `AGENTS.md` + `CLAUDE.md`, `README`,
+  dotfiles. Materialize `AGENTS.md` + `CLAUDE.md` + `<pack>/` at that repo's root (not at `projects/<slug>/`);
   keep any non-repo local aux (`references/`, `screenshots/`) at `projects/<slug>/` *outside* `<repo>`. Add
-  `ai/.memory/`, **`.secrets.env`**, and `__*/` (local-only folders) to the repo's `.gitignore` so no
+  `<pack>/.memory/`, **`.secrets.env`**, and `__*/` (local-only folders) to the repo's `.gitignore` so no
   secrets/hosts or scratch are committed, and seed a `.gitattributes` with `*.jsonl merge=union` (committed
   append-only logs then merge cleanly across collaborators). Record
-  `project.mode` `embedded` in `ai/manifest.json`; tools take `--dir projects/<slug>/<repo>/`.
+  `project.mode` `embedded` in `<pack>/manifest.json`; tools take `--dir projects/<slug>/<repo>/`.
 
 ## 5. Attach Plugins
 
 For each chosen plugin (including any implied by a plugin-provided type), run `install-plugin` (install):
-it copies the plugin's `shared/` into `ai/plugins/<name>/`, merges its `mcps.json` servers into the project runtime
-MCP (step 7), runs the plugin's `setup` from `manifest.json` (prompts for resources -> `ai/.memory/`), and
-records `{name, version}` in `ai/manifest.json` -> `plugins`.
+it copies the plugin's `shared/` into `<pack>/plugins/<name>/`, merges its `mcps.json` servers into the project runtime
+MCP (step 7), runs the plugin's `setup` from `manifest.json` (prompts for resources -> `<pack>/.memory/`), and
+records `{name, version}` in `<pack>/manifest.json` -> `plugins`.
 
 ## 6. Seed Spec, Manifest, Revisions Baseline
 
-- Short spec dialogue (purpose, components, constraints) -> `ai/spec.md`; copy it verbatim to
-  `ai/.memory/spec-v0.md`.
-- The copied `ai/.memory/` already includes a fresh `context.md` (the session-context summary, with
+- Short spec dialogue (purpose, components, constraints) -> `<pack>/spec.md`; copy it verbatim to
+  `<pack>/.memory/spec-v0.md`.
+- The copied `<pack>/.memory/` already includes a fresh `context.md` (the session-context summary, with
   `{{NAME}}` substituted); leave its `## Session Context` empty for the engineer to fill at a save point.
-- Ensure `ai/manifest.json` has `project.{name,slug,type,mode,description}` (the one-line description
+- Ensure `<pack>/manifest.json` has `project.{name,slug,type,mode,description}` (the one-line description
   feeds the pack README's `{{DESCRIPTION}}` render), `framework_version`, and `plugins`; when
   the project has workspaces beyond the default, also `project.workspaces` (array of folder names,
   `source` included).
 - Seed the project's own version: `uv run -m solaris.tools.version project-set --dir projects/<slug> 0.1.0`
   (a plain-text `.version` at the project root; the engineer proposes bumps at milestones - see the
   template's Project Version section).
-- Materialize the derived pack files: `uv run -m solaris.tools.revs ff --dir projects/<slug>` - writes
-  `ai/README.md` (the generated pack overview + how-to; its attached-plugins list renders from the
-  manifest, so run this after step 5).
+- Materialize the managed pack files: `uv run -m solaris.tools.revs ff --dir projects/<slug>` - writes
+  the root `AGENTS.md`, `<pack>/engineer.agent.md`, `<pack>/rules/`, `skills/`, `info/` and
+  `<pack>/README.md` (the generated pack overview + how-to; its attached-plugins list renders from the
+  manifest, so run this after step 5), every placeholder rendered.
 - Record the **revisions baseline**: `uv run -m solaris.tools.revs baseline --dir projects/<slug>` writes
   the `revisions` map (per materialized file: rev + content hash), so future `update-project` runs can tell
   whether the user edited a file.
 - Personas (only when chosen in step 1): a non-default primary ->
   `uv run -m solaris.tools.agents --rename-primary <role> --dir projects/<slug>` (after the baseline; it
-  moves `ai/engineer.agent.md` to `ai/<role>.agent.md`, sets the manifest's `agents.primary`, fixes the
-  references in `ai/instructions.md`, and re-renders the managed files). Each role persona -> copy
-  `solaris/templates/agents/role.agent.md` to `ai/<role>.agent.md` (beside the primary), fill the
-  frontmatter and brief with the user, put any starting know-how into the shared `ai/instructions.md`
+  moves `<pack>/engineer.agent.md` to `<pack>/<role>.agent.md`, sets the manifest's `agents.primary`, fixes the
+  references in `<pack>/instructions.md`, and re-renders the managed files). Each role persona -> copy
+  `solaris/templates/agents/role.agent.md` to `<pack>/<role>.agent.md` (beside the primary), fill the
+  frontmatter and brief with the user, put any starting know-how into the shared `<pack>/instructions.md`
   (under a heading named for the role when only that role uses it), validate
   (`uv run -m solaris.tools.agents --check --dir projects/<slug>`), then re-run `revs ff` + `revs baseline`
   so the pack README lists them.

@@ -14,9 +14,10 @@ summary: Prepare a project for external eyes - scrub identities/internals, add l
 
 Prepare a project (or any repo produced here) to be shared outside: with a customer, a third party, or the
 public. Everything below is a checklist against the **tracked** content only - the local-only layers
-(`__*/`, `ai/.memory/`) stay behind by design. `ai/instructions.md` is shareable and **ships**:
-relocate any machine-local notes in it (wrapper registry, host specifics) to `ai/.memory/` as part of the
-sweep. This skill
+(`__*/`, `<pack>/.memory/`) stay behind by design; `<pack>/` is the project's ai-pack folder (default
+`aipack/`, `ai/` in projects made before 0.39.0, any name). `<pack>/instructions.md` is shareable and
+**ships**: relocate any machine-local notes in it (wrapper registry, host specifics) to `<pack>/.memory/`
+as part of the sweep. This skill
 is read-mostly; every fix is shown as a diff and confirmed before it is made, and nothing is pushed or
 published without explicit confirmation (safety rule).
 
@@ -54,9 +55,9 @@ placeholder-ize every hit:
 A shared ai-pack must behave with **only** the shipped folder present - no Solaris root, hooks, or
 framework memory around it:
 
-- Any **linked** plugin (`ai/plugins/<name>.link.md`) cannot resolve outside - convert to a copy install first
+- Any **linked** plugin (`<pack>/plugins/<name>.link.md`) cannot resolve outside - convert to a copy install first
   (`install-plugin`, link -> copy).
-- `AGENTS.md` / `ai/` contain no reference that must **resolve** outside the project root (no live
+- `AGENTS.md` / `<pack>/` contain no reference that must **resolve** outside the project root (no live
   `solaris/...`, `plugins/...`, framework-`.memory/...` paths; the template's conditional "when working
   under a Solaris checkout, tools are available" note is fine - it self-disables when detached).
 - **Test from a clone outside the Solaris tree** (this is the only reliable leak test - running it inside
@@ -67,4 +68,4 @@ framework memory around it:
 
 Re-run the step-2 greps clean, show the user a summary of every change made, and stop - pushing /
 transferring is a separate, confirmed action. Log one line to `.memory/interactions.jsonl` (and the
-project's `ai/.memory/interactions.jsonl`).
+project's `<pack>/.memory/interactions.jsonl`).
