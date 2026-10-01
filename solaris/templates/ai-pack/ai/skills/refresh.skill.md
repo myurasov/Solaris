@@ -3,7 +3,7 @@ name: refresh
 triggers: ["refresh", "refresh project", "update my checkout", "pull latest", "sync with upstream", "get the new version"]
 summary: Bring a team member's existing checkout of {{NAME}} up to date - auto-stash local edits, pull main, rebase the personal branch (agent-resolved conflicts), migrate the private layer and environment to any new layout/conventions, re-apply the stash, and report what changed.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: refresh - Update and Migrate a Local Checkout <!-- omit in toc -->
 
@@ -13,7 +13,7 @@ _Rev. 9_
 4. [Verify + Report](#4-verify--report)
 
 Run when a team member wants an existing clone brought up to date. Everything is local: the skill never
-pushes, and never touches private `ai/.memory/` content beyond layout migrations (pure renames/moves).
+pushes, and never touches private `{{PACK}}/.memory/` content beyond layout migrations (pure renames/moves).
 (Template stub: add this project's real dependency and environment refresh steps.)
 
 ## 1. Pre-Flight
@@ -25,7 +25,7 @@ pushes, and never touches private `ai/.memory/` content beyond layout migrations
 
 ## 2. Pull
 
-When `"git.developer_branches"` is on (rule `ai/rules/git-collab.rule.md`) and the checkout
+When `"git.developer_branches"` is on (rule `{{PACK}}/rules/git-collab.rule.md`) and the checkout
 works on a personal branch: `git fetch origin`, `git switch main` + `git pull --ff-only`, then
 `git switch` back to the personal branch and **rebase it automatically**: `git rebase main` -
 never leave the personal branch behind main after a refresh. Resolve rebase conflicts
@@ -51,7 +51,7 @@ diagnose before asking:
   resolving it is a user decision, not a refresh step.
 
 When resolving conflicts (during the rebase or any merge): a conflict in
-`ai/manifest.json` `revisions` is mechanical - take either side and move on (it is Solaris sync metadata;
+`{{PACK}}/manifest.json` `revisions` is mechanical - take either side and move on (it is Solaris sync metadata;
 the Solaris-side maintainer re-records it on their next sync); conflicts in committed `*.jsonl` logs are
 avoided by `*.jsonl merge=union` in `.gitattributes` (add it if missing).
 
@@ -59,9 +59,9 @@ avoided by `*.jsonl merge=union` in `.gitattributes` (add it if missing).
 
 Apply in order; each step is idempotent (skips itself when already done):
 
-1. Any layout migrations announced in the pulled diff (`AGENTS.md` / `ai/*.md` convention changes) -
+1. Any layout migrations announced in the pulled diff (`AGENTS.md` / `{{PACK}}/*.md` convention changes) -
    apply the mechanical ones, surface the rest.
-2. New/updated plugin overlays: compare `ai/manifest.json` `plugins[]` against the `ai/` overlays present;
+2. New/updated plugin overlays: compare `{{PACK}}/manifest.json` `plugins[]` against the `{{PACK}}/` overlays present;
    report anything new (overlays arrive via git - nothing to install by hand).
 3. Dependencies: (e.g. re-run the installer when a lockfile changed in the pull).
 
@@ -70,8 +70,8 @@ Apply in order; each step is idempotent (skips itself when already done):
 - Re-apply the step-1 auto-stash when one was made: `git stash pop`. Resolve any pop conflicts
   with the same policy (yourself first, ask only in genuine doubt); the stash entry must not be
   left behind silently - pop it, or tell the user why it stayed.
-- `ai/.memory/` still has the user's `resources.md` / `credentials.md`; `git status` shows only
+- `{{PACK}}/.memory/` still has the user's `resources.md` / `credentials.md`; `git status` shows only
   the user's own re-applied changes.
 - Summarize: commit range pulled, rebase result (conflicts resolved; force-with-lease note when
   the personal branch was already pushed), migrations applied, dependency refreshes run, anything
-  the user should read. Log the turn in `ai/.memory/interactions.jsonl`.
+  the user should read. Log the turn in `{{PACK}}/.memory/interactions.jsonl`.

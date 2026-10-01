@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
+from solaris.tools import pack as P
 from solaris.tools import revs as R
 
 
@@ -53,6 +56,15 @@ def _wmd(path, body, rev):
     path.write_text(R.set_rev(body, ".md", rev), encoding="utf-8")
 
 
+def _pack(proj, name="ai", **fields):
+    """Make proj/<name>/ the project's pack: an ai-pack manifest (framework_version + project) plus fields."""
+    data = {"framework_version": "0.39.0", "project": {}, "plugins": [], "revisions": {}, **fields}
+    path = proj / name / "manifest.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return path
+
+
 def test_classify_verdicts(tmp_path):
     tpl = tmp_path / "tpl"
     plugins = tmp_path / "plugins"
@@ -81,11 +93,7 @@ def test_classify_verdicts(tmp_path):
         "ai/myplug/conf.rule.md": {"rev": 1, "hash": R.content_hash(R.set_rev("# conf\n\nbase\n", ".md", 1), ".md")},
         "ai/myplug/gone.rule.md": {"rev": 1, "hash": "deadbeef"},
     }
-    (proj / "ai").mkdir(parents=True, exist_ok=True)
-    (proj / "ai" / "manifest.json").write_text(json.dumps({
-        "plugins": [{"name": "myplug", "version": "0.1.0"}],
-        "revisions": baseline,
-    }), encoding="utf-8")
+    _pack(proj, plugins=[{"name": "myplug", "version": "0.1.0"}], revisions=baseline)
 
     rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
     assert rows["AGENTS.md"] == "in-sync"
@@ -103,12 +111,11 @@ def test_plugins_materialize_under_ai_plugins(tmp_path):
     _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
     _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
     _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
-    manifest = json.dumps({"plugins": [{"name": "myplug", "version": "0.1.0"}], "revisions": {}})
+    attached = [{"name": "myplug", "version": "0.1.0"}]
 
     # fresh project (no plugin dir yet) -> new home, never the legacy one
     fresh = tmp_path / "fresh"
-    (fresh / "ai").mkdir(parents=True)
-    (fresh / "ai" / "manifest.json").write_text(manifest, encoding="utf-8")
+    _pack(fresh, plugins=attached)
     rels = {rel for _, _, rel in R.materialized_map(fresh, template_dir=tpl, plugins_dir=plugins)}
     assert "ai/plugins/myplug/a.rule.md" in rels and "ai/myplug/a.rule.md" not in rels
 
@@ -116,15 +123,14 @@ def test_plugins_materialize_under_ai_plugins(tmp_path):
     _wmd(plugins / "rules" / "shared" / "r.rule.md", "# r\n\nrule\n", 1)
     clash = tmp_path / "clash"
     _wmd(clash / "ai" / "rules" / "pack.rule.md", "# pack\n\nrule\n", 1)
-    (clash / "ai" / "manifest.json").write_text(json.dumps({
-        "plugins": [{"name": "rules", "version": "0.1.0"}], "revisions": {}}), encoding="utf-8")
+    _pack(clash, plugins=[{"name": "rules", "version": "0.1.0"}])
     rels = {rel for _, _, rel in R.materialized_map(clash, template_dir=tpl, plugins_dir=plugins)}
     assert "ai/plugins/rules/r.rule.md" in rels and "ai/rules/r.rule.md" not in rels
 
     # legacy project (only ai/<name>/ exists) -> legacy home until migrated
     legacy = tmp_path / "legacy"
     _wmd(legacy / "ai" / "myplug" / "a.rule.md", "# a\n\nrule\n", 1)
-    (legacy / "ai" / "manifest.json").write_text(manifest, encoding="utf-8")
+    _pack(legacy, plugins=attached)
     rels = {rel for _, _, rel in R.materialized_map(legacy, template_dir=tpl, plugins_dir=plugins)}
     assert "ai/myplug/a.rule.md" in rels and "ai/plugins/myplug/a.rule.md" not in rels
 
@@ -132,7 +138,7 @@ def test_plugins_materialize_under_ai_plugins(tmp_path):
     both = tmp_path / "both"
     _wmd(both / "ai" / "myplug" / "a.rule.md", "# a\n\nrule\n", 1)
     _wmd(both / "ai" / "plugins" / "myplug" / "a.rule.md", "# a\n\nrule\n", 1)
-    (both / "ai" / "manifest.json").write_text(manifest, encoding="utf-8")
+    _pack(both, plugins=attached)
     rels = {rel for _, _, rel in R.materialized_map(both, template_dir=tpl, plugins_dir=plugins)}
     assert "ai/plugins/myplug/a.rule.md" in rels and "ai/myplug/a.rule.md" not in rels
 
@@ -145,7 +151,7 @@ def test_fast_forward_and_baseline(tmp_path):
     _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\nY\n", 1)
     # project: AGENTS.md missing; engineer present and identical (in-sync)
     _wmd(proj / "ai" / "engineer.agent.md", "# dev\n\nY\n", 1)
-    (proj / "ai" / "manifest.json").write_text(json.dumps({"plugins": [], "revisions": {}}), encoding="utf-8")
+    _pack(proj)
 
     res = R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
     applied = dict(res["applied"])
@@ -228,6 +234,7 @@ def test_set_rev_places_marker_after_frontmatter():
 
 def test_materialized_map_covers_pack_rules_and_skills(tmp_path):
     # The pack's always-on rules and skill stubs sync per file like the engineer agent.
+    _pack(tmp_path)
     rels = {rel for _, _, rel in R.materialized_map(tmp_path)}
     assert "ai/rules/subagents.rule.md" in rels
     assert "ai/rules/token-economy.rule.md" in rels
@@ -290,6 +297,7 @@ def test_plugin_blocks_respect_legacy_pack_layout(tmp_path):
     skill_body = '---\nname: do-thing\ntriggers: ["do the thing"]\n---\n\n# do\n'
     _wmd(plugins / "myplug" / "shared" / "do.skill.md", skill_body, 1)
     _wmd(proj / "ai" / "myplug" / "do.skill.md", skill_body, 1)
+    _pack(proj)
     manifest = {"plugins": [{"name": "myplug", "version": "0.1.0"}]}
     assert "- `myplug` 0.1.0 - copied into `myplug/`" in R._plugins_block(manifest, proj)
     block = R._skills_block(manifest, proj, template_dir=tpl, plugins_dir=plugins)
@@ -309,12 +317,7 @@ def test_readme_fast_forwards_after_plugin_attach(tmp_path):
     _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
     _wmd(tpl / "ai" / "README.md", "# {{NAME}}\n\n{{PLUGINS}}\n", 1)
     _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
-    (proj / "ai").mkdir(parents=True)
-    mpath = proj / "ai" / "manifest.json"
-    mpath.write_text(json.dumps({
-        "project": {"name": "P", "slug": "p", "type": "t", "mode": "local"},
-        "plugins": [], "revisions": {},
-    }), encoding="utf-8")
+    mpath = _pack(proj, project={"name": "P", "slug": "p", "type": "t", "mode": "local"})
     R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
     assert "- none attached yet" in (proj / "ai" / "README.md").read_text(encoding="utf-8")
 
@@ -330,6 +333,7 @@ def test_readme_fast_forwards_after_plugin_attach(tmp_path):
 
 def test_materialized_map_includes_pack_readme(tmp_path):
     # the shipped template carries the generated pack README; it syncs like the engineer agent
+    _pack(tmp_path)
     rels = {rel for _, _, rel in R.materialized_map(tmp_path)}
     assert "ai/README.md" in rels
 
@@ -345,13 +349,9 @@ def test_ff_materializes_readme_with_plugin_list(tmp_path):
     _wmd(plugins / "myplug" / "shared" / "a.rule.md", "# a\n\nrule\n", 1)
     _wmd(plugins / "myplug" / "shared" / "do.skill.md",
          '---\nname: do-thing\ntriggers: ["do the thing", "run thing"]\n---\n\n# do\n', 1)
-    (proj / "ai").mkdir(parents=True)
-    (proj / "ai" / "manifest.json").write_text(json.dumps({
-        "project": {"name": "Proj X", "slug": "proj-x", "type": "t", "mode": "local",
-                    "description": "Does X for Y."},
-        "plugins": [{"name": "myplug", "version": "0.2.0"}, {"name": "lp", "mode": "link"}],
-        "revisions": {},
-    }), encoding="utf-8")
+    _pack(proj, project={"name": "Proj X", "slug": "proj-x", "type": "t", "mode": "local",
+                         "description": "Does X for Y."},
+          plugins=[{"name": "myplug", "version": "0.2.0"}, {"name": "lp", "mode": "link"}])
     R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
     text = (proj / "ai" / "README.md").read_text(encoding="utf-8")
     assert text.startswith("_Rev. 1_")
@@ -376,8 +376,7 @@ def test_customized_stub_above_master_rev_never_fast_forwards(tmp_path):
     _wmd(proj / "AGENTS.md", "# ag\n\nx\n", 1)
     _wmd(proj / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
     _wmd(proj / "ai" / "skills" / "init.skill.md", custom, 9)
-    (proj / "ai" / "manifest.json").write_text(json.dumps({"plugins": [], "revisions": {}}),
-                                               encoding="utf-8")
+    _pack(proj)
     plugins = tmp_path / "plugins"
     R.record_baseline(proj, template_dir=tpl, plugins_dir=plugins)  # baseline == customized copy
     rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
@@ -411,9 +410,146 @@ def test_skills_block_lists_pack_and_plugin_skills(tmp_path):
          '---\nname: do-thing\ntriggers:\n  - "do the thing" / "run thing"\n---\n\n# do\n', 1)
     _wmd(proj / "ai" / "skills" / "local.skill.md",
          '---\nname: local\ntriggers: ["local dance"]\n---\n\n# local\n', 1)
+    _pack(proj)
     block = R._skills_block(
         {"plugins": [{"name": "myplug", "version": "1.0"}, {"name": "lnk", "mode": "link"}]},
         proj, template_dir=tpl, plugins_dir=plugins)
     assert '- **init** - "init project", "onboard me" ([`skills/init.skill.md`](skills/init.skill.md))' in block
     assert '- **do-thing** - "do the thing" ([`plugins/myplug/do.skill.md`](plugins/myplug/do.skill.md))' in block
     assert '- **local** - "local dance"' in block
+
+
+@pytest.mark.parametrize("name", ["aipack", "mypack", "ai"])
+def test_any_pack_folder_name_syncs(tmp_path, name):
+    # the pack is the child folder holding an ai-pack manifest, whatever its name: rel keys carry the
+    # name, {{PACK}} renders to it, and rendered copies classify in-sync (the template keeps ai/)
+    tpl = tmp_path / "solaris" / "templates" / "ai-pack"   # at the FRAMEWORK_GLOBS paths, for status
+    plugins = tmp_path / "plugins"
+    proj = tmp_path / "proj"
+    _wmd(tpl / "AGENTS.md", "# {{NAME}}\n\nRead [`{{PACK}}/{{PRIMARY}}.agent.md`]({{PACK}}/{{PRIMARY}}.agent.md).\n", 3)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\nShared store: `{{PACK}}/instructions.md`.\n", 2)
+    _wmd(tpl / "ai" / "README.md", "# {{NAME}}\n\n{{PLUGINS}}\n\n{{SKILLS}}\n", 1)
+    _wmd(tpl / "ai" / "rules" / "r.rule.md", "# r\n\nSwitches: `{{PACK}}/defaults.json`.\n", 1)
+    _wmd(plugins / "myplug" / "shared" / "p.skill.md",
+         '---\nname: p\ntriggers: ["do p"]\n---\n\n# p\n\nNotes go to `{{PACK}}/.memory/`.\n', 1)
+    (proj / "source").mkdir(parents=True)
+    (proj / "source" / "manifest.json").write_text('{"name": "web app"}', encoding="utf-8")   # not a pack
+    mpath = _pack(proj, name, project={"name": "P", "slug": "p", "type": "t", "mode": "local"},
+                  plugins=[{"name": "myplug", "version": "0.1.0"}])
+
+    def verdicts():
+        return {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
+
+    # a copy rendered by hand (as create-project does) and baselined is in-sync, not fast-forward
+    (proj / "AGENTS.md").write_text(R.set_rev(
+        f"# P\n\nRead [`{name}/engineer.agent.md`]({name}/engineer.agent.md).\n", ".md", 3), encoding="utf-8")
+    R.record_baseline(proj, template_dir=tpl, plugins_dir=plugins)
+    assert verdicts()["AGENTS.md"] == "in-sync"
+
+    res = R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    rels = {"AGENTS.md", f"{name}/engineer.agent.md", f"{name}/README.md", f"{name}/rules/r.rule.md",
+            f"{name}/plugins/myplug/p.skill.md"}
+    assert {rel for rel, _v in res["applied"]} == rels and res["skipped"] == []
+    for rel in rels:
+        assert "{{" not in (proj / rel).read_text(encoding="utf-8"), rel
+    assert f"`{name}/instructions.md`" in (proj / name / "engineer.agent.md").read_text(encoding="utf-8")
+    assert f"`{name}/.memory/`" in (proj / name / "plugins" / "myplug" / "p.skill.md").read_text(encoding="utf-8")
+    assert "[`plugins/myplug/p.skill.md`](plugins/myplug/p.skill.md)" in (proj / name / "README.md").read_text(
+        encoding="utf-8")
+    assert name == "ai" or not (proj / "ai").exists()   # nothing lands in a legacy ai/
+    assert set(json.loads(mpath.read_text(encoding="utf-8"))["revisions"]) == rels
+
+    # in-sync after ff and after a re-recorded baseline; a master edit still fast-forwards
+    assert set(verdicts().values()) == {"in-sync"}
+    assert set(R.record_baseline(proj, template_dir=tpl, plugins_dir=plugins)) == rels
+    assert set(verdicts().values()) == {"in-sync"}
+    _wmd(tpl / "ai" / "rules" / "r.rule.md", "# r\n\nSwitches live in `{{PACK}}/defaults.json`.\n", 2)
+    assert verdicts()[f"{name}/rules/r.rule.md"] == "fast-forward"
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    assert set(verdicts().values()) == {"in-sync"}
+
+    # status reads only the framework and plugin ledgers, never a project
+    ledger = tmp_path / "solaris" / "revisions.json"
+    R.rebuild_ledger(repo_root=tmp_path, path=ledger)
+    assert R.status(repo_root=tmp_path, path=ledger) == []
+
+
+def test_shipped_templates_render_the_pack_folder(tmp_path, capsys):
+    # the shipped masters write {{PACK}}: ff into a pack named mypack writes mypack/ paths, and the
+    # rendered copies stay in-sync across a baseline
+    proj = tmp_path / "proj"
+    plugins = tmp_path / "plugins"
+    _pack(proj, "mypack", project={"name": "Todo", "slug": "todo", "type": "python-cli", "mode": "local"})
+    R.fast_forward(proj, plugins_dir=plugins)
+    rels = [r["rel"] for r in R.classify(proj, plugins_dir=plugins)]
+    assert "mypack/engineer.agent.md" in rels and not [rel for rel in rels if rel.startswith("ai/")]
+    agents_md = (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert "mypack/engineer.agent.md" in agents_md and "mypack/instructions.md" in agents_md
+    for rel in rels:
+        assert "{{PACK}}" not in (proj / rel).read_text(encoding="utf-8"), rel
+    assert R.main(["baseline", "--dir", str(proj)]) == 0
+    assert str(proj / "mypack" / "manifest.json") in capsys.readouterr().out
+    assert {r["verdict"] for r in R.classify(proj, plugins_dir=plugins)} == {"in-sync"}
+
+
+def test_no_single_pack_is_a_clean_error(tmp_path, capsys):
+    # a plugin manifest does not make a pack, nor does a hidden folder; two packs are ambiguous
+    proj = tmp_path / "proj"
+    (proj / "ai").mkdir(parents=True)
+    (proj / "ai" / "manifest.json").write_text('{"name": "myplug", "version": "0.1.0"}', encoding="utf-8")
+    _pack(proj, ".aipack")
+    with pytest.raises(P.PackError):
+        R.classify(proj)
+    assert R.main(["classify", "--dir", str(proj)]) == 1
+    assert "no ai-pack" in capsys.readouterr().out
+    _pack(proj, "aipack")
+    _pack(proj, "mypack")
+    assert R.main(["ff", "--dir", str(proj)]) == 1
+    assert "more than one ai-pack" in capsys.readouterr().out
+
+
+def test_legacy_ai_keys_in_a_renamed_pack(tmp_path):
+    # a pack renamed by hand (aipack/) may still hold ai/... revisions keys: they classify exactly like
+    # aipack/... keys (a key under the real name wins), and ff / baseline write the real name
+    tpl = tmp_path / "tpl"
+    plugins = tmp_path / "plugins"
+    _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\nNEW\n", 2)
+    _wmd(tpl / "ai" / "rules" / "c.rule.md", "# c\n\nmaster\n", 2)
+    _wmd(tpl / "ai" / "rules" / "u.rule.md", "# u\n\nmaster\n", 2)
+
+    def base(body, rev):
+        return {"rev": rev, "hash": R.content_hash(R.set_rev(body, ".md", rev), ".md")}
+
+    def project(dirname, prefix):
+        proj = tmp_path / dirname
+        _wmd(proj / "AGENTS.md", "# ag\n\nx\n", 1)                            # in-sync
+        _wmd(proj / "aipack" / "engineer.agent.md", "# dev\n\nOLD\n", 1)      # untouched since base: fast-forward
+        _wmd(proj / "aipack" / "rules" / "c.rule.md", "# c\n\nedited\n", 1)   # both changed: conflict
+        _wmd(proj / "aipack" / "rules" / "u.rule.md", "# u\n\nmine\n", 3)     # rev above master: merge-up
+        return _pack(proj, "aipack", revisions={
+            "AGENTS.md": base("# ag\n\nx\n", 1), f"{prefix}/engineer.agent.md": base("# dev\n\nOLD\n", 1),
+            f"{prefix}/rules/c.rule.md": base("# c\n\nbase\n", 1), f"{prefix}/rules/u.rule.md": base("# u\n\nmaster\n", 1)})
+
+    def rows(proj):
+        return [(r["rel"], r["verdict"], r["base_rev"])
+                for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)]
+
+    legacy, real = tmp_path / "legacy", tmp_path / "real"
+    legacy_manifest, real_manifest = project("legacy", "ai"), project("real", "aipack")
+    m = json.loads(real_manifest.read_text(encoding="utf-8"))
+    m["revisions"]["ai/engineer.agent.md"] = {"rev": 9, "hash": "stale"}   # loses to the real-name key
+    real_manifest.write_text(json.dumps(m), encoding="utf-8")
+    assert rows(legacy) == rows(real) == [
+        ("AGENTS.md", "in-sync", 1), ("aipack/engineer.agent.md", "fast-forward", 1),
+        ("aipack/rules/c.rule.md", "conflict", 1), ("aipack/rules/u.rule.md", "merge-up", 1)]
+
+    # ff moves every key to the real name, keeping the bases of the files it skips
+    real_keys = {"AGENTS.md", "aipack/engineer.agent.md", "aipack/rules/c.rule.md", "aipack/rules/u.rule.md"}
+    R.fast_forward(legacy, template_dir=tpl, plugins_dir=plugins)
+    assert set(json.loads(legacy_manifest.read_text(encoding="utf-8"))["revisions"]) == real_keys
+    assert rows(legacy)[1:] == [("aipack/engineer.agent.md", "in-sync", 2),
+                                ("aipack/rules/c.rule.md", "conflict", 1), ("aipack/rules/u.rule.md", "merge-up", 1)]
+    # baseline records the real name and drops the stale legacy key
+    R.record_baseline(real, template_dir=tpl, plugins_dir=plugins)
+    assert set(json.loads(real_manifest.read_text(encoding="utf-8"))["revisions"]) == real_keys

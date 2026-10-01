@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Info: Harness Capabilities <!-- omit in toc -->
 
@@ -9,7 +9,7 @@ _Rev. 3_
 Perishable data layer: dated observations of what each agent harness actually provides, kept out
 of this pack's rules so the rules stay portable. Rules reference capabilities abstractly ("a
 harness with no subagent tool"); this file says which harness that is today. Companion to
-`ai/info/model-tiers.md`. Standalone-first: needs nothing beyond this pack.
+`{{PACK}}/info/model-tiers.md`. Standalone-first: needs nothing beyond this pack.
 
 ## Capability Matrix
 

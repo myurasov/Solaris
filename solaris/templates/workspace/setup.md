@@ -12,7 +12,7 @@ folder). A new engineer following only this file must end with a verified, worki
 
 ## Prerequisites
 
-- (host/tooling requirements - reference `ai/.memory/resources.md` for concrete hosts, never hardcode)
+- (host/tooling requirements - reference `<pack>/.memory/resources.md` for concrete hosts, never hardcode)
 - (shared inputs used, by location outside the workspace, e.g. `data/<set>` - and how to obtain them)
 
 ## Bring-Up

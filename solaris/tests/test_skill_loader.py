@@ -8,7 +8,11 @@ from __future__ import annotations
 import io
 import json
 
+import pytest
+
 from solaris.tools import skill_loader as S
+
+PACK_MANIFEST = json.dumps({"project": {"name": "P", "slug": "p"}, "framework_version": "0.39.0"})
 
 SAMPLE = (
     "---\n"
@@ -168,18 +172,19 @@ def test_parse_skill_tolerates_marker_after_frontmatter():
     assert sk is not None and sk["name"] == "ad-hoc-task"
 
 
-def _mk_project(tmp_path, rel, embedded_repo=None):
-    """Scaffold a fake project under tmp_path/projects/<rel> and return the repo root."""
+def _mk_project(tmp_path, rel, embedded_repo=None, pack="ai"):
+    """Scaffold a fake project under tmp_path/projects/<rel> (its pack folder named ``pack``); return the repo
+    root."""
     root = tmp_path / "projects" / rel
-    pack = root / embedded_repo if embedded_repo else root
-    (pack / "ai" / "plug").mkdir(parents=True)  # legacy pre-0.28 overlay location
-    (pack / "ai" / "plugins" / "newplug").mkdir(parents=True)
-    (pack / "ai" / "manifest.json").write_text("{}", encoding="utf-8")
-    (pack / "ai" / "canary.rule.md").write_text("# rule", encoding="utf-8")
-    (pack / "ai" / "plug" / "x.rule.md").write_text("# rule", encoding="utf-8")
-    (pack / "ai" / "other.link.md").write_text("# link", encoding="utf-8")
-    (pack / "ai" / "plugins" / "newplug" / "y.rule.md").write_text("# rule", encoding="utf-8")
-    (pack / "ai" / "plugins" / "linked.link.md").write_text("# link", encoding="utf-8")
+    d = (root / embedded_repo if embedded_repo else root) / pack
+    (d / "plug").mkdir(parents=True)  # legacy pre-0.28 overlay location
+    (d / "plugins" / "newplug").mkdir(parents=True)
+    (d / "manifest.json").write_text(PACK_MANIFEST, encoding="utf-8")
+    (d / "canary.rule.md").write_text("# rule", encoding="utf-8")
+    (d / "plug" / "x.rule.md").write_text("# rule", encoding="utf-8")
+    (d / "other.link.md").write_text("# link", encoding="utf-8")
+    (d / "plugins" / "newplug" / "y.rule.md").write_text("# rule", encoding="utf-8")
+    (d / "plugins" / "linked.link.md").write_text("# link", encoding="utf-8")
     return tmp_path
 
 
@@ -222,6 +227,44 @@ def test_render_overlays_lists_files_once_per_session(tmp_path):
 def test_render_overlays_skips_projects_without_overlays(tmp_path):
     root = tmp_path / "projects" / "nv" / "bare"
     (root / "ai").mkdir(parents=True)
-    (root / "ai" / "manifest.json").write_text("{}", encoding="utf-8")
+    (root / "ai" / "manifest.json").write_text(PACK_MANIFEST, encoding="utf-8")
+    assert S._project_root(root, tmp_path) == root
     text, fresh = S.render_overlays([root], set(), tmp_path)
     assert text == "" and fresh == []
+
+
+@pytest.mark.parametrize("pack", ["aipack", "brain"])
+def test_overlays_follow_a_renamed_pack(tmp_path, pack):
+    repo = _mk_project(tmp_path, "my/proj", pack=pack)
+    assert S._project_root(repo / "projects/my/proj/source/app.py", repo) == repo / "projects/my/proj"
+    roots = S.find_project_targets("work on projects/my/proj please", "", repo)
+    assert roots == [repo / "projects/my/proj"]
+    text, fresh = S.render_overlays(roots, set(), repo)
+    for rel in ("canary.rule.md", "plug/x.rule.md", "plugins/newplug/y.rule.md", "other.link.md",
+                "plugins/linked.link.md"):
+        assert f"  - {pack}/{rel}" in text
+    assert "ai/" not in text and fresh == ["overlay:projects/my/proj"]
+    # embedded mode: the renamed pack sits inside the repo
+    repo2 = _mk_project(tmp_path / "e", "my/emb", embedded_repo="src", pack=pack)
+    root2 = S._project_root(repo2 / "projects/my/emb/src/lib", repo2)
+    assert root2 == repo2 / "projects/my/emb/src"
+    assert f"{pack}/canary.rule.md" in S.overlay_files(root2)
+
+
+def test_no_project_without_exactly_one_visible_pack(tmp_path):
+    two = tmp_path / "projects/my/two"
+    _mk_project(tmp_path, "my/two", pack="ai")
+    _mk_project(tmp_path, "my/two", pack="aipack")     # two packs: ambiguous, so not a project
+    assert S._project_root(two, tmp_path) is None
+    assert S.overlay_files(two) == []
+    hidden = tmp_path / "projects/my/hidden/.aipack"     # a hidden folder is never a pack
+    hidden.mkdir(parents=True)
+    (hidden / "manifest.json").write_text(PACK_MANIFEST, encoding="utf-8")
+    (hidden / "canary.rule.md").write_text("# rule", encoding="utf-8")
+    assert S._project_root(tmp_path / "projects/my/hidden", tmp_path) is None
+    plug = tmp_path / "projects/my/plugonly/reporting"   # neither is a plugin manifest
+    plug.mkdir(parents=True)
+    (plug / "manifest.json").write_text('{"name": "reporting", "version": "0.4.0"}', encoding="utf-8")
+    (plug / "canary.rule.md").write_text("# rule", encoding="utf-8")
+    assert S._project_root(tmp_path / "projects/my/plugonly", tmp_path) is None
+    assert S.find_project_targets("look at projects/my/two and projects/my/plugonly", "", tmp_path) == []

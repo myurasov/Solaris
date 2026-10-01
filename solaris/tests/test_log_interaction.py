@@ -46,9 +46,20 @@ def test_log_path_is_always_framework(tmp_path):
     (tmp_path / ".memory").mkdir()
     # the hook always targets the framework master log (cwd is irrelevant - "hand off" never changes it)
     assert L.log_path(repo_root=tmp_path) == tmp_path / ".memory" / "interactions.jsonl"
-    # even with a project present, it still routes to the framework master (the agent writes project logs)
-    (tmp_path / "projects" / "todo" / "ai").mkdir(parents=True)
+    # even with projects present, whatever their pack folder is named (the default, a custom name, the
+    # legacy ai/), it still routes to the framework master (the agent writes the project logs)
+    for slug, pack in (("todo", "aipack"), ("lab", "brain"), ("old", "ai")):
+        d = tmp_path / "projects" / "my" / slug / pack
+        (d / ".memory").mkdir(parents=True)
+        (d / "manifest.json").write_text(
+            json.dumps({"project": {"name": slug}, "framework_version": "0.39.0"}), encoding="utf-8")
     assert L.log_path(repo_root=tmp_path) == tmp_path / ".memory" / "interactions.jsonl"
+
+
+def test_cli_refusal_points_at_the_pack_log(capsys):
+    assert L.main(["--anything"]) == 2
+    err = capsys.readouterr().err
+    assert "<pack>/.memory/interactions.jsonl" in err and "ai/.memory" not in err
 
 
 def test_append_creates_parent_and_writes_jsonl(tmp_path):

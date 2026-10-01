@@ -1,4 +1,4 @@
-_Rev. 6_
+_Rev. 7_
 
 # Rule: Subagents (Bulk-Read Floor + Leveled Delegation) <!-- omit in toc -->
 
@@ -12,7 +12,7 @@ _Rev. 6_
 
 What runs outside the main context, for all agent work on this project. Two layers: an always-on
 **bulk-read floor** keeps oversized reads out of the main transcript, and a **leveled delegation
-posture** on top lowers the bar to delegate-by-default. Sibling: `ai/rules/token-economy.rule.md`
+posture** on top lowers the bar to delegate-by-default. Sibling: `{{PACK}}/rules/token-economy.rule.md`
 (how much enters context, how fast it is re-sent); its resolved level drives this rule's `auto`.
 Standalone-first: needs nothing beyond this pack.
 
@@ -25,11 +25,11 @@ dump) and the session continues afterward, run it in a subagent - read-only agen
 sweeps, read-write only when it must write - returning the synthesized answer (named facts,
 quotes, file:line pointers), never raw dumps. At economy level `full` the threshold tightens to
 ~10k. Floor tiering, regardless of posture: mechanical sweeps run on the cheapest tier at low
-effort (names: `ai/info/model-tiers.md`); keep the session model for judgment-heavy synthesis.
+effort (names: `{{PACK}}/info/model-tiers.md`); keep the session model for judgment-heavy synthesis.
 Independent sweeps launch in one parallel batch (the batching floor in
-`ai/rules/token-economy.rule.md`).
+`{{PACK}}/rules/token-economy.rule.md`).
 
-No subagent tool in this harness (see `ai/info/harnesses.md`)? Do not skip the lookup - run it
+No subagent tool in this harness (see `{{PACK}}/info/harnesses.md`)? Do not skip the lookup - run it
 checkpointed inline: sliced/grepped reads within the read budget, notes accumulated in a scratch
 file, only the conclusions restated in the reply. The posture still applies through this fallback:
 at `quality`/`cost` checkpoint-inline delegable work by default, at `off` only floor-sized
@@ -40,14 +40,14 @@ it saves); a result that is itself the deliverable of a session that ends there.
 
 ## Posture Switch
 
-`"subagents.level"` - read `ai/defaults.json` (committed team default), then
-`ai/.memory/config.json` (private per-machine override; wins per key) - `off` / `auto` /
+`"subagents.level"` - read `{{PACK}}/defaults.json` (committed team default), then
+`{{PACK}}/.memory/config.json` (private per-machine override; wins per key) - `off` / `auto` /
 `quality` / `cost`; absent everywhere means `auto`. Aliases, accepted wherever the value is read:
 `med`/`q` = `quality`; `full`/`save` = `cost`.
 
 - **`off`**: leveled posture off; the bulk-read floor above still applies (it is never disabled).
 - **`auto`** (default): derive from the resolved economy level
-  (`ai/rules/token-economy.rule.md`): economy `off` -> `off`, `med` -> `quality`, `full` ->
+  (`{{PACK}}/rules/token-economy.rule.md`): economy `off` -> `off`, `med` -> `quality`, `full` ->
   `cost`. One dial - a crunch tightens both.
 - **`quality`**: posture in force, every tier choice one-upped (see table) - output quality over
   cost.
@@ -61,8 +61,8 @@ means a cheaper tier, not keeping the work inline.
 **Per-request override:** `subagents: off|auto|quality|cost` (or an alias) anywhere in a user
 message applies to that request only - acknowledge in one line, no config write. An unrecognized
 value gets a one-line correction. **Config changes only on explicit persistence language**
-("set/remember/from now on"): team-wide -> `ai/defaults.json`, this machine only ->
-`ai/.memory/config.json`.
+("set/remember/from now on"): team-wide -> `{{PACK}}/defaults.json`, this machine only ->
+`{{PACK}}/.memory/config.json`.
 
 ## The Posture
 
@@ -80,7 +80,7 @@ Delegation buys **context headroom**, not one-shot savings: raw reads die with t
 which compounds across every later round-trip - but delegating short work measured 7-22% MORE
 than inline (each spawn pays a fresh system prompt). Delegate for long-session headroom,
 wall-clock parallelism, and tier arbitrage. For a mechanical sweep over greppable material, a
-single batched shell call (`ai/rules/token-economy.rule.md`, batching floor) protects context
+single batched shell call (`{{PACK}}/rules/token-economy.rule.md`, batching floor) protects context
 cheaper still - delegate when the work needs judgment per item, when raw volume would flood a
 continuing session, or when independent sub-questions can run in parallel.
 
@@ -90,7 +90,7 @@ A delegated task must be executable by a weaker model. Every subagent prompt car
 
 1. **Exact scope** - the files, directories, queries, or ids to operate on; no "look around".
 2. **Exact procedure** - which tools/commands, in what order, with the project's known invocations
-   (from `ai/instructions.md`) spelled out, not rediscovered.
+   (from `{{PACK}}/instructions.md`) spelled out, not rediscovered.
 3. **Exact return shape** - named facts, file:line pointers, a verdict, a table; never raw dumps.
 4. **Boundaries** - read-only vs write, what not to touch, any confidentiality rules in scope.
 5. **Active modes restated** - subagents do not see this pack's always-on rules; restate any
@@ -105,7 +105,7 @@ is genuinely inseparable from the reading.
 
 Rules speak in abstract tiers - cheap (mechanical), mid (standard/moderate synthesis), high
 (strong synthesis/review), frontier (hardest judgment). Concrete model names live in
-`ai/info/model-tiers.md` (this pack's perishable data layer) - every tier choice reads that file,
+`{{PACK}}/info/model-tiers.md` (this pack's perishable data layer) - every tier choice reads that file,
 never memory; there is no fallback. If the file is missing, the pack is broken: surface it and
 repair (restore from git, or a project update under Solaris) instead of guessing. Match the task
 class, then read the active posture's column:

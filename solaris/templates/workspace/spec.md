@@ -7,7 +7,7 @@ _Rev. 1_
 - [State / Results](#state--results)
 
 Track-level spec for the `{{WORKSPACE}}/` workspace of **{{NAME}}**. Self-sufficient for this track;
-the project-level picture stays in `ai/spec.md` (which points here). Keep it current as the track evolves
+the project-level picture stays in `<pack>/spec.md` (which points here). Keep it current as the track evolves
 (rewrite in place, not append-only).
 
 ## Purpose

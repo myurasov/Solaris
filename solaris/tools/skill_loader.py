@@ -27,9 +27,11 @@ requesting them, and the harness fires this hook on them too.
 
 The hook also injects **project overlay indexes**: when the prompt (or session cwd) targets a project
 under ``projects/``, it emits a one-line-per-file index of that project's always-on overlay files
-(``ai/rules/*.rule.md``, ``ai/plugins/<plugin>/*.rule.md``, ``ai/plugins/*.link.md`` - plus the legacy
-pre-0.28 locations ``ai/<plugin>/*.rule.md`` / ``ai/*.link.md``) once per session per project, so overlay
-compliance does not depend on the agent walking the project's AGENTS.md by hand.
+(``<pack>/rules/*.rule.md``, ``<pack>/plugins/<plugin>/*.rule.md``, ``<pack>/plugins/*.link.md`` - plus the
+legacy pre-0.28 locations ``<pack>/<plugin>/*.rule.md`` / ``<pack>/*.link.md``) once per session per project,
+so overlay compliance does not depend on the agent walking the project's AGENTS.md by hand. ``<pack>`` is the
+project's ai-pack folder, whatever its name (``aipack/`` by default, ``ai/`` in older projects), found by
+solaris.tools.pack.
 
 Output is IDE-aware (Cursor JSON ``additional_context`` vs plain stdout), but injection is effectively
 Claude-only: Cursor's ``beforeSubmitPrompt`` cannot add context (its output is only ``{continue,
@@ -49,6 +51,8 @@ import re
 import sys
 import tempfile
 from pathlib import Path
+
+from solaris.tools import pack as P
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "solaris" / "skills"
@@ -208,9 +212,9 @@ def match_skills(prompt: str, skills: list) -> list:
 
 # --- Project overlay injection -------------------------------------------------------------------
 #
-# Always-on project rules (ai/rules/*.rule.md, ai/plugins/<plugin>/*.rule.md) and linked-plugin pointers
-# (ai/plugins/<name>.link.md) reach the agent only if it walks the project's AGENTS.md by hand - the exact
-# step that gets skipped (agent-bench 2026-08-08: an overlay canary rule was missed by default).
+# Always-on project rules (<pack>/rules/*.rule.md, <pack>/plugins/<plugin>/*.rule.md) and linked-plugin
+# pointers (<pack>/plugins/<name>.link.md) reach the agent only if it walks the project's AGENTS.md by hand -
+# the exact step that gets skipped (agent-bench 2026-08-08: an overlay canary rule was missed by default).
 # So when a prompt (or the session cwd) targets a project, name that project's overlay files
 # explicitly - names only, one line each, to stay far from any inline-size limit; full bodies are
 # the agent's job to open. Injected once per session per project via the same marker state.
@@ -218,11 +222,20 @@ def match_skills(prompt: str, skills: list) -> list:
 _PROJECT_PATH_RE = re.compile(r"\bprojects/[A-Za-z0-9._-]+(?:/[A-Za-z0-9._-]+)*")
 
 
+def _pack_of(folder: Path) -> "Path | None":
+    """``folder``'s ai-pack, or None when it has none - or several, which leaves the project ambiguous."""
+    try:
+        return P.find_pack(folder)
+    except Exception:
+        return None
+
+
 def _project_root(path: Path, repo_root: Path) -> "Path | None":
     """Nearest ancestor of ``path`` (inclusive) that is a project folder under ``repo_root/projects``.
 
-    A project folder holds ``ai/manifest.json`` directly, or ``<repo>/ai/manifest.json`` (embedded
-    mode). Projects sit one or two levels below ``projects/`` (grouped layout).
+    A project folder holds an ai-pack (a child folder with an ai-pack manifest.json, whatever its name)
+    directly, or inside ``<repo>/`` (embedded mode). Projects sit one or two levels below ``projects/``
+    (grouped layout).
     """
     try:
         path = path.resolve()
@@ -235,11 +248,11 @@ def _project_root(path: Path, repo_root: Path) -> "Path | None":
         if len(parts) < depth:
             continue
         cand = projects.joinpath(*parts)
-        if (cand / "ai" / "manifest.json").is_file():
+        if _pack_of(cand):
             return cand
         try:  # embedded mode: the pack lives one level down, inside the repo
             for sub in cand.iterdir():
-                if (sub / "ai" / "manifest.json").is_file():
+                if sub.is_dir() and _pack_of(sub):
                     return sub
         except Exception:
             pass
@@ -262,15 +275,17 @@ def find_project_targets(prompt: str, cwd: str, repo_root: Path = REPO_ROOT) -> 
 
 
 def overlay_files(project_root: Path) -> list:
-    """Relative paths (from the project root) of the always-on overlay files, sorted."""
-    ai = project_root / "ai"
+    """Relative paths (from the project root) of the always-on overlay files in its ai-pack, sorted."""
+    pack = _pack_of(project_root)
+    if pack is None:
+        return []
     out = []
     try:
-        out += ai.glob("*.rule.md")
-        out += ai.glob("*/*.rule.md")  # ai/rules/ + legacy pre-0.28 ai/<plugin>/ overlays
-        out += ai.glob("plugins/*/*.rule.md")
-        out += ai.glob("*.link.md")  # legacy pre-0.28 link-file location
-        out += ai.glob("plugins/*.link.md")
+        out += pack.glob("*.rule.md")
+        out += pack.glob("*/*.rule.md")  # <pack>/rules/ + legacy pre-0.28 <pack>/<plugin>/ overlays
+        out += pack.glob("plugins/*/*.rule.md")
+        out += pack.glob("*.link.md")  # legacy pre-0.28 link-file location
+        out += pack.glob("plugins/*.link.md")
     except Exception:
         return []
     return sorted(str(p.relative_to(project_root)) for p in out)

@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: YAGNI Mode (Switchable, Off by Default) <!-- omit in toc -->
 
@@ -12,13 +12,13 @@ needs nothing beyond this pack.
 
 ## Switch
 
-`"yagni.enabled"` - read `ai/defaults.json` (committed team default), then `ai/.memory/config.json`
+`"yagni.enabled"` - read `{{PACK}}/defaults.json` (committed team default), then `{{PACK}}/.memory/config.json`
 (private per-machine override; wins per key). `true`/`false`; absent everywhere means off.
 **Per-request override:** `yagni: on|off` anywhere in a user message applies to that request only -
 acknowledge in one line, no config write. **Config changes only on explicit persistence language**
-("set/remember/from now on"): team-wide -> `ai/defaults.json`, this machine only ->
-`ai/.memory/config.json`. When on and delegating, restate the mode in every subagent prompt it
-shapes (see `ai/rules/subagents.rule.md`, task contract).
+("set/remember/from now on"): team-wide -> `{{PACK}}/defaults.json`, this machine only ->
+`{{PACK}}/.memory/config.json`. When on and delegating, restate the mode in every subagent prompt it
+shapes (see `{{PACK}}/rules/subagents.rule.md`, task contract).
 
 ## The Rule
 

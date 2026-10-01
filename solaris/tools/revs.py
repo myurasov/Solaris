@@ -19,8 +19,11 @@ Marker by file type (placed at the top of the file):
 Framework ledger: ``solaris/revisions.json`` (current rev+hash + short history per tracked framework file).
 Each **plugin keeps its own** ledger at ``plugins/<name>/revisions.json`` (keys relative to the plugin) so the
 rev history travels inside the plugin's own git repo - it is never recorded in the framework ledger.
-ai-pack baseline: the ``revisions`` map in a project's ``ai/manifest.json`` ({rel: {rev, hash}} recorded
-at last materialization) - the merge base for detecting external user edits.
+ai-pack baseline: the ``revisions`` map in a project's ``<pack>/manifest.json`` ({rel: {rev, hash}} recorded
+at last materialization) - the merge base for detecting external user edits. ``<pack>`` is the project's
+ai-pack folder, whatever its name (pack.py finds it); rel keys carry that name (``aipack/README.md``), and
+the templates' ``{{PACK}}`` placeholder renders to it. A pack renamed by hand may still hold ``ai/...`` keys:
+they read as ``<pack>/...``, and ff / baseline write the real name.
 
 Run::
 
@@ -39,13 +42,15 @@ import json
 import re
 from pathlib import Path
 
+from solaris.tools import pack as P
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
 PLUGINS_DIR = REPO_ROOT / "plugins"
 LEDGER_PATH = REPO_ROOT / "solaris" / "revisions.json"
-# The primary persona: ai/<role>.agent.md, "engineer" unless the manifest's
+# The primary persona: <pack>/<role>.agent.md, "engineer" unless the manifest's
 # agents.primary renames it (solaris.tools.agents does the rename). Role briefs sit beside it as
-# ai/<role>.agent.md; every persona shares the one ai/instructions.md.
+# <pack>/<role>.agent.md; every persona shares the one <pack>/instructions.md.
 DEFAULT_PRIMARY = "engineer"
 ROLE_RE = re.compile(r"^[a-z][a-z0-9-]*$")
 
@@ -277,83 +282,94 @@ def status(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> list[str]:
 
 # ----------------------------------------------------------------- project classification
 
-def _plugin_home(project_dir: Path, name: str) -> str:
-    """A plugin's pack-side home relative to ai/: plugins/<name> (0.28.0+), or the legacy <name>
-    for a pre-migration pack that still has ai/<name>/. Pack-owned dir names never count as a
+def _plugin_home(pack: Path, name: str) -> str:
+    """A plugin's pack-side home relative to the pack: plugins/<name> (0.28.0+), or the legacy <name>
+    for a pre-migration pack that still has <pack>/<name>/. Pack-owned dir names never count as a
     legacy overlay (a plugin named "rules" etc. would otherwise collide with the pack's own
-    ai/rules/)."""
-    project_dir = Path(project_dir)
-    if (not (project_dir / "ai" / "plugins" / name).is_dir()
+    rules/)."""
+    if (not (pack / "plugins" / name).is_dir()
             and name not in ("rules", "skills", "info", "plugins", ".memory")
-            and (project_dir / "ai" / name).is_dir()):
+            and (pack / name).is_dir()):
         return name
     return f"plugins/{name}"
 
 
-def _link_ref(project_dir: Path, name: str) -> str:
-    """A linked plugin's pack-side pointer file relative to ai/ (legacy pre-0.28 location aware)."""
-    project_dir = Path(project_dir)
-    if (not (project_dir / "ai" / "plugins" / f"{name}.link.md").exists()
-            and (project_dir / "ai" / f"{name}.link.md").exists()):
+def _link_ref(pack: Path, name: str) -> str:
+    """A linked plugin's pack-side pointer file relative to the pack (legacy pre-0.28 location aware)."""
+    if (not (pack / "plugins" / f"{name}.link.md").exists()
+            and (pack / f"{name}.link.md").exists()):
         return f"{name}.link.md"
     return f"plugins/{name}.link.md"
 
 
 def primary_role(manifest: dict) -> str:
-    """The primary persona's role name (ai/<role>.agent.md): manifest agents.primary, default engineer."""
+    """The primary persona's role name (<pack>/<role>.agent.md): manifest agents.primary, default engineer."""
     agents = manifest.get("agents")
     if agents is None:
         agents = {}
     if not isinstance(agents, dict):
-        raise ValueError('ai/manifest.json: "agents" must be an object like {"primary": "engineer"}')
+        raise ValueError('<pack>/manifest.json: "agents" must be an object like {"primary": "engineer"}')
     unknown = sorted(set(agents) - {"primary"})
     if unknown:
-        raise ValueError(f"ai/manifest.json: unknown agents key(s) {', '.join(unknown)}; only 'primary' is defined")
+        raise ValueError(f"<pack>/manifest.json: unknown agents key(s) {', '.join(unknown)}; only 'primary' is defined")
     if "primary" not in agents:
         return DEFAULT_PRIMARY
     role = agents["primary"]   # present means set: an empty or null value is a mistake, not the default
     if not isinstance(role, str) or not ROLE_RE.match(role):
-        raise ValueError(f"ai/manifest.json: agents.primary must match {ROLE_RE.pattern}, got {role!r}")
+        raise ValueError(f"<pack>/manifest.json: agents.primary must match {ROLE_RE.pattern}, got {role!r}")
     return role
 
 
-def _load_manifest(project_dir: Path, required: bool = False) -> dict:
-    """The project's ai/manifest.json ({} when absent unless required); malformed JSON is a clean ValueError."""
-    path = Path(project_dir) / "ai" / "manifest.json"
-    if not path.exists():
-        if required:
-            raise ValueError(f"{path} not found")
-        return {}
-    try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ValueError(f"{path} is not valid JSON: {exc}") from None
-    if not isinstance(data, dict):
-        raise ValueError(f"{path}: the top level must be a JSON object")
-    return data
+def _load_pack(project_dir: Path) -> "tuple[Path, dict]":
+    """The project's pack folder and its manifest; pack.PackError when it has no pack or more than one."""
+    pack = P.require_pack(project_dir)
+    return pack, json.loads((pack / "manifest.json").read_text(encoding="utf-8"))
+
+
+def _revisions(manifest: dict, pack: Path) -> dict:
+    """The manifest's revisions map with legacy ai/... keys read as <pack>/... when the pack has another
+    name (a pack renamed by hand keeps its old keys); a key under the real folder name wins."""
+    revisions = manifest.get("revisions") or {}
+    if pack.name == P.LEGACY:
+        return revisions
+    prefix = P.LEGACY + "/"
+    out = {}
+    for key, val in revisions.items():
+        if not key.startswith(prefix):
+            out[key] = val
+        elif f"{pack.name}/{key[len(prefix):]}" not in revisions:
+            out[f"{pack.name}/{key[len(prefix):]}"] = val
+    return out
+
+
+def _pack_or_default(project_dir: Path) -> Path:
+    """The project's pack folder, or where a new one would go (pack.DEFAULT) when it has none yet; the
+    render helpers use it so they work on any folder."""
+    return P.find_pack(project_dir) or Path(project_dir) / P.DEFAULT
 
 
 def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
                      plugins_dir: Path = PLUGINS_DIR) -> list[tuple[Path, Path, str]]:
-    """(master_path, project_path, rel_in_project) for every file the framework materializes into a project."""
-    manifest = _load_manifest(project_dir)
+    """(master_path, project_path, rel_in_project) for every file the framework materializes into a project.
+    The template keeps its pack in ai/; the project's copies land in its own pack folder, named in rel."""
+    pack, manifest = _load_pack(project_dir)
     primary = primary_role(manifest)
+    tpl = template_dir / "ai"
     pairs = [
         (template_dir / "AGENTS.md", project_dir / "AGENTS.md", "AGENTS.md"),
         # the engineer template is the primary persona, materialized under the project's chosen role name
-        (template_dir / "ai" / "engineer.agent.md", project_dir / "ai" / f"{primary}.agent.md",
-         f"ai/{primary}.agent.md"),
+        (tpl / "engineer.agent.md", pack / f"{primary}.agent.md", f"{pack.name}/{primary}.agent.md"),
     ]
     # The generated pack README (its {{PLUGINS}} renders from the manifest); optional so template
     # fixtures without one still classify.
-    readme = template_dir / "ai" / "README.md"
+    readme = tpl / "README.md"
     if readme.exists():
-        pairs.append((readme, project_dir / "ai" / "README.md", "ai/README.md"))
+        pairs.append((readme, pack / "README.md", f"{pack.name}/README.md"))
     # Pack rules, skills, and info sync per file like the agent; instructions/spec stay seeded-only
     # (per-project content, never fast-forwarded).
     for sub, pattern in (("rules", "*.rule.md"), ("skills", "*.skill.md"), ("info", "*.md")):
-        for f in sorted((template_dir / "ai" / sub).glob(pattern)):
-            rel = f"ai/{sub}/{f.name}"
+        for f in sorted((tpl / sub).glob(pattern)):
+            rel = f"{pack.name}/{sub}/{f.name}"
             pairs.append((f, project_dir / rel, rel))
     for entry in manifest.get("plugins") or []:
         if isinstance(entry, dict) and entry.get("mode") == "link":
@@ -361,7 +377,7 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
         name = entry.get("name") if isinstance(entry, dict) else entry
         plugin_root = plugins_dir / name
         if (plugin_root / "shared").is_dir():
-            base = f"ai/{_plugin_home(project_dir, name)}"
+            base = f"{pack.name}/{_plugin_home(pack, name)}"
             for f in iter_plugin_shared(plugin_root):
                 sub = f.relative_to(plugin_root / "shared")
                 rel = f"{base}/{sub}"
@@ -371,6 +387,7 @@ def materialized_map(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
 
 def _plugins_block(manifest: dict, project_dir: Path) -> str:
     """Markdown bullet list of the manifest's attached plugins (the {{PLUGINS}} placeholder)."""
+    pack = _pack_or_default(project_dir)
     lines = []
     for entry in manifest.get("plugins") or []:
         if not isinstance(entry, dict):
@@ -382,11 +399,11 @@ def _plugins_block(manifest: dict, project_dir: Path) -> str:
             continue  # malformed entry; the README list just skips it
         if entry.get("mode") == "link":
             lines.append(f"- `{name}` - linked (always live from the local plugin "
-                         f"source; see `{_link_ref(project_dir, name)}`)")
+                         f"source; see `{_link_ref(pack, name)}`)")
         else:
             ver = entry.get("version", "")
             ver_part = f" {ver}" if ver else ""
-            lines.append(f"- `{name}`{ver_part} - copied into `{_plugin_home(project_dir, name)}/`")
+            lines.append(f"- `{name}`{ver_part} - copied into `{_plugin_home(pack, name)}/`")
     return "\n".join(lines) if lines else "- none attached yet"
 
 
@@ -413,14 +430,14 @@ def _workspaces_block(manifest: dict) -> str:
 
 
 def _agents_block(manifest: dict, project_dir: Path) -> str:
-    """The {{AGENTS}} bullets: the primary persona plus every ai/<role>.agent.md role brief beside it."""
+    """The {{AGENTS}} bullets: the primary persona plus every <pack>/<role>.agent.md role brief beside it."""
     primary = primary_role(manifest)
     lines = [f"- `{primary}` - the primary persona ([`{primary}.agent.md`]({primary}.agent.md)); drives every "
              "session"]
-    ai = Path(project_dir) / "ai"
-    if ai.is_dir():
+    pack = _pack_or_default(project_dir)
+    if pack.is_dir():
         from solaris.tools import agents as A  # lazy: that module imports this one
-        for f in sorted(ai.glob("*.agent.md")):
+        for f in sorted(pack.glob("*.agent.md")):
             if f.name == f"{primary}.agent.md":
                 continue
             try:
@@ -481,15 +498,16 @@ def _skills_block(manifest: dict, project_dir: Path, template_dir: Path = TEMPLA
         loc = f"`{ref}`" if ref.endswith(".link.md") else f"[`{ref}`]({ref})"
         return f"- **{name}** - {trig} ({loc})" if trig else f"- **{name}** ({loc})"
 
+    pack = _pack_or_default(project_dir)
     lines: list[str] = []
     seen: set[str] = set()
     # pack skills: the template masters (always shipped) plus extra project-local ones
     for f in sorted((Path(template_dir) / "ai" / "skills").glob("*.skill.md")):
         rel = f"skills/{f.name}"
-        proj_f = Path(project_dir) / "ai" / rel
+        proj_f = pack / rel
         lines.append(entry(proj_f if proj_f.exists() else f, rel))
         seen.add(rel)
-    proj_skills = Path(project_dir) / "ai" / "skills"
+    proj_skills = pack / "skills"
     if proj_skills.is_dir():
         for f in sorted(proj_skills.glob("*.skill.md")):
             rel = f"skills/{f.name}"
@@ -506,8 +524,8 @@ def _skills_block(manifest: dict, project_dir: Path, template_dir: Path = TEMPLA
         if shared.is_dir():
             for f in sorted(shared.rglob("*.skill.md")):
                 sub = f.relative_to(shared)
-                ref = (_link_ref(project_dir, pname) if linked
-                       else f"{_plugin_home(project_dir, pname)}/{sub}")
+                ref = (_link_ref(pack, pname) if linked
+                       else f"{_plugin_home(pack, pname)}/{sub}")
                 lines.append(entry(f, ref))
     return "\n".join(lines) if lines else "- none yet"
 
@@ -519,6 +537,7 @@ def _placeholder_subs(manifest: dict, project_dir: Path) -> dict:
     return {
         "{{SLUG}}": p.get("slug", ""), "{{NAME}}": p.get("name", ""),
         "{{TYPE}}": p.get("type", ""), "{{MODE}}": p.get("mode", ""),
+        "{{PACK}}": _pack_or_default(project_dir).name,   # the project's pack folder name
         "{{FRAMEWORK_VERSION}}": str(manifest.get("framework_version", "")),
         "{{DATE}}": str(manifest.get("created", "")),
         "{{PRIMARY}}": primary, "{{PRIMARY_TITLE}}": primary.replace("-", " ").title(),
@@ -539,9 +558,10 @@ def _render_master(master: Path, subs: dict) -> str:
 
 def classify(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
              plugins_dir: Path = PLUGINS_DIR) -> list[dict]:
-    """Per materialized file, a verdict: in-sync / fast-forward / merge-up / conflict / missing."""
-    manifest = _load_manifest(project_dir)
-    baseline = manifest.get("revisions", {})
+    """Per materialized file, a verdict: in-sync / fast-forward / merge-up / conflict / missing. Each
+    master is compared as rendered for this project (placeholders filled), so a rendered copy can be in-sync."""
+    pack, manifest = _load_pack(project_dir)
+    baseline = _revisions(manifest, pack)
     subs = _placeholder_subs(manifest, project_dir)
     subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
     rows: list[dict] = []
@@ -576,17 +596,16 @@ def classify(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
 
 def record_baseline(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
                     plugins_dir: Path = PLUGINS_DIR) -> dict:
-    """Record each present materialized file's current rev+hash into ai/manifest.json -> revisions."""
+    """Record each present materialized file's current rev+hash into <pack>/manifest.json -> revisions."""
     project_dir = Path(project_dir)
-    manifest_path = project_dir / "ai" / "manifest.json"
-    manifest = _load_manifest(project_dir, required=True)
+    pack, manifest = _load_pack(project_dir)
     baseline: dict = {}
     for _master, proj, rel in materialized_map(project_dir, template_dir, plugins_dir):
         if proj.exists():
             rev, h = file_rev_hash(proj)
             baseline[rel] = {"rev": rev, "hash": h}
     manifest["revisions"] = baseline
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    (pack / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return baseline
 
 
@@ -595,9 +614,8 @@ def fast_forward(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
     """Apply safe verdicts (missing/fast-forward copied from master; in-sync reconciled); skip merges."""
     project_dir = Path(project_dir)
     verdicts = {r["rel"]: r["verdict"] for r in classify(project_dir, template_dir, plugins_dir)}
-    manifest_path = project_dir / "ai" / "manifest.json"
-    manifest = _load_manifest(project_dir, required=True)
-    revisions = manifest.setdefault("revisions", {})
+    pack, manifest = _load_pack(project_dir)
+    revisions = manifest["revisions"] = _revisions(manifest, pack)   # legacy keys move to the real name
     subs = _placeholder_subs(manifest, project_dir)
     subs["{{SKILLS}}"] = _skills_block(manifest, project_dir, template_dir, plugins_dir)
     applied, skipped = [], []
@@ -613,7 +631,7 @@ def fast_forward(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             applied.append((rel, v))
         elif v in ("merge-up", "conflict"):
             skipped.append((rel, v))
-    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    (pack / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return {"applied": applied, "skipped": skipped}
 
 
@@ -664,7 +682,7 @@ def _cmd_classify(args):
 
 def _cmd_baseline(args):
     b = record_baseline(Path(args.dir))
-    print(f"revs: recorded baseline for {len(b)} file(s) in {args.dir}/ai/manifest.json")
+    print(f"revs: recorded baseline for {len(b)} file(s) in {P.require_pack(Path(args.dir)) / 'manifest.json'}")
     return 0
 
 
@@ -699,7 +717,7 @@ def main(argv=None) -> int:
     sp.add_argument("--dir", required=True)
     sp.set_defaults(func=_cmd_classify)
 
-    sp = sub.add_parser("baseline", help="record per-file rev+hash baseline into ai/manifest.json")
+    sp = sub.add_parser("baseline", help="record per-file rev+hash baseline into <pack>/manifest.json")
     sp.add_argument("--dir", required=True)
     sp.set_defaults(func=_cmd_baseline)
 
@@ -710,7 +728,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         return args.func(args)
-    except ValueError as exc:   # a malformed manifest (e.g. agents.primary) is user input: clean error, no traceback
+    except (ValueError, P.PackError) as exc:   # user input (bad manifest, no single pack): clean error, no traceback
         print(f"revs: {exc}")
         return 1
 

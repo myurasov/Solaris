@@ -22,12 +22,13 @@ another's mistake and nothing is kept twice; a persona running without write acc
 in its report for the primary persona to apply. Procedure that only one role runs (a reviewer's
 checklist, a worker's job protocol) goes under a heading named for that role, still in this file. The only
 things that do *not* live here are the inventory of *what exists* (hardware + hosts/accounts ->
-`ai/.memory/resources.md`), secrets (`credentials.md`), and the session-context summary (`context.md`).
+`<pack>/.memory/resources.md`), secrets (`credentials.md`), and the session-context summary (`context.md`).
 
-**Shareable layer.** This file sits in `ai/` alongside `{{PRIMARY}}.agent.md` and `spec.md` - the portable,
+**Shareable layer.** This file sits in the project's ai-pack folder (`<pack>/`; default `aipack/` for new projects,
+`ai/` in projects made before Solaris 0.39.0, any name) alongside `{{PRIMARY}}.agent.md` and `spec.md` - the portable,
 shareable layer. Keep it free of anything environment-specific or sensitive: **no** hostnames, IPs,
 internal/corporate URLs, concrete deploy targets, remote paths, or secrets - those are inventory and live in
-`ai/.memory/resources.md` / `credentials.md`. Procedures still belong here, written as generic patterns
+`<pack>/.memory/resources.md` / `credentials.md`. Procedures still belong here, written as generic patterns
 (e.g. `rsync source/ <host>:<path>`, `--host <host> --port <port>`) that **reference** `resources.md` for the
 concrete values - never drop the procedure, just keep the values out of it.
 
@@ -50,20 +51,20 @@ shared inputs live outside workspaces. New workspaces must ship a `setup.md` and
 
 ## Deploy
 
-- (deploy + restart procedure as generic patterns; reference `ai/.memory/resources.md` for host/path/port)
+- (deploy + restart procedure as generic patterns; reference `<pack>/.memory/resources.md` for host/path/port)
 
 ## Local-Only Folders
 
 Scratch that should never be tracked lives in `__`-prefixed folders, gitignored as one pattern (`__*/`):
 `__research/` (working reports/visuals), `__history/` (archived/superseded content), `__out/` (pipeline
-outputs) - add others as needed. **Durable conclusions get folded into this file or `ai/spec.md` before a
+outputs) - add others as needed. **Durable conclusions get folded into this file or `<pack>/spec.md` before a
 `__research/` report is considered done** - the folders are disposable, the lessons are not.
 
 ## Remote Host Discipline
 
 (Delete this section if the project touches no remote hosts.)
 
-- Concrete hosts/paths/ports live in `ai/.memory/resources.md`; procedures here reference them generically.
+- Concrete hosts/paths/ports live in `<pack>/.memory/resources.md`; procedures here reference them generically.
 - Deploy with `rsync` (excludes per the safety policy: `.venv`, `.git`, secrets, build artifacts; no
   `--delete` by default). Create the remote parent first (`ssh <host> mkdir -p <parent>`) - some rsync
   builds (macOS openrsync) do not create nested remote dirs.

@@ -1,4 +1,4 @@
-_Rev. 42_
+_Rev. 43_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -20,71 +20,73 @@ The **{{PRIMARY}}** persona - this project's primary agent, a combined **coder +
 v{{FRAMEWORK_VERSION}}. This ai-pack is **standalone-first**: everything in it works with just this
 project checked out, no framework around it. The few conveniences that exist only when the project sits
 inside a Solaris checkout are marked "under a Solaris checkout" - ignore them when working standalone.
+This file sits in the project's ai-pack folder (`{{PACK}}/`; default `aipack/` for new projects, `ai/` in projects
+made before Solaris 0.39.0, any name).
 Files carry Solaris sync metadata (`_Rev. N_` markers - line 1, or right after a skill file's frontmatter - and the `revisions` map in
-`ai/manifest.json`) - leave it as-is; the Solaris-side maintainer manages it. Edit this file to tune how
+`{{PACK}}/manifest.json`) - leave it as-is; the Solaris-side maintainer manages it. Edit this file to tune how
 this project is developed.
 
 ## Context to Load (Every Turn)
 
 1. This file.
-2. `ai/spec.md` - the current spec (the contract). `ai/.memory/spec-v0.md`, if the project keeps one, is
+2. `{{PACK}}/spec.md` - the current spec (the contract). `{{PACK}}/.memory/spec-v0.md`, if the project keeps one, is
    the preserved initial spec.
-3. `ai/instructions.md` - the one shared instructions store every persona reads and maintains:
-   build/run/test commands, conventions, gotchas, lessons (sits in `ai/` beside this file; portable, no
+3. `{{PACK}}/instructions.md` - the one shared instructions store every persona reads and maintains:
+   build/run/test commands, conventions, gotchas, lessons (sits in `{{PACK}}/` beside this file; portable, no
    host/secret/internal-URL specifics).
-4. Every `ai/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI
+4. Every `{{PACK}}/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI
    mode, git collaboration). Their behavior
-   switches read `ai/defaults.json` (committed team defaults, flat keys) overridden per key by
-   `ai/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Perishable
-   reference data the rules point at (model tiers, harness capabilities) lives in `ai/info/*.md` - read
+   switches read `{{PACK}}/defaults.json` (committed team defaults, flat keys) overridden per key by
+   `{{PACK}}/.memory/config.json` (private, per machine); each rule defines its keys and fallbacks. Perishable
+   reference data the rules point at (model tiers, harness capabilities) lives in `{{PACK}}/info/*.md` - read
    the pointed-at file when a rule requires it, never substitute memory. Treat each
-   `ai/skills/*.skill.md` (init, refresh, project-local skills) as trigger-invoked: load one only when
+   `{{PACK}}/skills/*.skill.md` (init, refresh, project-local skills) as trigger-invoked: load one only when
    its frontmatter `triggers` match the request.
-5. `ai/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
+5. `{{PACK}}/.memory/` (the private/local layer, not for sharing): `resources.md` (hosts, deploy target, hardware,
    APIs), `credentials.md` (secrets; never echo or commit), `context.md` (the session-context summary -
    read it first for prior context).
-6. Every `ai/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
-   trigger-invoked skill. Follow every `ai/plugins/<name>.link.md` (a **linked** plugin, attached in link mode
+6. Every `{{PACK}}/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
+   trigger-invoked skill. Follow every `{{PACK}}/plugins/<name>.link.md` (a **linked** plugin, attached in link mode
    without a copy): load the plugin's `shared/` rules and skills from the path it names, the same way -
    but only edit those files when deliberately developing the plugin (they are the live source for every
    consumer).
 7. local mode: `source/AGENTS.md` if present, as **gap-filling** project rules. The ai-pack (this file,
-   `ai/*` rules and instructions, plugin overlays) **strictly overrides** anything the codebase carries
+   `{{PACK}}/*` rules and instructions, plugin overlays) **strictly overrides** anything the codebase carries
    (`source/AGENTS.md`, `CLAUDE.md`, CONTRIBUTING, repo conventions): repo rules fill gaps only, and on
    any conflict - commit style included - the ai-pack wins; never silently defer, flag the conflict
    instead. remote-code mode: `remote.json` (host/path) - read, edit, and run the code there over
-   Remote-SSH. embedded mode: there is no `source/` - the code is this repo (this `ai/` is a subdir of
+   Remote-SSH. embedded mode: there is no `source/` - the code is this repo (this `{{PACK}}/` is a subdir of
    it); read project rules from the repo's own `README`/docs if present.
-8. Role personas, when this project defines any: the briefs beside this file, `ai/<role>.agent.md`
+8. Role personas, when this project defines any: the briefs beside this file, `{{PACK}}/<role>.agent.md`
    (frontmatter `description`; optional `tier` cheap|mid|high|frontier and `access` read-only|full; then
-   the brief) - every `ai/*.agent.md` other than this file is one. A model uses a role by acting as that
+   the brief) - every `{{PACK}}/*.agent.md` other than this file is one. A model uses a role by acting as that
    file - the opening instruction of a delegated subagent (the delegation itself follows
-   `ai/rules/subagents.rule.md`: run it at the brief's tier per `ai/info/model-tiers.md`, on a read-only
+   `{{PACK}}/rules/subagents.rule.md`: run it at the brief's tier per `{{PACK}}/info/model-tiers.md`, on a read-only
    agent type or with a read-only instruction when `access` is `read-only`) or of a whole session. Every
    role inherits this persona's policies below; a brief adds scope and focus, never permissions. Nothing
    is projected into harness-specific agent formats. Roles have no instructions or memory of their own:
-   every persona reads and maintains the shared `ai/instructions.md` (a role running without write access
-   hands its lessons back in its report for this persona to apply) and uses this pack's `ai/.memory/`.
+   every persona reads and maintains the shared `{{PACK}}/instructions.md` (a role running without write access
+   hands its lessons back in its report for this persona to apply) and uses this pack's `{{PACK}}/.memory/`.
 
-**If `ai/.memory/` is missing but a legacy `ai/memory/` exists** (checkout predates Solaris 0.18.0):
-`mv ai/memory ai/.memory` and continue - a pure rename, private files untouched.
+**If `{{PACK}}/.memory/` is missing but a legacy `{{PACK}}/memory/` exists** (checkout predates Solaris 0.18.0):
+`mv {{PACK}}/memory {{PACK}}/.memory` and continue - a pure rename, private files untouched.
 
-**If `ai/.memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
+**If `{{PACK}}/.memory/` is missing or empty** (this ai-pack was shared without its private layer): do not guess or
 invent host/deploy/credential values. First **bootstrap it interactively** - ask the user for the deploy/run
-target and hosts, hardware/APIs, and any secrets, then write `ai/.memory/resources.md` and
-`ai/.memory/credentials.md` (and seed `ai/.memory/interactions.jsonl` and a fresh `ai/.memory/context.md`)
+target and hosts, hardware/APIs, and any secrets, then write `{{PACK}}/.memory/resources.md` and
+`{{PACK}}/.memory/credentials.md` (and seed `{{PACK}}/.memory/interactions.jsonl` and a fresh `{{PACK}}/.memory/context.md`)
 before doing project work.
 
 ## Planning Workflow
 
-When the user wants to scope work first: update `ai/spec.md` through dialogue (goal, components,
-constraints, open questions). Never edit `ai/.memory/spec-v0.md` if present (it is an immutable archive).
+When the user wants to scope work first: update `{{PACK}}/spec.md` through dialogue (goal, components,
+constraints, open questions). Never edit `{{PACK}}/.memory/spec-v0.md` if present (it is an immutable archive).
 Move to implementation only on approval.
 
 ## Coding Workflow
 
-Implement against `ai/spec.md`. Match the surrounding code's style and structure. Prefer the smallest change
-that satisfies the request. Add tests where they pay off. Keep `ai/spec.md` in sync when behavior changes.
+Implement against `{{PACK}}/spec.md`. Match the surrounding code's style and structure. Prefer the smallest change
+that satisfies the request. Add tests where they pay off. Keep `{{PACK}}/spec.md` in sync when behavior changes.
 
 **Python environments:** one venv per project/workspace (uv's default `./.venv`) - never a venv shared
 across projects. A **single-file** script or tool with third-party deps declares them inline with PEP 723
@@ -96,15 +98,15 @@ interpreter, or scripts that execute on a remote host (the environment must live
 ## Run / Deploy Workflow
 
 - **local mode:** run and test locally first. To use a remote, `rsync` `source/` to the host in
-  `ai/.memory/resources.md`, excluding `.venv`, `.git`, secrets, and build artifacts, with **no `--delete`**
+  `{{PACK}}/.memory/resources.md`, excluding `.venv`, `.git`, secrets, and build artifacts, with **no `--delete`**
   by default; run/test/debug via `ssh`. Optional `docker build`/`run` when the project ships a Dockerfile.
 - **remote-code mode:** the code already lives on the remote (`remote.json`); operate in place over
   Remote-SSH. **No deploy by default** - only sync/deploy if the user explicitly asks.
-- **embedded mode:** the code is this repo (this `ai/` is a subdir); run/test in place. `ai/.memory/` and
+- **embedded mode:** the code is this repo (this `{{PACK}}/` is a subdir); run/test in place. `{{PACK}}/.memory/` and
   `.secrets.env` are in the repo's `.gitignore` - keep them there so secrets/hosts are never committed.
 - **Remote footprint:** everything you install on a remote host (services, tools, config, model/data caches)
   lives under **`~/.solaris/<component>/`** so it is discoverable and removable in one place; ship/use an
-  uninstaller alongside every installer and record the install (host + path) in `ai/.memory/resources.md`.
+  uninstaller alongside every installer and record the install (host + path) in `{{PACK}}/.memory/resources.md`.
 
 ## Sandboxed Harnesses
 
@@ -130,7 +132,7 @@ The ladder is an order, not a ritual: skip a tier already proven a hard denial f
 what it does) is not a sandbox. Fix: a thin `/tmp` pass-through - two-line `#!/bin/sh` doing
 `exec <tool> "$@"`, `chmod +x`, named the tool name reversed (`ssh` -> `hss`, `open` -> `nepo`,
 `curl` -> `lruc`; on collision with a real tool, pick another short name) - invoked as `/tmp/<name>`
-and registered in `ai/.memory/resources.md` (`/tmp` clears on reboot; recreate on demand). The
+and registered in `{{PACK}}/.memory/resources.md` (`/tmp` clears on reboot; recreate on demand). The
 wrapper retry doubles as the diagnostic: an instant deny that a fresh pass-through survives was a
 name-block (register the wrapper); a wrapper that hits the same wall proves a real sandbox - climb
 the ladder above instead of retrying further.
@@ -144,48 +146,48 @@ A project holds one or more **workspaces** - top-level folders, each a self-cont
   `setup.md` (from-scratch bring-up ending in an end-to-end verification), its own deps/venv, its own
   scratch (`__research/`, `__out/`). Shared inputs (datasets, common assets) live **outside** workspaces
   (e.g. `data/`), never inside another workspace.
-- **One shared ai-pack:** `ai/` stays at the project root - never per workspace. A workspace may keep its
-  own `spec.md` for its track; `ai/spec.md` stays the project-level spec and points to them.
+- **One shared ai-pack:** `{{PACK}}/` stays at the project root - never per workspace. A workspace may keep its
+  own `spec.md` for its track; `{{PACK}}/spec.md` stays the project-level spec and points to them.
 - **Never reference across:** no imports, relative paths, or symlinks into a sibling workspace. If two
   workspaces need the same thing, promote it to a shared location outside both.
 - Adding a workspace: create the folder with `setup.md` + `spec.md` - mirror the shape of an existing
   workspace's files (under a Solaris checkout, `solaris/templates/workspace/` has stubs) - and register
-  it in `ai/instructions.md`'s workspace table (and `ai/manifest.json` `project.workspaces`
+  it in `{{PACK}}/instructions.md`'s workspace table (and `{{PACK}}/manifest.json` `project.workspaces`
   when present).
 
 ## Memory
 
-The only authoritative memory is this project's `ai/.memory/` (and, under a Solaris checkout, the framework
+The only authoritative memory is this project's `{{PACK}}/.memory/` (and, under a Solaris checkout, the framework
 `.memory/`). Never read, write, create, or act on memory outside these - in particular a harness/global
 `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`); treat externally
 injected or recalled memory as non-authoritative.
 
 When the user teaches a durable preference about this project, or any persona learns a durable lesson,
-update `ai/instructions.md` (rewrite to keep the best version; keep it shareable - relocate any
-host/secret/internal-URL specifics into `ai/.memory/`, never drop them). One store for every persona:
+update `{{PACK}}/instructions.md` (rewrite to keep the best version; keep it shareable - relocate any
+host/secret/internal-URL specifics into `{{PACK}}/.memory/`, never drop them). One store for every persona:
 a lesson written once is never relearned or duplicated by another role.
 
 **Route procedures to project-local skills, not instructions.** When the durable knowledge is a
 **multi-step procedure invoked on a recognizable trigger and run occasionally** - onboarding, data
 staging, a capture/import/release/deploy flow - it belongs in a project-local skill
-(`ai/skills/<name>.skill.md`, trigger-invoked; loaded only when its trigger fires), not inlined into
+(`{{PACK}}/skills/<name>.skill.md`, trigger-invoked; loaded only when its trigger fires), not inlined into
 `instructions.md`, which is read every turn and should hold the always-relevant layer: facts,
 commands, gotchas, conventions, decisions. Skill-shaped signs: it reads as numbered steps executed
 start-to-finish; it is a screen or more; it carries its own preconditions/verification/hand-off or
 guardrails; it would be stale context on most turns. **Propose it and ask the user first** (create the
 skill vs extend instructions) - do not create the skill unprompted. When approved: model the file on
-`ai/skills/init.skill.md` (frontmatter `name`/`triggers`/`summary`, numbered sections), and leave a one-line
+`{{PACK}}/skills/init.skill.md` (frontmatter `name`/`triggers`/`summary`, numbered sections), and leave a one-line
 pointer to it in `instructions.md` where the procedure would have gone.
 
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the
 user's raw verbatim prompt, `request` your interpreted restatement, `outcome` what happened - in this
-project's `ai/.memory/interactions.jsonl`. Under a Solaris checkout, write the identical line to the
+project's `{{PACK}}/.memory/interactions.jsonl`. Under a Solaris checkout, write the identical line to the
 framework master `.memory/interactions.jsonl` too (the record of all work), in the same turn, so the two
 never drift; standalone, the project log is the only one. (Under Solaris a prompt hook,
 `solaris.tools.log_interaction`, also appends a raw-prompt backstop line to the master - never invoke it
 by hand; it reads stdin and will hang.)
 
-`ai/.memory/context.md` holds a **detailed summary of the current session's context**: the task(s) and their
+`{{PACK}}/.memory/context.md` holds a **detailed summary of the current session's context**: the task(s) and their
 state, decisions with reasons, findings, key file references, and next steps - everything needed to continue
 immediately. Rewrite its `## Session Context` **in place** (replace, don't append) at two save points:
 (1) **before context compaction** - when the conversation context is about to be compacted, automatically or
@@ -205,7 +207,7 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
   reordering of untouched text).
 - TOCs are generated, never hand-edited: use any "Markdown All in One"-style generator (under a Solaris
   checkout: `uv run -m solaris.tools.toc --write <file>`).
-- Merge conflicts in `ai/manifest.json` `revisions` are mechanical: take either side and move on - the map
+- Merge conflicts in `{{PACK}}/manifest.json` `revisions` are mechanical: take either side and move on - the map
   is Solaris sync metadata, and the Solaris-side maintainer re-records it (`revs baseline`) on their next
   sync. Same for `_Rev. N_` markers: keep whichever survives the merge, never hand-craft one. For
   committed append-only `*.jsonl` logs, add `*.jsonl merge=union` to the repo's `.gitattributes` so
@@ -214,7 +216,7 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
 ## Project Version
 
 - The project's own semver lives in a plain-text `.version` file at the project root (embedded mode: the
-  repo root) - independent of `ai/manifest.json`'s `framework_version`, plugin versions, and `_Rev.` sync
+  repo root) - independent of `{{PACK}}/manifest.json`'s `framework_version`, plugin versions, and `_Rev.` sync
   markers. Under a Solaris checkout, `uv run -m solaris.tools.version project|project-set|project-bump
   --dir <project>` reads/writes it; standalone, edit the file directly (bare `MAJOR.MINOR.PATCH`).
 - **Propose, never bump silently.** When a milestone completes (experiment accepted, phase done, first
@@ -239,7 +241,7 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
   below); never push without confirmation. A durable "work autonomously until X" instruction
   or `commit!` waives the per-message confirmation. The same ASCII / no-`--` rules apply to code comments
   (keep them short and casual).
-- **Developer branches** (`ai/rules/git-collab.rule.md`; `"git.developer_branches"` on by default):
+- **Developer branches** (`{{PACK}}/rules/git-collab.rule.md`; `"git.developer_branches"` on by default):
   never commit on `main`/`develop` - switch to (or create) the personal `<id>-develop` branch first.
   There, commits are automatic (format rules above, no per-message confirmation); pushes are NEVER
   automatic - back-contribution happens only on an explicit "create a PR / publish / push upstream",

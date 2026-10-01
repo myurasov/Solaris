@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: Git Collaboration (Developer Branches) <!-- omit in toc -->
 
@@ -16,14 +16,14 @@ and git itself (`gh` is optional - every step has a fallback).
 
 ## Switches
 
-Read `ai/defaults.json` (committed team default), then `ai/.memory/config.json` (private
+Read `{{PACK}}/defaults.json` (committed team default), then `{{PACK}}/.memory/config.json` (private
 per-machine override; wins per key):
 
 - `"git.developer_branches"` - `true`/`false`; absent means **true**. `false` =
   [main-developer mode](#main-developer-mode).
 - `"git.feature_branches"` - `true`/`false`; absent means **true**.
 
-Private state this rule caches in `ai/.memory/config.json`: `"git.branch"` (the developer's
+Private state this rule caches in `{{PACK}}/.memory/config.json`: `"git.branch"` (the developer's
 personal branch name), `"git.feature_origin"` (the branch an open feature branched from).
 
 ## Branch Guard (Before Every Commit)
@@ -93,7 +93,7 @@ abandon it first.
 ## Main-Developer Mode
 
 `"git.developer_branches": false` (typically set in the project owner's private
-`ai/.memory/config.json`) disables the branch guard: working directly on `main` is fine, and the
+`{{PACK}}/.memory/config.json`) disables the branch guard: working directly on `main` is fine, and the
 Commit Policy's standard confirmation posture applies to commits made **directly on `main`**.
 Feature branches (if enabled) still apply and keep their automatic posture - including the
 closing merge commit onto the originating branch, which only lands work already committed. The

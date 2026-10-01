@@ -1,5 +1,5 @@
 {
-  "_comment": "Committed, shareable behavior defaults for this ai-pack (flat keys). Per-machine overrides live in ai/.memory/config.json (gitignored, same keys; an override wins per key). Rules in ai/rules/ define each key and its fallback when absent.",
+  "_comment": "Committed, shareable behavior defaults for this ai-pack (flat keys). Per-machine overrides live in <pack>/.memory/config.json (gitignored, same keys; an override wins per key). Rules in <pack>/rules/ define each key and its fallback when absent.",
   "subagents.level": "auto",
   "economy.level": "med",
   "yagni.enabled": false,

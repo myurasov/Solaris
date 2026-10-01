@@ -44,8 +44,11 @@ def test_framework_version_reads_real_pyproject():
     assert V.framework_version() == solaris.__version__
 
 
-def _write_manifest(project_dir, framework_version="0.1.0", plugins=None):
-    ai = project_dir / "ai"
+PACKS = ["aipack", "brain", "ai"]   # the default, a custom name, the pre-0.39 legacy name
+
+
+def _write_manifest(project_dir, framework_version="0.1.0", plugins=None, pack="ai"):
+    ai = project_dir / pack
     ai.mkdir(parents=True)
     (ai / "manifest.json").write_text(
         json.dumps(
@@ -62,9 +65,11 @@ def _write_manifest(project_dir, framework_version="0.1.0", plugins=None):
     )
 
 
-def test_manifest_roundtrip_and_set(tmp_path):
+@pytest.mark.parametrize("pack", PACKS)
+def test_manifest_roundtrip_and_set(tmp_path, pack):
     proj = tmp_path / "todo"
-    _write_manifest(proj, "0.1.0", plugins=[{"name": "nvidia-isaac-lab", "version": "0.1.0"}])
+    _write_manifest(proj, "0.1.0", plugins=[{"name": "nvidia-isaac-lab", "version": "0.1.0"}], pack=pack)
+    (proj / "source").mkdir()
     assert V.aipack_version(proj) == "0.1.0"
     assert V.plugin_recorded_version(proj, "nvidia-isaac-lab") == "0.1.0"
     assert V.plugin_recorded_version(proj, "absent") is None
@@ -75,6 +80,8 @@ def test_manifest_roundtrip_and_set(tmp_path):
     data = V.read_manifest(proj)
     assert data["project"]["name"] == "todo"
     assert data["plugins"][0]["name"] == "nvidia-isaac-lab"
+    assert json.loads((proj / pack / "manifest.json").read_text(encoding="utf-8"))["framework_version"] == "0.2.0"
+    assert sorted(p.name for p in proj.iterdir()) == sorted([pack, "source"])   # written in place, no new pack
 
     with pytest.raises(ValueError):
         V.set_aipack_version(proj, "not-a-version")
@@ -158,9 +165,10 @@ def test_cli_current(capsys):
     assert capsys.readouterr().out.strip() == V.framework_version()
 
 
-def test_cli_check_exit_codes(tmp_path, capsys):
+@pytest.mark.parametrize("pack", PACKS)
+def test_cli_check_exit_codes(tmp_path, capsys, pack):
     proj = tmp_path / "p"
-    _write_manifest(proj, V.framework_version())
+    _write_manifest(proj, V.framework_version(), pack=pack)
     assert V.main(["check", "--dir", str(proj)]) == 0      # match
 
     V.set_aipack_version(proj, "0.0.1")
@@ -168,6 +176,36 @@ def test_cli_check_exit_codes(tmp_path, capsys):
 
     V.set_aipack_version(proj, "9.9.9")
     assert V.main(["check", "--dir", str(proj)]) == 2      # ahead -> downgrade
+
+    capsys.readouterr()
+    assert V.main(["set", "--dir", str(proj), "0.3.0"]) == 0
+    assert f"{pack}/manifest.json" in capsys.readouterr().out
+    assert V.main(["aipack", "--dir", str(proj)]) == 0
+    assert capsys.readouterr().out.strip() == "0.3.0"
+
+
+def test_cli_reports_a_missing_or_ambiguous_pack_cleanly(tmp_path, capsys):
+    proj = tmp_path / "p"
+    (proj / "source").mkdir(parents=True)
+    (proj / "reporting").mkdir()
+    (proj / "reporting" / "manifest.json").write_text('{"name": "reporting", "version": "0.4.0"}',
+                                                      encoding="utf-8")   # a plugin manifest is not a pack
+    (proj / ".aipack").mkdir()
+    (proj / ".aipack" / "manifest.json").write_text(
+        json.dumps({"project": {"name": "p"}, "framework_version": "0.1.0"}), encoding="utf-8")   # hidden
+    for cmd in (["check"], ["aipack"], ["chain"], ["check-plugins"], ["set", "0.2.0"],
+                ["plugin", "--plugin", "x"]):
+        assert V.main([cmd[0], "--dir", str(proj), *cmd[1:]]) == 1
+        captured = capsys.readouterr()
+        assert "no ai-pack" in captured.out and not captured.err      # one clean line, no traceback
+    assert V.main(["check", "--dir", str(tmp_path / "nope")]) == 1
+    assert "no ai-pack" in capsys.readouterr().out
+    _write_manifest(proj, "0.1.0", pack="ai")
+    _write_manifest(proj, "0.1.0", pack="aipack")
+    assert V.main(["check", "--dir", str(proj)]) == 1
+    assert "more than one ai-pack (ai, aipack)" in capsys.readouterr().out
+    with pytest.raises(V.P.PackError):
+        V.read_manifest(proj)
 
 
 def test_project_version_roundtrip_and_bump(tmp_path):

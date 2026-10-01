@@ -1,4 +1,4 @@
-_Rev. 6_
+_Rev. 7_
 
 # Info: Model Tiers <!-- omit in toc -->
 
@@ -7,7 +7,7 @@ _Rev. 6_
 - [Effort + Thinking](#effort--thinking)
 - [Keeping This Current](#keeping-this-current)
 
-Perishable data layer for this pack's rules (see `ai/rules/subagents.rule.md`): rules speak in
+Perishable data layer for this pack's rules (see `{{PACK}}/rules/subagents.rule.md`): rules speak in
 abstract tiers; the concrete model names live here and age. Tier choices come from this file -
 not from memory or guesswork. Standalone-first: needs nothing beyond this pack.
 
@@ -49,7 +49,7 @@ level with GPT-5.6 Sol (Cursor's newest OpenAI model) and far below Opus 5.5 and
 55.8%; vendor-reported), hence mid. In Claude Code, use the read-only `Explore` agent type for search
 sweeps, and pass `model:` whenever the tier differs from the session model - the built-in agent types
 otherwise run on the session model (`Explore` capped at Opus). Cursor's subagent tool also takes a
-model per launch (see `ai/info/harnesses.md`), so its column picks subagent models as well as the
+model per launch (see `{{PACK}}/info/harnesses.md`), so its column picks subagent models as well as the
 session model. The OpenAI / xAI column gives API model ids for harnesses that take those APIs directly
 (for example OpenCode, or Codex for the GPT models); Cursor does not list the GPT-6 models yet.
 

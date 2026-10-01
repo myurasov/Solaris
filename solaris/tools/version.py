@@ -4,8 +4,10 @@
 """Solaris versioning + migration-chain engine (stdlib only).
 
 The framework version is the single source of truth in ``pyproject.toml`` (``[project].version``). An
-ai-pack records the framework version it was written/updated at in ``<project>/ai/manifest.json``
-(``framework_version``). Plugins version independently in ``plugins/<name>/manifest.json``; the
+ai-pack records the framework version it was written/updated at in ``<project>/<pack>/manifest.json``
+(``framework_version``); ``<pack>`` is the project's pack folder (``aipack/`` by default, ``ai/`` in projects
+made before 0.39.0), found by solaris.tools.pack. Plugins version independently in
+``plugins/<name>/manifest.json``; the
 materialized version is recorded per-plugin in the project's manifest. The project's own content is
 versioned by a plain-text ``.version`` file (bare MAJOR.MINOR.PATCH) at the project root - the one
 place a ``.version`` file exists; framework and plugin versions stay in their manifests.
@@ -34,6 +36,8 @@ import re
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
+
+from solaris.tools import pack as P
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -95,7 +99,8 @@ def framework_version(pyproject: Path = PYPROJECT) -> str:
 # --------------------------------------------------------------------------- manifest.json
 
 def _manifest_path(project_dir: "str | Path") -> Path:
-    return Path(project_dir) / "ai" / "manifest.json"
+    """The ai-pack's manifest.json, whatever the pack folder is named (PackError: no pack, or several)."""
+    return P.require_pack(project_dir) / "manifest.json"
 
 
 def read_manifest(project_dir: "str | Path") -> dict:
@@ -105,7 +110,6 @@ def read_manifest(project_dir: "str | Path") -> dict:
 
 def write_manifest(project_dir: "str | Path", data: dict) -> None:
     path = _manifest_path(project_dir)
-    path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as fh:
         json.dump(data, fh, indent=2)
         fh.write("\n")
@@ -279,7 +283,7 @@ def _cmd_chain(args: argparse.Namespace) -> int:
 
 def _cmd_set(args: argparse.Namespace) -> int:
     set_aipack_version(args.dir, args.version)
-    print(f"set framework_version = {args.version} in {args.dir}/ai/manifest.json")
+    print(f"set framework_version = {args.version} in {_manifest_path(args.dir)}")
     return 0
 
 
@@ -360,7 +364,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     def _with_dir(name: str, help_text: str):
         sp = sub.add_parser(name, help=help_text)
-        sp.add_argument("--dir", required=True, help="project directory (contains ai/manifest.json)")
+        sp.add_argument("--dir", required=True, help="project directory (the folder holding the ai-pack)")
         return sp
 
     _with_dir("aipack", "print the ai-pack's recorded framework version").set_defaults(func=_cmd_aipack)
@@ -391,7 +395,11 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: "list[str] | None" = None) -> int:
     args = build_parser().parse_args(argv)
-    return args.func(args)
+    try:
+        return args.func(args)
+    except P.PackError as exc:   # --dir holds no ai-pack, or several: one clean line, never a traceback
+        print(exc)
+        return 1
 
 
 if __name__ == "__main__":

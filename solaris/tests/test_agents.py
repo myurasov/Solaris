@@ -1,12 +1,13 @@
 # Copyright 2026 Mikhail Yurasov <me@yurasov.me>
 # SPDX-License-Identifier: Apache-2.0
 
-"""Tests for solaris.tools.agents (renamable primary persona, role briefs beside it in ai/, the one shared
-ai/instructions.md) and the revs hooks behind it."""
+"""Tests for solaris.tools.agents (renamable primary persona, role briefs beside it in the ai-pack, the one
+shared <pack>/instructions.md, the renamable pack folder) and the revs hooks behind it."""
 
 from __future__ import annotations
 
 import json
+import shutil
 
 import pytest
 
@@ -14,12 +15,14 @@ from solaris.tools import agents as A
 from solaris.tools import revs as R
 
 TEMPLATE_DIR = R.TEMPLATE_DIR
+PACK_MANIFEST = {"project": {"name": "P", "slug": "p"}, "framework_version": "0.39.0"}
 
 
-def _project(tmp_path, primary=None):
-    """A pack rendered from the real templates (so placeholder handling is tested for real)."""
+def _project(tmp_path, primary=None, pack="ai"):
+    """A pack rendered from the real templates (so placeholder handling is tested for real), in a pack folder
+    named ``pack`` (``ai`` is the pre-0.39 name, ``aipack`` the default for new projects)."""
     proj = tmp_path / "proj"
-    (proj / "ai").mkdir(parents=True)
+    (proj / pack).mkdir(parents=True)
     manifest = {
         "project": {"name": "Todo", "slug": "todo", "type": "python-cli", "mode": "local",
                     "description": "A todo app."},
@@ -27,23 +30,35 @@ def _project(tmp_path, primary=None):
     }
     if primary:
         manifest["agents"] = {"primary": primary}
-    (proj / "ai" / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    (proj / pack / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     R.fast_forward(proj, template_dir=TEMPLATE_DIR, plugins_dir=tmp_path / "plugins")
     role = primary or "engineer"
     instr = (TEMPLATE_DIR / "ai" / "instructions.md").read_text(encoding="utf-8")
-    (proj / "ai" / "instructions.md").write_text(
-        instr.replace("{{NAME}}", "Todo").replace("{{PRIMARY}}", role), encoding="utf-8")
+    (proj / pack / "instructions.md").write_text(
+        instr.replace("{{NAME}}", "Todo").replace("{{PRIMARY}}", role).replace("{{PACK}}", pack),
+        encoding="utf-8")
+    shutil.copy(TEMPLATE_DIR / "CLAUDE.md", proj / "CLAUDE.md")
     return proj
 
 
+def _legacy_keys(proj, pack):
+    """Give a pack renamed by hand the ai/... revisions keys it had before (like a pre-0.39 manual rename)."""
+    path = proj / pack / "manifest.json"
+    man = json.loads(path.read_text(encoding="utf-8"))
+    man["revisions"] = {("ai/" + k[len(pack) + 1:] if k.startswith(f"{pack}/") else k): v
+                        for k, v in man["revisions"].items()}
+    path.write_text(json.dumps(man, indent=2) + "\n", encoding="utf-8")
+    return man
+
+
 def _brief(proj, name, desc="Reviews things before they count.", tier="high", access="read-only",
-           body="**Owns:** review.\n"):
+           body="**Owns:** review.\n", pack="ai"):
     fm = f"---\ndescription: {desc}\n"
     if tier:
         fm += f"tier: {tier}\n"
     if access:
         fm += f"access: {access}\n"
-    (proj / "ai" / f"{name}.agent.md").write_text(fm + "---\n\n" + body, encoding="utf-8")
+    (proj / pack / f"{name}.agent.md").write_text(fm + "---\n\n" + body, encoding="utf-8")
 
 
 def test_primary_role_default_and_validation():
@@ -294,9 +309,217 @@ def test_role_stub_validates(tmp_path):
 def test_revs_cli_reports_a_malformed_manifest_cleanly(tmp_path, capsys):
     proj = tmp_path / "p"
     (proj / "ai").mkdir(parents=True)
-    (proj / "ai" / "manifest.json").write_text('{"agents": {"primary": ""}}', encoding="utf-8")
+    bad = {**PACK_MANIFEST, "agents": {"primary": ""}}
+    (proj / "ai" / "manifest.json").write_text(json.dumps(bad), encoding="utf-8")
     assert R.main(["classify", "--dir", str(proj)]) == 1
     assert "agents.primary" in capsys.readouterr().out
+    assert A.main(["--dir", str(proj)]) == 1
+    assert "agents.primary" in capsys.readouterr().out
+    # unreadable JSON is no ai-pack manifest at all, so the project has no pack: still one clean line each
     (proj / "ai" / "manifest.json").write_text("{not json", encoding="utf-8")
     assert R.main(["classify", "--dir", str(proj)]) == 1
-    assert "not valid JSON" in capsys.readouterr().out
+    assert "no ai-pack" in capsys.readouterr().out
+    assert A.main(["--dir", str(proj)]) == 1
+    assert "no ai-pack" in capsys.readouterr().out
+
+
+# ----------------------------------------------------------------- any pack folder name
+
+@pytest.mark.parametrize("pack", ["aipack", "brain", "ai"])
+def test_check_finds_the_pack_whatever_its_name(tmp_path, capsys, pack):
+    proj = _project(tmp_path, pack=pack)
+    (proj / "source").mkdir()
+    assert f"{pack}/engineer.agent.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 0
+    assert f"single persona (engineer), all valid; role personas go beside it as {pack}/<role>.agent.md" \
+        in capsys.readouterr().out
+    _brief(proj, "reader", desc="Reads external material.", tier="mid", access="read-only", pack=pack)
+    assert A.main(["--dir", str(proj)]) == 0
+    assert f"1 role persona(s) in {pack}/, all valid" in capsys.readouterr().out
+    _brief(proj, "broken", desc="", pack=pack)
+    assert A.main(["--dir", str(proj)]) == 1
+    assert f"{pack}/broken.agent.md: 'description' is required" in capsys.readouterr().out
+    (proj / pack / "broken.agent.md").unlink()
+    (proj / pack / "instructions.md").unlink()
+    (proj / pack / "engineer.instructions.md").write_text("# old\n", encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 1
+    out = capsys.readouterr().out
+    assert f"PROBLEM: {pack}/instructions.md not found" in out
+    assert f"legacy per-persona instructions file(s) {pack}/engineer.instructions.md" in out
+
+
+def test_check_needs_exactly_one_pack(tmp_path, capsys):
+    proj = _project(tmp_path)
+    shutil.copytree(proj / "ai", proj / "aipack")
+    assert A.main(["--dir", str(proj)]) == 1
+    assert "more than one ai-pack (ai, aipack)" in capsys.readouterr().out
+    shutil.rmtree(proj / "ai")
+    shutil.move(str(proj / "aipack"), str(proj / ".aipack"))          # hidden folders are never packs
+    (proj / "reporting").mkdir()
+    (proj / "reporting" / "manifest.json").write_text('{"name": "reporting", "version": "0.4.0"}',
+                                                      encoding="utf-8")   # nor is a plugin manifest
+    assert A.main(["--dir", str(proj)]) == 1
+    assert "no ai-pack" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("pack", ["aipack", "brain"])
+def test_rename_primary_in_any_pack(tmp_path, capsys, pack):
+    proj = _project(tmp_path, pack=pack)
+    d = proj / pack
+    log, warnings = A.rename_primary(proj, "master")
+    assert not warnings and f"moved {pack}/engineer.agent.md -> {pack}/master.agent.md" in log
+    assert (d / "master.agent.md").exists() and not (d / "engineer.agent.md").exists()
+    man = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    assert man["agents"]["primary"] == "master"
+    assert f"{pack}/master.agent.md" in man["revisions"] and f"{pack}/engineer.agent.md" not in man["revisions"]
+    assert f"{pack}/master.agent.md" in (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, tmp_path / "plugins")} == {"in-sync"}
+    assert A.main(["--dir", str(proj), "--rename-primary", "engineer"]) == 0
+    assert f"agents: moved {pack}/master.agent.md -> {pack}/engineer.agent.md" in capsys.readouterr().out
+    assert (d / "engineer.agent.md").exists()
+
+
+# ----------------------------------------------------------------- --rename-pack
+
+def test_rename_pack_round_trip(tmp_path, capsys):
+    proj = _project(tmp_path)
+    _brief(proj, "reviewer")
+    plugins = tmp_path / "plugins"
+    log, warnings = A.rename_pack(proj, "aipack")
+    assert not warnings
+    assert not (proj / "ai").exists()
+    assert (proj / "aipack" / "engineer.agent.md").exists() and (proj / "aipack" / "reviewer.agent.md").exists()
+    agents_md = (proj / "AGENTS.md").read_text(encoding="utf-8")
+    assert "aipack/engineer.agent.md" in agents_md and not A._path_re("ai").search(agents_md)
+    claude_md = (TEMPLATE_DIR / "CLAUDE.md").read_text(encoding="utf-8")
+    assert (proj / "CLAUDE.md").read_text(encoding="utf-8") == claude_md   # names no pack: untouched
+    man = json.loads((proj / "aipack" / "manifest.json").read_text(encoding="utf-8"))
+    assert man["revisions"] and all(k == "AGENTS.md" or k.startswith("aipack/") for k in man["revisions"])
+    assert log[0] == "moved ai/ -> aipack/"
+    assert any(line.startswith("AGENTS.md: ") for line in log)
+    assert any("the baseline of AGENTS.md follows the rewrite" in line for line in log)
+    assert "  aipack/engineer.agent.md" in log      # a managed copy that still says ai/: listed, not edited
+    assert log[-2:] == [f"next: uv run -m solaris.tools.revs ff --dir {proj}",
+                        f"then: uv run -m solaris.tools.revs baseline --dir {proj} (once anything ff reports "
+                        "is merged)"]
+    # the pristine entry file is already in sync; the managed copies fast-forward onto the new name
+    verdicts = {r["rel"]: r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, plugins)}
+    assert verdicts["AGENTS.md"] == "in-sync" and verdicts["aipack/engineer.agent.md"] == "fast-forward"
+    assert not R.fast_forward(proj, TEMPLATE_DIR, plugins)["skipped"]
+    assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, plugins)} == {"in-sync"}
+    assert "aipack/instructions.md" in (proj / "aipack" / "engineer.agent.md").read_text(encoding="utf-8")
+    assert A.main(["--dir", str(proj)]) == 0
+    assert "1 role persona(s) in aipack/, all valid" in capsys.readouterr().out
+    # on to a custom name, then back to the legacy one, through the CLI
+    for old, new in (("aipack", "brain"), ("brain", "ai")):
+        assert A.main(["--dir", str(proj), "--rename-pack", new]) == 0
+        assert f"agents: moved {old}/ -> {new}/" in capsys.readouterr().out
+        R.fast_forward(proj, TEMPLATE_DIR, plugins)
+        assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, plugins)} == {"in-sync"}
+    assert A.rename_pack(proj, "ai") == (["the ai-pack folder is already ai/; nothing to do"], [])
+
+
+def test_rename_pack_refuses_bad_names_and_taken_targets(tmp_path, capsys):
+    proj = _project(tmp_path)
+    for bad in ("", ".", "..", ".hidden", "a/b", "a\\b", " aipack", "aipack\n"):
+        with pytest.raises(ValueError, match="plain folder name"):
+            A.rename_pack(proj, bad)
+    (proj / "source").mkdir()
+    (proj / "notes.md").write_text("x\n", encoding="utf-8")
+    for taken in ("source", "notes.md"):
+        with pytest.raises(ValueError, match="already exists"):
+            A.rename_pack(proj, taken)
+    assert (proj / "ai" / "manifest.json").exists()               # nothing moved
+    assert A.main(["--dir", str(proj), "--rename-pack", "../x"]) == 1
+    assert "plain folder name" in capsys.readouterr().out
+    assert A.main(["--dir", str(tmp_path / "nope"), "--rename-pack", "aipack"]) == 1
+    assert "not found" in capsys.readouterr().out
+    shutil.copytree(proj / "ai", proj / "brain")
+    assert A.main(["--dir", str(proj), "--rename-pack", "aipack"]) == 1
+    assert "more than one ai-pack (ai, brain)" in capsys.readouterr().out
+    bare = tmp_path / "bare"
+    (bare / "source").mkdir(parents=True)
+    assert A.main(["--dir", str(bare), "--rename-pack", "aipack"]) == 1
+    assert "no ai-pack" in capsys.readouterr().out
+    # a pack with nothing to re-key and nothing naming it: just the move
+    (bare / "ai").mkdir()
+    raw = json.dumps(PACK_MANIFEST)
+    (bare / "ai" / "manifest.json").write_text(raw, encoding="utf-8")
+    log, warnings = A.rename_pack(bare, "aipack")
+    assert not warnings and log[0] == "moved ai/ -> aipack/"
+    assert f"no other file under {bare} names ai/" in log
+    assert (bare / "aipack" / "manifest.json").read_text(encoding="utf-8") == raw
+
+
+def test_rename_pack_rewrites_only_the_entry_files_and_flags_ignore_rules(tmp_path, capsys):
+    proj = _project(tmp_path)
+    (proj / ".gitignore").write_text("__*/\nai/.memory/\n", encoding="utf-8")
+    (proj / "source").mkdir()
+    (proj / "source" / "README.md").write_text("See ../ai/spec.md first.\n", encoding="utf-8")
+    not_ours = "Not ours: openai/, nvidia-ai/, x.ai/, ai-pack/.\n"
+    (proj / "notes.md").write_text(not_ours, encoding="utf-8")
+    (proj / "CLAUDE.md").write_text("@AGENTS.md\n@ai/engineer.agent.md\n" + not_ours, encoding="utf-8")
+    (proj / ".git").mkdir()
+    (proj / ".git" / "config").write_text("ai/ inside git internals\n", encoding="utf-8")
+    (proj / "data.bin").write_bytes(b"\x00\xff ai/ \xfe")
+    assert A.main(["--dir", str(proj), "--rename-pack", "brain"]) == 1   # the stale ignore rule is a warning
+    out = capsys.readouterr().out
+    assert "agents: moved ai/ -> brain/" in out and "agents: CLAUDE.md: 1 reference(s)" in out
+    assert "\n  .gitignore\n" in out and "\n  source/README.md\n" in out and "\n  brain/" in out
+    for skipped in ("notes.md", ".git/config", "data.bin"):
+        assert f"  {skipped}\n" not in out
+    assert "agents: WARNING .gitignore still names ai/" in out and "brain/.memory/" in out
+    assert out.rstrip().splitlines()[-1].startswith("agents: WARNING")
+    # listed files are never edited; the entry files only lose the pack paths
+    assert (proj / ".gitignore").read_text(encoding="utf-8") == "__*/\nai/.memory/\n"
+    assert (proj / "source" / "README.md").read_text(encoding="utf-8") == "See ../ai/spec.md first.\n"
+    assert (proj / "CLAUDE.md").read_text(encoding="utf-8") == "@AGENTS.md\n@brain/engineer.agent.md\n" + not_ours
+
+
+def test_rename_pack_keeps_a_customized_entry_file_a_merge(tmp_path):
+    proj = _project(tmp_path)
+    agents_md = proj / "AGENTS.md"
+    agents_md.write_text(agents_md.read_text(encoding="utf-8") + "\nLocal note: read ai/spec.md first.\n",
+                         encoding="utf-8")
+    base = json.loads((proj / "ai" / "manifest.json").read_text(encoding="utf-8"))["revisions"]["AGENTS.md"]
+    log, warnings = A.rename_pack(proj, "aipack")
+    assert not warnings and not any("baseline of AGENTS.md" in line for line in log)
+    assert "Local note: read aipack/spec.md first." in agents_md.read_text(encoding="utf-8")
+    man = json.loads((proj / "aipack" / "manifest.json").read_text(encoding="utf-8"))
+    assert man["revisions"]["AGENTS.md"] == base          # a customization never passes for pristine
+    verdicts = {r["rel"]: r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, tmp_path / "plugins")}
+    assert verdicts["AGENTS.md"] == "conflict"            # so revs ff leaves it for a hand merge
+
+
+def test_renames_carry_the_legacy_keys_of_a_hand_renamed_pack(tmp_path):
+    # a pack renamed by hand before 0.39 (aipack/) may still record its baseline under ai/... keys; both renames
+    # read them as <pack>/... (revs' rule) so the baseline keeps matching and nothing turns into a conflict
+    proj = _project(tmp_path, pack="aipack")
+    plugins = tmp_path / "plugins"
+    man = _legacy_keys(proj, "aipack")
+    assert "ai/engineer.agent.md" in man["revisions"]
+    log, warnings = A.rename_primary(proj, "master")
+    assert not warnings
+    keys = json.loads((proj / "aipack" / "manifest.json").read_text(encoding="utf-8"))["revisions"]
+    assert "aipack/master.agent.md" in keys and not any(k.startswith("ai/") for k in keys)
+    assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, plugins)} == {"in-sync"}
+    _legacy_keys(proj, "aipack")
+    log, warnings = A.rename_pack(proj, "brain")
+    assert not warnings
+    keys = json.loads((proj / "brain" / "manifest.json").read_text(encoding="utf-8"))["revisions"]
+    assert keys and all(k == "AGENTS.md" or k.startswith("brain/") for k in keys)
+    assert "brain/master.agent.md" in keys
+    assert not R.fast_forward(proj, TEMPLATE_DIR, plugins)["skipped"]
+    assert {r["verdict"] for r in R.classify(proj, TEMPLATE_DIR, plugins)} == {"in-sync"}
+
+
+def test_rename_pack_caps_the_leftover_list(tmp_path, monkeypatch):
+    proj = _project(tmp_path)
+    monkeypatch.setattr(A, "LIST_MAX", 2)
+    for i in range(3):
+        (proj / f"note{i}.md").write_text("see ai/spec.md\n", encoding="utf-8")
+    log, _ = A.rename_pack(proj, "aipack")
+    listed = [line for line in log if line.startswith("  ") and not line.startswith("  ...")]
+    assert listed == ["  note0.md", "  note1.md"]           # shallow first
+    more = next(line for line in log if line.startswith("  ... and "))
+    assert f"grep -rlE '(^|[^[:alnum:]_.-])ai/' {proj} --exclude-dir=.git" in more

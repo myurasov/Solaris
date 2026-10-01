@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Rule: Token Economy <!-- omit in toc -->
 
@@ -13,12 +13,12 @@ Governs how much enters the main context and how fast it is re-sent, for all age
 project. Everything read into the main transcript is re-billed on every later round-trip - the
 cheapest token is the one never loaded. Two layers: an **always-on floor** (no quality trade-off
 at any level) and **graded measures** set by the level. Delegation mechanics live in
-`ai/rules/subagents.rule.md`; this rule only sets its bulk-read threshold (measure 9).
+`{{PACK}}/rules/subagents.rule.md`; this rule only sets its bulk-read threshold (measure 9).
 Standalone-first: needs nothing beyond this pack.
 
 ## Level Switch
 
-`"economy.level"` - read `ai/defaults.json` (committed team default), then `ai/.memory/config.json`
+`"economy.level"` - read `{{PACK}}/defaults.json` (committed team default), then `{{PACK}}/.memory/config.json`
 (private per-machine override; wins per key) - `off` / `med` / `full` / `auto`; absent everywhere
 means `med`.
 
@@ -37,8 +37,8 @@ The subagents rule's `auto` posture follows the **resolved** level - the configu
 **Per-request override:** `economy: off|med|full|auto` (alias `token-economy:`) anywhere in a user
 message applies to that request only - acknowledge in one line, no config write. An unrecognized
 value gets a one-line correction. **Config changes only on explicit persistence language**
-("set/remember/from now on"): team-wide -> `ai/defaults.json`, this machine only ->
-`ai/.memory/config.json`. Pacing has its own override (`asap`, below).
+("set/remember/from now on"): team-wide -> `{{PACK}}/defaults.json`, this machine only ->
+`{{PACK}}/.memory/config.json`. Pacing has its own override (`asap`, below).
 
 ## Always-On Floor
 
@@ -47,11 +47,11 @@ Applies at every level, including `off`:
 - **Read budget.** For any file past ~200 lines (source or docs), grep (or use its TOC/index) to
   locate the relevant section, then Read with offset/limit; whole-file reads are for known-small
   files or files whose full content the task genuinely needs. The pack's load-every-turn set
-  (`ai/{{PRIMARY}}.agent.md`, instructions, spec, rules) is standing context - do not re-open those
+  (`{{PACK}}/{{PRIMARY}}.agent.md`, instructions, spec, rules) is standing context - do not re-open those
   files unless editing them.
-- **Unbounded files.** Bounded-by-design files (config, `ai/.memory/context.md` - rewritten in
+- **Unbounded files.** Bounded-by-design files (config, `{{PACK}}/.memory/context.md` - rewritten in
   place) may be read whole. Append-only stores are never read whole: tail-read the latest entries
-  with a negative offset (`ai/.memory/interactions.jsonl`), grep for a known id, or filter through
+  with a negative offset (`{{PACK}}/.memory/interactions.jsonl`), grep for a known id, or filter through
   a tool. A new unbounded store gets its filtering access path decided before anything starts
   reading it.
 - **Batching.** Independent tool calls (no data dependency, no decision between them, no shared
@@ -83,7 +83,7 @@ Applies at every level, including `off`:
 | 6 | Re-fetch discipline | Reuse in-context evidence over re-fetching | Med, plus prefer in-context knowledge for non-decision-critical data (flag staleness) |
 | 7 | Enrichment sources | Skip when the primary material suffices - and say so | Skip by default - and say so |
 | 8 | New-artifact size | Compact: trigger, imperative, one example | Minimal |
-| 9 | Bulk-read delegation threshold (`ai/rules/subagents.rule.md`) | ~20k tokens | ~10k tokens |
+| 9 | Bulk-read delegation threshold (`{{PACK}}/rules/subagents.rule.md`) | ~20k tokens | ~10k tokens |
 | 10 | Round-trip discipline | Batch all independent calls; merge shell steps where safe | A round-trip only when its output gates the next step |
 | 11 | Heavy command output (builds, test runs, imports) | Output expected past ~2k tokens -> redirect to a log, read back a filtered slice (guardrails below). Commands only - NEVER an artifact you are writing | Default for every heavy command; open more of the log on any anomaly |
 | 12 | Subagent return shape | Name the expected shape in every delegated prompt | Med, plus a hard size target ("under N lines"); schema-forced output where the harness supports it |
