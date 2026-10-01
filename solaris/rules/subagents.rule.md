@@ -5,6 +5,7 @@
 - [The Posture](#the-posture)
 - [Task Contract (Every Delegated Prompt)](#task-contract-every-delegated-prompt)
 - [Model Tiering](#model-tiering)
+- [Stopped or Failed Subagents (Always-On)](#stopped-or-failed-subagents-always-on)
 - [What Stays Inline](#what-stays-inline)
 
 What runs outside the main context. Two layers: an always-on **bulk-read floor** keeps oversized
@@ -105,6 +106,27 @@ column:
 | Judgment-heavy (anything acted on directly) | session model, or inline | session model, never below high |
 
 In doubt at `cost`, take the cheaper tier; in doubt at `quality`, the stronger one.
+
+## Stopped or Failed Subagents (Always-On)
+
+A subagent that ends without its deliverable (an API error, a safety-filter stop, a crash, a timeout, a lost session)
+is unfinished work, never a dropped task (owner direction, 2026-09-30):
+
+1. **Salvage first.** List what it wrote and what it left running (files, partial outputs, remote jobs); keep what is
+   valid, and stop or adopt anything still running.
+2. **Recover or re-run.** Finish the remaining steps inline or by script when they are mechanical; otherwise resume it
+   (when the harness can continue the same agent) or launch a fresh one whose brief states what is done and what
+   remains.
+3. **Reword before a retry.** A stop by the API's safety filter ("safeguards flagged this message", for example
+   `[reasoning_extraction]`) is usually a false positive: retry with a reworded, neutral brief. At most two retries
+   per task, never the same prompt in a loop; then finish by script or report the task to the user as unfinished,
+   with what remains.
+4. **Track it to the end.** Every stopped subagent is recovered, re-run, or reported as abandoned with the reason; one
+   left behind silently is a defect (a `self-reflect` item).
+
+Avoiding the false positives: a subagent that analyzes model traces reads them through scripts that print
+aggregates (counts, labels, ids). It never pulls raw model thinking or reasoning text, raw requests or whole
+trajectories into its context, and it describes them in neutral terms.
 
 ## What Stays Inline
 

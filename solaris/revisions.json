@@ -147,8 +147,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/rules/subagents.rule.md": {
-      "rev": 5,
-      "hash": "51bfb21d9a4308cb15b2dfe8dca2cd56e2cdf690f45972ac6b6d0efc8e20d60e",
+      "rev": 6,
+      "hash": "1b16a1709edb50596f97382fae53bf8e50353ac445aa009b9c0f2d14921a68bd",
       "history": [
         {
           "rev": 1,
@@ -173,6 +173,10 @@
         {
           "rev": 5,
           "hash": "51bfb21d9a4308cb15b2dfe8dca2cd56e2cdf690f45972ac6b6d0efc8e20d60e"
+        },
+        {
+          "rev": 6,
+          "hash": "1b16a1709edb50596f97382fae53bf8e50353ac445aa009b9c0f2d14921a68bd"
         }
       ]
     },
@@ -279,8 +283,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/info/model-tiers.md": {
-      "rev": 5,
-      "hash": "b0e54af6145c3fb18e7fe983c86a413207bf9a69de23b16a159cb5f687f0ff13",
+      "rev": 6,
+      "hash": "bb3598cf5eb9fd4d23dfe2460fcf870b94e9ddfdbde1137c338e4478f9bb07de",
       "history": [
         {
           "rev": 1,
@@ -297,6 +301,10 @@
         {
           "rev": 5,
           "hash": "b0e54af6145c3fb18e7fe983c86a413207bf9a69de23b16a159cb5f687f0ff13"
+        },
+        {
+          "rev": 6,
+          "hash": "bb3598cf5eb9fd4d23dfe2460fcf870b94e9ddfdbde1137c338e4478f9bb07de"
         }
       ]
     }
