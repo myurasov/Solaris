@@ -21,9 +21,9 @@ __pycache__/
 .mcp.json
 .cursor/mcp.json
 
-# User content (per spec)
-projects/
-tasks/
+# User content (per spec); anchored, so solaris/templates/projects/ stays tracked
+/projects/
+/tasks/
 solaris/spec/references/
 
 # Framework-level secrets + runtime log
@@ -40,6 +40,7 @@ solaris/spec/references/
 # gitignored .stignore holds optional device-only lines first, then `#include .stglobalignore`.
 # Conflict copies never belong in git (their names carry a device id).
 .stfolder/
+.stversions/
 .stignore
 *.sync-conflict-*
 
