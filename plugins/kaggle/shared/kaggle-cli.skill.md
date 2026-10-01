@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 6_
+_Rev. 7_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -19,7 +19,8 @@ _Rev. 6_
 Anything that touches Kaggle: finding competitions and reading their pages, downloading data,
 submitting and reading scores, running notebooks (Kaggle calls them kernels) on Kaggle GPUs,
 datasets, models, discussions, benchmarks, GPU quota. The Kaggle CLI (Kaggle's official
-command-line client) is the only channel - this plugin does no browser automation (the one
+command-line client) is the channel for commands and writes, and the plugin's fixed `--sdk`
+reads cover what the CLI drops, read-only. This plugin does no browser automation (the one
 fallback, a forum listing saved from a browser page where the CLI cannot list a competition's
 discussions, is optional and read-only: the `kaggle-discussions` skill). For how to run a
 competition (setup, validation, daily submissions, agent organization), follow the
@@ -55,6 +56,10 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
   triggers a clean reinstall on the next call; parallel first calls wait for a single install;
   deleting `.venv-kaggle/` is a safe reset. Never `pip install kaggle`, `uv tool install
   kaggle`, or call a bare `kaggle` from PATH.
+- **SDK reads.** `<gateway> --sdk <read> <args>` runs one of the plugin's fixed, read-only SDK
+  reads (`tools/kaggle_sdk.py`: `topic <id>`, `notebooks <slug>`, `account`) with the same pins
+  and sign-in as the CLI. The plugin's tools use it, and an agent may run a read directly (say,
+  `--sdk topic <id>` to read one topic in full). No writes, and no SDK code of your own.
 - **Output.** Gateway notes go to stderr; stdout is the CLI's own output, and it can carry
   notices before the data: `Next Page Token = ...` on paginated commands, `Using competition:`,
   and an out-of-date warning once Kaggle ships past the pin. To parse, use `--format json` and
@@ -113,8 +118,8 @@ Corrections to it, verified against 2.2.4:
   recent --format json -p <N>` (20 a page; `forums topics list <slug>` answers 403, since it
   takes a global forum's name). `forums topics show <id> --format json` has every comment but
   not the opening post; the table view (no `--format`) has the opening post and the reply tree
-  but cuts each comment to 200 characters. `tools/kaggle_forum.py` does all of this (the
-  `kaggle-discussions` skill).
+  but cuts each comment to 200 characters; `<gateway> --sdk topic <id>` reads one topic in full.
+  `tools/kaggle_forum.py` does all of this (the `kaggle-discussions` skill).
 - **`kernels output` trusts server file names:** 2.2.4 writes each file to `<-p dir>/<name the
   server sent>` without sanitizing it, so a crafted name can land outside `-p` (fixed upstream
   after 2.2.4). For someone else's kernel, list the files with `kernels files` first and fetch
@@ -128,9 +133,10 @@ Corrections to it, verified against 2.2.4:
   wanted file's name minus its last character (the page starts after that name), re-encode,
   and pass it as `--page-token` with the anchored `--file-pattern`.
 - **`kernels list` has no score field** in any format: `--sort-by scoreDescending` gives the
-  order only, so read scores from the notebook's text. **`kernels logs <owner>/<kernel>`** also
-  works on other users' public kernels and returns the last run's timed stdout: use it for
-  runtimes and stage timings.
+  order only. `tools/kaggle_lb.py notebooks <slug>` reads the real public scores (through the
+  SDK); a score found only in a notebook's title or text stays marked claimed.
+  **`kernels logs <owner>/<kernel>`** also works on other users' public kernels and returns the
+  last run's timed stdout: use it for runtimes and stage timings.
 
 ## Solaris Conventions
 

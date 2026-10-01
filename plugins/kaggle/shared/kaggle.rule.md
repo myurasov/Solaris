@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
@@ -8,6 +8,8 @@ when no skill was triggered. The how-to lives in `kaggle-cli.skill.md`.
 - **Gateway only.** Every Kaggle command runs through this plugin's `tools/kaggle.py`, started from
   the project root or task folder - never a bare `kaggle`, `pip install kaggle`, or
   `uv tool install kaggle`. The gateway pins the CLI and keeps it inside the project or task.
+  The CLI serves commands and every write; the gateway's `--sdk` reads (`topic`, `notebooks`,
+  `account`) are the only SDK use, and are read-only. Agents never write their own SDK code.
 - **Writes to Kaggle are confirmed first.** Anything that creates, changes, runs, launches,
   publishes, uploads, deletes, or mints a credential on Kaggle waits for the owner's go-ahead
   on the exact command. That includes `competitions submit` (it also spends one of the day's

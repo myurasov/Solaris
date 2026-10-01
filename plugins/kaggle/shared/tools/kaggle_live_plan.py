@@ -376,7 +376,8 @@ def build(plan, now, ctx):
     parts = [table(["Metric", "Value", "Note"], head_rows, [18, 14, 68], "headline", lft=(0, 2))]
 
     slots = plan.get("slots") or []
-    s = [f'<p>{rich(plan.get("day"))}. Submitted at the reset, in this order, a few minutes apart:</p>' if slots else
+    lead = rich(plan.get("day"))
+    s = [f'<p>{lead + ". " if lead else ""}Slots in submission order:</p>' if slots else
          "<p>No slots planned yet.</p>"]
     if slots:
         s.append(table(["#", "Candidate", "Status", "Prediction", "Rule"],
