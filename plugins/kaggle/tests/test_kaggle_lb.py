@@ -9,6 +9,7 @@ import gzip
 import io
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import textwrap
@@ -554,6 +555,141 @@ class ImportTests(Tmp):
         self.assertEqual([(r["team_id"], r["rank"]) for r in snap["rows"]], [(101, 1), (102, 2), (900, 3), (103, 4)])
         self.assertNotIn("user", json.dumps(snap["rows"]))
         self.assertEqual(snap["source_file"], f"{SLUG}-publicleaderboard-2026-09-27T22:54:20.csv")
+
+
+def nb(ref, score, votes=3, last="2026-09-27T08:00:00"):
+    return {"ref": ref, "title": f"Notebook {ref}", "lastRunTime": last, "votes": votes, "score": score}
+
+
+def nb_read(notebooks, fetched_at="2026-09-28T10:00:00Z", complete=True, note=None):
+    # what `kaggle.py --sdk notebooks <slug>` prints
+    return json.dumps({"competition": SLUG, "fetched_at": fetched_at, "notebooks": notebooks,
+                       "complete": complete, "note": note}, indent=2) + "\n"
+
+
+class FakeSdk:
+    """Stands in for `python3 kaggle.py --sdk notebooks ...`: answers each call with the next (exit code, stdout)."""
+
+    def __init__(self, *replies):
+        self.replies, self.calls = list(replies), []
+
+    def __call__(self, cmd, cwd):
+        self.calls.append(cmd)
+        return self.replies.pop(0)
+
+
+class NotebooksTests(Tmp):
+    def setUp(self):
+        super().setUp()
+        # an executable stand-in for kaggle.py: prints and exits as reply.json says
+        self.reply = self.tmp / "reply.json"
+        self.gateway.write_text(textwrap.dedent(f"""\
+            import json, sys
+            r = json.load(open({str(self.reply)!r}))
+            sys.stderr.write(r["err"])
+            sys.stdout.write(r["out"])
+            sys.exit(r["code"])
+        """))
+
+    def answer(self, out="", err="", code=0):
+        self.reply.write_text(json.dumps({"out": out, "err": err, "code": code}))
+
+    def take(self, *replies, **kw):
+        fake = FakeSdk(*replies)
+        kw = {"gateway": self.gateway, "directory": self.base, "root": self.tmp, "run": fake, **kw}
+        return (*L.take_notebooks(SLUG, **kw), fake)
+
+    def command(self, read):
+        # the command through the stand-in gateway, run the way the tool runs the real one
+        self.answer(read)
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            code = L.main(["notebooks", SLUG, "--dir", str(self.base), "--gateway", str(self.gateway)])
+        return code, buf.getvalue().splitlines()
+
+    def test_a_read_is_saved_as_gzip_json_named_by_its_time(self):
+        path, doc, prev, fake = self.take((0, nb_read([nb("ann/fast-start", 0.71), nb("bo/eda", None)])),
+                                          max_n=20)
+        self.assertEqual(path, self.d / "notebooks" / "20260928T100000Z.json.gz")
+        self.assertEqual(L.read_snapshot(path), doc)
+        self.assertEqual([n["ref"] for n in doc["notebooks"]], ["ann/fast-start", "bo/eda"])
+        self.assertIsNone(prev)
+        self.assertEqual(fake.calls, [[sys.executable, str(self.gateway.resolve()), "--sdk", "notebooks", SLUG,
+                                       "--max", "20"]])
+        # a read in the same second gets a file of its own, and the first is its previous list
+        path2, _, prev, fake = self.take((0, nb_read([nb("ann/fast-start", 0.71)])))
+        self.assertEqual(path2.name, "20260928T100000Z-2.json.gz")
+        self.assertEqual(prev, doc)
+        self.assertNotIn("--max", fake.calls[0])
+
+    def test_the_store_sits_beside_the_leaderboard(self):
+        proj = self.tmp / "proj"
+        self.assertEqual(L.store_dir(SLUG, root=proj, kind="notebooks"),
+                         proj / "__data" / "kaggle" / SLUG / "notebooks")
+        self.assertEqual(L.store_dir(SLUG, directory=str(self.base), kind="notebooks"), self.d / "notebooks")
+
+    def test_the_table_marks_new_notebooks_and_score_changes_since_the_previous_list(self):
+        code, lines = self.command(nb_read([nb("ann/fast-start", 0.71, votes=40), nb("bo/eda", None, votes=None),
+                                            nb("cy/blend", 0.65)]))
+        self.assertEqual(code, 0)
+        self.assertIn(f"{SLUG}: 3 notebooks, 2 with a public score (complete)", lines[0])
+        self.assertIn("no earlier list", lines[1])
+        self.assertEqual([line.split() for line in lines[3:]],
+                         [["0.71", "ann/fast-start", "40", "2026-09-27", "08:00"],
+                          ["bo/eda", "2026-09-27", "08:00"], ["0.65", "cy/blend", "3", "2026-09-27", "08:00"]])
+        _, lines = self.command(nb_read([nb("dee/new-idea", 0.74, last="2026-09-28T09:30:00.123000"),
+                                         nb("ann/fast-start", 0.72, votes=41), nb("cy/blend", 0.65),
+                                         nb("bo/eda", 0.6)], fetched_at="2026-09-28T11:00:00Z"))
+        self.assertIn(": 1 new, 1 with a changed score", lines[1])
+        self.assertEqual(lines[2].split(), ["score", "ref", "votes", "last", "run", "(UTC)", "change"])
+        # Kaggle's order is kept; a score that was null is no change
+        self.assertEqual([line.split() for line in lines[3:]],
+                         [["0.74", "dee/new-idea", "3", "2026-09-28", "09:30", "new"],
+                          ["0.72", "ann/fast-start", "41", "2026-09-27", "08:00", "0.71", "->", "0.72"],
+                          ["0.65", "cy/blend", "3", "2026-09-27", "08:00"],
+                          ["0.6", "bo/eda", "3", "2026-09-27", "08:00"]])
+
+    def test_a_null_score_is_blank_and_never_a_change(self):
+        self.command(nb_read([nb("ann/fast-start", 0.71), nb("bo/eda", None)]))
+        _, lines = self.command(nb_read([nb("ann/fast-start", None), nb("bo/eda", None)],
+                                        fetched_at="2026-09-28T11:00:00Z"))
+        self.assertIn("2 notebooks, 0 with a public score", lines[0])
+        self.assertIn(": 0 new, 0 with a changed score", lines[1])
+        for line in lines[3:]:
+            self.assertTrue(line.startswith(" "), line)
+            self.assertEqual(len(line.split()), 4, line)
+        latest = sorted((self.d / "notebooks").glob("*.json.gz"))[-1]
+        self.assertEqual([n["score"] for n in L.read_snapshot(latest)["notebooks"]], [None, None])
+
+    def test_an_incomplete_read_is_saved_and_flagged(self):
+        code, lines = self.command(nb_read([nb("ann/fast-start", 0.71)], complete=False,
+                                           note="the list stopped at --max 1"))
+        self.assertEqual(code, 0)
+        self.assertIn("(incomplete: the list stopped at --max 1)", lines[0])
+        (path,) = (self.d / "notebooks").glob("*.json.gz")
+        self.assertEqual(path.name, "20260928T100000Z-incomplete.json.gz")
+        saved = L.read_snapshot(path)
+        self.assertEqual((saved["complete"], saved["note"]), (False, "the list stopped at --max 1"))
+
+    def test_a_failed_read_saves_nothing_and_exits_with_the_error_line(self):
+        self.answer(err="kaggle_sdk: 403 Forbidden: Permission denied\n", code=1)
+        p = subprocess.run([sys.executable, L.__file__, "notebooks", SLUG, "--dir", str(self.base),
+                            "--gateway", str(self.gateway)], capture_output=True, text=True, cwd=self.tmp)
+        self.assertEqual((p.returncode, p.stdout), (1, ""))
+        self.assertEqual(p.stderr.splitlines(), ["kaggle_sdk: 403 Forbidden: Permission denied",
+                                                 "kaggle_lb: notebooks read failed (exit 1); nothing saved"])
+        self.assertFalse(self.base.exists())
+
+    def test_output_off_the_contract_saves_nothing(self):
+        good = nb_read([nb("ann/fast-start", 0.71)])
+        for out in ("", "not json", "[]", good.replace(SLUG, "other-competition"),
+                    nb_read([nb("ann/fast-start", "0.71")]), nb_read([nb("no-owner", 0.71)])):
+            with self.assertRaises(L.LeaderboardError, msg=out[:60]):
+                self.take((0, out))
+        self.assertFalse(self.base.exists())
+        # fields beyond the contract are not kept
+        path, *_ = self.take((0, nb_read([dict(nb("ann/fast-start", 0.71), authorName="Someone")])))
+        self.assertNotIn("authorName", json.dumps(L.read_snapshot(path)))
 
 
 if __name__ == "__main__":

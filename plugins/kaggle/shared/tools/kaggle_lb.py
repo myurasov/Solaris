@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle_lb: leaderboard history for any Kaggle competition.
 
@@ -15,13 +15,21 @@ name, score and submission date - no profile lookups, nothing else scraped.
     python3 <plugin-dir>/tools/kaggle_lb.py summary <slug> [--top N]
     python3 <plugin-dir>/tools/kaggle_lb.py record-raw <slug> --file <path>
     python3 <plugin-dir>/tools/kaggle_lb.py import <slug> <file> [<file> ...]
+    python3 <plugin-dir>/tools/kaggle_lb.py notebooks <slug> [--max N]
 
-Run it from the project root or task folder. Only `snapshot` and `show` call
-Kaggle, read-only, through the gateway (--gateway; default the kaggle.py beside
-this file); the other commands read saved snapshots. Snapshots live in
-<context>/__data/kaggle/<slug>/leaderboard/ - one gzip JSON file each plus
-index.jsonl - or in <base>/<slug>/ with --dir <base> or KAGGLE_LB_DIR=<base>.
-They are never overwritten; an incomplete read is kept, flagged "partial".
+Run it from the project root or task folder. Only `snapshot`, `show` and
+`notebooks` call Kaggle, read-only, through the gateway (--gateway; default the
+kaggle.py beside this file); the other commands read saved snapshots. Snapshots
+live in <context>/__data/kaggle/<slug>/leaderboard/ - one gzip JSON file each
+plus index.jsonl - or in <base>/<slug>/ with --dir <base> or
+KAGGLE_LB_DIR=<base>. They are never overwritten; an incomplete read is kept,
+flagged "partial". `notebooks` saves the competition's public notebooks the
+same way, from the gateway's `--sdk notebooks` read: per notebook its ref
+(owner/slug), title, last run time, votes and best public score (null when
+unknown), in Kaggle's score order. Each list is one gzip JSON file in the
+notebooks/ folder beside leaderboard/ (<base>/<slug>/notebooks/ with --dir),
+flagged "incomplete" when the read says so; the command prints the list and
+marks new notebooks and score changes since the previous list.
 tee_leaderboard() is the gateway's hook: it passes a raw `competitions
 leaderboard` call through unchanged and saves the read - what a --show printed,
 and the zip a --download wrote (-p <folder>, $KAGGLE_PATH, or the working
@@ -79,6 +87,8 @@ FIELDS = {
     "teamid": "team_id", "teamname": "team_name", "score": "score",
     "submissiondate": "submission_date", "lastsubmissiondate": "submission_date",
 }
+# stored fields of one notebook in the gateway's --sdk notebooks read; others are dropped
+NOTEBOOK_FIELDS = ("ref", "title", "lastRunTime", "votes", "score")
 
 
 class LeaderboardError(Exception):
@@ -141,16 +151,18 @@ def find_root(start=None):
     return None
 
 
-def store_dir(slug, directory=None, root=None):
-    """The folder holding this competition's snapshots."""
+def store_dir(slug, directory=None, root=None, kind="leaderboard"):
+    """The folder holding this competition's saved reads of one kind: leaderboard or notebooks."""
     check_slug(slug)
     base = directory or os.environ.get(ENV_DIR)
     if base:
-        return Path(base).expanduser() / slug
+        # the board's snapshots sit in <base>/<slug>/ itself
+        d = Path(base).expanduser() / slug
+        return d if kind == "leaderboard" else d / kind
     root = root or find_root()
     if root is None:
         raise LeaderboardError("no project or task folder here - run from one, or pass --dir / set KAGGLE_LB_DIR")
-    return Path(root) / "__data" / "kaggle" / slug / "leaderboard"
+    return Path(root) / "__data" / "kaggle" / slug / kind
 
 
 @contextmanager
@@ -182,27 +194,31 @@ def _append_index(d, entry):
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 
+def _write_new(d, stem, obj):
+    # gzip JSON as <stem>.json.gz, else <stem>-2.json.gz and on: never overwriting; called holding the lock
+    data = gzip.compress(json.dumps(obj, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), mtime=0)
+    n = 1
+    while True:
+        path = d / (f"{stem}.json.gz" if n == 1 else f"{stem}-{n}.json.gz")
+        try:
+            with open(path, "xb") as f:
+                f.write(data)
+            return path
+        except FileExistsError:
+            n += 1
+
+
 def save_snapshot(directory, snap):
     """Write one snapshot under a new file name (never overwriting) and add it to the index."""
     d = Path(directory)
     d.mkdir(parents=True, exist_ok=True)
-    data = gzip.compress(json.dumps(snap, ensure_ascii=False, separators=(",", ":")).encode("utf-8"), mtime=0)
     tags = [snap["fetched_at"].replace("-", "").replace(":", "")]
     if snap["imported"]:
         tags.append("imported")
     if snap["partial"]:
         tags.append("partial")
-    stem = "-".join(tags)
     with locked(d):
-        n = 1
-        while True:
-            path = d / (f"{stem}.json.gz" if n == 1 else f"{stem}-{n}.json.gz")
-            try:
-                with open(path, "xb") as f:
-                    f.write(data)
-                break
-            except FileExistsError:
-                n += 1
+        path = _write_new(d, "-".join(tags), snap)
         _append_index(d, index_entry(path.name, snap))
     return path
 
@@ -381,15 +397,98 @@ def take_snapshot(slug, *, gateway=None, directory=None, root=None, page_size=PA
     check_slug(slug)
     root = Path(root) if root else find_root()
     d = store_dir(slug, directory, root)
-    gw = Path(gateway).resolve() if gateway else Path(__file__).resolve().parent / "kaggle.py"
-    if not gw.is_file():
-        raise LeaderboardError(f"gateway not found: {gw} (pass --gateway)")
+    gw = find_gateway(gateway)
     t0, fetched_at = time.time(), utc_now()
     pages, partial, note = fetch_board(slug, gw, root or Path.cwd(), page_size=page_size, max_pages=max_pages,
                                        run=run, pause=pause)
     snap = build_snapshot(slug, pages, fetched_at=fetched_at, source="snapshot", fmt="json", partial=partial,
                           note=note, seconds=round(time.time() - t0, 1))
     return save_snapshot(d, snap), snap
+
+
+def find_gateway(gateway=None):
+    gw = Path(gateway).resolve() if gateway else Path(__file__).resolve().parent / "kaggle.py"
+    if not gw.is_file():
+        raise LeaderboardError(f"gateway not found: {gw} (pass --gateway)")
+    return gw
+
+
+def _known(v, *types):
+    # null, or one of types (a bool counts as no number)
+    return v is None or (isinstance(v, types) and not isinstance(v, bool))
+
+
+def check_notebooks(slug, doc):
+    """A --sdk notebooks read checked against its contract, each notebook cut down to NOTEBOOK_FIELDS."""
+    try:
+        when(doc["fetched_at"])
+        nbs = [{k: n.get(k) for k in NOTEBOOK_FIELDS} for n in doc["notebooks"]]
+        good = (doc["competition"] == slug and isinstance(doc["complete"], bool) and _known(doc.get("note"), str)
+                and all(isinstance(n["ref"], str) and n["ref"].count("/") == 1 and _known(n["title"], str)
+                        and _known(n["lastRunTime"], str) and _known(n["votes"], int)
+                        and _known(n["score"], int, float) for n in nbs))
+    except (KeyError, TypeError, ValueError, AttributeError):
+        good = False
+    if not good:
+        raise LeaderboardError("notebooks read failed: the gateway's output is not a --sdk notebooks read; "
+                               "nothing saved")
+    return {"competition": slug, "fetched_at": doc["fetched_at"], "notebooks": nbs, "complete": doc["complete"],
+            "note": doc.get("note")}
+
+
+def fetch_notebooks(slug, gateway, root, *, max_n=None, run=_run):
+    """The competition's public notebooks with their best public scores, through the gateway's --sdk read."""
+    cmd = [sys.executable, str(gateway), "--sdk", "notebooks", slug]
+    if max_n is not None:
+        cmd += ["--max", str(max_n)]
+    # stderr passes through: on a failure it carries the read's error line
+    code, out = run(cmd, root)
+    if code != 0:
+        tail = out.strip()[-400:]
+        raise LeaderboardError(f"notebooks read failed (exit {code}{': ' + tail if tail else ''}); nothing saved")
+    try:
+        doc = json.loads(out)
+    except ValueError:
+        doc = None
+    return check_notebooks(slug, doc)
+
+
+def _last_list(slug, d):
+    # the newest readable notebooks list in d, or None: file names start with the UTC time
+    for p in sorted(d.glob("*.json.gz"), reverse=True):
+        try:
+            return check_notebooks(slug, read_snapshot(p))
+        except (OSError, ValueError, EOFError, LeaderboardError):
+            continue
+    return None
+
+
+def take_notebooks(slug, *, gateway=None, directory=None, root=None, max_n=None, run=_run):
+    """Read the public notebooks and save the list; returns (path, list, the previous list or None)."""
+    check_slug(slug)
+    root = Path(root) if root else find_root()
+    d = store_dir(slug, directory, root, kind="notebooks")
+    doc = fetch_notebooks(slug, find_gateway(gateway), root or Path.cwd(), max_n=max_n, run=run)
+    d.mkdir(parents=True, exist_ok=True)
+    stem = doc["fetched_at"].replace("-", "").replace(":", "") + ("" if doc["complete"] else "-incomplete")
+    with locked(d):
+        prev = _last_list(slug, d)
+        path = _write_new(d, stem, doc)
+    return path, doc, prev
+
+
+def notebook_changes(prev, doc):
+    """{lowercased ref: mark}: "new" when the previous list lacks it, else "old -> new" for a changed score."""
+    was = {n["ref"].lower(): n["score"] for n in prev["notebooks"]}
+    marks = {}
+    for n in doc["notebooks"]:
+        k = n["ref"].lower()
+        if k not in was:
+            marks[k] = "new"
+        # null is unknown: no change is marked from or to it
+        elif None not in (was[k], n["score"]) and was[k] != n["score"]:
+            marks[k] = f"{was[k]} -> {n['score']}"
+    return marks
 
 
 # ---- saving reads made elsewhere
@@ -903,16 +1002,41 @@ def cmd_import(a):
     return 0
 
 
+def cmd_notebooks(a):
+    path, doc, prev = take_notebooks(a.slug, gateway=a.gateway, directory=a.dir, max_n=a.max)
+    nbs = doc["notebooks"]
+    state = "complete" if doc["complete"] else "incomplete" + (f": {doc['note']}" if doc["note"] else "")
+    print(f"{a.slug}: {len(nbs)} notebooks, {sum(n['score'] is not None for n in nbs)} with a public score "
+          f"({state}), {local(doc['fetched_at'])}; saved {_rel(path)}")
+    marks = notebook_changes(prev, doc) if prev else {}
+    if prev:
+        new = sum(m == "new" for m in marks.values())
+        print(f"since {local(prev['fetched_at'])}: {new} new, {len(marks) - new} with a changed score")
+    else:
+        print("no earlier list: changes show from the next read")
+    # a blank score is unknown: none yet, or one the read could not get
+    scores = ["" if n["score"] is None else str(n["score"]) for n in nbs]
+    sw, rw = max([5, *map(len, scores)]), max([3, *(len(n["ref"]) for n in nbs)])
+    print(f"{'score':<{sw}}  {'ref':<{rw}}  {'votes':>5}  {'last run (UTC)':<16}  change")
+    for s, n in zip(scores, nbs):
+        votes = "" if n["votes"] is None else n["votes"]
+        print(f"{s:<{sw}}  {n['ref']:<{rw}}  {votes:>5}  {_date(n['lastRunTime']):<16}  "
+              f"{marks.get(n['ref'].lower(), '')}".rstrip())
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="kaggle_lb.py", description="Leaderboard history for a Kaggle "
                                 "competition: every read is saved as a snapshot.")
     sub = p.add_subparsers(dest="cmd", required=True)
     common = argparse.ArgumentParser(add_help=False)
     common.add_argument("slug", help="competition slug")
-    common.add_argument("--dir", help="store base: snapshots go to <dir>/<slug>/ (also KAGGLE_LB_DIR); "
-                        "default <project>/__data/kaggle/<slug>/leaderboard/")
-    fetch = argparse.ArgumentParser(add_help=False)
-    fetch.add_argument("--gateway", help="the kaggle.py gateway to call (default: the one beside this file)")
+    common.add_argument("--dir", help="store base: snapshots go to <dir>/<slug>/, notebook lists to "
+                        "<dir>/<slug>/notebooks/ (also KAGGLE_LB_DIR); default "
+                        "<project>/__data/kaggle/<slug>/leaderboard/ and .../notebooks/")
+    gw = argparse.ArgumentParser(add_help=False)
+    gw.add_argument("--gateway", help="the kaggle.py gateway to call (default: the one beside this file)")
+    fetch = argparse.ArgumentParser(add_help=False, parents=[gw])
     fetch.add_argument("--page-size", type=int, default=PAGE_SIZE)
     fetch.add_argument("--max-pages", type=int, default=MAX_PAGES)
     since = argparse.ArgumentParser(add_help=False)
@@ -934,10 +1058,13 @@ def main(argv=None):
     s = sub.add_parser("import", parents=[common], help="backfill earlier dumps as imported snapshots")
     s.add_argument("files", nargs="+", help="downloaded board .zip/.csv files, or saved CLI pages in page order")
     s.add_argument("--fetched-at", type=iso_arg, help="when they were read, ISO 8601 (default from the files)")
+    s = sub.add_parser("notebooks", parents=[common, gw], help="save the public notebooks with their public "
+                       "scores (in <slug>/notebooks/), then show them and what changed")
+    s.add_argument("--max", type=int, help="notebooks to list in Kaggle's score order, 1..1000 (default 100)")
     a = p.parse_args(argv)
     commands = {"snapshot": cmd_snapshot, "show": cmd_show, "history": cmd_history, "movers": cmd_movers,
                 "new-teams": cmd_new_teams, "summary": cmd_summary, "record-raw": cmd_record_raw,
-                "import": cmd_import}
+                "import": cmd_import, "notebooks": cmd_notebooks}
     try:
         res = commands[a.cmd](a)
     except LeaderboardError as e:
