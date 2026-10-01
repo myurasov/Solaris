@@ -141,7 +141,8 @@ def test_render_part4_inlines_yagni_rule_whole():
         assert ("----- " + rel + " -----") not in out
 
 
-def test_main_part4(capsys):
+def test_main_part4(capsys, monkeypatch):
+    monkeypatch.setattr(R, "heal_sync_conflicts", lambda: "")  # never sweep the real tree in tests
     assert R.main(["--part", "4"]) == 0
     assert "READ-FIRST, PART 4" in capsys.readouterr().out
 
@@ -154,51 +155,178 @@ def test_check_covers_all_parts(capsys):
     assert "OVER BUDGET" not in out
 
 
+# Dummy Syncthing device IDs only: never a real device's ID in this public repo.
+_CP = "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl"
+
+
+def _memory(root, canonical, copy, rel=".memory"):
+    """A memory dir under ``root`` with a canonical log (None: missing) and one conflict copy."""
+    mem = root / rel
+    mem.mkdir(parents=True)
+    if canonical is not None:
+        (mem / "interactions.jsonl").write_bytes(canonical)
+    (mem / _CP).write_bytes(copy)
+    return mem
+
+
 def test_canonical_conflict_target():
     p = Path("/x/.memory/interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl")
     assert R.canonical_conflict_target(p) == Path("/x/.memory/interactions.jsonl")
-    p = Path("/x/.memory/instructions.sync-conflict-20260930-151157-AAAAAAA.md")
+    p = Path("/x/.memory/instructions.sync-conflict-20260930-151157-BBBBBBB.md")
     assert R.canonical_conflict_target(p) == Path("/x/.memory/instructions.md")
     assert R.canonical_conflict_target(Path("/x/.memory/interactions.jsonl")) is None
 
 
 def test_heal_sync_conflicts_unions_jsonl_and_leaves_other(tmp_path):
-    mem = tmp_path / ".memory"
-    mem.mkdir()
-    (mem / "interactions.jsonl").write_text('{"ts": "a"}\n{"ts": "b"}\n', encoding="utf-8")
-    (mem / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").write_text(
-        '{"ts": "b"}\n{"ts": "c"}\n', encoding="utf-8"
-    )
+    mem = _memory(tmp_path, b'{"ts": "a"}\n{"ts": "b"}\n', b'{"ts": "b"}\n{"ts": "c"}\n')
+    (mem / "interactions.jsonl").chmod(0o644)
     (mem / "instructions.md").write_text("main\n", encoding="utf-8")
-    leftover = mem / "instructions.sync-conflict-20260930-151157-AAAAAAA.md"
+    leftover = mem / "instructions.sync-conflict-20260930-151157-BBBBBBB.md"
     leftover.write_text("other\n", encoding="utf-8")
     # A tree that must not be walked:
     bulky = tmp_path / "projects" / "my" / "kaggle" / "__out"
     bulky.mkdir(parents=True)
-    (bulky / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").write_text(
-        '{"ts": "nope"}\n', encoding="utf-8"
-    )
+    (bulky / _CP).write_text('{"ts": "nope"}\n', encoding="utf-8")
 
     note = R.heal_sync_conflicts(tmp_path)
-    body = (mem / "interactions.jsonl").read_text(encoding="utf-8")
-    assert '{"ts": "a"}' in body and '{"ts": "c"}' in body
-    assert body.count("\n") == 3
-    assert not (mem / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").exists()
+    assert (mem / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "b"}\n{"ts": "c"}\n'
+    assert (mem / "interactions.jsonl").stat().st_mode & 0o777 == 0o644  # appended in place
+    assert not (mem / _CP).exists()
     assert leftover.exists()
-    assert "unmerged" in note
-    assert "instructions.sync-conflict" in note
-    assert (bulky / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").exists()
+    assert note == ("1 Syncthing conflict copy left in memory folders, review before deleting: "
+                    ".memory/instructions.sync-conflict-20260930-151157-BBBBBBB.md")
+    assert (bulky / _CP).exists()
 
 
 def test_heal_sync_conflicts_project_memory(tmp_path):
-    mem = tmp_path / "projects" / "my" / "demo" / "ai" / ".memory"
-    mem.mkdir(parents=True)
-    (mem / "interactions.jsonl").write_text('{"ts": "p1"}\n', encoding="utf-8")
-    (mem / "interactions.sync-conflict-20260928-224430-BBBBBBB.jsonl").write_text(
-        '{"ts": "p2"}\n', encoding="utf-8"
-    )
+    mem = _memory(tmp_path, b'{"ts": "p1"}\n', b'{"ts": "p2"}\n', "projects/my/demo/ai/.memory")
+    (mem / "context.sync-conflict-20260928-224430-BBBBBBB.md").write_text("x\n", encoding="utf-8")
     note = R.heal_sync_conflicts(tmp_path)
-    body = (mem / "interactions.jsonl").read_text(encoding="utf-8")
-    assert '{"ts": "p1"}' in body and '{"ts": "p2"}' in body
-    assert "ai/.memory/interactions.jsonl" in note
-    assert not (mem / "interactions.sync-conflict-20260928-224430-BBBBBBB.jsonl").exists()
+    assert (mem / "interactions.jsonl").read_bytes() == b'{"ts": "p1"}\n{"ts": "p2"}\n'
+    assert not (mem / _CP).exists()
+    # A merged copy is not reported; the other leftover counts once, with its path.
+    assert note.startswith("1 Syncthing conflict copy left") and "ai/.memory/context.sync" in note
+
+
+def test_heal_covers_renamed_and_embedded_packs_but_not_data(tmp_path):
+    demo = tmp_path / "projects" / "my" / "demo"
+    swept = ["aipack/.memory", "repo/ai/.memory"]
+    skipped = ["__data/.memory", "__out/ai/.memory"]
+    for rel in swept + skipped:
+        _memory(demo, b'{"ts": "a"}\n', b'{"ts": "loser"}\n', rel)
+    assert R.heal_sync_conflicts(tmp_path) == ""
+    for rel in swept:
+        assert (demo / rel / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "loser"}\n'
+        assert not (demo / rel / _CP).exists()
+    for rel in skipped:
+        assert (demo / rel / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n'
+        assert (demo / rel / _CP).exists()
+
+
+def test_heal_merges_bytes_split_on_newline_only(tmp_path):
+    # A non-UTF-8 byte and raw U+2028/U+2029/U+0085 inside JSON strings must survive byte for byte;
+    # str.splitlines would cut those entries apart and dedup would then join two of them.
+    base = ('{"p": "x\u2028", "o": "same"}\n{"p": "y\u2029\u0085", "o": "same"}\n'.encode("utf-8")
+            + b'{"p": "caf\xe9"}\n')
+    mem = _memory(tmp_path, base, b'{"p": "caf\xe9"}\n{"ts": "loser"}\n')
+    R.heal_sync_conflicts(tmp_path)
+    assert (mem / "interactions.jsonl").read_bytes() == base + b'{"ts": "loser"}\n'
+    assert not (mem / _CP).exists()
+
+
+def test_heal_keeps_copies_when_a_read_fails(tmp_path, monkeypatch):
+    # Missing canonical (Syncthing between its renames): nothing is created and the copy stays.
+    mem = _memory(tmp_path, None, b'{"ts": "loser"}\n')
+    assert R.heal_sync_conflicts(tmp_path).startswith("1 Syncthing conflict copy left")
+    assert not (mem / "interactions.jsonl").exists() and (mem / _CP).exists()
+    # Unreadable copy: the canonical is untouched and the copy stays.
+    (mem / "interactions.jsonl").write_bytes(b'{"ts": "a"}\n')
+    real = Path.read_bytes
+
+    def deny(self):
+        if self.name == _CP:
+            raise PermissionError(self)
+        return real(self)
+
+    monkeypatch.setattr(Path, "read_bytes", deny)
+    R.heal_sync_conflicts(tmp_path)
+    assert real(mem / "interactions.jsonl") == b'{"ts": "a"}\n' and (mem / _CP).exists()
+
+
+def test_heal_keeps_an_append_made_during_the_merge(tmp_path, monkeypatch):
+    from solaris.tools import log_interaction as L
+
+    mem = _memory(tmp_path, b'{"ts": "a"}\n', b'{"ts": "loser"}\n')
+    canon = mem / "interactions.jsonl"
+    real = Path.read_bytes
+
+    def racing(self):
+        out = real(self)
+        if self == canon and b"during" not in out:
+            L.append(canon, {"ts": "during"})  # another session logs right after the sweep's read
+        return out
+
+    monkeypatch.setattr(Path, "read_bytes", racing)
+    R.heal_sync_conflicts(tmp_path)
+    assert real(canon) == b'{"ts": "a"}\n{"ts": "during"}\n{"ts": "loser"}\n'
+    assert not (mem / _CP).exists()
+
+
+def test_heal_skips_when_busy_mid_line_or_without_fcntl(tmp_path, monkeypatch):
+    mem = _memory(tmp_path, b'{"ts": "a"}\n', b'{"ts": "loser"}\n')
+    canon = mem / "interactions.jsonl"
+    with open(canon, "ab") as held:
+        R.fcntl.flock(held.fileno(), R.fcntl.LOCK_EX)  # another session's sweep holds the lock
+        R.heal_sync_conflicts(tmp_path)
+    assert canon.read_bytes() == b'{"ts": "a"}\n' and (mem / _CP).exists()
+    # No trailing newline: a writer may be mid-line, so the group waits for the next session start.
+    canon.write_bytes(b'{"ts": "a"}\n{"ts": "par')
+    R.heal_sync_conflicts(tmp_path)
+    assert canon.read_bytes() == b'{"ts": "a"}\n{"ts": "par' and (mem / _CP).exists()
+    with open(canon, "ab") as fh:
+        fh.write(b'tial"}\n')
+    with monkeypatch.context() as m:
+        m.setattr(R, "fcntl", None)  # no flock (Windows): the sweep is skipped
+        assert R.heal_sync_conflicts(tmp_path) == ""
+    assert (mem / _CP).exists()
+    R.heal_sync_conflicts(tmp_path)
+    assert canon.read_bytes() == b'{"ts": "a"}\n{"ts": "partial"}\n{"ts": "loser"}\n'
+    assert not (mem / _CP).exists()
+
+
+def test_heal_keeps_copies_when_the_verify_fails(tmp_path, monkeypatch):
+    # Syncthing swaps in a new canonical after the open: the append lands in the old inode, the
+    # re-read through the path lacks the copy's line, so the copy is kept.
+    mem = _memory(tmp_path, b'{"ts": "a"}\n', b'{"ts": "loser"}\n')
+    canon = mem / "interactions.jsonl"
+    real = R.os.write
+
+    def swap_then_write(fd, data):
+        (mem / "incoming").write_bytes(b'{"ts": "remote"}\n')
+        R.os.replace(mem / "incoming", canon)
+        return real(fd, data)
+
+    monkeypatch.setattr(R.os, "write", swap_then_write)
+    R.heal_sync_conflicts(tmp_path)
+    assert canon.read_bytes() == b'{"ts": "remote"}\n' and (mem / _CP).exists()
+
+
+def test_sweep_note_rides_on_part4_within_budget(tmp_path, monkeypatch, capsys):
+    # Many unmerged copies with long names still give a count plus at most two paths.
+    stamp = ".sync-conflict-20261001-101500-BBBBBBB"
+    for i in range(12):
+        mem = tmp_path / "projects" / "my" / ("a-project-with-a-long-slug-%02d" % i) / "ai" / ".memory"
+        mem.mkdir(parents=True)
+        (mem / ("context" + stamp + ".md")).write_text("x\n", encoding="utf-8")
+    note = R.heal_sync_conflicts(tmp_path)
+    assert note.startswith("12 Syncthing conflict copies left") and note.count(stamp) == 2
+    calls = []
+    monkeypatch.setattr(R, "heal_sync_conflicts", lambda: calls.append(1) or note)
+    monkeypatch.setattr(R, "detect_ide", lambda env=None: "claude")
+    for argv in ([], ["--part", "2"], ["--part", "3"], ["--remind"]):
+        assert R.main(argv) == 0
+    assert calls == [] and note not in capsys.readouterr().out
+    assert R.main(["--part", "4"]) == 0
+    out = capsys.readouterr().out
+    assert calls == [1] and out.startswith("[Solaris] " + note + "\n") and "READ-FIRST, PART 4" in out
+    assert len(out) <= R._budget()

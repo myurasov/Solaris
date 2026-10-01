@@ -14,9 +14,10 @@ Two modes:
   files under an authoritative header. Wired to the session-start hook (Claude Code ``SessionStart``;
   Cursor ``sessionStart``) so it fires once per session and again after a compaction / clear / resume.
 - **``--part 2``** - full load, part 2 (the subagents rule); **``--part 3``** - full load, part 3 (the
-  token-economy rule); **``--part 4``** - full load, part 4 (the YAGNI rule). Wired as additional
-  session-start hook entries: the harness inline threshold applies per hook call, so splitting the set
-  across calls multiplies the inline room without risking a spill.
+  token-economy rule); **``--part 4``** - full load, part 4 (the YAGNI rule, plus the Syncthing
+  conflict sweep below). Wired as additional session-start hook entries: the harness inline threshold
+  applies per hook call, so splitting the set across calls multiplies the inline room without risking
+  a spill.
 - **``--check``** - print per-file sizes, the inline budget, and whether the rendered payload fits
   (the size assertion; run after growing any read-first file, especially ``.memory/instructions.md``).
 - **``--remind``** - print a one-line forcing reminder that the set was loaded. Wired to Claude Code's
@@ -27,10 +28,13 @@ Two modes:
 Output format is IDE-aware: Cursor hooks read a JSON object (``additional_context``); Claude Code hooks read
 plain stdout. The tool detects the IDE from the environment and emits whichever the caller expects.
 
-On a part-1 session start it also union-merges Syncthing ``*.sync-conflict-*`` copies of
-``interactions.jsonl`` (framework ``.memory/`` and each project's ``ai/.memory/``) into the canonical
-file and deletes those copies. Other conflict copies are left in place; a one-line note is prepended
-to the payload so the session can review them.
+On a part-4 session start it also merges Syncthing ``*.sync-conflict-*`` copies of any ``.jsonl`` log
+in a memory folder (framework ``.memory/`` and each project pack's ``.memory/``, never ``__data/`` or
+``__out/``) into the canonical file: it appends only the missing lines under a non-blocking lock,
+re-reads to verify them, and only then deletes the copies. A group it cannot merge safely (a missing,
+unreadable, locked or mid-line file) keeps its copies for the next session start. Every copy left in
+place is reported by a one-line note (a count plus at most two paths) prepended to part 4, the
+smallest payload, so the note cannot push part 1 past the inline budget.
 
 Like the other hooks it is **fail-safe**: it never raises, always exits 0, and tolerates missing files / a
 missing venv - a broken read-first load must never block the user's turn. It does not read stdin (avoiding
@@ -43,8 +47,12 @@ import json
 import os
 import re
 import sys
-import tempfile
 from pathlib import Path
+
+try:
+    import fcntl
+except ImportError:  # no flock (Windows): the conflict sweep is skipped
+    fcntl = None
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -129,8 +137,13 @@ _CONFLICT_NAME = re.compile(
 def _memory_roots(repo_root: Path) -> list[Path]:
     """Memory dirs the conflict sweeper may touch: never walk __data/__out or the whole tree."""
     roots = [repo_root / ".memory"]
-    roots.extend(repo_root.glob("projects/*/ai/.memory"))
-    roots.extend(repo_root.glob("projects/*/*/ai/.memory"))
+    # projects/<slug>/ai, projects/<group>/<slug>/<pack> (ai/ or a renamed pack such as aipack/)
+    # and embedded projects/<group>/<slug>/<repo>/ai. Keep .stglobalignore's conflict lines in step.
+    # Glob lists only the wildcard levels, so __data/__out are never listed; matches in them are dropped.
+    for pattern in ("projects/*/ai/.memory", "projects/*/*/*/.memory", "projects/*/*/*/ai/.memory"):
+        for path in repo_root.glob(pattern):
+            if not {"__data", "__out"} & set(path.relative_to(repo_root).parts):
+                roots.append(path)
     return [p for p in roots if p.is_dir()]
 
 
@@ -142,80 +155,82 @@ def canonical_conflict_target(path: Path) -> "Path | None":
     return path.with_name(m.group("stem") + m.group("ext"))
 
 
-def _read_lines(path: Path) -> list[str]:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except Exception:
-        return []
-    if not text:
-        return []
-    lines = text.splitlines(keepends=True)
-    if lines and not lines[-1].endswith("\n"):
-        lines[-1] += "\n"
-    return lines
+def _jsonl_lines(blob: bytes) -> list[bytes]:
+    # Split bytes on b"\n" only: str.splitlines also breaks at U+2028/U+2029/U+0085 inside JSON strings.
+    return [line for line in blob.split(b"\n") if line]
 
 
-def _union_jsonl(canonical: Path, copies: list[Path]) -> None:
-    seen: set[str] = set()
-    out: list[str] = []
-    for src in [canonical] + copies:
-        for line in _read_lines(src):
-            if line not in seen:
-                seen.add(line)
-                out.append(line)
-    canonical.parent.mkdir(parents=True, exist_ok=True)
-    fd, tmp = tempfile.mkstemp(dir=str(canonical.parent), prefix="." + canonical.name + ".", suffix=".tmp")
+def _merge_jsonl(canonical: Path, copies: list[Path]) -> bool:
+    """Append the copies' lines missing from ``canonical``; delete the copies only after a verified merge.
+
+    The canonical file is only appended to (one O_APPEND write under a non-blocking flock), so a log
+    line another session appends meanwhile is never lost, and the file keeps its inode and mode.
+    Returns False and keeps every copy for the next session start when the canonical file is missing,
+    locked or mid-line, when any file cannot be read, or when the re-read lacks a copy line.
+    """
     try:
-        with os.fdopen(fd, "w", encoding="utf-8") as fh:
-            fh.writelines(out)
-        os.replace(tmp, canonical)
-    except BaseException:
-        try:
-            os.unlink(tmp)
-        except OSError:
-            pass
-        raise
-    for copy in copies:
-        try:
-            copy.unlink()
-        except OSError:
-            pass
+        fd = os.open(canonical, os.O_WRONLY | os.O_APPEND)  # no O_CREAT: a missing canonical skips
+    except OSError:
+        return False
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # raises if another session holds it
+        base = canonical.read_bytes()
+        blobs = [copy.read_bytes() for copy in copies]
+        if base and not base.endswith(b"\n"):
+            return False  # a writer may be mid-line
+        have = set(_jsonl_lines(base))
+        add: list[bytes] = []
+        for blob in blobs:
+            for line in _jsonl_lines(blob):
+                if line not in have:
+                    have.add(line)
+                    add.append(line)
+        if add:
+            data = b"\n".join(add) + b"\n"
+            if os.write(fd, data) != len(data):
+                return False
+            os.fsync(fd)
+        # Re-read through the path: if a new canonical was swapped in since the open, this check fails.
+        after = set(_jsonl_lines(canonical.read_bytes()))
+        if any(line not in after for blob in blobs for line in _jsonl_lines(blob)):
+            return False
+        for copy in copies:
+            copy.unlink(missing_ok=True)
+        return True
+    except OSError:
+        return False
+    finally:
+        os.close(fd)
 
 
 def heal_sync_conflicts(repo_root: Path = REPO_ROOT) -> str:
-    """Union-merge jsonl Syncthing conflict copies; leave other leftovers for the agent.
+    """Merge ``.jsonl`` Syncthing conflict copies in memory dirs; return a note on any copy left.
 
-    Fail-safe: any error returns an empty string. Walks only memory dirs so a session start
-    cannot scan ``__data/`` / ``__out/``.
+    Fail-safe: any error returns an empty string, and without fcntl the sweep is skipped. Walks only
+    memory dirs so a session start cannot scan ``__data/`` / ``__out/``. The note is a count plus at
+    most two paths, so it stays small whatever is left.
     """
+    if fcntl is None:
+        return ""
     try:
+        found: list[Path] = []
         grouped: dict[Path, list[Path]] = {}
-        unknown: list[Path] = []
         for root in _memory_roots(repo_root):
             for path in root.glob("*sync-conflict-*"):
                 if not path.is_file():
                     continue
+                found.append(path)
                 target = canonical_conflict_target(path)
-                if target is None:
-                    unknown.append(path)
-                    continue
-                grouped.setdefault(target, []).append(path)
-        notes: list[str] = []
-        leftover: list[Path] = list(unknown)
+                if target is not None and target.suffix == ".jsonl":
+                    grouped.setdefault(target, []).append(path)
         for canonical, copies in grouped.items():
-            copies = sorted(copies)
-            if canonical.suffix == ".jsonl":
-                _union_jsonl(canonical, copies)
-                rel = str(canonical.relative_to(repo_root))
-                notes.append("merged %d conflict cop%s into %s"
-                             % (len(copies), "y" if len(copies) == 1 else "ies", rel))
-            else:
-                leftover.extend(copies)
-        if leftover:
-            rels = ", ".join(str(p.relative_to(repo_root)) for p in leftover[:8])
-            extra = "" if len(leftover) <= 8 else " (+%d more)" % (len(leftover) - 8)
-            notes.append("unmerged conflict copies (review before deleting): " + rels + extra)
-        return "; ".join(notes)
+            _merge_jsonl(canonical, sorted(copies))
+        left = sorted(p for p in found if p.exists())
+        if not left:
+            return ""
+        shown = ", ".join(str(p.relative_to(repo_root)) for p in left[:2])
+        return "%d Syncthing conflict cop%s left in memory folders, review before deleting: %s%s" % (
+            len(left), "y" if len(left) == 1 else "ies", shown, ", ..." if len(left) > 2 else "")
     except Exception:
         return ""
 
@@ -358,17 +373,19 @@ def main(argv: "list[str] | None" = None) -> int:
         part = 1
         if "--part" in argv:
             part = 4 if "4" in argv else (3 if "3" in argv else (2 if "2" in argv else 1))
-        heal_note = ""
         if not remind and part == 1:
             migrate_legacy_memory()  # session start: pick up a pre-0.19 checkout's memory/ folder
-            heal_note = heal_sync_conflicts()
         ide = detect_ide()
         # Cursor carries hook context as JSON without spilling large payloads to a file, so it
         # keeps the full set; the inline budget exists for Claude Code's stdout-persist behavior.
         full_budget = 1_000_000 if ide == "cursor" else None
         text = _REMINDER if remind else render_full(budget=full_budget, part=part)
-        if heal_note and "unmerged" in heal_note:
-            text = "[Solaris] " + heal_note + "\n" + text
+        if not remind and part == 4:
+            # The sweep and its note ride on part 4, the smallest payload: part 1 sits near the
+            # budget, and past 10,000 characters the harness stops inlining it.
+            note = heal_sync_conflicts()
+            if note:
+                text = "[Solaris] " + note + "\n" + text
         emit(text, ide)
     except Exception:
         pass  # fail-safe: a context-loading hook must never break the user's turn

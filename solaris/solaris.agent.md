@@ -230,8 +230,9 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   `.memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
   turn is project work, append the **same** line to that project's `ai/.memory/interactions.jsonl`. The
   prompt-submit hook also appends a raw-prompt backstop line to the master as a fail-safe.
-  Syncthing conflict copies (`*.sync-conflict-*`): session start union-merges `interactions.jsonl`
-  copies (framework and per-project) into the canonical file; review any other leftovers before deleting.
+  Syncthing conflict copies (`*.sync-conflict-*`): session start (read-first part 4) union-merges the
+  `.jsonl` copies in memory folders (framework and per-project, `ai/` or a renamed pack) into the canonical
+  file, keeping any copy it cannot merge safely; review every other leftover before deleting.
   `.memory/` must stay synced (do not add it to `.stglobalignore`).
 - **Session-context summary (`ai/.memory/context.md`).** During project work, that project's
   `ai/.memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris

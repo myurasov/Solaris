@@ -61,13 +61,17 @@ Everything above, plus:
   for a linked plugin a missing source is a hard break - it has no materialized copy to fall back on).
 - **gitignore sanity** - `.mcp.json`, `.cursor/mcp.json`, `projects/`, `tasks/`, `.memory/*`,
   `plugins/*` (the last two except `.empty`) are ignored; confirm no `credentials.md` is tracked.
-- **Syncthing** - if `.stfolder` exists: `.stglobalignore` is present (tracked; fix: pull / restore
-  from git); `.stignore` (gitignored) contains `#include .stglobalignore` (fix: write a two-line file
-  with that include plus `// Device-only rules for this machine go below.`, preserving any extra
-  lines already there); extra lines after the include are device-only and OK. Scan `.memory/` and
-  `projects/**/ai/.memory/` for leftover `*.sync-conflict-*` (jsonl copies are union-merged at
-  session start; other leftovers need a review). `.git` on this machine is expected (each device
-  keeps its own clone; commit only here if this is the clone that owns the repo). `.memory/` must
-  not appear in `.stglobalignore`.
+- **Syncthing** - if `.stfolder` exists: `.stglobalignore` is present (tracked and synced; fix: pull
+  / restore from git); `.stignore` (gitignored) has `#include .stglobalignore` as its last rule, with
+  any device-only rules above it (Syncthing applies the first matching rule, so a rule below the
+  include loses to the shared list and a `!` exception there never takes effect). Fix: if `.stignore`
+  is missing, write `// Device-only rules for this machine go above the include.` and then
+  `#include .stglobalignore`; otherwise put the include (adding it if absent) on the last line,
+  keeping every existing line above it. Scan the memory folders the session-start sweep covers
+  (`.memory/`, `projects/*/ai/.memory/`, `projects/*/*/*/.memory/`, `projects/*/*/*/ai/.memory/`) for
+  leftover `*.sync-conflict-*`: the sweep merges every `.jsonl` copy (any log, not only
+  `interactions.jsonl`) and keeps one it cannot merge safely for the next start; other copies need a
+  review. `.git` on this machine is expected (each device keeps its own clone; commit only here if
+  this is the clone that owns the repo). `.memory/` must not appear in `.stglobalignore`.
 
 Report findings grouped as OK / warnings / suggested fixes. Apply nothing without the user asking.

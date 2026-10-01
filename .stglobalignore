@@ -1,9 +1,10 @@
 // Syncthing ignore rules shared by every device that syncs this Solaris checkout.
-// Each device's .stignore (never synced by Syncthing, gitignored here) is one line,
-// `#include .stglobalignore`, plus any device-only rules after it. Edit this file, not the
-// per-device copies. Syncthing treats a missing include file as an error, so a new device needs
-// this file in place before its folder starts. Do not ignore .memory/ : that layer is how a
-// session on one machine sees operating memory written on another.
+// Each device's .stignore (never synced by Syncthing, gitignored here) holds any device-only rules
+// first and `#include .stglobalignore` last: Syncthing applies the first rule that matches, so a
+// device rule placed after the include loses to any shared rule here (a `!` exception there never
+// takes effect). Edit this file, not the per-device copies. Syncthing treats a missing include file
+// as an error, so a new device needs this file in place before its folder starts. Do not ignore
+// .memory/ : that layer is how a session on one machine sees operating memory written on another.
 
 (?d).DS_Store
 (?d).Spotlight-V100
@@ -50,6 +51,11 @@
 /.claude/settings.local.json
 /.claude/agents
 
-// Conflict copies stay on the machine that lost. Session start union-merges interactions.jsonl
-// copies locally; other leftovers are reported, not synced.
-**/*sync-conflict-*
+// Conflict copies in memory folders stay on the machine that lost: session start merges every
+// .jsonl copy there into its canonical log and reports any copy it leaves. These lines match the
+// folders the sweep covers (_memory_roots in solaris/tools/read_first.py; keep them in step). A
+// conflict copy anywhere else syncs like any other file, so every device sees the losing edit.
+/.memory/*.sync-conflict-*
+/projects/*/ai/.memory/*.sync-conflict-*
+/projects/*/*/*/.memory/*.sync-conflict-*
+/projects/*/*/*/ai/.memory/*.sync-conflict-*
