@@ -56,6 +56,6 @@
 // folders the sweep covers (_memory_roots in solaris/tools/read_first.py; keep them in step). A
 // conflict copy anywhere else syncs like any other file, so every device sees the losing edit.
 /.memory/*.sync-conflict-*
-/projects/*/ai/.memory/*.sync-conflict-*
+/projects/*/*/.memory/*.sync-conflict-*
 /projects/*/*/*/.memory/*.sync-conflict-*
-/projects/*/*/*/ai/.memory/*.sync-conflict-*
+/projects/*/*/*/*/.memory/*.sync-conflict-*

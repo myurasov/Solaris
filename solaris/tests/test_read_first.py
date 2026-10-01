@@ -237,6 +237,37 @@ def test_heal_sweeps_a_project_memory_only_beside_a_manifest(tmp_path):
     assert (repo / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n' and (repo / _CP).exists()
 
 
+def test_heal_covers_ungrouped_and_embedded_packs_of_any_name(tmp_path):
+    # projects/<slug>/<pack> and embedded projects/<group>/<slug>/<repo>/<pack>, here aipack/:
+    # swept beside a manifest.json, left alone without one.
+    projects = tmp_path / "projects"
+    swept = ["demo/aipack/.memory", "my/demo/repo/aipack/.memory"]
+    skipped = ["bare/aipack/.memory", "my/bare/repo/aipack/.memory"]
+    for rel in swept + skipped:
+        _memory(projects, b'{"ts": "a"}\n', b'{"ts": "loser"}\n', rel, manifest=rel in swept)
+    assert sorted(R._memory_roots(tmp_path)) == sorted(projects / rel for rel in swept)
+    assert R.heal_sync_conflicts(tmp_path) == ""  # a folder without a manifest is not walked
+    for rel in swept:
+        assert (projects / rel / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "loser"}\n'
+        assert not (projects / rel / _CP).exists()
+    for rel in skipped:
+        assert (projects / rel / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n'
+        assert (projects / rel / _CP).exists()
+
+
+def test_memory_roots_on_the_real_tree_keep_every_folder_found_before():
+    # List only, never sweep the real tree: every memory folder the earlier patterns (ai/ packs
+    # ungrouped and embedded, any pack grouped) found is still listed, and none twice.
+    old = ("projects/*/ai/.memory", "projects/*/*/*/.memory", "projects/*/*/*/ai/.memory")
+    before = [R.REPO_ROOT / ".memory"] + [
+        p for pattern in old for p in R.REPO_ROOT.glob(pattern)
+        if (p.parent / "manifest.json").is_file()
+        and not {"__data", "__out"} & set(p.relative_to(R.REPO_ROOT).parts)]
+    roots = R._memory_roots(R.REPO_ROOT)
+    assert {p for p in before if p.is_dir()} <= set(roots)
+    assert len(roots) == len(set(roots))
+
+
 def test_heal_merges_bytes_split_on_newline_only(tmp_path):
     # A non-UTF-8 byte and raw U+2028/U+2029/U+0085 inside JSON strings must survive byte for byte;
     # str.splitlines would cut those entries apart and dedup would then join two of them.

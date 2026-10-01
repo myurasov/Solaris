@@ -138,15 +138,16 @@ _CONFLICT_NAME = re.compile(
 def _memory_roots(repo_root: Path) -> list[Path]:
     """Memory dirs the conflict sweeper may touch: never walk __data/__out or the whole tree."""
     roots = [repo_root / ".memory"]
-    # projects/<slug>/ai, projects/<group>/<slug>/<pack> (ai/ or a renamed pack such as aipack/)
-    # and embedded projects/<group>/<slug>/<repo>/ai. Keep .stglobalignore's conflict lines in step.
-    # Glob lists only the wildcard levels, so __data/__out are never listed; matches in them are dropped.
-    # A match counts only if its pack holds manifest.json, so a .memory in a source/ repo is not swept.
-    for pattern in ("projects/*/ai/.memory", "projects/*/*/*/.memory", "projects/*/*/*/ai/.memory"):
-        for path in repo_root.glob(pattern):
-            bulk = {"__data", "__out"} & set(path.relative_to(repo_root).parts)
-            if not bulk and (path.parent / "manifest.json").is_file():
-                roots.append(path)
+    # A pack of any name (ai/, aipack/) sits 2 to 4 levels under projects/: <slug>/<pack>,
+    # <group>/<slug>/<pack> or <slug>/<repo>/<pack>, and embedded <group>/<slug>/<repo>/<pack>.
+    # Keep .stglobalignore's conflict lines in step. The walk lists each level once, stops at the
+    # packs and never enters __data/__out, so nothing in them is listed or swept.
+    # A folder counts only if it holds manifest.json, so a .memory in a source/ repo is not swept.
+    level = [repo_root / "projects"]
+    for depth in range(1, 5):
+        level = [d for p in level for d in p.glob("*/") if d.name not in ("__data", "__out")]
+        if depth > 1:
+            roots += [d / ".memory" for d in level if (d / "manifest.json").is_file()]
     return [p for p in roots if p.is_dir()]
 
 
