@@ -35,8 +35,9 @@ The primary scenario is a Linux host (a GPU box) that holds a synced copy of the
 1. `ssh host`, run `claude` or `opencode` at the Solaris root as usual, `develop-project <slug>`.
 2. Say **"build docker home"**. The engineer asks the per-host options (GPUs, network, extra
    mounts), runs `dh-build.sh` locally on that host, records image, container and state dir in
-   `ai/.memory/resources.md`, and prints the enter command.
-3. In the same terminal: `bash ai/plugins/docker-home/dh-enter.sh`, then `claude` (or `codex`,
+   `<pack>/.memory/resources.md` (`<pack>` is the project's ai-pack folder: default `aipack/`, `ai/`
+   in older projects, any name), and prints the enter command.
+3. In the same terminal: `bash <pack>/plugins/docker-home/dh-enter.sh`, then `claude` (or `codex`,
    `opencode`). Log in once; the login persists in the home directory. Detach with `Ctrl-b d`;
    the session keeps running. Re-attach later with the same command.
 4. `dh-rebuild.sh` after Dockerfile or option changes (home kept); `dh-remove.sh` to delete
@@ -84,7 +85,7 @@ No `mcps.json`: the plugin ships no MCP servers.
 ## Install
 
 Under a Solaris checkout: "add plugin docker-home to `<project>`" (copy mode) or "link plugin
-docker-home to `<project>`". Attaching copies `shared/` into `ai/plugins/docker-home/` and surfaces
+docker-home to `<project>`". Attaching copies `shared/` into `<pack>/plugins/docker-home/` and surfaces
 the setup notes; it builds nothing. Standalone ai-packs carry the overlay copy and need only Docker,
 `bash` and `python3` on the host.
 
@@ -100,13 +101,13 @@ the setup notes; it builds nothing. Standalone ai-packs carry the overlay copy a
 - One active side per project: the container agent and a host session edit the same files.
 - With a synced Solaris tree, git state is per host (sync tools usually exclude `.git`): pick one
   git-authoritative side per project, and expect sync conflicts if both sides append to
-  `ai/.memory/*.jsonl` between syncs.
+  `<pack>/.memory/*.jsonl` between syncs.
 - Network egress to Ubuntu, NodeSource, npm and GitHub is needed at build time.
 
 ## Design Notes
 
 Bind mount, never a copy: the project stays the single source of truth for code, pack and
-`ai/.memory/`, and everything the container writes reaches the host (and any sync layer) directly.
+`<pack>/.memory/`, and everything the container writes reaches the host (and any sync layer) directly.
 Heavy generated artifacts belong in the home directory, not the mount. The home is a bind directory
 rather than a named volume so it follows the Solaris remote-footprint rule (`~/.solaris/<component>/`:
 discoverable, inventoried, removable in one place). The scripts derive everything from their own

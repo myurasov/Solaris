@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# rev. 1
+# rev. 2
 # docker-home: shared helpers, sourced by every dh-*.sh (never run directly).
-# Everything is derived from where the overlay lives (<project>/ai/plugins/docker-home/), so the
-# scripts work in a detached ai-pack and never reference a Solaris checkout.
+# Everything is derived from where the overlay lives (<project>/<pack>/plugins/docker-home/, <pack>
+# being the project's ai-pack folder), so the scripts work in a detached ai-pack and never reference
+# a Solaris checkout.
 
 set -euo pipefail
 
@@ -20,33 +21,71 @@ dh_refuse_inside() {
   fi
 }
 
-# Project root = the ai-pack root (the folder holding ai/manifest.json). Resolution order:
-# $DH_PROJECT_ROOT, the overlay's own location (copy install: <project>/ai/plugins/docker-home/),
-# then a walk up from the current directory (link install, or when run from the plugin source).
-dh_resolve_project() {
-  local cand
-  if [ -n "${DH_PROJECT_ROOT:-}" ]; then
-    cand="$(cd "$DH_PROJECT_ROOT" 2>/dev/null && pwd -P)" || dh_die "DH_PROJECT_ROOT does not exist: $DH_PROJECT_ROOT"
-    [ -f "$cand/ai/manifest.json" ] || dh_die "no ai/manifest.json under DH_PROJECT_ROOT=$cand"
-    PROJECT_ROOT="$cand"; return
-  fi
-  cand="$(cd "$DH_DIR/../../.." 2>/dev/null && pwd -P || true)"
-  if [ -n "$cand" ] && [ -f "$cand/ai/manifest.json" ]; then PROJECT_ROOT="$cand"; return; fi
-  cand="$(pwd -P)"
-  while [ "$cand" != "/" ]; do
-    if [ -f "$cand/ai/manifest.json" ]; then PROJECT_ROOT="$cand"; return; fi
-    cand="$(dirname "$cand")"
-  done
-  dh_die "cannot find the project root (a folder holding ai/manifest.json); run from inside the project or set DH_PROJECT_ROOT"
+# The ai-pack folder can have any name (aipack/ by default, ai/ in projects made before Solaris
+# 0.39.0): it is the project root's one direct child folder whose manifest.json carries
+# "framework_version" and a "project" object (plugin manifests do not). The glob below skips hidden
+# folders, which are never packs.
+dh_is_pack() {
+  [ -f "$1/manifest.json" ] &&
+    grep -q '"framework_version"[[:space:]]*:' "$1/manifest.json" &&
+    grep -q '"project"[[:space:]]*:[[:space:]]*{' "$1/manifest.json"
 }
 
-# Slug from ai/manifest.json (project.slug), else the folder name. The manifest is project content
-# the container can edit, so the value is normalized to a safe docker name (lowercase [a-z0-9_-],
-# no leading or trailing separators) and validated, never trusted.
+# Sets DH_FOUND to the one ai-pack folder directly under $1, empty when there is none.
+dh_find_pack() {
+  local d
+  DH_FOUND=""
+  for d in "$1"/*/; do
+    d="${d%/}"
+    dh_is_pack "$d" || continue
+    [ -z "$DH_FOUND" ] || dh_die "more than one ai-pack folder in $1 ($(basename "$DH_FOUND"), $(basename "$d")); keep one"
+    DH_FOUND="$d"
+  done
+}
+
+# Home and every folder above it (the filesystem root too) are never listed: no project lives there,
+# touching ~/Desktop or ~/Documents can raise macOS privacy prompts, and an auto-mounted /home can be
+# slow. True when folder $1 is off limits for the home folder $2.
+dh_off_limits() {
+  [ "$1" = / ] && return 0
+  case "$2/" in "$1"/*) return 0 ;; esac
+  return 1
+}
+
+# Project root = the folder holding the project's ai-pack folder (DH_PACK). Resolution order:
+# $DH_PROJECT_ROOT, the overlay's own location (copy install: <project>/<pack>/plugins/docker-home/),
+# then a walk up from the current directory (link install, or when run from the plugin source).
+dh_resolve_project() {
+  local cand home
+  if [ -n "${DH_PROJECT_ROOT:-}" ]; then
+    cand="$(cd "$DH_PROJECT_ROOT" 2>/dev/null && pwd -P)" || dh_die "DH_PROJECT_ROOT does not exist: $DH_PROJECT_ROOT"
+    dh_find_pack "$cand"
+    [ -n "$DH_FOUND" ] || dh_die "no ai-pack folder (a child folder holding an ai-pack manifest.json) under DH_PROJECT_ROOT=$cand"
+    PROJECT_ROOT="$cand"; DH_PACK="$DH_FOUND"; return
+  fi
+  home="$(cd "${HOME:-/}" 2>/dev/null && pwd -P || printf '%s' "${HOME:-/}")"
+  cand="$(dirname "$(dirname "$DH_DIR")")"
+  if [ "$(basename "$(dirname "$DH_DIR")")" = plugins ] && ! dh_off_limits "$(dirname "$cand")" "$home" &&
+     dh_is_pack "$cand"; then
+    dh_find_pack "$(dirname "$cand")"
+    if [ "$DH_FOUND" = "$cand" ]; then PROJECT_ROOT="$(dirname "$cand")"; DH_PACK="$cand"; return; fi
+  fi
+  cand="$(pwd -P)"
+  until dh_off_limits "$cand" "$home"; do
+    dh_find_pack "$cand"
+    if [ -n "$DH_FOUND" ]; then PROJECT_ROOT="$cand"; DH_PACK="$DH_FOUND"; return; fi
+    cand="$(dirname "$cand")"
+  done
+  dh_die "cannot find the project root (a folder whose child folder holds an ai-pack manifest.json); run from inside the project or set DH_PROJECT_ROOT"
+}
+
+# Slug from the pack's manifest.json (project.slug), else the folder name. The manifest is project
+# content the container can edit, so the value is normalized to a safe docker name (lowercase
+# [a-z0-9_-], no leading or trailing separators) and validated, never trusted.
 dh_read_slug() {
   local slug=""
   if command -v python3 >/dev/null 2>&1; then
-    slug="$(python3 - "$PROJECT_ROOT/ai/manifest.json" <<'PY' 2>/dev/null || true
+    slug="$(python3 - "$DH_PACK/manifest.json" <<'PY' 2>/dev/null || true
 import json, sys
 m = json.load(open(sys.argv[1]))
 print((m.get("project") or {}).get("slug") or "")
@@ -55,7 +94,7 @@ PY
   fi
   [ -n "$slug" ] || slug="$(basename "$PROJECT_ROOT")"
   slug="$(printf '%s' "$slug" | tr 'A-Z' 'a-z' | sed -e 's/[^a-z0-9_-]/-/g' -e 's/^[-_]*//' -e 's/[-_]*$//')"
-  [ -n "$slug" ] || dh_die "could not derive a usable project slug from $PROJECT_ROOT/ai/manifest.json"
+  [ -n "$slug" ] || dh_die "could not derive a usable project slug from $DH_PACK/manifest.json"
   SLUG="$slug"
 }
 

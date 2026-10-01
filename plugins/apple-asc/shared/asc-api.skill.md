@@ -3,7 +3,7 @@ name: asc-api
 triggers: ["app store connect", "asc api", "app store connect api", "app store listing", "submit for review", "app store screenshots", "attach build", "app store pricing", "testflight testers", "age rating"]
 summary: Operate App Store Connect over the ASC REST API (team key + short-lived JWT) - the default path for listings, screenshots, builds, pricing, age rating, review submission, TestFlight - with field-tested endpoints, schema pitfalls, review-time editability, and the policy quirks that gate submissions.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: asc-api - App Store Connect Over the REST API <!-- omit in toc -->
 
@@ -26,8 +26,9 @@ exists yet (creating one is itself a browser flow).
 
 ## Auth
 
-- Team key: key id, issuer id, and `.p8` path live in `ai/.memory/credentials.md`; staged
-  resource ids (app, version, submission) in `ai/.memory/`.
+- Team key: key id, issuer id, and `.p8` path live in `<pack>/.memory/credentials.md` (`<pack>`
+  is the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name); staged
+  resource ids (app, version, submission) in `<pack>/.memory/`.
 - JWT ES256 with `aud=appstoreconnect-v1` and **exp <= 20 minutes - longer and every call
   fails as an auth error** (the message does not say why; the expiry is the reason).
 - Role **App Manager** suffices for uploads and full listing staging.
@@ -112,7 +113,7 @@ typically lands within ~20 min of "In Review" - poll the state, not the inbox.
 - Every mutating call is **outward** - the safety rule applies: confirm first unless a
   standing autonomy grant covers the task; genuinely irreversible steps (Submit for Review,
   agreements) still get a one-line heads-up.
-- Keys and ids stay in `ai/.memory/` - never in shareable files, logs, or commits; reference
+- Keys and ids stay in `<pack>/.memory/` - never in shareable files, logs, or commits; reference
   secrets by name, never by value.
 
 ## Maintenance (Standing Duty)

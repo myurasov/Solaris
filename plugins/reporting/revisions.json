@@ -49,8 +49,8 @@
       ]
     },
     "shared/assets/style.css": {
-      "rev": 6,
-      "hash": "e218e74ff1150b3f2b09664f0f546806e119b6428197f64de3898d43e8699087",
+      "rev": 7,
+      "hash": "2a15a28d3474251f0ff895ebf31a346ea949232e3ebdc934825781dc4ed2a2c1",
       "history": [
         {
           "rev": 1,
@@ -75,12 +75,16 @@
         {
           "rev": 6,
           "hash": "e218e74ff1150b3f2b09664f0f546806e119b6428197f64de3898d43e8699087"
+        },
+        {
+          "rev": 7,
+          "hash": "2a15a28d3474251f0ff895ebf31a346ea949232e3ebdc934825781dc4ed2a2c1"
         }
       ]
     },
     "shared/report.skill.md": {
-      "rev": 8,
-      "hash": "030320ed3f4c83d7dec477b68b2a37adb2df57e721670c6b3a29ecbcd874def7",
+      "rev": 9,
+      "hash": "1c4615810df46e06d603c12bca12f7dcf099421e8f1deeccfe2bfb2b77006e7a",
       "history": [
         {
           "rev": 1,
@@ -109,6 +113,10 @@
         {
           "rev": 8,
           "hash": "030320ed3f4c83d7dec477b68b2a37adb2df57e721670c6b3a29ecbcd874def7"
+        },
+        {
+          "rev": 9,
+          "hash": "1c4615810df46e06d603c12bca12f7dcf099421e8f1deeccfe2bfb2b77006e7a"
         }
       ]
     }

@@ -3,7 +3,7 @@ name: asc-upload
 triggers: ["upload build", "upload to app store connect", "archive and upload", "xcodebuild archive", "new build for the app store", "upload the app"]
 summary: Get a build from an Xcode project into App Store Connect from the command line - archive with archive-time signing overrides, export with destination upload, -allowProvisioningUpdates for automatic distribution signing - with the field-tested config pattern and pitfalls (macOS-verified).
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: asc-upload - Archive and Upload a Build <!-- omit in toc -->
 
@@ -25,7 +25,8 @@ attach, and submission are separate steps (`asc-api.skill.md`).
 - Xcode is signed into the Apple ID (Xcode > Settings > Accounts) -
   `-allowProvisioningUpdates` then mints/refreshes distribution signing automatically; no
   manual certificate or profile management needed.
-- The ASC app record and bundle id exist (app id and team id: `ai/.memory/`).
+- The ASC app record and bundle id exist (app id and team id: `<pack>/.memory/`, `<pack>` being
+  the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name).
 - App Store binaries must be **sandboxed**; keep entitlements minimal - drop anything the
   app does not strictly need (unused entitlements invite review questions and can fail
   signing validation).
@@ -70,7 +71,7 @@ dialog / API) when ready - the build row gains its app icon. Attach + submit per
 - **CFBundleVersion must increase on every upload** and is never reused, even for builds
   that were rejected or never attached - keep a continuous integer build number.
 - A wrong `DEVELOPMENT_TEAM` fails late and confusingly - when the account has had multiple
-  teams (e.g. an old personal team), verify the team id against `ai/.memory/` first.
+  teams (e.g. an old personal team), verify the team id against `<pack>/.memory/` first.
 - Archive from a clean tree state you can tag: the uploaded binary is immutable, and
   debugging "which code is build N" later is expensive.
 - Building inside a cloud-synced directory (e.g. iCloud) can break CodeSign with xattr

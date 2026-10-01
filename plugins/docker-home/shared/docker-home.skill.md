@@ -3,7 +3,7 @@ name: docker-home
 triggers: ["build docker home", "start docker home", "stop docker home", "enter docker home", "docker home status", "rebuild docker home", "remove docker home", "docker-home"]
 summary: Build, start, enter, rebuild or remove this project's docker home (a per-project Linux container that runs the coding harness with only the project folder mounted) through the dh-*.sh shortcut scripts in this overlay, strictly on the user's request.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: docker-home - Run the Agent Inside a Project Container <!-- omit in toc -->
 
@@ -20,7 +20,8 @@ _Rev. 1_
 ## When This Fires
 
 Only on an explicit request naming the docker home (the triggers above). Each verb maps to one
-shortcut script in this overlay (`ai/plugins/docker-home/`, or the plugin's `shared/` when linked);
+shortcut script in this overlay (`<pack>/plugins/docker-home/`, `<pack>` being the project's ai-pack
+folder: default `aipack/`, `ai/` in older projects, any name; or the plugin's `shared/` when linked);
 run the script, do not re-implement it. Everything here acts on the machine the session runs on:
 there is no remote orchestration. If the user's Solaris tree is synced to a Linux host, they run the
 build there, in a session on that host.
@@ -59,12 +60,12 @@ build there, in a session on that host.
    defaults to `8g` when GPUs are passed through.
 3. Run non-interactively with the answers as flags, so the script never blocks on a prompt:
    ```bash
-   bash ai/plugins/docker-home/dh-build.sh --non-interactive --gpus all --network host --extra "-v /data:/data"
+   bash <pack>/plugins/docker-home/dh-build.sh --non-interactive --gpus all --network host --extra "-v /data:/data"
    ```
    The build pulls Ubuntu 24.04, Node, uv, gh and the three harnesses (a few minutes, network
    needed). The answers are stored in `~/.solaris/docker-home/<slug>/dh.conf`; a later `dh-build.sh`
    reuses them, flags override, deleting the file asks again.
-4. Record the inventory in `ai/.memory/resources.md`: host name, image, container, state dir, the
+4. Record the inventory in `<pack>/.memory/resources.md`: host name, image, container, state dir, the
    options chosen. Tell the user the enter command the script printed.
 5. Do not enter on their behalf: the container session is theirs. Stop editing the project from this
    host session once they are inside (one active side per project).
@@ -98,11 +99,11 @@ dir and removes only container and image). The project folder is never touched b
 
 | Path | What |
 |---|---|
-| `<project>/ai/plugins/docker-home/` | this overlay: `Dockerfile`, `dh-*.sh`, this skill, the rule |
+| `<project>/<pack>/plugins/docker-home/` | this overlay: `Dockerfile`, `dh-*.sh`, this skill, the rule |
 | `~/.solaris/docker-home/<slug>/dh.conf` | per-host options (sourced by the scripts) |
 | `~/.solaris/docker-home/<slug>/home/` | the container's `/home/dev`: logins, sessions, caches, venvs |
 | `~/.solaris/docker-home/<slug>/home/.ssh/` | copies of your ssh `config` and `known_hosts` (writable); private keys stay on the host, the forwarded agent socket signs (`DH_MOUNT_SSH=keys` in `dh.conf` mounts `~/.ssh` read-only instead, `0` disables both) |
-| `/home/dev/<slug>/ai/plugins/docker-home` (inside) | this overlay, re-mounted read-only so the container cannot rewrite the scripts the host runs |
+| `/home/dev/<slug>/<pack>/plugins/docker-home` (inside) | this overlay, re-mounted read-only so the container cannot rewrite the scripts the host runs |
 | `/home/dev/<slug>` (inside) | the project folder, bind-mounted read-write |
 | image `solaris-dh-<slug>`, container `dh-<slug>` | per project; `dh-status.sh` shows them |
 

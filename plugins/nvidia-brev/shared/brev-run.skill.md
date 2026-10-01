@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
   brev-cli/ upstream mirror.
 ---
-_Rev. 16_
+_Rev. 17_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -24,14 +24,15 @@ read the upstream directly at `github.com/brevdev/brev-cli` under `.agents/skill
 ## 0. Preconditions
 
 - `brev ls` succeeds (else run `brev-setup`).
-- **The active org matches the project's recorded `brev_org`** (`ai/.memory/resources.md`).
+- **The active org matches the project's recorded `brev_org`** (`<pack>/.memory/resources.md`;
+  `<pack>` is the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name).
   Check the active org with `brev org ls` (or `jq -r .name ~/.brev/active_org.json`). Being
   logged in says nothing about the org, and an instance created under the wrong org lists and
   bills there - invisible to the project team (a real field incident). If no `brev_org` is
   recorded, or it is a TBD/unreviewed default: ask the user which org this project's instances
   bill to, record the answer in `resources.md`, and never assume the personal org for a team
   project. On mismatch: `brev org set <recorded>` and re-check before ANY `create`.
-- The project has `ai/.memory/brev-costs.md` (create from the template below if missing).
+- The project has `<pack>/.memory/brev-costs.md` (create from the template below if missing).
 
 ## 1. Pick and create the instance
 
@@ -47,10 +48,10 @@ read the upstream directly at `github.com/brevdev/brev-cli` under `.agents/skill
    the instance and its type with `brev ls`. It waits for ready (default timeout 300s -
    pass `--timeout 900` for slow boots). Name convention: `<project-or-org-prefix>-<job>`.
 4. Record start time + $/h at creation. **Every instance gets a row in
-   `ai/.memory/brev-costs.md`** (created/deleted UTC, rate, hours, cost, purpose) - appended
+   `<pack>/.memory/brev-costs.md`** (created/deleted UTC, rate, hours, cost, purpose) - appended
    at teardown, including aborted attempts. The run report must state the actual cost.
 
-Ledger template (`ai/.memory/brev-costs.md`):
+Ledger template (`<pack>/.memory/brev-costs.md`):
 
 ```markdown
 # Brev Run-Cost Ledger
@@ -80,7 +81,7 @@ until their rows land at teardown.
 - Fallback (no outbound from the source host): relay via the local machine's scratch space
   (never cloud-synced paths), then `brev copy <tar> <name>:~/`.
 - Restricted data (NDA/PII) may only go to hosts its handling rules allow - check the
-  project's data-handling notes (`ai/.memory/resources.md` or equivalent) before shipping;
+  project's data-handling notes (`<pack>/.memory/resources.md` or equivalent) before shipping;
   never route through third-party storage buckets.
 
 ## 3. Set up + launch
@@ -125,8 +126,8 @@ until their rows land at teardown.
    The usage feed lags real time - re-check a while after teardown for the final number,
    and mark the row "billed" once verified.
 4. Report: what ran, where results landed, wall-clock, actual cost.
-5. Log the run in the project's `ai/.memory/interactions.jsonl`; record durable host facts
-   in `ai/.memory/resources.md`.
+5. Log the run in the project's `<pack>/.memory/interactions.jsonl`; record durable host facts
+   in `<pack>/.memory/resources.md`.
 
 ## Field Gotchas (learned on real runs)
 

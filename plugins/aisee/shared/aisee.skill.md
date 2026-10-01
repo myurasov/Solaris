@@ -17,7 +17,7 @@ summary: Capture the UI (or take provided media), then have AISee's VLM eyes ans
   assert an expectation, or watch a recording, or its audio models transcribe one - MCP first,
   REST/CLI fallback.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: aisee - visual verification and transcription with AISee <!-- omit in toc -->
 
@@ -38,8 +38,9 @@ evidence, media rules) are in [`aisee.rule.md`](aisee.rule.md) - they always app
 
 ## 0. Reach the server
 
-1. Read `aisee_server` from `ai/.memory/resources.md` and the consumer token (if any) from
-   `ai/.memory/credentials.md`.
+1. Read `aisee_server` from `<pack>/.memory/resources.md` and the consumer token (if any) from
+   `<pack>/.memory/credentials.md` (`<pack>` is the project's ai-pack folder: default `aipack/`,
+   `ai/` in older projects, any name).
 2. Confirm liveness: the MCP `health` tool if the `aisee` MCP server is connected, else
    `GET <server>/v1/health` (open endpoint).
 3. On the **first contact** with a server, read `GET <server>/v1/describe?flavor=mcp` - the
@@ -64,7 +65,7 @@ Skip if the user already provided media.
   `pdftoppm -r 100 -png report.pdf <dir>/p`, then one assert per page, e.g. "No text on this
   page overlaps other text or graphics" (about 1-2 s per page on `qwen3-6-35b-a3b`).
 
-Save per the evidence rule: `ai/.memory/visual/<area>-<state>-<YYYYMMDD>.png` (or the active
+Save per the evidence rule: `<pack>/.memory/visual/<area>-<state>-<YYYYMMDD>.png` (or the active
 task folder).
 
 ## 2. Query
@@ -174,8 +175,8 @@ uv sync && ./aisee install            # checks docker/NVIDIA toolkit/ffmpeg, cre
   minutes, the first request waited 84 s for the model to load, then answers took about 1 s
   per photo.
 
-Then record the URL in `ai/.memory/resources.md` (`aisee_server`), the consumer token (if
-enabled) in `ai/.memory/credentials.md`, and update the `aisee` MCP entry in both `.mcp.json` and
+Then record the URL in `<pack>/.memory/resources.md` (`aisee_server`), the consumer token (if
+enabled) in `<pack>/.memory/credentials.md`, and update the `aisee` MCP entry in both `.mcp.json` and
 `.cursor/mcp.json` (keep the two identical; under a Solaris checkout,
 `uv run -m solaris.tools.mcp_sync --check` verifies).
 

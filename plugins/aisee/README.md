@@ -33,7 +33,8 @@ CLI**. The plugin ships knowledge only - AISee itself runs as an external servic
 
 At the Solaris root: `install plugin aisee to <project>` (or `link plugin aisee to <project>`
 while developing the plugin). Setup prompts for the AISee server URL and an optional consumer
-token; answers land in the project's `ai/.memory/resources.md` / `credentials.md`, and the
+token; answers land in the project's `<pack>/.memory/resources.md` / `credentials.md` (`<pack>` is
+the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name), and the
 merged MCP entry gets the real URL.
 
 ## Requirements

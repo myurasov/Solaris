@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rev. 1
+# rev. 2
 # docker-home: start this project's container (create it on first start, seeding the home directory).
 # Mounts: the project folder (rw), the container's home (rw), this overlay re-mounted read-only on
 # top of the project so the container can never rewrite the scripts the host executes, the optional
@@ -35,7 +35,7 @@ dh_image_exists || dh_die "image $DH_IMAGE not found; run dh-build.sh first"
 mkdir -p "$DH_HOME/.claude" "$DH_HOME/.local/bin" "$DH_HOME/.ssh" "$DH_HOME/$SLUG"
 chmod 700 "$DH_HOME/.ssh"
 if [ ! -f "$DH_HOME/.claude/settings.json" ]; then
-  # Solaris memory doctrine: the pack's ai/.memory/ is the only memory; no harness auto memory.
+  # Solaris memory doctrine: the pack's .memory/ is the only memory; no harness auto memory.
   printf '{\n  "autoMemoryEnabled": false\n}\n' > "$DH_HOME/.claude/settings.json"
 fi
 if [ ! -f "$DH_HOME/.bashrc" ]; then

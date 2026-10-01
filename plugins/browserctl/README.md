@@ -22,9 +22,10 @@ browser outlives any single agent turn.
 
 ## Profile Model
 
-- **Per-project namespaces.** Every profile belongs to a project id (auto-derived from the
-  nearest `ai/manifest.json`, else the git-root/CWD name; `--project` / `$BROWSERCTL_PROJECT`
-  override). Projects never share profiles, ports, or logins.
+- **Per-project namespaces.** Every profile belongs to a project id, auto-derived from the
+  project's `<pack>/manifest.json` (`<pack>` is the project's ai-pack folder: default `aipack/`,
+  `ai/` in older projects, any name), else the git-root/CWD name; `--project` /
+  `$BROWSERCTL_PROJECT` override. Projects never share profiles, ports, or logins.
 - **Clean on first use.** A missing profile is created as an empty user-data dir - at project
   init (`browserctl.py init`) or on first `launch`. No login-bearing master, no inherited state.
 - **Ephemeral on demand.** `launch --ephemeral` profiles are deleted on `stop` and swept by

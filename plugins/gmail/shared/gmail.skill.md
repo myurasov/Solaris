@@ -3,7 +3,7 @@ name: gmail
 triggers: ["gmail", "check email", "check my email", "check inbox", "check my inbox", "unread emails", "read email", "read the email", "read that email", "search email", "find the email", "send email", "send an email", "send a mail", "reply to the email", "reply to that email", "forward the email", "draft an email", "email <someone>"]
 summary: Read and send Gmail from the terminal with gws (the Google Workspace CLI) - triage or search the inbox, read a message body, send / reply / reply-all / forward / draft with attachments - plus the raw Gmail API form for what the helpers do not cover. Needs gws-setup once per machine.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: gmail - Read and Send Mail With gws <!-- omit in toc -->
 
@@ -26,8 +26,9 @@ CLI and signs it in - run it first whenever the preflight below fails.
 ## Preflight
 
 1. `gws auth status` - `auth_method` must not be `"none"`; otherwise hand off to `gws-setup`.
-2. Know which account you act as: `gmail_account` in `ai/.memory/resources.md` (recorded by
-   `gws-setup`). `gws gmail users getProfile --params '{"userId":"me"}'` shows the signed-in
+2. Know which account you act as: `gmail_account` in `<pack>/.memory/resources.md` (`<pack>`
+   is the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name;
+   recorded by `gws-setup`). `gws gmail users getProfile --params '{"userId":"me"}'` shows the signed-in
    address when in doubt.
 3. `gws gmail +triage --max 1` is the harmless probe (read-only, never modifies the mailbox).
    Exit code 2 = auth error (token expired or revoked) -> re-login per `gws-setup`.

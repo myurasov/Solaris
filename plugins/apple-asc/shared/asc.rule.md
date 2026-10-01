@@ -1,4 +1,4 @@
-_Rev. 1_
+_Rev. 2_
 
 # Rule: App Store Connect (Always-On) <!-- omit in toc -->
 
@@ -16,8 +16,9 @@ been triggered.
   get a one-line heads-up even under a grant.
 - **Secrets and identity discipline.** The Apple web session lives only in a browserctl
   profile (never launched outside browserctl, never exported); API keys, app/version ids,
-  team ids, and account details live in `ai/.memory/` - never in shareable files, logs, or
-  commits. Reference secrets by name, never by value.
+  team ids, and account details live in `<pack>/.memory/` (`<pack>` is the project's ai-pack
+  folder: default `aipack/`, `ai/` in older projects, any name) - never in shareable files, logs,
+  or commits. Reference secrets by name, never by value.
 - **Verify by re-reading, never by the click/call.** After any mutation, confirm the
   persisted state (fresh snapshot or GET) before reporting it done - ASC fails silently in
   both the UI and some API flows.

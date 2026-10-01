@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -27,16 +27,17 @@ status, agreements, IAP setup, API-key creation, visual verification) and for th
 case where no API key exists yet. Requires the base **browserctl** plugin in the same
 project (its `browserctl.skill.md` is the command reference); this skill adds the
 ASC-specific technique. The overlay path below is written as
-`ai/plugins/browserctl/browserctl.py` - adjust if the base plugin is linked rather than
+`<pack>/plugins/browserctl/browserctl.py`, `<pack>` being the project's ai-pack folder (default
+`aipack/`, `ai/` in older projects, any name) - adjust if the base plugin is linked rather than
 copied.
 
 ## Session Prelude
 
 1. **Profile:** the signed-in Apple session persists in the browserctl profile named in
-   `ai/.memory/resources.md`.
+   `<pack>/.memory/resources.md`.
 
    ```bash
-   uv run ai/plugins/browserctl/browserctl.py launch --profile <name> --headless --url <deep link>
+   uv run <pack>/plugins/browserctl/browserctl.py launch --profile <name> --headless --url <deep link>
    ```
 
    Headless is fine once the session exists; for a (re)login launch `--headed` and ask the
@@ -47,7 +48,7 @@ copied.
    reading anything else - an expired session otherwise looks like an empty page.
 2. **Scripts:** if the project env has no playwright, run attach() scripts with
    `uv run --with playwright python <script>.py` from the project root.
-3. **Identifiers** (app id, version/submission ids, team id) come from `ai/.memory/` -
+3. **Identifiers** (app id, version/submission ids, team id) come from `<pack>/.memory/` -
    never hard-code them in shareable files.
 
 ## Two Drive Modes
@@ -55,11 +56,11 @@ copied.
 **CLI quick loop** - reads and single clicks; no script file needed:
 
 ```bash
-uv run ai/plugins/browserctl/browserctl.py navigate --profile <name> --url <url>
-uv run ai/plugins/browserctl/browserctl.py eval --profile <name> \
+uv run <pack>/plugins/browserctl/browserctl.py navigate --profile <name> --url <url>
+uv run <pack>/plugins/browserctl/browserctl.py eval --profile <name> \
   --js "new Promise(r=>setTimeout(()=>r(document.readyState+' | '+location.href),6000))"   # ASC is a slow SPA - always give it ~6 s
-uv run ai/plugins/browserctl/browserctl.py snapshot --profile <name> --out step.yaml        # then grep the YAML
-uv run ai/plugins/browserctl/browserctl.py eval --profile <name> \
+uv run <pack>/plugins/browserctl/browserctl.py snapshot --profile <name> --out step.yaml        # then grep the YAML
+uv run <pack>/plugins/browserctl/browserctl.py eval --profile <name> \
   --js "(()=>{const b=[...document.querySelectorAll('button')].find(x=>x.textContent.trim()==='Done');if(!b)return 'no button';b.click();return 'clicked'})()"
 ```
 
@@ -70,7 +71,7 @@ without redoing the rest:
 ```python
 import importlib.util
 spec = importlib.util.spec_from_file_location(
-    "browserctl", "<abs project path>/ai/plugins/browserctl/browserctl.py")
+    "browserctl", "<abs project path>/<pack>/plugins/browserctl/browserctl.py")
 bctl = importlib.util.module_from_spec(spec); spec.loader.exec_module(bctl)
 
 with bctl.attach("<profile>") as (pw, browser):
@@ -100,7 +101,7 @@ Screenshot only to verify visuals (icons, screenshot thumbnails, badges).
 ## Deep-Link Map
 
 ASC routes are stable - deep-link instead of clicking through menus. `<platform>` is `ios`
-or `macos`; ids from `ai/.memory/`:
+or `macos`; ids from `<pack>/.memory/`:
 
 | Page | URL |
 |---|---|
@@ -148,7 +149,7 @@ Nearly every mutation happens in a `role=dialog` overlay:
   the updated date + Active.
 - **API key creation**: Users and Access > Integrations > App Store Connect API ->
   Generate; role App Manager suffices for uploads + full listing staging. Capture the
-  one-time `.p8` with `page.expect_download()`; store per `ai/.memory/credentials.md`.
+  one-time `.p8` with `page.expect_download()`; store per `<pack>/.memory/credentials.md`.
 - **Attach a build** (browser path; also fine over the API): version page -> `Add Build` ->
   the dialog lists processed builds (a build appears with its icon once Apple finishes
   processing, typically 15-60 min after upload) -> check the radio (`Done` stays disabled
@@ -254,7 +255,7 @@ Nearly every mutation happens in a `role=dialog` overlay:
   tokens, never launch the profile outside browserctl (a foreign launch purges cookies),
   never paste session material into logs or commits.
 - Keep account identifiers, contact details, and resource ids out of shareable files -
-  they live in `ai/.memory/`.
+  they live in `<pack>/.memory/`.
 
 ## Maintenance (Standing Duty)
 

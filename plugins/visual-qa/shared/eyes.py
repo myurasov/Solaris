@@ -1,6 +1,5 @@
-# rev. 11
-
 #!/usr/bin/env -S uv run --no-project --script
+# rev. 12
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["mcp>=1.2.0"]
@@ -46,23 +45,76 @@ TIMEOUT = float(os.environ.get("VISUAL_QA_TIMEOUT", "120"))
 
 
 # ------------------------------------------------------------------- multi-model registry
-def _registry_path() -> str | None:
-    cands = [os.environ.get("VISUAL_QA_REGISTRY", ""),
-             os.path.join("ai", ".memory", "visual-qa-endpoints.json"),
-             os.path.join("ai", "memory", "visual-qa-endpoints.json"),  # pre-0.18 layout
-             os.path.join(os.path.dirname(os.path.abspath(__file__)), "endpoints.json")]
-    for c in cands:
-        if c and os.path.isfile(c):
-            return c
+def _is_pack(d: str) -> bool:
+    """An ai-pack folder: not hidden, with a manifest.json that carries framework_version and a
+    project object (plugin manifests do not)."""
+    if os.path.basename(d).startswith(".") or not os.path.isdir(d):
+        return False
+    try:
+        with open(os.path.join(d, "manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
+def _pack_in(root: str) -> str | None:
+    """The one ai-pack folder directly under root, None when there is none."""
+    try:
+        packs = sorted(p for p in (os.path.join(root, n) for n in os.listdir(root)) if _is_pack(p))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        raise RuntimeError(f"more than one ai-pack folder in {root}: "
+                           + ", ".join(os.path.basename(p) for p in packs))
+    return packs[0] if packs else None
+
+
+def _find_pack() -> str | None:
+    """The project's ai-pack folder, whatever its name (aipack/ by default, ai/ in projects made
+    before Solaris 0.39.0): the project root is the nearest folder with one direct child folder
+    holding an ai-pack manifest.json, and that child is the pack. Searched from the working
+    directory up, then from this file's own location (a copied install lives in
+    <project>/<pack>/plugins/visual-qa/)."""
+    # Home and every folder above it (the filesystem root too) are never listed: no project lives
+    # there, touching ~/Desktop or ~/Documents can raise macOS privacy prompts, and an auto-mounted
+    # /home can be slow. A folder is off limits when it is home or one of home's ancestors.
+    home = os.path.realpath(os.path.expanduser("~"))
+    d = os.getcwd()
+    while os.path.commonpath([d, home]) != d:
+        pack = _pack_in(d)
+        if pack:
+            return pack
+        d = os.path.dirname(d)
+    here = os.path.dirname(os.path.realpath(__file__))
+    pack = os.path.dirname(os.path.dirname(here))
+    root = os.path.dirname(pack)
+    if (os.path.basename(os.path.dirname(here)) == "plugins" and os.path.commonpath([root, home]) != root
+            and _is_pack(pack) and _pack_in(root) == pack):
+        return pack
     return None
+
+
+def _registry_path() -> str | None:
+    env = os.environ.get("VISUAL_QA_REGISTRY", "")
+    if env and os.path.isfile(env):
+        return env
+    cands = []
+    pack = _find_pack()
+    if pack:
+        cands += [os.path.join(pack, ".memory", "visual-qa-endpoints.json"),
+                  os.path.join(pack, "memory", "visual-qa-endpoints.json")]  # pre-0.18 layout
+    cands.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "endpoints.json"))
+    return next((c for c in cands if os.path.isfile(c)), None)
 
 
 def _registry() -> list[dict]:
     """Registered serving instances: [{name, model, endpoint, tasks, default?, note?}, ...].
 
-    Read from VISUAL_QA_REGISTRY (path), else ai/.memory/visual-qa-endpoints.json (ai/memory/ pre-0.18) (the private
-    layer - endpoints carry internal hosts), else an endpoints.json next to this file (standalone
-    use). Empty list = single-endpoint mode (env defaults only).
+    Read from VISUAL_QA_REGISTRY (path), else .memory/visual-qa-endpoints.json in the project's
+    ai-pack folder (memory/ pre-0.18; see _find_pack) (the private layer - endpoints carry internal
+    hosts), else an endpoints.json next to this file (standalone use). Empty list = single-endpoint
+    mode (env defaults only).
     """
     p = _registry_path()
     if not p:
@@ -99,7 +151,8 @@ def use(name: str) -> dict:
     """Persistently select the active instance: sets default: true on `name` in the registry."""
     p = _registry_path()
     if not p:
-        raise RuntimeError("no registry file found (ai/.memory/visual-qa-endpoints.json)")
+        raise RuntimeError("no registry file found (<pack>/.memory/visual-qa-endpoints.json, "
+                           "<pack> being the project's ai-pack folder)")
     with open(p, encoding="utf-8") as f:
         doc = json.load(f)
     names = [i.get("name") for i in doc.get("instances", [])]

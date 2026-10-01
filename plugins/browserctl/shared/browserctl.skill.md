@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page", "bot check", "cloudflare challenge", "verify you are human", "headless is blocked"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 12_
+_Rev. 13_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -17,8 +17,9 @@ _Rev. 12_
 
 ## Why This Exists
 
-`browserctl.py` (in this plugin's overlay - `ai/plugins/browserctl/` in the project, or the plugin's
-`shared/` when linked) **replaces the Playwright MCP** as the project's browser layer. Playwright
+`browserctl.py` (in this plugin's overlay - `<pack>/plugins/browserctl/` in the project, `<pack>`
+being the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name; or the
+plugin's `shared/` when linked) **replaces the Playwright MCP** as the project's browser layer. Playwright
 remains the engine: browserctl launches the Playwright-managed Chromium directly, one persistent
 profile per purpose, each on a stable CDP port. Any client attaches over CDP, so several flows
 (and several agent sessions) can hold browsers open concurrently with zero profile-lock
@@ -31,7 +32,7 @@ where this skill was loaded from:
 
 ```bash
 # copy install (the usual case) - from the project root:
-uv run ai/plugins/browserctl/browserctl.py <cmd> ...
+uv run <pack>/plugins/browserctl/browserctl.py <cmd> ...
 # link install (plugin development) - from the Solaris root:
 uv run plugins/browserctl/shared/browserctl.py <cmd> ...
 ```
@@ -51,9 +52,10 @@ under `~/.solaris/browserctl/` is machine-local and disposable - never inside th
 often cloud-synced). Override with `$BROWSERCTL_HOME` to point at a different root (e.g. for
 sandboxed harnesses or to keep old profiles from a prior `~/.browserctl/` home).
 
-- **Every profile belongs to a project.** The project id is auto-derived (nearest
-  `ai/manifest.json` walking up from the CWD, else the git-root/CWD name) or forced with
-  `--project` / `$BROWSERCTL_PROJECT`. Two projects never share profiles, ports, or logins.
+- **Every profile belongs to a project.** The project id is auto-derived (the project's
+  `<pack>/manifest.json`, found walking up from the CWD or, for a copied script, from where the
+  script sits; else the git-root/CWD name) or forced with `--project` / `$BROWSERCTL_PROJECT`.
+  Two projects never share profiles, ports, or logins.
 - **Profiles start clean.** A missing profile is created as an empty user-data dir on first
   `launch` - no logins inherited from anywhere. The project's standing profile is `default`;
   create it at project init with `init` (idempotent, no launch) or just launch it.
@@ -120,7 +122,7 @@ selectors), write a short Python script against the same live browser - full Pla
 
 ```python
 import importlib.util
-spec = importlib.util.spec_from_file_location("browserctl", "ai/plugins/browserctl/browserctl.py")  # or the absolute path; same resolution as the CLI above
+spec = importlib.util.spec_from_file_location("browserctl", "<pack>/plugins/browserctl/browserctl.py")  # or the absolute path; same resolution as the CLI above
 bctl = importlib.util.module_from_spec(spec); spec.loader.exec_module(bctl)
 
 with bctl.attach("default") as (pw, browser):

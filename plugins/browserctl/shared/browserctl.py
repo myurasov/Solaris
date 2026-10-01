@@ -1,6 +1,5 @@
-# rev. 3
-
 #!/usr/bin/env -S uv run --no-project --script
+# rev. 4
 # /// script
 # requires-python = ">=3.10"
 # dependencies = ["playwright>=1.45", "pillow>=10"]
@@ -17,9 +16,11 @@ without profile-lock conflicts. Chromium is the only supported engine.
 Profile model (per project, clean by default):
 
 - Every profile belongs to a **project** namespace. The project id comes from
-  ``--project`` / ``$BROWSERCTL_PROJECT``, or is auto-derived by walking up
-  from the CWD to the nearest ai-pack (``ai/manifest.json`` -> project slug),
-  else the git-root / CWD folder name.
+  ``--project`` / ``$BROWSERCTL_PROJECT``, or is auto-derived from the
+  project's ai-pack (``<pack>/manifest.json`` -> project slug, where
+  ``<pack>`` is the project's ai-pack folder: default ``aipack/``, ``ai/`` in
+  older projects, any name; see ``find_pack``), else the git-root / CWD
+  folder name.
 - A missing profile is created **clean** (empty user-data dir) on first
   launch - no logins are inherited from anywhere. The project's standing
   profile is ``default`` (create it explicitly with ``init`` at project
@@ -132,31 +133,74 @@ def sanitize_id(raw: str) -> str:
     return slug
 
 
+def _is_pack(d: Path) -> bool:
+    """An ai-pack folder: not hidden, with a manifest.json that carries
+    framework_version and a project object (plugin manifests do not)."""
+    if d.name.startswith(".") or not d.is_dir():
+        return False
+    try:
+        m = json.loads((d / "manifest.json").read_text())
+    except (OSError, ValueError):
+        return False
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
+def _pack_in(root: Path) -> Path | None:
+    """The one ai-pack folder directly under root, None when there is none."""
+    try:
+        packs = sorted(d for d in root.iterdir() if _is_pack(d))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        raise RuntimeError(f"more than one ai-pack folder in {root} "
+                           f"({', '.join(d.name for d in packs)}); pass --project")
+    return packs[0] if packs else None
+
+
+def find_pack() -> Path | None:
+    """The project's ai-pack folder, whatever its name (aipack/ by default, ai/
+    in projects made before Solaris 0.39.0): the project root is the nearest
+    folder with one direct child folder holding an ai-pack manifest.json, and
+    that child is the pack. Searched from the CWD up, then from this file's
+    own location (a copied install lives in <project>/<pack>/plugins/<name>/).
+    Works in Solaris projects and detached ai-packs alike."""
+    # Home and every folder above it (the filesystem root too) are never
+    # listed: no project lives there, touching ~/Desktop or ~/Documents can
+    # raise macOS privacy prompts, and an auto-mounted /home can be slow.
+    home = Path.home().resolve()
+    off_limits = {home, *home.parents}
+    cwd = Path.cwd()
+    for p in (cwd, *cwd.parents):
+        if p in off_limits:
+            break
+        pack = _pack_in(p)
+        if pack:
+            return pack
+    here = Path(__file__).resolve()
+    pack = here.parent.parent.parent  # copied install: <project>/<pack>/plugins/<name>/<this file>
+    if (here.parent.parent.name == "plugins" and pack.parent not in off_limits
+            and _is_pack(pack) and _pack_in(pack.parent) == pack):
+        return pack
+    return None
+
+
 def resolve_project(explicit: str | None) -> str:
-    """Project id: --project > $BROWSERCTL_PROJECT > nearest ai-pack manifest
-    (walking up from CWD; works in Solaris projects and standalone ai-packs
-    alike, since ai/manifest.json travels with the pack) > git root name >
-    CWD name."""
+    """Project id: --project > $BROWSERCTL_PROJECT > the project's ai-pack
+    manifest (project slug or name; see find_pack) > git root name > CWD name."""
     if explicit:
         return sanitize_id(explicit)
     env = os.environ.get("BROWSERCTL_PROJECT")
     if env:
         return sanitize_id(env)
+    pack = find_pack()
+    if pack:
+        with contextlib.suppress(Exception):
+            proj = json.loads((pack / "manifest.json").read_text())["project"]
+            slug = proj.get("slug") or proj.get("name")
+            if slug:
+                return sanitize_id(str(slug))
     cwd = Path.cwd()
-    git_root: Path | None = None
-    for p in (cwd, *cwd.parents):
-        candidates = [p / "ai" / "manifest.json"]
-        if p.name == "ai":
-            candidates.append(p / "manifest.json")
-        for mf in candidates:
-            if mf.is_file():
-                with contextlib.suppress(Exception):
-                    proj = (json.loads(mf.read_text()) or {}).get("project", {})
-                    slug = proj.get("slug") or proj.get("name")
-                    if slug:
-                        return sanitize_id(str(slug))
-        if git_root is None and (p / ".git").exists():
-            git_root = p
+    git_root = next((p for p in (cwd, *cwd.parents) if (p / ".git").exists()), None)
     return sanitize_id((git_root or cwd).name)
 
 

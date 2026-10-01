@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/asc-api.skill.md": {
-      "rev": 4,
-      "hash": "9ccb8457819720cc6f473aa0ba732461203123333b0d0a6814fcf34f079f0e0e",
+      "rev": 5,
+      "hash": "6191741c9554d3545a2979b36fa9b81a659513002370fdc634c7a0e24978030b",
       "history": [
         {
           "rev": 1,
@@ -21,32 +21,44 @@
         {
           "rev": 4,
           "hash": "9ccb8457819720cc6f473aa0ba732461203123333b0d0a6814fcf34f079f0e0e"
+        },
+        {
+          "rev": 5,
+          "hash": "6191741c9554d3545a2979b36fa9b81a659513002370fdc634c7a0e24978030b"
         }
       ]
     },
     "shared/asc-upload.skill.md": {
-      "rev": 1,
-      "hash": "22312e674d44209a0564106c82356f54d7317a708680095553984067f8233f54",
+      "rev": 2,
+      "hash": "beda9a2dbb1907cafe3193fd7b17555c465bf831e71bbcde5b95b39e40b8972c",
       "history": [
         {
           "rev": 1,
           "hash": "22312e674d44209a0564106c82356f54d7317a708680095553984067f8233f54"
+        },
+        {
+          "rev": 2,
+          "hash": "beda9a2dbb1907cafe3193fd7b17555c465bf831e71bbcde5b95b39e40b8972c"
         }
       ]
     },
     "shared/asc.rule.md": {
-      "rev": 1,
-      "hash": "59252b1bed18f46d1fb4a4049baac1a5bb59792951ae5e0b4fa2afcdbc2af061",
+      "rev": 2,
+      "hash": "e75bcdb41531956e570df7658c530a3a4f5a59de4a8d772eb12daa99db36d9fa",
       "history": [
         {
           "rev": 1,
           "hash": "59252b1bed18f46d1fb4a4049baac1a5bb59792951ae5e0b4fa2afcdbc2af061"
+        },
+        {
+          "rev": 2,
+          "hash": "e75bcdb41531956e570df7658c530a3a4f5a59de4a8d772eb12daa99db36d9fa"
         }
       ]
     },
     "shared/browserctl.asc.skill.md": {
-      "rev": 9,
-      "hash": "89a4667053b3a0b293d8e06511a34dbe6377a2617d9317a22d13de8bf025b552",
+      "rev": 10,
+      "hash": "d1dfd3cd6c21848120a33fc3e3dcf1c84b8be2eb0d34ed7cd931d5ed6e290abf",
       "history": [
         {
           "rev": 1,
@@ -83,6 +95,10 @@
         {
           "rev": 9,
           "hash": "89a4667053b3a0b293d8e06511a34dbe6377a2617d9317a22d13de8bf025b552"
+        },
+        {
+          "rev": 10,
+          "hash": "d1dfd3cd6c21848120a33fc3e3dcf1c84b8be2eb0d34ed7cd931d5ed6e290abf"
         }
       ]
     }

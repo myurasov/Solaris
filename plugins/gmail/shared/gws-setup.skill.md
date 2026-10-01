@@ -3,7 +3,7 @@ name: gws-setup
 triggers: ["set up gmail", "setup gmail", "gmail setup", "install gws", "set up gws", "gws setup", "gws login", "gws auth", "log in to gmail", "gmail login", "google workspace cli", "set up google workspace cli", "install google workspace cli"]
 summary: Install gws (the Google Workspace CLI) on macOS or Linux, put an OAuth Desktop client in place, sign in with the Gmail scope (gws prints a URL, the owner completes consent in a browser; owner-confirmed export hand-off for headless hosts), verify, and record the account. Idempotent - run before the first gmail use on any machine, and again when auth expires.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: gws-setup - Install and Sign In the Google Workspace CLI <!-- omit in toc -->
 
@@ -47,7 +47,8 @@ later service needs only extra scopes at login (step 3) plus its own skill.
      the shell profile. On a **remote host Solaris manages**, use `~/.solaris/gws/bin/`
      instead (the remote footprint convention) and add it to `PATH` in the shell profile;
      uninstall = remove that directory and `~/.config/gws/`. Record host + path in
-     `ai/.memory/resources.md`.
+     `<pack>/.memory/resources.md` (`<pack>` is the project's ai-pack folder: default `aipack/`,
+     `ai/` in older projects, any name).
    - **npm (Node 18+ and `tar` on PATH, any OS):** `npm install -g @googleworkspace/cli`
      (downloads the same release binary; make sure npm's global bin is on `PATH`).
    - **From source:** `cargo install --git https://github.com/googleworkspace/cli --locked`
@@ -99,7 +100,7 @@ Skip its `--login` flag: it runs an unscoped login whose terminal picker presele
 Workspace services; do step 3 of this skill instead.
 
 - The client JSON is a credential: never paste it into chat, commits, or shared files;
-  reference it by path. Record the GCP project id in `ai/.memory/resources.md`.
+  reference it by path. Record the GCP project id in `<pack>/.memory/resources.md`.
 - **Testing-mode expiry (External audience only):** an External app left in **Testing** gets
   refresh tokens that expire after 7 days, so `gws` needs step 3 again weekly. To stop that,
   publish the app (Audience > **Publish app** > In production) - the "Google hasn't verified
@@ -157,7 +158,7 @@ Workspace services; do step 3 of this skill instead.
 
 1. `gws gmail users getProfile --params '{"userId":"me"}'` - the `emailAddress` in the reply
    is the signed-in account; `gws gmail +triage --max 3` proves read access.
-2. Record in the project's `ai/.memory/resources.md`: `gmail_account: <email>`, the GCP
+2. Record in the project's `<pack>/.memory/resources.md`: `gmail_account: <email>`, the GCP
    project id, and (remote hosts) host + install path + credentials-file path. Identifiers
    only - never tokens or the client JSON. `gws-setup` is done; `gmail.skill.md` takes over.
 

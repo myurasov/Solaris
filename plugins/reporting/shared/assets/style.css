@@ -1,11 +1,12 @@
-/* rev. 6 */
+/* rev. 7 */
 
 /* ==========================================================================
    Report stylesheet - the plugin-managed base for report styling.
 
    Report HTML sources live in reports/html/ (gitignored working files) and
-   link this file plus the project theme:
-     <link rel="stylesheet" href="../../ai/plugins/reporting/assets/style.css">
+   link this file plus the project theme (<pack> is the project's ai-pack
+   folder: default aipack/, ai/ in older projects, any name):
+     <link rel="stylesheet" href="../../<pack>/plugins/reporting/assets/style.css">
      <link rel="stylesheet" href="../theme.css">
    report-specific rules go in a small inline <style> after the links.
 

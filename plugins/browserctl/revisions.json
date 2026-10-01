@@ -3,18 +3,22 @@
   "schema_version": 1,
   "files": {
     "shared/browserctl.py": {
-      "rev": 3,
-      "hash": "f65dd2eab5f560be029054105e33af95da7f455ee4d8d4bc4dc1d0e01539514b",
+      "rev": 4,
+      "hash": "5ce3b0d9659bd16299626732b33688eac1fbce0fcbaf9c941d7c4e8ddc20911a",
       "history": [
         {
           "rev": 3,
           "hash": "f65dd2eab5f560be029054105e33af95da7f455ee4d8d4bc4dc1d0e01539514b"
+        },
+        {
+          "rev": 4,
+          "hash": "5ce3b0d9659bd16299626732b33688eac1fbce0fcbaf9c941d7c4e8ddc20911a"
         }
       ]
     },
     "shared/browserctl.rule.md": {
-      "rev": 5,
-      "hash": "a07a946694fe8bc810415e8637c292401174ae1d79652572b480876eca7ad0d3",
+      "rev": 6,
+      "hash": "aaf17c5fae1baabd6cb42485d5fedc9ff128d7396f8df3b293fcc1df0e8bddfd",
       "history": [
         {
           "rev": 1,
@@ -35,17 +39,17 @@
         {
           "rev": 5,
           "hash": "a07a946694fe8bc810415e8637c292401174ae1d79652572b480876eca7ad0d3"
+        },
+        {
+          "rev": 6,
+          "hash": "aaf17c5fae1baabd6cb42485d5fedc9ff128d7396f8df3b293fcc1df0e8bddfd"
         }
       ]
     },
     "shared/browserctl.skill.md": {
-      "rev": 12,
-      "hash": "df89e07dbfb0c07367af723e94eb42b6aea71b81e926bec98cdf2ab11d6b536c",
+      "rev": 13,
+      "hash": "0313907de905b775899fef925362d80af07aef33ee87fc3a6ee627f8b29f7e73",
       "history": [
-        {
-          "rev": 2,
-          "hash": "fd1ffa5f370387c4a259ffd9343913ce98b4df5e476a0e4c63d61f1c4e9705dc"
-        },
         {
           "rev": 3,
           "hash": "25a38ff1543ca3ae8062ccd98070ea936da8b260cd7b4b4c8f190e8c4456bab8"
@@ -81,6 +85,10 @@
         {
           "rev": 12,
           "hash": "df89e07dbfb0c07367af723e94eb42b6aea71b81e926bec98cdf2ab11d6b536c"
+        },
+        {
+          "rev": 13,
+          "hash": "0313907de905b775899fef925362d80af07aef33ee87fc3a6ee627f8b29f7e73"
         }
       ]
     },

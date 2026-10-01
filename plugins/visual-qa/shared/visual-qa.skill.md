@@ -11,7 +11,7 @@ antitriggers:
   - "work on tasks/"
 summary: Capture the running UI (web / native / mobile), then have the VLM 'eyes' answer or assert against it - the visual leg of verification.
 ---
-_Rev. 12_
+_Rev. 13_
 
 # visual-qa <!-- omit in toc -->
 
@@ -39,7 +39,8 @@ NVIDIA GPU system** - a DGX Spark, a workstation RTX, a datacenter A100/H100, or
 just the Spark. To stand an endpoint up, see [`README.md`](../README.md).
 
 Every `eyes.py` command below uses the copy-install path, run from the project root:
-`uv run --no-project ai/plugins/visual-qa/eyes.py ...`. When the plugin is not materialized - a link-mode
+`uv run --no-project <pack>/plugins/visual-qa/eyes.py ...` (`<pack>` is the project's ai-pack folder:
+default `aipack/`, `ai/` in older projects, any name). When the plugin is not materialized - a link-mode
 install, or live-loaded by an ad-hoc task - substitute the live source path from the Solaris root:
 `uv run --no-project plugins/visual-qa/shared/eyes.py ...` (same commands otherwise).
 
@@ -58,16 +59,16 @@ the quant: Blackwell -> NVFP4, Hopper/Ada -> FP8, Ampere/older -> AWQ int4), and
 
 Procedure:
 
-1. **Detect the GPU.** Locally: `uv run --no-project ai/plugins/visual-qa/eyes.py detect`. On a remote host, run
+1. **Detect the GPU.** Locally: `uv run --no-project <pack>/plugins/visual-qa/eyes.py detect`. On a remote host, run
    `nvidia-smi --query-gpu=name,memory.total --format=csv,noheader,nounits` there (via the `hss` wrapper)
    and read off the name + MiB. Unified-memory parts (e.g. GB10) report memory as `N/A` - use the usable
    budget instead (the Spark is ~110 GB).
 2. **Get ranked options** for the detected `vram`/`arch` and the task:
-   `uv run --no-project ai/plugins/visual-qa/eyes.py recommend --vram <GB> --arch <arch> --task <task>`
+   `uv run --no-project <pack>/plugins/visual-qa/eyes.py recommend --vram <GB> --arch <arch> --task <task>`
    (or `--detect` to read the local GPU). It returns a ranked shortlist with estimated VRAM, the quant,
    serving backend, and license. The catalog is editable data in [`models.json`](models.json).
 3. **Ask the user to choose.** Present the top few options (name, size, est. VRAM, why) and let them pick -
-   do not silently auto-select. Record the choice into `ai/.memory/resources.md` and set
+   do not silently auto-select. Record the choice into `<pack>/.memory/resources.md` and set
    `VISUAL_QA_MODEL` / `VISUAL_QA_VIDEO_MODEL` (and the serving command) accordingly.
 
 ## 1. Capture
@@ -97,10 +98,10 @@ Call the **`visual-qa` MCP** tools (or run `eyes.py` directly via Bash):
 CLI equivalents (for scripting / health checks):
 
 ```
-uv run --no-project ai/plugins/visual-qa/eyes.py health
-uv run --no-project ai/plugins/visual-qa/eyes.py look   --media shot.png  --q "what's on screen?"
-uv run --no-project ai/plugins/visual-qa/eyes.py assert --media shot.png  --expect "login form with email + password"
-uv run --no-project ai/plugins/visual-qa/eyes.py assert --media flow.mov --frames 8 --video --expect "checkout completes and a success toast appears"
+uv run --no-project <pack>/plugins/visual-qa/eyes.py health
+uv run --no-project <pack>/plugins/visual-qa/eyes.py look   --media shot.png  --q "what's on screen?"
+uv run --no-project <pack>/plugins/visual-qa/eyes.py assert --media shot.png  --expect "login form with email + password"
+uv run --no-project <pack>/plugins/visual-qa/eyes.py assert --media flow.mov --frames 8 --video --expect "checkout completes and a success toast appears"
 ```
 
 `--media` accepts an image, multiple images (repeat the flag), or a video (`--video`, sampled to `--frames`
@@ -130,8 +131,8 @@ call count: chunks ≈ duration × fps / server_frames). In assert mode `watch` 
 synthesized, time-cited summary. `--scale <height>` downscales frames to cut latency.
 
 ```
-uv run --no-project ai/plugins/visual-qa/eyes.py watch --media run.mp4 --fps 1  --q "when does the scene load?"
-uv run --no-project ai/plugins/visual-qa/eyes.py watch --media run.mp4 --fps 15 --expect "no black or corrupted frames"
+uv run --no-project <pack>/plugins/visual-qa/eyes.py watch --media run.mp4 --fps 1  --q "when does the scene load?"
+uv run --no-project <pack>/plugins/visual-qa/eyes.py watch --media run.mp4 --fps 15 --expect "no black or corrupted frames"
 ```
 
 MCP: `watch_tool(media, question|expectation, fps, ...)`; `look`/`assert` also accept `fps`/`native`.
@@ -142,7 +143,7 @@ MCP: `watch_tool(media, question|expectation, fps, ...)`; `look`/`assert` also a
 (`look`/`assert`/`watch`) run on. There is **no implicit per-task model switching**. More instances may be
 *installed* (weights cached, container stopped) and swapped in when needed.
 
-- **Registry** — `ai/.memory/visual-qa-endpoints.json` (private layer; or `VISUAL_QA_REGISTRY=<path>`):
+- **Registry** — `<pack>/.memory/visual-qa-endpoints.json` (private layer; or `VISUAL_QA_REGISTRY=<path>`):
   installed instances `{name, model, endpoint, tasks, note, default?}`; **`name` is the slug of the full model id** (e.g. `Qwen/Qwen3-VL-32B-Instruct` → `qwen3-vl-32b-instruct`), matching the serving container/config names. `default: true` marks the active one.
 - **Select the active instance:** `eyes.py use <name>` / MCP `use_model_tool(name)` (persists), or
   `VISUAL_QA_ACTIVE=<name>` env for a session-only override. Make sure that instance is *started*

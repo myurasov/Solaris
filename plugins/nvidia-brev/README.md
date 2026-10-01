@@ -13,7 +13,8 @@ non-negotiable teardown and cost ledger entry.
   (browser flow; no secrets in chat), pick the org, verify access.
 - `shared/brev-run.skill.md` - the full run lifecycle: size and create an instance, ship the
   payload (direct datacenter-to-datacenter push preferred), set up, launch detached, monitor,
-  collect results, ALWAYS tear down, and append the mandatory row to `ai/.memory/brev-costs.md`.
+  collect results, ALWAYS tear down, and append the mandatory row to `<pack>/.memory/brev-costs.md`
+  (`<pack>` is the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any name).
   Includes field gotchas learned on real runs (Blackwell torch matrices, `pkill -f` self-match,
   `brev exec` detach semantics, provider quirks).
 - `brev-cli/` - **pristine mirror** of the upstream NVIDIA brev-cli agent files

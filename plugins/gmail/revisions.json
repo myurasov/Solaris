@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/gmail.rule.md": {
-      "rev": 2,
-      "hash": "a690db58fb7da795e4053097a2d69eb288787ffa84388ac8868043f3a48062c7",
+      "rev": 3,
+      "hash": "119cff2b059d9bb69ad1d8f76fee7c59fc5eddbd51e251be5453ec11a13e21f0",
       "history": [
         {
           "rev": 1,
@@ -13,12 +13,16 @@
         {
           "rev": 2,
           "hash": "a690db58fb7da795e4053097a2d69eb288787ffa84388ac8868043f3a48062c7"
+        },
+        {
+          "rev": 3,
+          "hash": "119cff2b059d9bb69ad1d8f76fee7c59fc5eddbd51e251be5453ec11a13e21f0"
         }
       ]
     },
     "shared/gmail.skill.md": {
-      "rev": 3,
-      "hash": "8f0910ec1152a063d88e1b19a7906982db32bea5dfe1944fdea2779cad4eec66",
+      "rev": 4,
+      "hash": "9eb7c4bc949f48e031454d29ba58bf159b1bb0abc6f1783db9a1649aa8b008ad",
       "history": [
         {
           "rev": 1,
@@ -31,12 +35,16 @@
         {
           "rev": 3,
           "hash": "8f0910ec1152a063d88e1b19a7906982db32bea5dfe1944fdea2779cad4eec66"
+        },
+        {
+          "rev": 4,
+          "hash": "9eb7c4bc949f48e031454d29ba58bf159b1bb0abc6f1783db9a1649aa8b008ad"
         }
       ]
     },
     "shared/gws-setup.skill.md": {
-      "rev": 4,
-      "hash": "6bc44fc3fb257a24f946b593526055e4d637b1546aebfdd6685cb60f2b8eab41",
+      "rev": 5,
+      "hash": "061cc23f59195c73d17e8347790365f7ee9ed13521bac1587897adf928c94916",
       "history": [
         {
           "rev": 1,
@@ -57,6 +65,10 @@
         {
           "rev": 4,
           "hash": "6bc44fc3fb257a24f946b593526055e4d637b1546aebfdd6685cb60f2b8eab41"
+        },
+        {
+          "rev": 5,
+          "hash": "061cc23f59195c73d17e8347790365f7ee9ed13521bac1587897adf928c94916"
         }
       ]
     }

@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # Rule: browserctl conventions <!-- omit in toc -->
 
@@ -28,7 +28,8 @@ full command reference live in [`browserctl.skill.md`](browserctl.skill.md).
   one-off jobs that should leave no state behind; `--fresh` when the requested profile is busy.
 - Logins live in profiles, not in files: to authenticate, launch headed, let the user sign in
   once, and rely on profile persistence. Never write session cookies or tokens into the repo or
-  the ai-pack; profile names and hosts worth remembering go in `ai/.memory/resources.md`.
+  the ai-pack; profile names and hosts worth remembering go in `<pack>/.memory/resources.md`
+  (`<pack>`: the project's ai-pack folder, default `aipack/`, `ai/` in older projects, any name).
 
 ## Outputs and Hygiene
 

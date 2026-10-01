@@ -17,8 +17,8 @@
       ]
     },
     "shared/dh-common.sh": {
-      "rev": 1,
-      "hash": "6693f86137c45e06cdf6c86c48344a0a4c8cb464542ad5ada7efee1a485cd9ac",
+      "rev": 2,
+      "hash": "4a45d71c9e8d6828b4be1682486d525a7827a182a076ff04b3e0b0fab8586fef",
       "history": [
         {
           "rev": 1,
@@ -27,6 +27,10 @@
         {
           "rev": 1,
           "hash": "6693f86137c45e06cdf6c86c48344a0a4c8cb464542ad5ada7efee1a485cd9ac"
+        },
+        {
+          "rev": 2,
+          "hash": "4a45d71c9e8d6828b4be1682486d525a7827a182a076ff04b3e0b0fab8586fef"
         }
       ]
     },
@@ -69,8 +73,8 @@
       ]
     },
     "shared/dh-start.sh": {
-      "rev": 1,
-      "hash": "40aaa62d09b1b6c30ec5d077c629cd361d3d3ff37848f689bbc72fd0ec607976",
+      "rev": 2,
+      "hash": "cf197b0941b0215635ae6d34eea6aedcb96ac50698cfb7eca32e1f2543ace635",
       "history": [
         {
           "rev": 1,
@@ -79,6 +83,10 @@
         {
           "rev": 1,
           "hash": "40aaa62d09b1b6c30ec5d077c629cd361d3d3ff37848f689bbc72fd0ec607976"
+        },
+        {
+          "rev": 2,
+          "hash": "cf197b0941b0215635ae6d34eea6aedcb96ac50698cfb7eca32e1f2543ace635"
         }
       ]
     },
@@ -121,8 +129,8 @@
       ]
     },
     "shared/docker-home.skill.md": {
-      "rev": 1,
-      "hash": "ab8fc60a607e67e9c1197a87072221527f3968914a85ac434d2520fdb45e3c46",
+      "rev": 2,
+      "hash": "1598863f7270d3a230a58d31585ff44633b076ab186d788f34629a7138ad2612",
       "history": [
         {
           "rev": 1,
@@ -131,6 +139,10 @@
         {
           "rev": 1,
           "hash": "ab8fc60a607e67e9c1197a87072221527f3968914a85ac434d2520fdb45e3c46"
+        },
+        {
+          "rev": 2,
+          "hash": "1598863f7270d3a230a58d31585ff44633b076ab186d788f34629a7138ad2612"
         }
       ]
     }
