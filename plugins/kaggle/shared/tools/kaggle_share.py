@@ -1,4 +1,4 @@
-# rev. 4
+# rev. 5
 
 """kaggle_share: share one Kaggle account's sessions and GPU quota between projects.
 
@@ -23,10 +23,10 @@ machine: activity stamps, one per project or task folder, that the gateway
 writes on each call (stamp()). A project is active when it made gateway calls
 in the last 24 hours, has a queued or running kernel, or holds a lease or a
 waiting request. Kernels map to projects through the ids in their
-kernel-metadata.json files (projects in the Solaris tree with an ai or aipack
-pack, embedded repos included, and any folder a stamp names). Leases, waiting
-requests and ledger entries follow the project folder, so two projects with
-the same folder name never share a count.
+kernel-metadata.json files (projects in the Solaris tree, whatever their
+ai-pack folder is named, embedded repos included, and any folder a stamp
+names). Leases, waiting requests and ledger entries follow the project folder,
+so two projects with the same folder name never share a count.
 
 Split. Every active project gets an equal share of each session pool (rounded
 up) and of the weekly GPU hours; sharing.json overrides that with fixed
@@ -70,7 +70,6 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 ENV_DIR = "KAGGLE_SHARE_DIR"
 # set on the plugin's own monitoring calls, so checking never makes a project look active
 QUIET_ENV = "KAGGLE_SHARE_QUIET"
-PACKS = ("ai", "aipack")
 KINDS = ("cpu", "gpu")
 DEFAULTS = {"limits": {"cpu": 5, "gpu": 2, "gpu_hours": 30.0}, "reserve": {"cpu": 0, "gpu": 0},
             "active_hours": 24, "lease_hours": 12, "scan_hours": 12}
@@ -160,10 +159,64 @@ def write_json(path, data):
 
 # ---- contexts, kernels and stamps
 
+def is_pack(d):
+    # an ai-pack manifest carries framework_version and a project object; a plugin's has neither
+    m = read_json(Path(d) / "manifest.json", None)
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
+def pack_of(d):
+    """The ai-pack folder of d: its one direct child folder holding an ai-pack manifest.json, else None."""
+    try:
+        packs = sorted(c for c in Path(d).iterdir() if not c.name.startswith(".") and is_pack(c))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        raise ShareError(f"{d}: more than one ai-pack ({', '.join(p.name for p in packs)})")
+    return packs[0] if packs else None
+
+
+def unread_pack(d):
+    """A child folder of d whose manifest.json may be an ai-pack's but cannot be read, else None: one that cannot
+    be opened, or names framework_version but is not JSON (a merge conflict, say)."""
+    try:
+        children = sorted(c for c in Path(d).iterdir() if not c.name.startswith("."))
+    except OSError:
+        return None
+    for c in children:
+        m = c / "manifest.json"
+        # a child folder that cannot be searched is passed over (os.path.isfile never raises)
+        if not os.path.isfile(m):
+            continue
+        try:
+            raw = m.read_bytes()
+        except OSError:
+            return c
+        try:
+            json.loads(raw.decode("utf-8"))
+        except ValueError:
+            if b"framework_version" in raw:
+                return c
+    return None
+
+
+def walk_up(d):
+    """d and the folders above it, stopping before the home folder, any folder above it, or /."""
+    home = Path(os.path.expanduser("~"))
+    homes = (home, home.resolve()) if home.is_absolute() else ()
+    chain = []
+    for f in (d, *d.parents):
+        # never read $HOME or above: on macOS ~/Desktop can raise privacy prompts, and an automounted /home is slow
+        if f.parent == f or any(f == h or f in h.parents for h in homes):
+            break
+        chain.append(f)
+    return chain
+
+
 def context_kind(d):
-    """'project' for a project root, 'task' for an ad-hoc task folder, else None."""
+    """'project' for a project root (a folder with an ai-pack), 'task' for an ad-hoc task folder, else None."""
     d = Path(d)
-    if any((d / p / "manifest.json").is_file() for p in PACKS):
+    if pack_of(d):
         return "project"
     notes = d / "notes.md"
     if notes.is_file() and "ad-hoc-task" in notes.read_text(errors="replace")[:4096]:
@@ -173,15 +226,15 @@ def context_kind(d):
 
 def find_context(start=None):
     """The project root or ad-hoc task folder around start (a project wins), else None."""
-    cwd = Path(start or os.getcwd()).resolve()
-    chain = (cwd, *cwd.parents)
+    chain = walk_up(Path(start or os.getcwd()).resolve())
     for want in ("project", "task"):
         for d in chain:
             if context_kind(d) == want:
                 return d
-    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle_share.py
+    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle_share.py; a project root at home or
+    # above is never listed (walk_up is empty there)
     up = Path(__file__).resolve().parents
-    if len(up) > 4 and up[2].name == "plugins" and up[3].name in PACKS and (up[3] / "manifest.json").is_file():
+    if len(up) > 4 and up[2].name == "plugins" and walk_up(up[4]) and is_pack(up[3]) and pack_of(up[4]) == up[3]:
         return up[4]
     return None
 
@@ -199,14 +252,31 @@ def find_solaris(*starts):
 
 
 def tree_projects(solaris):
-    """Project roots under <solaris>/projects/: <slug>, <group>/<slug>, and the embedded repos under them."""
+    """Project roots under <solaris>/projects/: <slug>, <group>/<slug>, and the embedded repos under them.
+
+    A folder whose ai-pack cannot be told (two or more, or none but a manifest that cannot be read, see
+    unread_pack) is skipped with a note on stderr, and so is everything in it: one broken project never stops
+    the scan of the others.
+    """
     base = Path(solaris) / "projects"
-    found = []
-    # shallow first, so a folder inside a project already found is never a project of its own
+    found, skipped = [], []
+    # shallow first, so a folder inside a project already found (or skipped) is never a project of its own
     for pattern in ("*", "*/*", "*/*/*"):
         for d in sorted(base.glob(pattern)):
-            if d.is_dir() and not any(p in found for p in d.parents) and context_kind(d) == "project":
-                found.append(d)
+            if not d.is_dir() or any(p in found or p in skipped for p in d.parents):
+                continue
+            try:
+                if pack_of(d):
+                    found.append(d)
+                    continue
+                bad = unread_pack(d)
+                if not bad:
+                    continue
+                why = f"{d}: cannot read {bad.name}/manifest.json"
+            except ShareError as e:
+                why = str(e)
+            skipped.append(d)
+            print(f"kaggle_share: {why}: skipped", file=sys.stderr)
     return sorted(found)
 
 
@@ -263,8 +333,8 @@ def context_kernels(root):
 
 
 def has_kaggle_plugin(root):
-    return any((Path(root) / p / "plugins" / "kaggle").is_dir()
-               or (Path(root) / p / "plugins" / "kaggle.link.md").is_file() for p in PACKS)
+    pack = pack_of(root)
+    return bool(pack) and ((pack / "plugins" / "kaggle").is_dir() or (pack / "plugins" / "kaggle.link.md").is_file())
 
 
 def stamp_path(base, root):

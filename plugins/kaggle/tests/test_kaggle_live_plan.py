@@ -34,6 +34,8 @@ with open(os.path.join(here, name + ".out"), "rb") as f:
 """
 SHARE_STATUS = {"quota": {"gpu": {"used": 12.5, "total": 30.0, "refresh": "2026-10-03T00:00:00Z"}},
                 "gpu_hours_left": 17.5, "in_use": {"gpu": 1, "cpu": 0}, "cap": {"gpu": 2, "cpu": 5}}
+# what makes a folder an ai-pack, whatever its name: a manifest with framework_version and a project object
+PACK_MANIFEST = json.dumps({"framework_version": "0.39.0", "project": {"name": "Demo"}})
 
 
 def ctx(**kw):
@@ -58,7 +60,7 @@ class Tmp(unittest.TestCase):
         os.environ.pop("KAGGLE_LB_DIR", None)
         self.addCleanup(setattr, P, "TZ", P.TZ)
         (self.tmp / "ai").mkdir()
-        (self.tmp / "ai" / "manifest.json").write_text(json.dumps({"project": {"name": "Demo"}}))
+        (self.tmp / "ai" / "manifest.json").write_text(PACK_MANIFEST)
         (self.tmp / "submissions").mkdir()
         self.plan_file = self.tmp / "submissions" / "live-plan.json"
         self.page = self.tmp / "reports" / "html" / "live-plan.html"
@@ -94,6 +96,37 @@ class Tmp(unittest.TestCase):
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = P.main(["--root", str(self.tmp), "--gateway", str(self.gateway), "--no-render", *args])
         return code, out.getvalue(), err.getvalue()
+
+
+class RootTests(unittest.TestCase):
+    def test_root_and_pack_for_any_pack_name_and_from_a_copied_install(self):
+        tmp = Path(tempfile.mkdtemp()).resolve()
+        self.addCleanup(shutil.rmtree, tmp, True)
+        (tmp / "elsewhere").mkdir()
+        for pack in ("ai", "aipack", "mypack"):
+            proj = tmp / f"p-{pack}"
+            tools = proj / pack / "plugins" / "kaggle" / "tools"
+            tools.mkdir(parents=True)
+            (proj / pack / "manifest.json").write_text(PACK_MANIFEST)
+            self.assertEqual((P.find_root(str(tools)), P.pack_of(str(proj))), (str(proj), pack))
+            self.assertEqual(P.project_name(str(proj), pack), "Demo")
+            # a copied install finds its project from its own place
+            with mock.patch.object(P, "HERE", str(tools)):
+                self.assertEqual(P.find_root(str(tmp / "elsewhere")), str(proj))
+        # a plugin manifest and a hidden folder are no pack; two packs stop the walk with an error naming them
+        odd = tmp / "odd"
+        for name, text in (("plugin", '{"name": "kaggle"}'), (".hidden", PACK_MANIFEST), ("one", PACK_MANIFEST),
+                           ("two", PACK_MANIFEST)):
+            (odd / name).mkdir(parents=True)
+            (odd / name / "manifest.json").write_text(text)
+        with self.assertRaisesRegex(P.PackError, r"odd: more than one ai-pack \(one, two\)$"):
+            P.find_root(str(odd / "plugin"))
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            self.assertEqual(P.main(["--root", str(odd), "--no-render"]), 2)
+        self.assertEqual(err.getvalue(), f"kaggle_live_plan: {odd}: more than one ai-pack (one, two)\n")
+        (odd / "two" / "manifest.json").unlink()
+        self.assertEqual(P.pack_of(str(odd)), "one")
 
 
 class EscapeTests(unittest.TestCase):

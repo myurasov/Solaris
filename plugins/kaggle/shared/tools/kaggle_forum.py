@@ -1,4 +1,4 @@
-# rev. 3
+# rev. 4
 
 """kaggle_forum: watch a Kaggle competition's discussions.
 
@@ -58,7 +58,6 @@ except ImportError:  # no flock on this platform: writes go unlocked
 
 SCHEMA = 1
 ENV_DIR = "KAGGLE_FORUM_DIR"
-PACKS = ("ai", "aipack")
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 MAX_PAGES = 50
@@ -122,20 +121,50 @@ def _rel(p):
 
 # ---- storage
 
+def is_pack(d):
+    # an ai-pack manifest carries framework_version and a project object; a plugin's has neither
+    m = read_json(Path(d) / "manifest.json", None)
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
+def pack_of(d):
+    """The ai-pack folder of d: its one direct child folder holding an ai-pack manifest.json, else None."""
+    try:
+        packs = sorted(c for c in Path(d).iterdir() if not c.name.startswith(".") and is_pack(c))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        raise ForumError(f"{d}: more than one ai-pack ({', '.join(p.name for p in packs)})")
+    return packs[0] if packs else None
+
+
+def walk_up(d):
+    """d and the folders above it, stopping before the home folder, any folder above it, or /."""
+    home = Path(os.path.expanduser("~"))
+    homes = (home, home.resolve()) if home.is_absolute() else ()
+    chain = []
+    for f in (d, *d.parents):
+        # never read $HOME or above: on macOS ~/Desktop can raise privacy prompts, and an automounted /home is slow
+        if f.parent == f or any(f == h or f in h.parents for h in homes):
+            break
+        chain.append(f)
+    return chain
+
+
 def find_root(start=None):
-    """The project root (holding <pack>/manifest.json) or ad-hoc task folder around start, else None."""
-    cwd = Path(start or os.getcwd()).resolve()
-    chain = (cwd, *cwd.parents)
+    """The project root (a folder with an ai-pack, see pack_of) or ad-hoc task folder around start, else None."""
+    chain = walk_up(Path(start or os.getcwd()).resolve())
     for d in chain:
-        if any((d / p / "manifest.json").is_file() for p in PACKS):
+        if pack_of(d):
             return d
     for d in chain:
         notes = d / "notes.md"
         if notes.is_file() and "ad-hoc-task" in notes.read_text(errors="replace")[:4096]:
             return d
-    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle_forum.py
+    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle_forum.py; a project root at home or
+    # above is never listed (walk_up is empty there)
     up = Path(__file__).resolve().parents
-    if len(up) > 4 and up[2].name == "plugins" and up[3].name in PACKS and (up[3] / "manifest.json").is_file():
+    if len(up) > 4 and up[2].name == "plugins" and walk_up(up[4]) and is_pack(up[3]) and pack_of(up[4]) == up[3]:
         return up[4]
     return None
 

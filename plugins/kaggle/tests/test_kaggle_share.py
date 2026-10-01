@@ -21,6 +21,8 @@ sys.path.insert(0, str(TOOLS))
 import kaggle_share as S  # noqa: E402
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc)
+# what makes a folder an ai-pack, whatever its name: a manifest with framework_version and a project object
+PACK_MANIFEST = json.dumps({"framework_version": "0.39.0", "project": {"name": "demo"}})
 # the quota as the account read prints it
 QUOTA = {"gpu": {"used": 12.0, "remaining": 18.0, "total": 30.0, "refresh": "2026-10-03T00:00:00"},
          "tpu": {"used": 0.0, "remaining": 20.0, "total": 20.0, "refresh": "2026-10-03T00:00:00"}}
@@ -107,7 +109,7 @@ class Tmp(unittest.TestCase):
         os.environ.pop(S.ENV_DIR, None)
 
     def tree(self):
-        """A small Solaris checkout: alpha (aipack) and beta (ai) with kernels, gamma with only the plugin."""
+        """A small Solaris checkout: alpha (aipack) and beta (ai) with kernels, gamma (mypack) with only the plugin."""
         sol = self.tmp / "sol"
         (sol / "solaris").mkdir(parents=True)
         (sol / "solaris" / "solaris.agent.md").write_text("x")
@@ -115,15 +117,15 @@ class Tmp(unittest.TestCase):
                                          "source/kaggle/k2": {"id": "alice/alpha-cpu", "enable_gpu": False},
                                          ".venv/x": {"id": "alice/hidden"}, "__out/y": {"id": "alice/local"}}),
                  "nv/beta": ("ai", {"kernels/b1": {"id": "Alice/Beta-GPU", "machine_shape": "NvidiaTeslaT4"}}),
-                 "tmp/gamma": ("ai", {}), "tmp/plain": ("ai", {})}
+                 "tmp/gamma": ("mypack", {}), "tmp/plain": ("ai", {})}
         for rel, (pack, kernels) in specs.items():
             root = sol / "projects" / rel
             (root / pack).mkdir(parents=True)
-            (root / pack / "manifest.json").write_text("{}")
+            (root / pack / "manifest.json").write_text(PACK_MANIFEST)
             for d, meta in kernels.items():
                 (root / d).mkdir(parents=True)
                 (root / d / "kernel-metadata.json").write_text(json.dumps(meta))
-        (sol / "projects" / "tmp" / "gamma" / "ai" / "plugins" / "kaggle").mkdir(parents=True)
+        (sol / "projects" / "tmp" / "gamma" / "mypack" / "plugins" / "kaggle").mkdir(parents=True)
         return sol
 
     def config(self, **raw):
@@ -257,18 +259,69 @@ class DetectionTests(Tmp):
         sol = self.tree()
         repo = sol / "projects" / "my" / "delta" / "delta-repo"
         (repo / "ai").mkdir(parents=True)
-        (repo / "ai" / "manifest.json").write_text("{}")
+        (repo / "ai" / "manifest.json").write_text(PACK_MANIFEST)
         (repo / "kaggle" / "k").mkdir(parents=True)
         (repo / "kaggle" / "k" / "kernel-metadata.json").write_text(json.dumps({"id": "alice/delta-gpu",
                                                                                "enable_gpu": True}))
         # a folder inside a project is never a project of its own
         nested = sol / "projects" / "my" / "alpha" / "vendor"
         (nested / "ai").mkdir(parents=True)
-        (nested / "ai" / "manifest.json").write_text("{}")
+        (nested / "ai" / "manifest.json").write_text(PACK_MANIFEST)
         found = S.tree_projects(sol)
         self.assertIn(repo, found)
         self.assertNotIn(nested, found)
         self.assertEqual(S.gather(sol, [])["delta-repo"]["kernels"], {"alice/delta-gpu": "gpu"})
+
+    def test_a_project_whose_pack_cannot_be_told_is_skipped_with_a_note(self):
+        sol = self.tree()
+        projects, beta, delta = sol / "projects", sol / "projects" / "nv" / "beta", sol / "projects" / "my" / "delta"
+        # beta gets a copy of its pack (cp -r ai ai.bak); delta's only pack manifest is a merge conflict
+        shutil.copytree(beta / "ai", beta / "ai.bak")
+        (delta / "aipack").mkdir(parents=True)
+        (delta / "aipack" / "manifest.json").write_text(f"<<<<<<< HEAD\n{PACK_MANIFEST}\n=======\n")
+        # an embedded repo's own manifest.json that is not JSON but names no framework_version is no broken pack
+        repo = projects / "my" / "ext" / "ext-repo"
+        (repo / "ai").mkdir(parents=True)
+        (repo / "ai" / "manifest.json").write_text(PACK_MANIFEST)
+        (repo / "manifest.json").write_text('{"manifest_version": 3, // a browser extension\n}')
+        err, out = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stderr(err), contextlib.redirect_stdout(out):
+            found = S.tree_projects(sol)
+            # account sharing goes on for the others
+            code = S.main(["status", "--json", "--offline", "--solaris", str(sol), "--state", str(self.base)])
+        self.assertEqual([p.relative_to(projects).as_posix() for p in found],
+                         ["my/alpha", "my/ext/ext-repo", "tmp/gamma", "tmp/plain"])
+        self.assertEqual((code, sorted(json.loads(out.getvalue())["projects"])), (0, ["alpha", "gamma"]))
+        notes = [f"kaggle_share: {delta}: cannot read aipack/manifest.json: skipped",
+                 f"kaggle_share: {beta}: more than one ai-pack (ai, ai.bak): skipped"]
+        self.assertEqual(err.getvalue().splitlines(), notes * 2)
+        # the tool's own lookup still stops at two packs
+        with self.assertRaisesRegex(S.ShareError, r"beta: more than one ai-pack \(ai, ai\.bak\)$"):
+            S.find_context(beta / "kernels")
+
+    def test_context_for_any_pack_name_and_from_a_copied_install(self):
+        (self.tmp / "elsewhere").mkdir()
+        for pack in ("ai", "aipack", "mypack"):
+            proj = self.tmp / f"p-{pack}"
+            tools = proj / pack / "plugins" / "kaggle" / "tools"
+            tools.mkdir(parents=True)
+            (proj / pack / "manifest.json").write_text(PACK_MANIFEST)
+            self.assertEqual((S.find_context(tools), S.pack_of(proj), S.context_kind(proj)),
+                             (proj, proj / pack, "project"))
+            self.assertTrue(S.has_kaggle_plugin(proj))
+            # a copied install finds its project from its own place
+            with mock.patch.object(S, "__file__", str(tools / "kaggle_share.py")):
+                self.assertEqual(S.find_context(self.tmp / "elsewhere"), proj)
+        # a plugin manifest and a hidden folder are no pack; two packs stop the walk with an error naming them
+        odd = self.tmp / "odd"
+        for name, text in (("plugin", '{"name": "kaggle"}'), (".hidden", PACK_MANIFEST), ("one", PACK_MANIFEST),
+                           ("two", PACK_MANIFEST)):
+            (odd / name / "plugins" / "kaggle").mkdir(parents=True)
+            (odd / name / "manifest.json").write_text(text)
+        with self.assertRaisesRegex(S.ShareError, r"odd: more than one ai-pack \(one, two\)$"):
+            S.find_context(odd / "plugin")
+        (odd / "two" / "manifest.json").unlink()
+        self.assertEqual((S.pack_of(odd), S.context_kind(odd), S.has_kaggle_plugin(odd)), (odd / "one", "project", True))
 
     def test_scan_hours_from_sharing_json_reach_the_account_scan(self):
         now = S.now_utc()
@@ -561,7 +614,7 @@ class CommandTests(Tmp):
         sol = self.tree()
         mine, twin = sol / "projects" / "my" / "alpha", sol / "projects" / "nv" / "alpha"
         (twin / "ai").mkdir(parents=True)
-        (twin / "ai" / "manifest.json").write_text("{}")
+        (twin / "ai" / "manifest.json").write_text(PACK_MANIFEST)
         (twin / "k").mkdir()
         (twin / "k" / "kernel-metadata.json").write_text(json.dumps({"id": "alice/twin-gpu", "enable_gpu": True}))
         self.assertEqual(sorted(S.gather(sol, [])), ["alpha (my)", "alpha (nv)", "beta", "gamma"])
@@ -595,7 +648,7 @@ class CommandTests(Tmp):
     def test_stamp_command(self):
         proj = self.tmp / "p"
         (proj / "ai").mkdir(parents=True)
-        (proj / "ai" / "manifest.json").write_text("{}")
+        (proj / "ai" / "manifest.json").write_text(PACK_MANIFEST)
         code, out, _ = self.run_main("stamp", "--path", str(proj))
         self.assertEqual(code, 0)
         self.assertEqual(S.load_stamps(self.base)[0]["root"], str(proj))

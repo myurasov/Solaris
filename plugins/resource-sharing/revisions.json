@@ -21,8 +21,8 @@
       ]
     },
     "shared/resource-sharing.skill.md": {
-      "rev": 5,
-      "hash": "5d01199ca95533c0ab418756520d18a767da8cba065a707c513cf844a57e5fc0",
+      "rev": 6,
+      "hash": "1b45f9d6b1cbc3844523027dd1fcc4894a34f79b3d2ce267c1b25a990f39bea7",
       "history": [
         {
           "rev": 1,
@@ -39,12 +39,16 @@
         {
           "rev": 5,
           "hash": "5d01199ca95533c0ab418756520d18a767da8cba065a707c513cf844a57e5fc0"
+        },
+        {
+          "rev": 6,
+          "hash": "1b45f9d6b1cbc3844523027dd1fcc4894a34f79b3d2ce267c1b25a990f39bea7"
         }
       ]
     },
     "shared/tools/hostclaims.py": {
-      "rev": 3,
-      "hash": "0c707ef61eb2a53a963f14abf25b4c4e9ad4edf610c9396fbba4a5f5f40cbac5",
+      "rev": 4,
+      "hash": "d098699756d1ede9f20747cb54dbc790c378b9766fa8f0fef07a61dae1fff805",
       "history": [
         {
           "rev": 1,
@@ -57,6 +61,10 @@
         {
           "rev": 3,
           "hash": "0c707ef61eb2a53a963f14abf25b4c4e9ad4edf610c9396fbba4a5f5f40cbac5"
+        },
+        {
+          "rev": 4,
+          "hash": "d098699756d1ede9f20747cb54dbc790c378b9766fa8f0fef07a61dae1fff805"
         }
       ]
     }

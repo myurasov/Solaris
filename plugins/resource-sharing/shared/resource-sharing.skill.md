@@ -3,7 +3,7 @@ name: resource-sharing
 triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance"]
 summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield, moves stale claims aside, reports usage, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: resource-sharing - Hosts Shared by Many Agents <!-- omit in toc -->
 
@@ -39,8 +39,9 @@ run or session.
 
 ## Setup
 
-1. **Inventory.** The project's `<pack>/.memory/hosts.json` (`<pack>` is `ai` or `aipack`) lists hosts as
-   `{name, target, opts}` (`target` is `user@address`, `opts` the ssh options). Optional per host: `owner`
+1. **Inventory.** The project's `<pack>/.memory/hosts.json` (`<pack>` is the project's ai-pack folder: default
+   `aipack/`, `ai/` in older projects, any name) lists hosts as `{name, target, opts}` (`target` is
+   `user@address`, `opts` the ssh options). Optional per host: `owner`
    (a project slug; default: this project), `lease` (below), `root` (the claims folder, default
    `~/.solaris/claims`) and `gpus` (free text such as `2x H200 NVL`, which `shared` shows guests).
    `--hosts FILE` uses exactly that file instead; `--local-root DIR` works on a folder on this machine
@@ -52,10 +53,11 @@ run or session.
    {"project": "<this-slug>", "share_with": ["<other-slug>"], "policy": {}}
    ```
 
-   Every call scans the Solaris tree (`projects/*/<slug>/`, then `projects/*/*/<slug>/`, pack folder `ai`
-   or `aipack`) and merges in the hosts each other project owns and shares with this one: a host of P is
-   usable by Q when P lists Q (`"*"` shares with every project). Sharing is one way unless both list each
-   other. Every host line shows its source project and owner; a name clash becomes `<project>/<name>`.
+   Every call scans the Solaris tree (`projects/*/<slug>/`, then `projects/*/*/<slug>/`, each project with
+   its one ai-pack folder, whatever its name) and merges in the hosts each other project owns and shares with
+   this one: a host of P is usable by Q when P lists Q (`"*"` shares with every project). Sharing is one way
+   unless both list each other. Every host line shows its source project and owner; a name clash becomes
+   `<project>/<name>`.
    Without the file the slug is the project folder's name and the project's hosts stay private.
 3. **Agent name.** `--agent`, else `HOSTCLAIMS_AGENT`, else the project slug. Workers claim under their
    project's name, so claims, usage and ownership are per project. Owner actions (install, uninstall,

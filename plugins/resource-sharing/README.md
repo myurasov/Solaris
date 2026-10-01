@@ -30,8 +30,9 @@ counters for account-level limits. No daemon, no central server, no root.
 
 ## Install
 
-"install plugin resource-sharing to `<project>`" copies `shared/` into `<pack>/plugins/resource-sharing/`.
-Then, in the project:
+"install plugin resource-sharing to `<project>`" copies `shared/` into `<pack>/plugins/resource-sharing/`, where
+`<pack>` is the project's ai-pack folder (default `aipack/`, `ai/` in older projects, any name). Then, in the
+project:
 
 1. List hosts in `<pack>/.memory/hosts.json` as `{name, target, opts}`, with optional `owner` and `lease`.
 2. Optionally create `<pack>/.memory/resource-sharing.json`:
@@ -73,10 +74,11 @@ claims never oversubscribing (24 processes at once), idempotency, capacity math 
 use, stale reaping (dead PID, changed boot id), orphan detection, yield request, acknowledgement and kill
 after the grace, the watcher's environment, pinning and done marker, status tags, the usage ledger, pools
 (caps, borrowing, budgets, expiry), uninstall refusals, lease kinds, the request flow (request, approve,
-decline, timeout, then launch-new), fit ranking with a fake inventory, discovery in a fake Solaris tree (both
-pack folder names, one-way and mutual sharing), shared-host changes (new, gone, changed, unreadable owner
-files, the seen list, `--probe` admission), `install --all` and the audit's sync flags, ownership rules, the
-owner audit, the ssh path through a fake ssh program, hardening cases from a code review (a released claim is
+decline, timeout, then launch-new), fit ranking with a fake inventory, discovery in a fake Solaris tree (pack
+folders `ai`, `aipack` and a custom name, one-way and mutual sharing), finding the project and its pack (from
+the working folder, `--project` or a copied install; two packs are an error; the walk stops before the home
+folder), shared-host changes (new, gone, changed, unreadable owner files, the seen list, `--probe` admission),
+`install --all` and the audit's sync flags, ownership rules, the owner audit, the ssh path through a fake ssh program, hardening cases from a code review (a released claim is
 never revived, yield admission, pending yields, stop signals, an unwritable run folder, machine binding and
 network homes, pool definers), and Python 3.8 grammar.
 

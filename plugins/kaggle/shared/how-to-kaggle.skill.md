@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 17_
+_Rev. 18_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -680,8 +680,8 @@ Follow this sequence from minute one; each step points to the section with the r
 
 - **One master copy.** This file lives in the Solaris `kaggle` plugin
   (`plugins/kaggle/shared/how-to-kaggle.skill.md`); projects get it as an installed plugin skill, copied into
-  `<pack>/plugins/kaggle/`. Edit the master copy, never an installed one: a plugin update overwrites installed
-  copies.
+  `<pack>/plugins/kaggle/` (`<pack>` is the project's ai-pack folder: default `aipack/`, `ai/` in older projects,
+  any name). Edit the master copy, never an installed one: a plugin update overwrites installed copies.
 - **Update it in the same turn** as each new owner direction or change in approach that a result causes, not in a
   later batch; a stale playbook is a lost lesson.
 - **Release each change set as a new plugin version:** from the Solaris root, `uv run -m solaris.tools.revs bump`

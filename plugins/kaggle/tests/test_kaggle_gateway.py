@@ -18,6 +18,7 @@ import tempfile
 import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.dont_write_bytecode = True  # keep __pycache__ out of the plugin folder
 TOOLS = Path(__file__).resolve().parents[1] / "shared" / "tools"
@@ -28,6 +29,8 @@ BOARD = json.dumps([{"teamId": 1, "teamName": "Alpha", "submissionDate": "2026-0
                    indent=2) + "\n"
 CSV = ("Rank,TeamId,TeamName,LastSubmissionDate,Score,SubmissionCount,TeamMemberUserNames\n"
        '1,1,Alpha,"2026-09-25 00:00:57",0.512,5,alpha_user\n2,2,Beta,"2026-09-25 01:10:00",0.498,3,beta_user\n')
+# what makes a folder an ai-pack, whatever its name: a manifest with framework_version and a project object
+PACK_MANIFEST = json.dumps({"framework_version": "0.39.0", "project": {"name": "demo"}}) + "\n"
 FAKE_CLI = """\
 #!{python}
 import json, os, sys, zipfile
@@ -94,7 +97,7 @@ class Env(unittest.TestCase):
     def project(self, name="proj", pack="aipack"):
         root = self.tmp / name
         (root / pack).mkdir(parents=True)
-        (root / pack / "manifest.json").write_text("{}\n")
+        (root / pack / "manifest.json").write_text(PACK_MANIFEST)
         env = root / GW.ENV_DIR
         (env / "bin").mkdir(parents=True)
         (env / "pyvenv.cfg").write_text("home = test\n")
@@ -140,11 +143,66 @@ class ContextTests(Env):
         finally:
             os.chdir(old)
 
-    def test_project_roots_for_both_pack_names(self):
-        for pack in ("ai", "aipack"):
+    def test_project_roots_for_any_pack_name(self):
+        for pack in ("ai", "aipack", "mypack"):
             root = self.project(f"p-{pack}", pack)
             (root / "src" / "deep").mkdir(parents=True)
             self.assertEqual(self.where(root / "src" / "deep"), root)
+            self.assertEqual(GW.pack_of(root), root / pack)
+
+    def test_plugin_manifests_and_hidden_folders_are_no_pack(self):
+        root = self.tmp / "p"
+        (root / "src").mkdir(parents=True)
+        for name, text in (("plugin", '{"name": "kaggle", "version": "0.4.0"}\n'), (".hidden", PACK_MANIFEST),
+                           ("one", PACK_MANIFEST)):
+            (root / name).mkdir()
+            (root / name / "manifest.json").write_text(text)
+        self.assertEqual((GW.pack_of(root), self.where(root / "src")), (root / "one", root))
+
+    def test_two_packs_stop_the_gateway_before_any_kaggle_call(self):
+        root = self.project()
+        (root / "ai").mkdir()
+        (root / "ai" / "manifest.json").write_text(PACK_MANIFEST)
+        (root / "src").mkdir()
+        code, out, err = self.run_gw(["--version"], root / "src")
+        self.assertEqual((code, out, err), (1, "", f"kaggle gateway: {root}: more than one ai-pack (ai, aipack)\n"))
+        self.assertEqual((self.cli_runs(), self.stamps()), ([], []))
+
+    def test_every_tool_stops_its_walk_before_home(self):
+        home, proj = self.tmp / "home", self.tmp / "home" / "proj"
+        for d in (home / "work", proj / "src", self.tmp / "other"):
+            d.mkdir(parents=True)
+        # were they read, home would be a project root (and a task folder), and so would the folder above it
+        for pack in (home / "aipack", self.tmp / "otherpack", proj / "mypack"):
+            pack.mkdir()
+            (pack / "manifest.json").write_text(PACK_MANIFEST)
+        (home / "notes.md").write_text("made with the ad-hoc-task skill\n")
+        tools = [load(TOOLS / f"{n}.py") for n in ("kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan")]
+        finders = [self.where, tools[0].find_root, tools[1].find_root, tools[2].find_context,
+                   lambda d: tools[3].find_root(str(d))]
+        with mock.patch.dict(os.environ, {"HOME": str(home)}):
+            for find in finders:
+                found = [find(d) for d in (proj / "src", home / "work", self.tmp / "other")]
+                # a project under home is found from inside it; nothing at home or above is
+                self.assertEqual([f and Path(f) for f in found], [proj, None, None])
+
+    def test_no_copied_overlay_takes_home_or_above_for_its_project(self):
+        home, other = self.tmp / "home", self.tmp / "other"
+        other.mkdir()
+        names = ("kaggle", "kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan")
+        found = []
+        # copied overlays whose project root would be home, the folder above it, and a project under home
+        for root in (home, self.tmp, home / "proj"):
+            tools = root / "aipack" / "plugins" / "kaggle" / "tools"
+            tools.mkdir(parents=True)
+            (root / "aipack" / "manifest.json").write_text(PACK_MANIFEST)
+            for n in names:
+                shutil.copyfile(TOOLS / f"{n}.py", tools / f"{n}.py")
+            forum, lb, share, plan = (load(tools / f"{n}.py") for n in names[1:])
+            with mock.patch.dict(os.environ, {"HOME": str(home)}):
+                found.append([self.where(other, tools / "kaggle.py"), forum.find_root(other), lb.find_root(other),
+                              share.find_context(other), plan.find_root(str(other))])
+        self.assertEqual([[f and Path(f) for f in row] for row in found], [[None] * 5, [None] * 5, [home / "proj"] * 5])
 
     def test_project_wins_over_task_notes_inside_it(self):
         root = self.project()
@@ -162,7 +220,7 @@ class ContextTests(Env):
 
     def test_copied_overlay_finds_its_project_from_anywhere(self):
         (self.tmp / "elsewhere").mkdir()
-        for pack in ("ai", "aipack"):
+        for pack in ("ai", "aipack", "mypack"):
             root = self.project(f"c-{pack}", pack)
             self.assertEqual(self.where(self.tmp / "elsewhere", self.overlay(root, pack)), root)
 

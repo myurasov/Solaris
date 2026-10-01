@@ -25,6 +25,7 @@ import time
 import unittest
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import redirect_stdout
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 TOOL = os.path.join(os.path.dirname(HERE), "shared", "tools", "hostclaims.py")
@@ -34,6 +35,11 @@ _spec.loader.exec_module(hc)
 with open(TOOL) as _f:
     SRC = _f.read()
 T4 = {"name": "Tesla T4", "mem_total_gb": 15.0}
+
+
+def pack_manifest(slug="demo"):
+    # what makes a folder an ai-pack, whatever its name: framework_version and a project object
+    return {"framework_version": "0.39.0", "project": {"name": slug}}
 
 
 def load(path):
@@ -836,7 +842,7 @@ class TestDiscovery(Base):
         root = os.path.join(self.tmp, "sol", "projects", *rel.split("/"))
         os.makedirs(os.path.join(root, pack, ".memory"))
         with open(os.path.join(root, pack, "manifest.json"), "w") as f:
-            json.dump({"name": slug}, f)
+            json.dump(pack_manifest(slug), f)
         with open(os.path.join(root, pack, ".memory", "resource-sharing.json"), "w") as f:
             json.dump({"project": slug, "share_with": share_with}, f)
         entries = []
@@ -851,11 +857,12 @@ class TestDiscovery(Base):
 
     def setUp(self):
         Base.setUp(self)
-        # a shares with b and c; c shares with a (mutual); b shares with nobody (one way from a)
+        # a shares with b and c; c shares with a (mutual); b shares with nobody (one way from a);
+        # the packs are named ai, aipack and mypack (any name works)
         self.a = self.project("my/proj-a", "ai", "proj-a", ["proj-b", "proj-c", "proj-gone"],
                               [{"name": "gpu-1"}, {"name": "borrowed", "owner": "proj-x"}])
         self.b = self.project("nv/team/proj-b", "aipack", "proj-b", [], [{"name": "gpu-1"}])
-        self.c = self.project("my/proj-c", "ai", "proj-c", ["proj-a"], [{"name": "cpu-1"}])
+        self.c = self.project("my/proj-c", "mypack", "proj-c", ["proj-a"], [{"name": "cpu-1"}])
 
     def inv(self, project):
         buf = io.StringIO()
@@ -888,6 +895,79 @@ class TestDiscovery(Base):
                  base=guest, code=hc.NOFIT)
         st = self.cli("status", "--host", "proj-a/gpu-1", base=guest)["hosts"]["proj-a/gpu-1"]
         self.assertEqual((st["owner"], st["project"]), ("proj-a", "proj-a"))
+
+
+class TestFindProject(unittest.TestCase):
+    def setUp(self):
+        # the real path: the working folder comes back resolved
+        self.tmp = os.path.realpath(tempfile.mkdtemp(prefix="hc-find-"))
+        self.addCleanup(shutil.rmtree, self.tmp, True)
+        self.addCleanup(os.chdir, os.getcwd())
+
+    def write(self, folder, data):
+        os.makedirs(folder, exist_ok=True)
+        with open(os.path.join(folder, "manifest.json"), "w") as f:
+            json.dump(data, f)
+
+    def test_any_pack_name_from_the_working_folder_a_given_folder_or_a_copied_install(self):
+        elsewhere = os.path.join(self.tmp, "elsewhere")
+        os.makedirs(elsewhere)
+        for pack in ("ai", "aipack", "mypack"):
+            root = os.path.join(self.tmp, "p-" + pack)
+            tools = os.path.join(root, pack, "plugins", "resource-sharing", "tools")
+            os.makedirs(tools)
+            self.write(os.path.join(root, pack), pack_manifest())
+            os.chdir(tools)
+            self.assertEqual((hc.find_project(), hc.find_project(root)), ((root, pack), (root, pack)))
+            # a copied install finds its project from its own place
+            os.chdir(elsewhere)
+            with mock.patch.object(hc, "__file__", os.path.join(tools, "hostclaims.py")):
+                self.assertEqual(hc.find_project(), (root, pack))
+        self.assertEqual(hc.find_project(), (None, None))
+        # a plugin manifest and a hidden folder are no pack; two packs are an error naming them, given or walked into
+        odd = os.path.join(self.tmp, "odd")
+        for name, data in (("plugin", {"name": "resource-sharing"}), (".hidden", pack_manifest()),
+                           ("one", pack_manifest()), ("two", pack_manifest())):
+            self.write(os.path.join(odd, name), data)
+        os.chdir(os.path.join(odd, "plugin"))
+        for start in (odd, None):
+            with self.assertRaises(hc.Fail) as e:
+                hc.find_project(start)
+            self.assertEqual((str(e.exception), e.exception.code), (odd + ": more than one ai-pack (one, two)",
+                                                                    hc.USAGE))
+        os.unlink(os.path.join(odd, "two", "manifest.json"))
+        self.assertEqual(hc.find_project(odd), (odd, "one"))
+
+    def test_the_walk_stops_before_home(self):
+        home = os.path.join(self.tmp, "home")
+        proj = os.path.join(home, "proj")
+        # were they read, home would be a project root, and so would the folder above it
+        for pack in (os.path.join(home, "aipack"), os.path.join(self.tmp, "otherpack"), os.path.join(proj, "mypack")):
+            self.write(pack, pack_manifest())
+        for d in (os.path.join(home, "work"), os.path.join(proj, "src"), os.path.join(self.tmp, "other")):
+            os.makedirs(d)
+        found = []
+        with mock.patch.dict(os.environ, {"HOME": home}):
+            for d in (os.path.join(proj, "src"), os.path.join(home, "work"), os.path.join(self.tmp, "other")):
+                os.chdir(d)
+                found.append(hc.find_project())
+        # a project under home is found from inside it; nothing at home or above is
+        self.assertEqual(found, [(proj, "mypack"), (None, None), (None, None)])
+
+    def test_a_copied_install_never_takes_home_or_above_for_its_project(self):
+        home, other = os.path.join(self.tmp, "home"), os.path.join(self.tmp, "other")
+        os.makedirs(other)
+        os.chdir(other)
+        found = []
+        # copied installs whose project root would be home, the folder above it, and a project under home
+        for root in (home, self.tmp, os.path.join(home, "proj")):
+            tools = os.path.join(root, "aipack", "plugins", "resource-sharing", "tools")
+            os.makedirs(tools)
+            self.write(os.path.join(root, "aipack"), pack_manifest())
+            with mock.patch.dict(os.environ, {"HOME": home}):
+                with mock.patch.object(hc, "__file__", os.path.join(tools, "hostclaims.py")):
+                    found.append(hc.find_project())
+        self.assertEqual(found, [(None, None), (None, None), (os.path.join(home, "proj"), "aipack")])
 
 
 class TestAudit(Base):
@@ -1507,6 +1587,36 @@ class TestSharedHosts(TestDiscovery):
         self.assertIn("--as-owner", run_printed("(then tell the projects you share with): ", "--agent", "p",
                                                 "--as-owner", "audit"))
         self.assertTrue(os.path.exists(os.path.join(root, "host.json")))
+
+    def test_a_project_whose_pack_cannot_be_told_is_skipped_as_unread(self):
+        # proj-d and an embedded repo (whose own manifest.json, a browser extension's, is not JSON but no ai-pack's)
+        # each share a host with proj-b
+        d = self.project("my/proj-d", "ai", "proj-d", ["proj-b"], [])
+        ext = self.project("my/ext/ext-repo", "ai", "ext", ["proj-b"], [])
+        for root, host in ((d, "gpu-9"), (ext, "gpu-5")):
+            with open(os.path.join(root, "ai", ".memory", "hosts.json"), "w") as f:
+                json.dump([{"name": host, "target": "user@" + host}], f)
+        with open(os.path.join(ext, "manifest.json"), "w") as f:
+            f.write('{"manifest_version": 3, // a browser extension\n}')
+        self.assertEqual([h["key"] for h in self.shared("--ack")["new"]], ["ext/gpu-5", "proj-a/gpu-1", "proj-d/gpu-9"])
+        # a copy of proj-d's pack (cp -r ai ai.bak): the scan goes on, and proj-d's host stays as seen, with a note
+        shutil.copytree(os.path.join(d, "ai"), os.path.join(d, "ai.bak"))
+        folder = os.path.join("projects", "my", "proj-d")
+        r = self.shared()
+        self.assertEqual(([h["key"] for h in r["unchanged"]], r["gone"], [h["key"] for h in r["unread"]]),
+                         (["ext/gpu-5", "proj-a/gpu-1"], [], ["proj-d/gpu-9"]))
+        self.assertEqual(r["notes"], ["%s: more than one ai-pack (ai, ai.bak): the hosts of the project in %s are "
+                                      "skipped" % (d, folder)])
+        _, b = self.inv(self.b)
+        self.assertEqual(sorted(b), ["gpu-1", "gpu-5", "proj-a/gpu-1"])
+        # a pack manifest left unreadable by a merge conflict: the same
+        shutil.rmtree(os.path.join(d, "ai.bak"))
+        manifest = os.path.join(d, "ai", "manifest.json")
+        with open(manifest, "w") as f:
+            f.write("<<<<<<< HEAD\n%s\n=======\n" % json.dumps(pack_manifest("proj-d")))
+        r = self.shared()
+        self.assertEqual((r["gone"], [h["key"] for h in r["unread"]]), ([], ["proj-d/gpu-9"]))
+        self.assertEqual(r["notes"], ["cannot read %s: the hosts of the project in %s are skipped" % (manifest, folder)])
 
     @unittest.skipIf(hasattr(os, "geteuid") and os.geteuid() == 0, "root reads files whatever their mode")
     def test_peer_files_without_read_permission(self):

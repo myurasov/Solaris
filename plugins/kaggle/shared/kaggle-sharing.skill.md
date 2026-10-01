@@ -3,7 +3,7 @@ name: kaggle-sharing
 triggers: ["kaggle sessions", "share the kaggle account", "kaggle quota", "kaggle sharing", "kaggle gpu quota", "kaggle concurrent sessions"]
 summary: Share one Kaggle account between the projects using it - detects the active projects (account-wide queued and running kernels, local gateway activity), splits the concurrent CPU and GPU sessions and the weekly GPU hours equally or as the user directs, and hands out a lease around each kernel run. Covers kaggle_share.py (status, acquire, release, ledger, config, stamp) and the agent routine.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: kaggle-sharing - One Kaggle Account, Several Projects <!-- omit in toc -->
 
@@ -48,7 +48,7 @@ its own if wanted.
 - **Active** means gateway calls in the last 24 hours (`config --active-hours`), a queued or running
   kernel, or a lease or waiting request.
 - **Kernels map to projects** through the `id` in each `kernel-metadata.json` under the projects of
-  the Solaris tree (pack `ai` or `aipack`, embedded repos included) and under any folder a stamp
+  the Solaris tree (whatever their ai-pack folder is named, embedded repos included) and under any folder a stamp
   names; hidden, `__*` and package folders are skipped. `enable_gpu`, `enable_tpu` and `machine_shape` give each kernel's
   kind. A running kernel that no local folder describes shows as "(no local folder)" with an unknown
   kind and counts against both pools until `status --probe` reads its metadata (a read-only
@@ -89,6 +89,8 @@ Run from the project root or task folder:
 |---|---|
 | Project, plugin copied | `python3 <pack>/plugins/kaggle/tools/kaggle_share.py <command> ...` |
 | Project linked, or ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/tools/kaggle_share.py <command> ...` |
+
+`<pack>` is the project's ai-pack folder (default `aipack/`, `ai/` in older projects, any name).
 
 | Command | Does |
 |---|---|

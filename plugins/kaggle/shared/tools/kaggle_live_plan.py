@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle_live_plan: a live plan document for the owner of a Kaggle competition project.
 
@@ -19,8 +19,10 @@ attached (<pack>/plugins/reporting/assets/render.sh), renders <root>/reports/<na
 writes the HTML only.
 
 Found or passed as flags:
-  root        --root, else the folder holding <pack>/manifest.json (<pack> is ai or aipack) around the working
-              directory, else the project of a copied overlay (<project>/<pack>/plugins/kaggle/tools/)
+  root        --root, else the nearest folder up from the working directory (never the home folder or one above it)
+              with exactly one child folder <pack> holding an ai-pack manifest.json (<pack> is the project's ai-pack
+              folder: default aipack/, ai/ in older projects, any name; two such folders are an error), else the
+              project of a copied overlay (<project>/<pack>/plugins/kaggle/tools/)
   plan        --plan, else <root>/submissions/live-plan.json
   slug        --slug, else the plan's "competition", else the only competition with saved leaderboard snapshots
               (kaggle_lb.py's store: <root>/__data/kaggle/<slug>/leaderboard/, or $KAGGLE_LB_DIR/<slug>/)
@@ -82,7 +84,6 @@ import sys
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
-PACKS = ("ai", "aipack")
 HERE = os.path.dirname(os.path.abspath(__file__))
 E = html.escape
 NA = '<span class="pending">n/a</span>'
@@ -99,25 +100,55 @@ th.lft, td.lft { text-align: left; }
 """
 
 
+class PackError(Exception):
+    """A folder with more than one ai-pack."""
+
+
+def home_or_above(d):
+    # the home folder, a folder above it, or /: the walk up never reads these (on macOS ~/Desktop can raise
+    # privacy prompts, and an automounted /home is slow)
+    if os.path.dirname(d) == d:
+        return True
+    home = os.path.expanduser("~")
+    homes = (os.path.abspath(home), os.path.realpath(home)) if os.path.isabs(home) else ()
+    return any(h == d or h.startswith(d + os.sep) for h in homes)
+
+
 def find_root(start=None):
-    """The project root around start (the folder holding <pack>/manifest.json), else a copied overlay's project."""
+    """The project root around start (a folder with an ai-pack, see pack_of), else a copied overlay's project."""
     d = os.path.abspath(start or os.getcwd())
-    while True:
+    while not home_or_above(d):
         if pack_of(d):
             return d
-        if os.path.dirname(d) == d:
-            break
         d = os.path.dirname(d)
-    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/
+    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/; a project root at home or above is never listed
     plugins = os.path.dirname(os.path.dirname(HERE))
     pack = os.path.dirname(plugins)
-    if os.path.basename(plugins) == "plugins" and os.path.basename(pack) in PACKS and pack_of(os.path.dirname(pack)):
+    if (os.path.basename(plugins) == "plugins" and not home_or_above(os.path.dirname(pack)) and is_pack(pack)
+            and pack_of(os.path.dirname(pack)) == os.path.basename(pack)):
         return os.path.dirname(pack)
     return None
 
 
+def is_pack(d):
+    # an ai-pack manifest carries framework_version and a project object; a plugin's has neither
+    try:
+        with open(os.path.join(d, "manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
 def pack_of(root):
-    return next((p for p in PACKS if os.path.isfile(os.path.join(root, p, "manifest.json"))), None)
+    """The name of root's ai-pack folder: its one direct child folder holding an ai-pack manifest.json, else None."""
+    try:
+        packs = sorted(n for n in os.listdir(root) if not n.startswith(".") and is_pack(os.path.join(root, n)))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        raise PackError(f"{root}: more than one ai-pack ({', '.join(packs)})")
+    return packs[0] if packs else None
 
 
 def local_zone():
@@ -554,11 +585,15 @@ def main(argv=None):
     ap.add_argument("--gateway", help="Kaggle gateway (default: the kaggle.py beside this file)")
     a = ap.parse_args(argv)
 
-    root = os.path.abspath(a.root) if a.root else find_root()
+    try:
+        root = os.path.abspath(a.root) if a.root else find_root()
+        pack = pack_of(root) if root else None
+    except PackError as e:
+        print(f"kaggle_live_plan: {e}", file=sys.stderr)
+        return 2
     if not root:
         print("kaggle_live_plan: no project here - run from a project root or pass --root", file=sys.stderr)
         return 2
-    pack = pack_of(root)
     plan_path = os.path.abspath(a.plan or os.path.join(root, "submissions", "live-plan.json"))
     try:
         plan = json.load(open(plan_path, encoding="utf-8"))

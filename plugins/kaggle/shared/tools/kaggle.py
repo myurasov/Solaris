@@ -1,20 +1,23 @@
-# rev. 4
+# rev. 5
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
 Solaris agents run this instead of a bare `kaggle`. It finds the calling
-context - a project root (the folder holding <pack>/manifest.json, where the
-ai-pack folder <pack> is ai, or aipack in a project that renamed it) or an
-ad-hoc task folder (the one holding the task notes.md) - keeps a private venv
-there with exactly the pinned CLI installed, and execs that CLI with the
-arguments unchanged. With no project or task around (the framework root) it
+context - a project root (the nearest folder up with exactly one child folder
+<pack> holding an ai-pack manifest.json, where <pack> is the project's ai-pack
+folder: default aipack/, ai/ in older projects, any name) or an ad-hoc task
+folder (the one holding the task notes.md) - keeps a private venv there with
+exactly the pinned CLI installed, and execs that CLI with the arguments
+unchanged. With no project or task around (the framework root) it
 runs the same pinned CLI from a throwaway uv environment, so nothing is ever
 installed globally.
 
     python3 <plugin-dir>/tools/kaggle.py <kaggle args>
     python3 <plugin-dir>/tools/kaggle.py --sdk <read> <args>
 
-Run it from the project root or task folder. A copied overlay
+Run it from the project root or task folder; the search for one never reads
+the home folder itself or any folder above it, and a folder holding two
+ai-packs stops it with an error. A copied overlay
 (<project>/<pack>/plugins/kaggle/tools/kaggle.py) also finds its project from
 its own location; the live copy in a Solaris checkout
 (<solaris>/plugins/kaggle/shared/tools/kaggle.py, used by linked projects,
@@ -41,6 +44,7 @@ exactly what the Kaggle CLI (or kaggle_sdk.py) printed.
 
 import fcntl
 import importlib.util
+import json
 import os
 import shutil
 import subprocess
@@ -55,8 +59,6 @@ SDK_PIN = "0.1.37"
 REQS = [f"kaggle=={PIN}", f"kagglesdk=={SDK_PIN}"]
 ENV_DIR = ".venv-kaggle"
 STAMP = ".solaris-kaggle-pin"
-# ai-pack folder names that mark a project root: the Solaris default and a renamed pack
-PACKS = ("ai", "aipack")
 # hook switches: monitoring calls leave no activity stamp; 0 stops saving leaderboard reads
 QUIET_ENV = "KAGGLE_SHARE_QUIET"
 RECORD_ENV = "KAGGLE_LB_RECORD"
@@ -84,26 +86,56 @@ def is_task(d):
     return notes.is_file() and "ad-hoc-task" in notes.read_text(errors="replace")[:4096]
 
 
-def is_project(d):
-    return any((d / pack / "manifest.json").is_file() for pack in PACKS)
+def is_pack(d):
+    # an ai-pack manifest carries framework_version and a project object; a plugin's has neither
+    try:
+        m = json.loads((d / "manifest.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
+def pack_of(d):
+    """The ai-pack folder of d: its one direct child folder holding an ai-pack manifest.json, else None."""
+    try:
+        packs = sorted(c for c in d.iterdir() if not c.name.startswith(".") and is_pack(c))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        # ambiguous: stop before any Kaggle call
+        sys.exit(f"kaggle gateway: {d}: more than one ai-pack ({', '.join(p.name for p in packs)})")
+    return packs[0] if packs else None
+
+
+def walk_up(d):
+    """d and the folders above it, stopping before the home folder, any folder above it, or /."""
+    home = Path(os.path.expanduser("~"))
+    homes = (home, home.resolve()) if home.is_absolute() else ()
+    chain = []
+    for f in (d, *d.parents):
+        # never read $HOME or above: on macOS ~/Desktop can raise privacy prompts, and an automounted /home is slow
+        if f.parent == f or any(f == h or f in h.parents for h in homes):
+            break
+        chain.append(f)
+    return chain
 
 
 def find_context():
     """Project root or task folder this call belongs to; None at the framework level."""
-    cwd = Path.cwd()
-    chain = (cwd, *cwd.parents)
+    chain = walk_up(Path.cwd())
     # a project wins over task-style notes inside it (e.g. graduated research notes)
     for d in chain:
-        if is_project(d):
+        if pack_of(d):
             return d
     for d in chain:
         if is_task(d):
             return d
-    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle.py
+    # a copied overlay sits at <project>/<pack>/plugins/kaggle/tools/kaggle.py; a project root at home or above is
+    # never listed (walk_up is empty there)
     here = Path(__file__).resolve().parent
     if len(here.parents) > 2:
         plugins, pack = here.parents[1], here.parents[2]
-        if plugins.name == "plugins" and pack.name in PACKS and (pack / "manifest.json").is_file():
+        if plugins.name == "plugins" and walk_up(pack.parent) and is_pack(pack) and pack_of(pack.parent) == pack:
             return pack.parent
     return None
 

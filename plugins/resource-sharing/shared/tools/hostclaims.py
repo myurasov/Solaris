@@ -1,4 +1,4 @@
-# rev. 3
+# rev. 4
 
 """hostclaims: share hosts between agents through claim files kept on each host.
 
@@ -2510,11 +2510,61 @@ def watch(root, rd, cid, logf):
 
 # controller side: projects, sharing links, inventory, policy, transport
 
+def is_pack(d):
+    # an ai-pack manifest carries framework_version and a project object; a plugin's has neither
+    try:
+        with open(os.path.join(d, "manifest.json"), encoding="utf-8") as f:
+            m = json.load(f)
+    except (OSError, ValueError):
+        return False
+    return isinstance(m, dict) and "framework_version" in m and isinstance(m.get("project"), dict)
+
+
 def pack_of(d):
-    for pack in ("ai", "aipack"):
-        if os.path.isfile(os.path.join(d, pack, "manifest.json")):
-            return pack
+    # the name of d's ai-pack folder, whatever it is: its one direct child folder holding an ai-pack manifest.json,
+    # else None; more than one is an error
+    try:
+        packs = sorted(n for n in os.listdir(d) if not n.startswith(".") and is_pack(os.path.join(d, n)))
+    except OSError:
+        return None
+    if len(packs) > 1:
+        raise Fail("%s: more than one ai-pack (%s)" % (d, ", ".join(packs)), USAGE)
+    return packs[0] if packs else None
+
+
+def unread_pack(d):
+    # the manifest.json of a child folder of d that may be an ai-pack's but cannot be read: one that cannot be opened,
+    # or names framework_version but is not JSON (a merge conflict, say); None when there is none
+    try:
+        names = sorted(n for n in os.listdir(d) if not n.startswith("."))
+    except OSError:
+        return None
+    for n in names:
+        path = os.path.join(d, n, "manifest.json")
+        # a child folder that cannot be searched is passed over (os.path.isfile never raises)
+        if not os.path.isfile(path):
+            continue
+        try:
+            with open(path, "rb") as f:
+                raw = f.read()
+        except OSError:
+            return path
+        try:
+            json.loads(raw.decode("utf-8"))
+        except ValueError:
+            if b"framework_version" in raw:
+                return path
     return None
+
+
+def home_or_above(d):
+    # the home folder, a folder above it, or /: the walk up never reads these (on macOS ~/Desktop can raise
+    # privacy prompts, and an automounted /home is slow)
+    if os.path.dirname(d) == d:
+        return True
+    home = os.path.expanduser("~")
+    homes = (os.path.abspath(home), os.path.realpath(home)) if os.path.isabs(home) else ()
+    return any(h == d or h.startswith(d + os.sep) for h in homes)
 
 
 def find_project(start=None):
@@ -2523,24 +2573,23 @@ def find_project(start=None):
         d = os.path.abspath(os.path.expanduser(start))
         pack = pack_of(d)
         if not pack:
-            raise Fail("%s is not a project (no ai/ or aipack/ folder with a manifest.json)" % d, USAGE)
+            raise Fail("%s is not a project (no child folder holding an ai-pack manifest.json)" % d, USAGE)
         return d, pack
     d = os.getcwd()
-    while True:
+    while not home_or_above(d):
         pack = pack_of(d)
         if pack:
             return d, pack
-        parent = os.path.dirname(d)
-        if parent == d:
-            break
-        d = parent
+        d = os.path.dirname(d)
+    # a copied install sits at <project>/<pack>/plugins/resource-sharing/tools/hostclaims.py; a project root at home
+    # or above is never listed
     d = os.path.dirname(os.path.abspath(__file__))
     while True:
         parent = os.path.dirname(d)
         if parent == d:
             return None, None
-        if os.path.basename(d) == "plugins" and os.path.basename(parent) in ("ai", "aipack"):
-            if os.path.isfile(os.path.join(parent, "manifest.json")):
+        if os.path.basename(d) == "plugins" and not home_or_above(os.path.dirname(parent)) and is_pack(parent):
+            if pack_of(os.path.dirname(parent)) == os.path.basename(parent):
                 return os.path.dirname(parent), os.path.basename(parent)
         d = parent
 
@@ -2567,6 +2616,9 @@ def solaris_root_of(root):
 
 
 def scan_projects(sroot):
+    # (root, pack, why) for each project folder in the tree, never one inside another; a folder whose ai-pack cannot
+    # be told (two or more, or none but a manifest that cannot be read) has pack None and why it is skipped, so one
+    # broken project never stops the scan of the others
     def dirs(d):
         try:
             return sorted(os.path.join(d, n) for n in os.listdir(d)
@@ -2574,17 +2626,25 @@ def scan_projects(sroot):
         except OSError:
             return []
 
+    def look(d):
+        try:
+            pack = pack_of(d)
+        except Fail as e:
+            return None, str(e)
+        path = None if pack else unread_pack(d)
+        return pack, ("cannot read %s" % path) if path else None
+
     out = []
     for group in dirs(os.path.join(sroot, "projects")):
         for d in dirs(group):
-            pack = pack_of(d)
-            if pack:
-                out.append((d, pack))
+            pack, why = look(d)
+            if pack or why:
+                out.append((d, pack, why))
                 continue
             for d2 in dirs(d):
-                pack = pack_of(d2)
-                if pack:
-                    out.append((d2, pack))
+                pack, why = look(d2)
+                if pack or why:
+                    out.append((d2, pack, why))
     return out
 
 
@@ -2606,19 +2666,23 @@ def read_inventory(path):
 
 def peer_hosts(me, unread=None):
     # hosts that other projects in this Solaris tree own and share with this project;
-    # unread (a dict) maps the folder of each project whose sharing file or inventory could not be read to its slug
+    # unread (a dict) maps the folder of each project whose sharing file or inventory could not be read, or whose
+    # ai-pack could not be told, to its slug
     out, notes, found = [], [], set()
     sroot = solaris_root_of(me["root"])
     if not sroot:
         return out, notes
-    for root, pack in scan_projects(sroot):
+    for root, pack, why in scan_projects(sroot):
         if os.path.abspath(root) == os.path.abspath(me["root"]):
             continue
         # the folder under the Solaris root names a project even when its sharing file, and so its slug, is unreadable
         folder = os.path.relpath(root, sroot)
-        path = os.path.join(root, pack, ".memory", "hosts.json")
         p = None
         try:
+            if why:
+                # its ai-pack cannot be told, so neither can its sharing file: unread, like an unreadable one
+                raise Fail(why)
+            path = os.path.join(root, pack, ".memory", "hosts.json")
             p = project_info(root, pack)
             found.add(p["slug"])
             if p["config_error"]:

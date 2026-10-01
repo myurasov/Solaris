@@ -20,6 +20,8 @@ sys.path.insert(0, str(TOOLS))
 import kaggle_forum as F  # noqa: E402
 
 SLUG = "demo-competition"
+# what makes a folder an ai-pack, whatever its name: a manifest with framework_version and a project object
+PACK_MANIFEST = json.dumps({"framework_version": "0.39.0", "project": {"name": "demo"}})
 
 
 def row(tid, title, comments, date="2026-09-20T10:00:00.100000"):
@@ -431,7 +433,7 @@ class CommandTests(Tmp):
     def test_default_store_is_under_the_project_root(self):
         proj = self.tmp / "proj"
         (proj / "aipack").mkdir(parents=True)
-        (proj / "aipack" / "manifest.json").write_text("{}")
+        (proj / "aipack" / "manifest.json").write_text(PACK_MANIFEST)
         (proj / "src").mkdir()
         self.assertEqual(F.find_root(proj / "src"), proj)
         self.assertEqual(F.store_dir(SLUG, root=proj), proj / "__data" / "kaggle" / SLUG / "forum")
@@ -440,6 +442,28 @@ class CommandTests(Tmp):
         for bad in ("../x", "a/b", "", ".hidden"):
             with self.assertRaises(F.ForumError):
                 F.store_dir(bad, directory=str(self.tmp))
+
+    def test_project_root_for_any_pack_name_and_from_a_copied_install(self):
+        (self.tmp / "elsewhere").mkdir()
+        for pack in ("ai", "aipack", "mypack"):
+            proj = self.tmp / f"p-{pack}"
+            tools = proj / pack / "plugins" / "kaggle" / "tools"
+            tools.mkdir(parents=True)
+            (proj / pack / "manifest.json").write_text(PACK_MANIFEST)
+            self.assertEqual((F.find_root(tools), F.pack_of(proj)), (proj, proj / pack))
+            # a copied install finds its project from its own place
+            with mock.patch.object(F, "__file__", str(tools / "kaggle_forum.py")):
+                self.assertEqual(F.find_root(self.tmp / "elsewhere"), proj)
+        # a plugin manifest and a hidden folder are no pack; two packs stop the walk with an error naming them
+        odd = self.tmp / "odd"
+        for name, text in (("plugin", '{"name": "kaggle"}'), (".hidden", PACK_MANIFEST), ("one", PACK_MANIFEST),
+                           ("two", PACK_MANIFEST)):
+            (odd / name).mkdir(parents=True)
+            (odd / name / "manifest.json").write_text(text)
+        with self.assertRaisesRegex(F.ForumError, r"odd: more than one ai-pack \(one, two\)$"):
+            F.find_root(odd / "plugin")
+        (odd / "two" / "manifest.json").unlink()
+        self.assertEqual(F.pack_of(odd), odd / "one")
 
     def test_list_failure_exit_code_and_message(self):
         self.gateway.write_text(textwrap.dedent("""\

@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -38,7 +38,7 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
 | Ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/tools/kaggle.py <args>` | task folder |
 | Framework root | `python3 plugins/kaggle/shared/tools/kaggle.py <args>` | Solaris root |
 
-`<pack>` is the project's ai-pack folder: `ai`, or `aipack` in a project that renamed it.
+`<pack>` is the project's ai-pack folder (default `aipack/`, `ai/` in older projects, any name).
 `<solaris>` is the Solaris checkout, absolute or relative: from a grouped project root
 (`projects/<group>/<slug>/`) the linked call is
 `python3 ../../../plugins/kaggle/shared/tools/kaggle.py <args>`.
@@ -46,10 +46,12 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
 - **Where the CLI lives.** The first call installs `kaggle==2.2.4` (with `kagglesdk==0.1.37`,
   the SDK it was tested with) into `<context>/.venv-kaggle/` (about a second on a warm uv
   cache; the venv git-ignores itself); later calls run it directly. The context is the nearest
-  project root above the working directory (a folder holding `ai/manifest.json` or
-  `aipack/manifest.json`), else the nearest task folder (its `notes.md` header names the
-  ad-hoc-task skill) - so `cd` there first. A copied overlay also finds its project from its
-  own location; the live copy under `<solaris>/plugins/` goes by the working directory only.
+  project root above the working directory (a folder with exactly one child folder holding an
+  ai-pack `manifest.json`: its `<pack>`), else the nearest task folder (its `notes.md` header
+  names the ad-hoc-task skill) - so `cd` there first. The search never reads the home folder
+  itself or anything above it, and a folder with two ai-packs stops the call with an error naming
+  them. A copied overlay also finds its project from its own location; the live copy under
+  `<solaris>/plugins/` goes by the working directory only.
   With neither (the framework root, or an old task without that header) the gateway runs the
   same pinned CLI from a throwaway uv environment and says so on stderr.
 - **Self-healing.** A changed pin (plugin update), a moved folder, or a removed base Python

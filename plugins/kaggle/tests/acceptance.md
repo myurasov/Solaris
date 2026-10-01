@@ -81,8 +81,9 @@ ABORTED (commit with the owner's go-ahead, then start over).
 ### Scratch Context
 
 The gateway keeps the CLI in a `.venv-kaggle/` inside the context it runs for: the nearest folder
-above the working directory that holds `ai/manifest.json` or `aipack/manifest.json` (a project), else
-one whose `notes.md` names the `ad-hoc-task` skill near its top (a task). An ad-hoc task folder would
+above the working directory with exactly one child folder holding an ai-pack `manifest.json` (a
+project, whatever its ai-pack folder is named), else one whose `notes.md` names the `ad-hoc-task`
+skill near its top (a task). An ad-hoc task folder would
 do; a scratch folder outside the checkout is simpler to throw away. Its one-line `notes.md` makes it a
 task, so check 1 builds a fresh environment there, and with no project above it nothing else wins. If
 the folder already exists, an earlier run did not clean up: remove it first.

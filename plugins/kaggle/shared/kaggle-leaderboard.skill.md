@@ -3,7 +3,7 @@ name: kaggle-leaderboard
 triggers: ["leaderboard", "leaderboard history", "competitor progress", "monitor the leaderboard", "leaderboard snapshot", "who is climbing", "public notebooks"]
 summary: Leaderboard history for any Kaggle competition - every leaderboard read is saved as a local snapshot of the public leaderboard fields, so each team's progress can be followed over time, and the public notebooks are saved with their measured public scores, so notebook jumps show. Covers kaggle_lb.py (snapshot, show, history, movers, new-teams, summary, record-raw, import, notebooks), the storage layout, an hourly cadence, privacy, and reading progress over time.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: kaggle-leaderboard - Leaderboard History <!-- omit in toc -->
 
@@ -70,6 +70,8 @@ Run from the project root or task folder:
 |---|---|
 | Project, plugin copied | `python3 <pack>/plugins/kaggle/tools/kaggle_lb.py <command> <slug> ...` |
 | Project linked, or ad-hoc task | `python3 <solaris>/plugins/kaggle/shared/tools/kaggle_lb.py <command> <slug> ...` |
+
+`<pack>` is the project's ai-pack folder (default `aipack/`, `ai/` in older projects, any name).
 
 | Command | Does |
 |---|---|

@@ -24,6 +24,8 @@ import kaggle_lb as L  # noqa: E402
 
 SLUG = "demo-competition"
 FIELDS = ["teamId", "teamName", "submissionDate", "score"]
+# what makes a folder an ai-pack, whatever its name: a manifest with framework_version and a project object
+PACK_MANIFEST = json.dumps({"framework_version": "0.39.0", "project": {"name": "demo"}})
 
 
 def team(tid, name, score, date="2026-09-25T00:00:57.303000"):
@@ -258,10 +260,33 @@ class StorageTests(Tmp):
     def test_default_store_is_under_the_project_root(self):
         proj = self.tmp / "proj"
         (proj / "aipack").mkdir(parents=True)
-        (proj / "aipack" / "manifest.json").write_text("{}")
+        (proj / "aipack" / "manifest.json").write_text(PACK_MANIFEST)
         (proj / "src" / "deep").mkdir(parents=True)
         self.assertEqual(L.find_root(proj / "src" / "deep"), proj.resolve())
         self.assertEqual(L.store_dir(SLUG, root=proj), proj / "__data" / "kaggle" / SLUG / "leaderboard")
+
+    def test_project_root_for_any_pack_name_and_from_a_copied_install(self):
+        tmp = self.tmp.resolve()
+        (tmp / "elsewhere").mkdir()
+        for pack in ("ai", "aipack", "mypack"):
+            proj = tmp / f"p-{pack}"
+            tools = proj / pack / "plugins" / "kaggle" / "tools"
+            tools.mkdir(parents=True)
+            (proj / pack / "manifest.json").write_text(PACK_MANIFEST)
+            self.assertEqual((L.find_root(tools), L.pack_of(proj)), (proj, proj / pack))
+            # a copied install finds its project from its own place
+            with mock.patch.object(L, "__file__", str(tools / "kaggle_lb.py")):
+                self.assertEqual(L.find_root(tmp / "elsewhere"), proj)
+        # a plugin manifest and a hidden folder are no pack; two packs stop the walk with an error naming them
+        odd = tmp / "odd"
+        for name, text in (("plugin", '{"name": "kaggle"}'), (".hidden", PACK_MANIFEST), ("one", PACK_MANIFEST),
+                           ("two", PACK_MANIFEST)):
+            (odd / name).mkdir(parents=True)
+            (odd / name / "manifest.json").write_text(text)
+        with self.assertRaisesRegex(L.LeaderboardError, r"odd: more than one ai-pack \(one, two\)$"):
+            L.find_root(odd / "plugin")
+        (odd / "two" / "manifest.json").unlink()
+        self.assertEqual(L.pack_of(odd), odd / "one")
 
     def test_task_folder_is_a_context(self):
         task = self.tmp / "task"
