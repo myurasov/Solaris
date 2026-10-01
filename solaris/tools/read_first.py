@@ -31,10 +31,11 @@ plain stdout. The tool detects the IDE from the environment and emits whichever 
 On a part-4 session start it also merges Syncthing ``*.sync-conflict-*`` copies of any ``.jsonl`` log
 in a memory folder (framework ``.memory/`` and each project pack's ``.memory/``, never ``__data/`` or
 ``__out/``) into the canonical file: it appends only the missing lines under a non-blocking lock,
-re-reads to verify them, and only then deletes the copies. A group it cannot merge safely (a missing,
-unreadable, locked or mid-line file) keeps its copies for the next session start. Every copy left in
-place is reported by a one-line note (a count plus at most two paths) prepended to part 4, the
-smallest payload, so the note cannot push part 1 past the inline budget.
+re-reads to verify them, and only then deletes the copies. A merge can bring back a line that was
+deliberately removed from the canonical log on another device, since the copy still holds it. A group
+it cannot merge safely (a missing, unreadable, locked or mid-line file) keeps its copies for the next
+session start. Every copy left in place is reported by a one-line note (a count plus at most two paths)
+prepended to part 4, the smallest payload, so the note cannot push part 1 past the inline budget.
 
 Like the other hooks it is **fail-safe**: it never raises, always exits 0, and tolerates missing files / a
 missing venv - a broken read-first load must never block the user's turn. It does not read stdin (avoiding
@@ -140,9 +141,11 @@ def _memory_roots(repo_root: Path) -> list[Path]:
     # projects/<slug>/ai, projects/<group>/<slug>/<pack> (ai/ or a renamed pack such as aipack/)
     # and embedded projects/<group>/<slug>/<repo>/ai. Keep .stglobalignore's conflict lines in step.
     # Glob lists only the wildcard levels, so __data/__out are never listed; matches in them are dropped.
+    # A match counts only if its pack holds manifest.json, so a .memory in a source/ repo is not swept.
     for pattern in ("projects/*/ai/.memory", "projects/*/*/*/.memory", "projects/*/*/*/ai/.memory"):
         for path in repo_root.glob(pattern):
-            if not {"__data", "__out"} & set(path.relative_to(repo_root).parts):
+            bulk = {"__data", "__out"} & set(path.relative_to(repo_root).parts)
+            if not bulk and (path.parent / "manifest.json").is_file():
                 roots.append(path)
     return [p for p in roots if p.is_dir()]
 
@@ -165,8 +168,8 @@ def _merge_jsonl(canonical: Path, copies: list[Path]) -> bool:
 
     The canonical file is only appended to (one O_APPEND write under a non-blocking flock), so a log
     line another session appends meanwhile is never lost, and the file keeps its inode and mode.
-    Returns False and keeps every copy for the next session start when the canonical file is missing,
-    locked or mid-line, when any file cannot be read, or when the re-read lacks a copy line.
+    Returns False and keeps every copy for the next session start when the canonical file is missing
+    or locked, when any file is mid-line or cannot be read, or when the re-read lacks a copy line.
     """
     try:
         fd = os.open(canonical, os.O_WRONLY | os.O_APPEND)  # no O_CREAT: a missing canonical skips
@@ -178,6 +181,8 @@ def _merge_jsonl(canonical: Path, copies: list[Path]) -> bool:
         blobs = [copy.read_bytes() for copy in copies]
         if base and not base.endswith(b"\n"):
             return False  # a writer may be mid-line
+        if any(blob and not blob.endswith(b"\n") for blob in blobs):
+            return False  # a copy caught mid-write would merge a broken line
         have = set(_jsonl_lines(base))
         add: list[bytes] = []
         for blob in blobs:

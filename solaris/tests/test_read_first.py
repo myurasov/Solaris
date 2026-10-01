@@ -159,10 +159,12 @@ def test_check_covers_all_parts(capsys):
 _CP = "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl"
 
 
-def _memory(root, canonical, copy, rel=".memory"):
+def _memory(root, canonical, copy, rel=".memory", manifest=False):
     """A memory dir under ``root`` with a canonical log (None: missing) and one conflict copy."""
     mem = root / rel
     mem.mkdir(parents=True)
+    if manifest:
+        (mem.parent / "manifest.json").write_text("{}\n", encoding="utf-8")  # marks a project pack
     if canonical is not None:
         (mem / "interactions.jsonl").write_bytes(canonical)
     (mem / _CP).write_bytes(copy)
@@ -199,7 +201,8 @@ def test_heal_sync_conflicts_unions_jsonl_and_leaves_other(tmp_path):
 
 
 def test_heal_sync_conflicts_project_memory(tmp_path):
-    mem = _memory(tmp_path, b'{"ts": "p1"}\n', b'{"ts": "p2"}\n', "projects/my/demo/ai/.memory")
+    mem = _memory(tmp_path, b'{"ts": "p1"}\n', b'{"ts": "p2"}\n', "projects/my/demo/ai/.memory",
+                  manifest=True)
     (mem / "context.sync-conflict-20260928-224430-BBBBBBB.md").write_text("x\n", encoding="utf-8")
     note = R.heal_sync_conflicts(tmp_path)
     assert (mem / "interactions.jsonl").read_bytes() == b'{"ts": "p1"}\n{"ts": "p2"}\n'
@@ -213,7 +216,7 @@ def test_heal_covers_renamed_and_embedded_packs_but_not_data(tmp_path):
     swept = ["aipack/.memory", "repo/ai/.memory"]
     skipped = ["__data/.memory", "__out/ai/.memory"]
     for rel in swept + skipped:
-        _memory(demo, b'{"ts": "a"}\n', b'{"ts": "loser"}\n', rel)
+        _memory(demo, b'{"ts": "a"}\n', b'{"ts": "loser"}\n', rel, manifest=True)
     assert R.heal_sync_conflicts(tmp_path) == ""
     for rel in swept:
         assert (demo / rel / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "loser"}\n'
@@ -221,6 +224,17 @@ def test_heal_covers_renamed_and_embedded_packs_but_not_data(tmp_path):
     for rel in skipped:
         assert (demo / rel / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n'
         assert (demo / rel / _CP).exists()
+
+
+def test_heal_sweeps_a_project_memory_only_beside_a_manifest(tmp_path):
+    # A .memory in a project's source/ repo is not a pack's; any folder holding manifest.json is.
+    demo = tmp_path / "projects" / "my" / "demo"
+    pack = _memory(demo, b'{"ts": "a"}\n', b'{"ts": "loser"}\n', "anyname/.memory", manifest=True)
+    repo = _memory(demo, b'{"ts": "a"}\n', b'{"ts": "loser"}\n', "source/.memory")
+    assert R.heal_sync_conflicts(tmp_path) == ""  # source/.memory is not walked, so not reported
+    assert (pack / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "loser"}\n'
+    assert not (pack / _CP).exists()
+    assert (repo / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n' and (repo / _CP).exists()
 
 
 def test_heal_merges_bytes_split_on_newline_only(tmp_path):
@@ -294,6 +308,16 @@ def test_heal_skips_when_busy_mid_line_or_without_fcntl(tmp_path, monkeypatch):
     assert not (mem / _CP).exists()
 
 
+def test_heal_keeps_copies_when_a_copy_is_cut_off_mid_line(tmp_path):
+    # Syncthing caught a copy mid-write: nothing of its group is merged, so no broken line lands.
+    mem = _memory(tmp_path, b'{"ts": "a"}\n', b'{"ts": "b"}\n{"ts": "par')
+    whole = mem / "interactions.sync-conflict-20260930-151209-BBBBBBB.jsonl"
+    whole.write_bytes(b'{"ts": "c"}\n')
+    assert R.heal_sync_conflicts(tmp_path).startswith("2 Syncthing conflict copies left")
+    assert (mem / "interactions.jsonl").read_bytes() == b'{"ts": "a"}\n'
+    assert (mem / _CP).read_bytes() == b'{"ts": "b"}\n{"ts": "par' and whole.exists()
+
+
 def test_heal_keeps_copies_when_the_verify_fails(tmp_path, monkeypatch):
     # Syncthing swaps in a new canonical after the open: the append lands in the old inode, the
     # re-read through the path lacks the copy's line, so the copy is kept.
@@ -317,6 +341,7 @@ def test_sweep_note_rides_on_part4_within_budget(tmp_path, monkeypatch, capsys):
     for i in range(12):
         mem = tmp_path / "projects" / "my" / ("a-project-with-a-long-slug-%02d" % i) / "ai" / ".memory"
         mem.mkdir(parents=True)
+        (mem.parent / "manifest.json").write_text("{}\n", encoding="utf-8")
         (mem / ("context" + stamp + ".md")).write_text("x\n", encoding="utf-8")
     note = R.heal_sync_conflicts(tmp_path)
     assert note.startswith("12 Syncthing conflict copies left") and note.count(stamp) == 2
