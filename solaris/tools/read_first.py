@@ -13,10 +13,10 @@ Two modes:
 - **no args** - full load, part 1 (rules + memory + orchestrator role). Print the concatenated read-first
   files under an authoritative header. Wired to the session-start hook (Claude Code ``SessionStart``;
   Cursor ``sessionStart``) so it fires once per session and again after a compaction / clear / resume.
-- **``--part 2``** - full load, part 2 (the subagents + YAGNI rules); **``--part 3``** - full load,
-  part 3 (the token-economy rule). Wired as additional session-start hook entries: the harness inline
-  threshold applies per hook call, so splitting the set across calls multiplies the inline room
-  without risking a spill.
+- **``--part 2``** - full load, part 2 (the subagents rule); **``--part 3``** - full load, part 3 (the
+  token-economy rule); **``--part 4``** - full load, part 4 (the YAGNI rule). Wired as additional
+  session-start hook entries: the harness inline threshold applies per hook call, so splitting the set
+  across calls multiplies the inline room without risking a spill.
 - **``--check``** - print per-file sizes, the inline budget, and whether the rendered payload fits
   (the size assertion; run after growing any read-first file, especially ``.memory/instructions.md``).
 - **``--remind``** - print a one-line forcing reminder that the set was loaded. Wired to Claude Code's
@@ -44,7 +44,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # The AGENTS.md "Read first" set in INLINE PRIORITY order (not reading order): the always-on
 # rules are small and operative, so they must always arrive whole; the operating memory and the
 # orchestrator role are larger and degrade gracefully to a truncated head + a read-the-rest pointer.
-# The set is split into three parts because Claude Code's inline threshold is PER HOOK INVOCATION:
+# The set is split into four parts because Claude Code's inline threshold is PER HOOK INVOCATION:
 # every part is wired as its own SessionStart hook, so each gets its own budget.
 READ_FIRST = (
     "solaris/rules/commits.rule.md",
@@ -55,10 +55,12 @@ READ_FIRST = (
 )
 READ_FIRST_2 = (
     "solaris/rules/subagents.rule.md",
-    "solaris/rules/yagni.rule.md",
 )
 READ_FIRST_3 = (
     "solaris/rules/token-economy.rule.md",
+)
+READ_FIRST_4 = (
+    "solaris/rules/yagni.rule.md",
 )
 
 # Claude Code persists hook stdout beyond 10,000 characters to a file, keeping only a small inline
@@ -88,6 +90,13 @@ _HEADER_2 = (
 
 _HEADER_3 = (
     "=== SOLARIS READ-FIRST, PART 3 (auto-loaded every session by the read_first hook) ===\n"
+    "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
+    "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
+    "read it yourself before relying on it.\n"
+)
+
+_HEADER_4 = (
+    "=== SOLARIS READ-FIRST, PART 4 (auto-loaded every session by the read_first hook) ===\n"
     "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
     "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
     "read it yourself before relying on it.\n"
@@ -163,8 +172,8 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None, part: 
     silently. ``part`` selects which slice of the set to render (the budget is per hook call,
     so each part is wired as its own SessionStart hook).
     """
-    files = {2: READ_FIRST_2, 3: READ_FIRST_3}.get(part, READ_FIRST)
-    header = {2: _HEADER_2, 3: _HEADER_3}.get(part, _HEADER)
+    files = {2: READ_FIRST_2, 3: READ_FIRST_3, 4: READ_FIRST_4}.get(part, READ_FIRST)
+    header = {2: _HEADER_2, 3: _HEADER_3, 4: _HEADER_4}.get(part, _HEADER)
     budget = _budget() if budget is None else budget
     remaining = budget - len(header)
     parts = [header]
@@ -201,9 +210,9 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None, part: 
 
 
 def check(repo_root: Path = REPO_ROOT) -> str:
-    """Size assertion for humans/CI: per-file sizes, the budget, and both rendered payload sizes."""
+    """Size assertion for humans/CI: per-file sizes, the budget, and every part's rendered payload size."""
     lines = ["read_first check: budget=%d per part (%s)" % (_budget(), _BUDGET_ENV)]
-    for part, files in ((1, READ_FIRST), (2, READ_FIRST_2), (3, READ_FIRST_3)):
+    for part, files in ((1, READ_FIRST), (2, READ_FIRST_2), (3, READ_FIRST_3), (4, READ_FIRST_4)):
         for rel in files:
             try:
                 n = len((Path(repo_root) / rel).read_text(encoding="utf-8"))
@@ -241,7 +250,7 @@ def main(argv: "list[str] | None" = None) -> int:
         remind = "--remind" in argv
         part = 1
         if "--part" in argv:
-            part = 3 if "3" in argv else (2 if "2" in argv else 1)
+            part = 4 if "4" in argv else (3 if "3" in argv else (2 if "2" in argv else 1))
         if not remind and part == 1:
             migrate_legacy_memory()  # session start: pick up a pre-0.19 checkout's memory/ folder
         ide = detect_ide()

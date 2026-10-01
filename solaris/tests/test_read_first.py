@@ -89,11 +89,12 @@ def test_check_reports_budget(capsys):
     out = capsys.readouterr().out
     assert "rendered payload" in out and ("OK (inline)" in out or "OVER BUDGET" in out)
 
-def test_render_part2_inlines_both_rules_whole():
-    # Part 2 (second SessionStart hook call) carries the subagents + YAGNI rules, whole and in budget.
+def test_render_part2_inlines_subagents_rule_whole():
+    # Part 2 (second SessionStart hook call) carries the subagents rule alone, whole and in budget.
     out = R.render_full(part=2)
     assert len(out) <= R._budget()
     assert "READ-FIRST, PART 2" in out
+    assert R.READ_FIRST_2 == ("solaris/rules/subagents.rule.md",)
     for rel in R.READ_FIRST_2:
         body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
         assert body in out, rel + " must be inlined whole"
@@ -126,9 +127,27 @@ def test_main_part3(capsys):
     assert "READ-FIRST, PART 3" in capsys.readouterr().out
 
 
+def test_render_part4_inlines_yagni_rule_whole():
+    # Part 4 (fourth SessionStart hook call) carries the YAGNI rule, whole and in budget.
+    out = R.render_full(part=4)
+    assert len(out) <= R._budget()
+    assert "READ-FIRST, PART 4" in out
+    for rel in R.READ_FIRST_4:
+        body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
+        assert body in out, rel + " must be inlined whole"
+    # part 4 never re-lists earlier parts' files
+    for rel in R.READ_FIRST + R.READ_FIRST_2 + R.READ_FIRST_3:
+        assert ("----- " + rel + " -----") not in out
+
+
+def test_main_part4(capsys):
+    assert R.main(["--part", "4"]) == 0
+    assert "READ-FIRST, PART 4" in capsys.readouterr().out
+
+
 def test_check_covers_all_parts(capsys):
     assert R.main(["--check"]) == 0
     out = capsys.readouterr().out
-    for n in (1, 2, 3):
+    for n in (1, 2, 3, 4):
         assert ("part %d rendered payload" % n) in out
     assert "OVER BUDGET" not in out

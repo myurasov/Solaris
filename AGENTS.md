@@ -52,7 +52,7 @@ Escalation grants capability, not permission - rule 2 still applies on top.
 7. [`solaris/rules/yagni.rule.md`](solaris/rules/yagni.rule.md) - YAGNI mode (opt-in via `.memory/config.json` `"yagni.enabled"`; `yagni: on|off` per-request).
 8. [`.memory/instructions.md`](.memory/instructions.md) - operating memory: terse, timestamped cross-project lessons + your durable preferences. Load every session; keep it updated (see Memory + Logging).
 
-A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`, in three parts - the harness inline limit applies per hook call) auto-injects these files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
+A session-start hook (`solaris.tools.read_first`, wired in `.claude/settings.json` -> `SessionStart` and `.cursor/hooks.json` -> `sessionStart`, in four parts - the harness inline limit applies per hook call) auto-injects these files at the start of each session (and again after a compaction / clear), so they are in context without being opened by hand; on Claude Code a per-prompt `--remind` line also reinforces them. Treat the injected copy as authoritative, and still re-open a file before editing it.
 
 Run the `health-check` overview to orient **before you start working on a project** (the first
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run

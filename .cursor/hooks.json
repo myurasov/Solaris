@@ -13,6 +13,10 @@
       {
         "command": "uv run -m solaris.tools.read_first --part 3",
         "timeout": 10
+      },
+      {
+        "command": "uv run -m solaris.tools.read_first --part 4",
+        "timeout": 10
       }
     ],
     "beforeSubmitPrompt": [

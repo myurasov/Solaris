@@ -103,9 +103,9 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE]` (personas: validate the
   `ai/*.agent.md` briefs and the shared `ai/instructions.md`; rename the primary persona)
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
-- `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--check]` (the read-first loader hook;
-  loads in three session-start parts - core set, subagents/YAGNI rules, token economy - because the
-  Claude Code inline threshold of 10k chars applies per hook call; not called by hand except `--check`)
+- `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--part 4|--check]` (the read-first loader
+  hook; loads in four session-start parts - core set, subagents rule, token economy, YAGNI rule - because
+  the Claude Code inline threshold of 10k chars applies per hook call; not called by hand except `--check`)
 - `uv run -m solaris.tools.skill_loader` (the prompt-submit skill auto-loader hook; matches the prompt against each skill's `triggers` minus `antitriggers` and injects matching skill bodies; not called by hand)
 - `uv run -m solaris.tools.toc [--check|--write] <file>... | --all` (maintain Markdown tables of contents)
 

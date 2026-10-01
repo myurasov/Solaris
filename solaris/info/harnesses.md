@@ -25,8 +25,8 @@ As of **2026-09-29**, for the two harnesses Solaris runs on:
 
 ## Notes
 
-- The 10k inline hook budget is why `read_first` loads in three parts (core set; delegation/YAGNI
-  rules; token economy), each budgeted separately.
+- The 10k inline hook budget is why `read_first` loads in four parts (core set; delegation rule;
+  token economy; YAGNI rule), each budgeted separately.
 - Both harnesses now have a subagent tool (Cursor since 2.4), so the subagents rule's
   checkpointed-inline fallback - the lookup still runs, sliced/grepped within the read budget, notes
   to a scratch file, only conclusions restated - applies only to harnesses without one (the bulk-read
