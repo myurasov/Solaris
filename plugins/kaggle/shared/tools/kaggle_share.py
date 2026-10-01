@@ -1,4 +1,4 @@
-# rev. 3
+# rev. 4
 
 """kaggle_share: share one Kaggle account's sessions and GPU quota between projects.
 
@@ -15,17 +15,18 @@ lease before each run.
     python3 <plugin-dir>/tools/kaggle_share.py config [--equal | --only P | --weight P=W] [--cap P:KIND=N] ...
     python3 <plugin-dir>/tools/kaggle_share.py stamp
 
-Detection. Account-wide, through the gateway (--gateway; default the kaggle.py
-beside this file): the GPU quota, the account's kernels, and the status of each
-one run in the last 12 hours (scan_hours in sharing.json) - this covers
-projects on any machine. On this machine: activity stamps, one per project or
-task folder, that the gateway writes on each call (stamp()). A project is
-active when it made gateway calls in the last 24 hours, has a queued or running
-kernel, or holds a lease or a waiting request. Kernels map to projects through
-the ids in their kernel-metadata.json files (projects in the Solaris tree with
-an ai or aipack pack, embedded repos included, and any folder a stamp names).
-Leases, waiting requests and ledger entries follow the project folder, so two
-projects with the same folder name never share a count.
+Detection. Account-wide, in one SDK read through the gateway (kaggle.py --sdk
+account; --gateway, default the kaggle.py beside this file): the GPU quota, the
+account's kernels, and the status of each one run in the last 12 hours
+(scan_hours in sharing.json) - this covers projects on any machine. On this
+machine: activity stamps, one per project or task folder, that the gateway
+writes on each call (stamp()). A project is active when it made gateway calls
+in the last 24 hours, has a queued or running kernel, or holds a lease or a
+waiting request. Kernels map to projects through the ids in their
+kernel-metadata.json files (projects in the Solaris tree with an ai or aipack
+pack, embedded repos included, and any folder a stamp names). Leases, waiting
+requests and ledger entries follow the project folder, so two projects with
+the same folder name never share a count.
 
 Split. Every active project gets an equal share of each session pool (rounded
 up) and of the weekly GPU hours; sharing.json overrides that with fixed
@@ -76,7 +77,6 @@ DEFAULTS = {"limits": {"cpu": 5, "gpu": 2, "gpu_hours": 30.0}, "reserve": {"cpu"
 # kernel run states (kagglesdk KernelWorkerStatus); a cancel in progress still holds its session
 RUNNING = {"QUEUED", "RUNNING", "CANCEL_REQUESTED"}
 DONE = {"COMPLETE", "ERROR", "CANCEL_ACKNOWLEDGED", "NEW_SCRIPT"}
-STATUS_RE = re.compile(r'has status "(?:KernelWorkerStatus\.)?([A-Z_]+)"')
 SKIP_DIRS = {"node_modules", "site-packages"}
 LIST_PAGE = 50
 MAX_STATUS = 25
@@ -274,12 +274,14 @@ def stamp_path(base, root):
 
 
 def command_of(argv):
-    # only the command words (e.g. "kernels push"), never arguments: paths, messages and ids stay out
-    words = []
-    for a in argv:
-        if str(a).startswith("-") or len(words) == 2:
+    # only the command words (e.g. "kernels push", "sdk topic"), never arguments: paths, messages and ids stay out
+    argv = [str(a) for a in argv]
+    # an SDK read (kaggle.py --sdk <read> ...) records as "sdk <read>"
+    words = ["sdk"] if argv[:1] == ["--sdk"] else []
+    for a in argv[len(words):]:
+        if a.startswith("-") or len(words) == 2:
             break
-        words.append(str(a))
+        words.append(a)
     return " ".join(words)
 
 
@@ -360,75 +362,29 @@ def _run(cmd, cwd):
     return p.returncode, p.stdout if p.returncode == 0 else p.stdout + p.stderr
 
 
-def json_rows(text):
-    """The JSON list in a CLI response, skipping notices before it."""
-    lines = text.splitlines()
-    for i, line in enumerate(lines):
-        if line.strip().startswith(("[", "{")):
-            try:
-                data, _ = json.JSONDecoder().raw_decode("\n".join(lines[i:]).strip())
-            except ValueError:
-                continue
-            return data if isinstance(data, list) else [data]
-    if "Not found" in text or "No quota information" in text:
-        return []
-    raise ShareError("no JSON in the Kaggle output")
-
-
-def _hours(text):
-    # quota values print as "1.52h"
-    try:
-        return float(str(text).strip().rstrip("h"))
-    except ValueError:
-        return None
-
-
-def parse_quota(text):
-    quota = {}
-    for r in json_rows(text):
-        name = str(r.get("resource", "")).lower()
-        if name in ("gpu", "tpu"):
-            quota[name] = {"used": _hours(r.get("used")), "remaining": _hours(r.get("remaining")),
-                           "total": _hours(r.get("total")), "refresh": r.get("refreshAt") or None}
-    return quota
-
-
-def parse_status(text):
-    m = STATUS_RE.search(text)
-    if not m:
-        raise ShareError(f"no kernel status in: {text.strip()[:120]}")
-    return m.group(1)
-
-
 def scan_account(gateway, cwd, *, run=_run, now=None, cache=None, scan_hours=12):
-    """GPU quota, the account's recent kernels and the status of each one run within scan_hours.
+    """GPU quota, the account's recent kernels and the status of each one run within scan_hours: one SDK read.
 
-    A finished run stays finished until its kernel runs again, so cached finished states are reused.
+    A finished run stays finished until its kernel runs again, so cached finished states are reused: the read
+    is told of them (--done) and does not ask Kaggle again.
     """
     now = now or now_utc()
-    calls, errors = 0, []
-
-    def call(*args):
-        nonlocal calls
-        calls += 1
-        code, out = run([sys.executable, str(gateway), *args], cwd)
-        if code != 0:
-            raise ShareError(f"`{' '.join(args[:2])}` failed (exit {code}): {out.strip()[-200:]}")
-        return out
-
-    quota = None
-    try:
-        quota = parse_quota(call("quota", "--format", "json"))
-    except ShareError as e:
-        errors.append(str(e))
-    rows = None
-    try:
-        rows = json_rows(call("kernels", "list", "--mine", "--sort-by", "dateRun", "--page-size", str(LIST_PAGE),
-                              "--format", "json"))
-    except ShareError as e:
-        errors.append(str(e))
     known = {k["ref"]: k for k in (cache or {}).get("kernels", [])}
-    cutoff = now - timedelta(hours=float(scan_hours))
+    args = ["--sdk", "account", "--hours", f"{float(scan_hours):g}", "--page-size", str(LIST_PAGE)]
+    for ref, k in known.items():
+        if k.get("status") in DONE:
+            args += ["--done", f"{ref}={k.get('last_run')}"]
+    code, out = run([sys.executable, str(gateway), *args], cwd)
+    try:
+        doc = json.loads(out) if code == 0 else None
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict):
+        # nothing read: no quota and no kernel list
+        doc = {"calls": 0, "errors": [f"`--sdk account` failed (exit {code}): {out.strip()[-200:]}"]}
+    rows = doc.get("kernels")
+    # the read's own cutoff: a run at the edge of the window is never left without its status
+    cutoff = parse_time(doc.get("since") or iso(now - timedelta(hours=float(scan_hours))))
     recent = []
     for r in rows or []:
         ref = str(r.get("ref") or "").lower()
@@ -437,22 +393,17 @@ def scan_account(gateway, cwd, *, run=_run, now=None, cache=None, scan_hours=12)
         except (TypeError, ValueError):
             continue
         if ref and last >= cutoff:
-            recent.append((ref, str(r.get("lastRunTime"))))
+            recent.append((ref, str(r.get("lastRunTime")), r.get("status")))
     kernels = []
-    for ref, last in recent[:MAX_STATUS]:
+    for ref, last, status in recent[:MAX_STATUS]:
         old = known.get(ref)
         if old and old.get("last_run") == last and old.get("status") in DONE:
             status = old["status"]
-        else:
-            try:
-                status = parse_status(call("kernels", "status", ref))
-            except ShareError as e:
-                errors.append(str(e))
-                status = "UNKNOWN"
-        kernels.append({"ref": ref, "last_run": last, "status": status})
-    return {"at": iso(now), "listed": rows is not None, "quota": quota, "kernels": kernels,
-            "truncated": max(0, len(recent) - MAX_STATUS), "calls": calls, "errors": errors,
-            "kinds": dict((cache or {}).get("kinds", {}))}
+        # a status the read could not get (its errors say why)
+        kernels.append({"ref": ref, "last_run": last, "status": status or "UNKNOWN"})
+    return {"at": iso(now), "listed": rows is not None, "quota": doc.get("quota"), "kernels": kernels,
+            "truncated": max(0, len(recent) - MAX_STATUS), "calls": doc.get("calls", 0),
+            "errors": list(doc.get("errors") or []), "kinds": dict((cache or {}).get("kinds", {}))}
 
 
 def probe_kind(ref, gateway, cwd, run=_run):

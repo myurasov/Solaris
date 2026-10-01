@@ -3,7 +3,7 @@ name: kaggle-sharing
 triggers: ["kaggle sessions", "share the kaggle account", "kaggle quota", "kaggle sharing", "kaggle gpu quota", "kaggle concurrent sessions"]
 summary: Share one Kaggle account between the projects using it - detects the active projects (account-wide queued and running kernels, local gateway activity), splits the concurrent CPU and GPU sessions and the weekly GPU hours equally or as the user directs, and hands out a lease around each kernel run. Covers kaggle_share.py (status, acquire, release, ledger, config, stamp) and the agent routine.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: kaggle-sharing - One Kaggle Account, Several Projects <!-- omit in toc -->
 
@@ -35,11 +35,11 @@ its own if wanted.
 
 ## Detection
 
-- **Account-wide, from any machine:** `quota`, `kernels list --mine --sort-by dateRun`, and
-  `kernels status` for each kernel run in the last 12 hours (`scan_hours` in `sharing.json`) - all
-  read-only, through the gateway.
-  Finished runs are remembered, so after the first check (about two calls plus one per recent kernel)
-  a check costs about three calls.
+- **Account-wide, from any machine:** one read-only SDK read through the gateway (`kaggle.py --sdk
+  account`), in one process: the quota, the account's kernels (latest run first) and the run state
+  of each kernel run in the last 12 hours (`scan_hours` in `sharing.json`).
+  Finished runs are remembered and not asked again, so after the first check (two calls plus one per
+  recent kernel) a check costs about three calls.
 - **This machine:** the gateway stamps each call in `~/.solaris/kaggle/activity/` - one small JSON
   file per project or task folder with its path, name, first and last call time, call count and the
   last command words, never arguments. Stamps stay out of `~/.kaggle/`, which holds credentials.

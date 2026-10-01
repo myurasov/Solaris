@@ -21,10 +21,9 @@ sys.path.insert(0, str(TOOLS))
 import kaggle_share as S  # noqa: E402
 
 NOW = datetime(2026, 9, 28, 12, 0, tzinfo=timezone.utc)
-QUOTA = [{"resource": "GPU", "used": "12.00h", "remaining": "18.00h", "total": "30.00h",
-          "refreshAt": "2026-10-03T00:00:00"},
-         {"resource": "TPU", "used": "0.00h", "remaining": "20.00h", "total": "20.00h",
-          "refreshAt": "2026-10-03T00:00:00"}]
+# the quota as the account read prints it
+QUOTA = {"gpu": {"used": 12.0, "remaining": 18.0, "total": 30.0, "refresh": "2026-10-03T00:00:00"},
+         "tpu": {"used": 0.0, "remaining": 20.0, "total": 20.0, "refresh": "2026-10-03T00:00:00"}}
 
 
 def at(hours_ago):
@@ -41,40 +40,60 @@ def ctx(name, last=None, kernels=None):
             "kernels": kernels or {}}
 
 
-# a stand-in gateway run as a subprocess: no quota, the kernel list from a fixture file, every run complete
+# a stand-in gateway run as a subprocess: the account read with no quota, the kernel list from a fixture file and
+# every run complete
 GATEWAY_STANDIN = """\
 import json, sys
+from datetime import datetime, timedelta, timezone
 a = sys.argv[1:]
-if a[0] == "quota":
-    print("[]")
-elif a[:2] == ["kernels", "list"]:
-    print(open({fixtures!r}).read())
-elif a[:2] == ["kernels", "status"]:
-    print(a[2] + ' has status "KernelWorkerStatus.COMPLETE"')
-else:
+if a[:2] != ["--sdk", "account"]:
     sys.exit(2)
+since = datetime.now(timezone.utc) - timedelta(hours=float(a[a.index("--hours") + 1]))
+kernels = [dict(k, status="COMPLETE") for k in json.load(open({fixtures!r}))]
+print(json.dumps(dict(since=since.strftime("%Y-%m-%dT%H:%M:%SZ"), quota=dict(), kernels=kernels, calls=2, errors=[])))
 """
 
 
 class FakeKaggle:
-    """Stands in for the gateway: serves quota, the kernel list and statuses from fixtures."""
+    """Stands in for the gateway's account read (--sdk account), printing what kaggle_sdk.py prints from fixtures.
 
-    def __init__(self, kernels=(), statuses=None, quota=None, fail=()):
+    fail names what fails: "quota", "list", a kernel ref (its status), or "read" (the whole read). The read's
+    clock runs `late` seconds after the caller's.
+    """
+
+    def __init__(self, kernels=(), statuses=None, quota=None, fail=(), late=0):
         self.kernels, self.statuses = list(kernels), statuses or {}
-        self.quota, self.fail, self.calls = quota or QUOTA, set(fail), []
+        self.quota, self.fail, self.late, self.calls = quota or QUOTA, set(fail), late, []
 
     def __call__(self, cmd, cwd):
         args = cmd[2:]
         self.calls.append(args)
-        if " ".join(args[:2]) in self.fail:
-            return 1, "403 - Forbidden\n"
-        if args[0] == "quota":
-            return 0, json.dumps(self.quota, indent=2)
-        if args[:2] == ["kernels", "list"]:
-            return 0, "Next Page Token = abc\n" + json.dumps(self.kernels, indent=2)
-        if args[:2] == ["kernels", "status"]:
-            return 0, f'{args[2]} has status "KernelWorkerStatus.{self.statuses.get(args[2], "COMPLETE")}"\n'
-        return 2, "unexpected command"
+        if args[:2] != ["--sdk", "account"]:
+            return 2, "unexpected command"
+        if "read" in self.fail:
+            return 1, "kaggle_sdk: not signed in to Kaggle: sign in first\n"
+        since = NOW + timedelta(seconds=self.late) - timedelta(hours=float(args[args.index("--hours") + 1]))
+        done = {args[i + 1] for i, a in enumerate(args) if a == "--done"}
+        doc = {"fetched_at": S.iso(NOW), "since": S.iso(since), "quota": self.quota, "kernels": [], "calls": 2,
+               "errors": []}
+        if "quota" in self.fail:
+            doc["quota"] = None
+            doc["errors"].append("quota read failed: 403 Forbidden: Permission denied")
+        if "list" in self.fail:
+            doc["kernels"] = None
+            doc["errors"].append("kernel list failed: 403 Forbidden: Permission denied")
+            return 0, json.dumps(doc, indent=2)
+        for k in self.kernels:
+            row = dict(k, status=None)
+            doc["kernels"].append(row)
+            if S.parse_time(k["lastRunTime"]) < since or f"{k['ref'].lower()}={k['lastRunTime']}" in done:
+                continue
+            doc["calls"] += 1
+            if k["ref"] in self.fail:
+                doc["errors"].append(f"status read of {k['ref']} failed: 429 Too Many Requests: slow down")
+            else:
+                row["status"] = self.statuses.get(k["ref"], "COMPLETE")
+        return 0, json.dumps(doc, indent=2)
 
 
 class Tmp(unittest.TestCase):
@@ -133,6 +152,16 @@ class DetectionTests(Tmp):
         self.assertNotIn("slug", p.read_text())
         self.assertEqual(p.parent, self.base / "activity")
 
+    def test_an_sdk_read_is_stamped_as_sdk_and_its_read(self):
+        for argv, command in ((["--sdk", "notebooks", "SECRETSLUG", "--max", "5"], "sdk notebooks"),
+                              (["--sdk", "account", "--hours", "12"], "sdk account"), (["--sdk"], "sdk"),
+                              (["--sdk", "--help"], "sdk"), (["kernels", "list", "--mine"], "kernels list")):
+            self.assertEqual(S.command_of(argv), command)
+        root = self.tree() / "projects" / "my" / "alpha"
+        p = S.stamp(root, ["--sdk", "topic", "987654321"], now=NOW, base=self.base)
+        self.assertEqual(json.loads(p.read_text())["command"], "sdk topic")
+        self.assertNotIn("987654321", p.read_text())
+
     def test_monitoring_calls_are_not_stamped(self):
         root = self.tree() / "projects" / "my" / "alpha"
         os.environ[S.QUIET_ENV] = "1"
@@ -181,15 +210,32 @@ class DetectionTests(Tmp):
                                                "refresh": "2026-10-03T00:00:00"})
         again = S.scan_account(Path("gw.py"), self.tmp, run=fake, now=NOW, cache=acc)
         self.assertEqual(again["calls"], 3)  # the finished run is not asked again
-        for cmd in fake.calls:
-            self.assertIn(cmd[0], ("quota", "kernels"))
-            self.assertNotIn(cmd[:2], (["kernels", "push"], ["kernels", "delete"]))
+        self.assertEqual(again["kernels"], acc["kernels"])
+        # one read each time, and it is told of the finished run
+        read = ["--sdk", "account", "--hours", "12", "--page-size", "50"]
+        self.assertEqual(fake.calls, [read, [*read, "--done", f"alice/b={kaggle_time(5)}"]])
+
+    def test_the_reads_own_window_decides_what_is_recent(self):
+        # the read starts 5 s after this clock: a run inside this window but not the read's has no status read,
+        # and must not show as a run of unknown state
+        edge = (NOW - timedelta(hours=12, seconds=-2)).strftime("%Y-%m-%dT%H:%M:%S.123000")
+        fake = FakeKaggle([{"ref": "alice/edge", "lastRunTime": edge}], late=5)
+        self.assertEqual(S.scan_account(Path("gw.py"), self.tmp, run=fake, now=NOW)["kernels"], [])
 
     def test_failed_reads_are_reported_not_fatal(self):
-        acc = S.scan_account(Path("gw.py"), self.tmp, run=FakeKaggle(fail={"kernels list"}), now=NOW)
+        kernels = [{"ref": "alice/a", "lastRunTime": kaggle_time(1)}]
+        acc = S.scan_account(Path("gw.py"), self.tmp, run=FakeKaggle(kernels, fail={"list"}), now=NOW)
         self.assertFalse(acc["listed"])
-        self.assertTrue(any("kernels list" in e for e in acc["errors"]))
+        self.assertTrue(any("kernel list" in e for e in acc["errors"]))
         self.assertIsNotNone(acc["quota"])
+        # a status the read could not get counts as a run of unknown state
+        acc = S.scan_account(Path("gw.py"), self.tmp, run=FakeKaggle(kernels, fail={"quota", "alice/a"}), now=NOW)
+        self.assertEqual((acc["quota"], acc["kernels"][0]["status"], len(acc["errors"])), (None, "UNKNOWN", 2))
+        # the whole read failing: nothing listed, no quota
+        acc = S.scan_account(Path("gw.py"), self.tmp, run=FakeKaggle(kernels, fail={"read"}), now=NOW)
+        self.assertEqual((acc["listed"], acc["quota"], acc["kernels"], acc["calls"]), (False, None, [], 0))
+        self.assertEqual(acc["errors"], ["`--sdk account` failed (exit 1): kaggle_sdk: not signed in to Kaggle: "
+                                         "sign in first"])
 
     def test_kernel_ids_that_contain_insert_are_real(self):
         d = self.tmp / "k"
@@ -245,12 +291,6 @@ class DetectionTests(Tmp):
         self.assertEqual(checked(), 1)
         self.assertEqual(checked(scan_hours=24), 2)
 
-    def test_status_line_parsing(self):
-        self.assertEqual(S.parse_status('alice/x has status "KernelWorkerStatus.QUEUED"\n'), "QUEUED")
-        self.assertEqual(S.parse_status('alice/x has status "ERROR"\nFailure message: "boom"\n'), "ERROR")
-        with self.assertRaises(S.ShareError):
-            S.parse_status("403 - Forbidden")
-
     def test_running_kernels_map_to_projects_and_kinds(self):
         contexts = S.gather(self.tree(), [])
         account = {"at": S.iso(NOW), "listed": True, "kinds": {}, "kernels": [
@@ -303,7 +343,7 @@ class SplitTests(Tmp):
         self.assertIn("only to beta", why)
 
     def test_gpu_hours_this_week_come_from_the_ledger_and_open_leases(self):
-        account = {"at": S.iso(NOW), "quota": S.parse_quota(json.dumps(QUOTA)), "kernels": []}
+        account = {"at": S.iso(NOW), "quota": QUOTA, "kernels": []}
         ledger = [{"project": "alpha", "kind": "gpu", "end": at(24), "hours": 4.0},
                   {"project": "alpha", "kind": "gpu", "end": at(24 * 5), "hours": 3.0},  # before the week began
                   {"project": "alpha", "kind": "cpu", "end": at(2), "hours": 9.0}]
