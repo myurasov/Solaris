@@ -37,9 +37,11 @@ solaris/spec/references/
 .playwright*
 
 # Syncthing folder markers (machine-local). .stglobalignore is tracked: every device's
-# gitignored .stignore is `#include .stglobalignore` plus optional device-only lines.
+# gitignored .stignore holds optional device-only lines first, then `#include .stglobalignore`.
+# Conflict copies never belong in git (their names carry a device id).
 .stfolder/
 .stignore
+*.sync-conflict-*
 
 # Local-only scratch folders (the __*/ convention), including inside bundled plugins
 __*/
