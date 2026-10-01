@@ -42,6 +42,9 @@ context; `projects/<slug>/` below is shorthand for the grouped destination) and 
   and embed the ai-pack **inside** it - `ai/` + `AGENTS.md` + `CLAUDE.md` at the repo root, with `ai/.memory/`
   added to the repo's `.gitignore`. No separate `source/`. Use only when the user wants the pack committed with their repo.
 
+If this Solaris checkout is a Syncthing folder (`.stfolder` present), the root `.stglobalignore`
+already excludes `__data/`, `__out/`, and `.git`; do not add a nested Syncthing folder for the project.
+
 ## 3. Detect Type + Toolchain (Read-Only)
 
 Match a `templates/projects/<type>.md` from signals: `pyproject.toml`/`setup.py` -> python;

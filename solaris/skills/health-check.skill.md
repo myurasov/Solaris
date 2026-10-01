@@ -61,5 +61,13 @@ Everything above, plus:
   for a linked plugin a missing source is a hard break - it has no materialized copy to fall back on).
 - **gitignore sanity** - `.mcp.json`, `.cursor/mcp.json`, `projects/`, `tasks/`, `.memory/*`,
   `plugins/*` (the last two except `.empty`) are ignored; confirm no `credentials.md` is tracked.
+- **Syncthing** - if `.stfolder` exists: `.stglobalignore` is present (tracked; fix: pull / restore
+  from git); `.stignore` (gitignored) contains `#include .stglobalignore` (fix: write a two-line file
+  with that include plus `// Device-only rules for this machine go below.`, preserving any extra
+  lines already there); extra lines after the include are device-only and OK. Scan `.memory/` and
+  `projects/**/ai/.memory/` for leftover `*.sync-conflict-*` (jsonl copies are union-merged at
+  session start; other leftovers need a review). `.git` on this machine is expected (each device
+  keeps its own clone; commit only here if this is the clone that owns the repo). `.memory/` must
+  not appear in `.stglobalignore`.
 
 Report findings grouped as OK / warnings / suggested fixes. Apply nothing without the user asking.

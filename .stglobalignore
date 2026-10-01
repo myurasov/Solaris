@@ -1,0 +1,55 @@
+// Syncthing ignore rules shared by every device that syncs this Solaris checkout.
+// Each device's .stignore (never synced by Syncthing, gitignored here) is one line,
+// `#include .stglobalignore`, plus any device-only rules after it. Edit this file, not the
+// per-device copies. Syncthing treats a missing include file as an error, so a new device needs
+// this file in place before its folder starts. Do not ignore .memory/ : that layer is how a
+// session on one machine sees operating memory written on another.
+
+(?d).DS_Store
+(?d).Spotlight-V100
+(?d).Trashes
+(?d)Thumbs.db
+(?d)desktop.ini
+
+(?d)**/.venv
+(?d)**/.venv*
+(?d)**/node_modules
+(?d)**/.npm
+
+(?d)**/__pycache__
+(?d)**/*.pyc
+(?d)**/*.pyo
+(?d)**/*.pyd
+(?d)**/.pytest_cache
+(?d)**/.ruff_cache
+(?d)**/.mypy_cache
+(?d)**/*.egg-info
+
+(?d)/.tmp
+(?d)/.tools
+
+(?d)**/*.nosync
+(?d)**/*.noSync
+(?d)**/.playwright*
+(?d)**/dist
+(?d)**/build
+
+// Each machine keeps its own git clone. No (?d): a directory deleted on another device must not
+// take this machine's clone (and any unpushed commits) with it.
+**/.git
+
+// Project data and run outputs (the ai-pack's local-only `__data/` and `__out/`): large,
+// regenerated, and kept on the machine that produced them. No (?d), for the same reason.
+**/__data
+**/__out
+
+// Per-machine runtime (gitignored; tokens and local overrides). No (?d): deleting a copy here
+// must not delete another machine's.
+/.mcp.json
+/.cursor/mcp.json
+/.claude/settings.local.json
+/.claude/agents
+
+// Conflict copies stay on the machine that lost. Session start union-merges interactions.jsonl
+// copies locally; other leftovers are reported, not synced.
+**/*sync-conflict-*

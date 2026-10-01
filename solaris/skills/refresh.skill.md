@@ -44,6 +44,9 @@ git step here - only framework files move.
    `solaris/tools/read_first.py` / `skill_loader.py` / `log_interaction.py`): tell the user to restart the
    agent session afterwards - hooks are read at session start.
 3. `uv run -m solaris.tools.mcp_sync --check` (fix with `--sync` if the pull changed MCP config).
+4. If `.stfolder` exists: `.stglobalignore` arrives via git. If `.stignore` is missing or has no
+   `#include .stglobalignore` line, write (or prepend) that include plus
+   `// Device-only rules for this machine go below.` Preserve any extra lines already there.
 
 ## 4. Verify
 

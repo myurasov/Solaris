@@ -36,7 +36,8 @@ solaris/spec/references/
 
 .playwright*
 
-# Syncthing folder markers (machine-local)
+# Syncthing folder markers (machine-local). .stglobalignore is tracked: every device's
+# gitignored .stignore is `#include .stglobalignore` plus optional device-only lines.
 .stfolder/
 .stignore
 

@@ -27,6 +27,11 @@ Two modes:
 Output format is IDE-aware: Cursor hooks read a JSON object (``additional_context``); Claude Code hooks read
 plain stdout. The tool detects the IDE from the environment and emits whichever the caller expects.
 
+On a part-1 session start it also union-merges Syncthing ``*.sync-conflict-*`` copies of
+``interactions.jsonl`` (framework ``.memory/`` and each project's ``ai/.memory/``) into the canonical
+file and deletes those copies. Other conflict copies are left in place; a one-line note is prepended
+to the payload so the session can review them.
+
 Like the other hooks it is **fail-safe**: it never raises, always exits 0, and tolerates missing files / a
 missing venv - a broken read-first load must never block the user's turn. It does not read stdin (avoiding
 the blocking footgun); it keys only off argv and the environment.
@@ -36,7 +41,9 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
+import tempfile
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -111,6 +118,106 @@ _REMINDER = (
     "follows the economy level) and honor the token-economy floor; `subagents:`/`economy:`/`yagni:`/"
     "`asap` in a prompt are per-request overrides; log the turn to .memory/interactions.jsonl (UTC ts)."
 )
+
+
+# Syncthing names the loser `stem.sync-conflict-YYYYMMDD-HHMMSS-DEVICE.ext`.
+_CONFLICT_NAME = re.compile(
+    r"^(?P<stem>.+)\.sync-conflict-\d{8}-\d{6}-[A-Za-z0-9]+(?P<ext>\.[^./]+)$"
+)
+
+
+def _memory_roots(repo_root: Path) -> list[Path]:
+    """Memory dirs the conflict sweeper may touch: never walk __data/__out or the whole tree."""
+    roots = [repo_root / ".memory"]
+    roots.extend(repo_root.glob("projects/*/ai/.memory"))
+    roots.extend(repo_root.glob("projects/*/*/ai/.memory"))
+    return [p for p in roots if p.is_dir()]
+
+
+def canonical_conflict_target(path: Path) -> "Path | None":
+    """Return the pre-conflict path for a Syncthing conflict copy, or None if the name does not match."""
+    m = _CONFLICT_NAME.match(path.name)
+    if not m:
+        return None
+    return path.with_name(m.group("stem") + m.group("ext"))
+
+
+def _read_lines(path: Path) -> list[str]:
+    try:
+        text = path.read_text(encoding="utf-8")
+    except Exception:
+        return []
+    if not text:
+        return []
+    lines = text.splitlines(keepends=True)
+    if lines and not lines[-1].endswith("\n"):
+        lines[-1] += "\n"
+    return lines
+
+
+def _union_jsonl(canonical: Path, copies: list[Path]) -> None:
+    seen: set[str] = set()
+    out: list[str] = []
+    for src in [canonical] + copies:
+        for line in _read_lines(src):
+            if line not in seen:
+                seen.add(line)
+                out.append(line)
+    canonical.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=str(canonical.parent), prefix="." + canonical.name + ".", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.writelines(out)
+        os.replace(tmp, canonical)
+    except BaseException:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+    for copy in copies:
+        try:
+            copy.unlink()
+        except OSError:
+            pass
+
+
+def heal_sync_conflicts(repo_root: Path = REPO_ROOT) -> str:
+    """Union-merge jsonl Syncthing conflict copies; leave other leftovers for the agent.
+
+    Fail-safe: any error returns an empty string. Walks only memory dirs so a session start
+    cannot scan ``__data/`` / ``__out/``.
+    """
+    try:
+        grouped: dict[Path, list[Path]] = {}
+        unknown: list[Path] = []
+        for root in _memory_roots(repo_root):
+            for path in root.glob("*sync-conflict-*"):
+                if not path.is_file():
+                    continue
+                target = canonical_conflict_target(path)
+                if target is None:
+                    unknown.append(path)
+                    continue
+                grouped.setdefault(target, []).append(path)
+        notes: list[str] = []
+        leftover: list[Path] = list(unknown)
+        for canonical, copies in grouped.items():
+            copies = sorted(copies)
+            if canonical.suffix == ".jsonl":
+                _union_jsonl(canonical, copies)
+                rel = str(canonical.relative_to(repo_root))
+                notes.append("merged %d conflict cop%s into %s"
+                             % (len(copies), "y" if len(copies) == 1 else "ies", rel))
+            else:
+                leftover.extend(copies)
+        if leftover:
+            rels = ", ".join(str(p.relative_to(repo_root)) for p in leftover[:8])
+            extra = "" if len(leftover) <= 8 else " (+%d more)" % (len(leftover) - 8)
+            notes.append("unmerged conflict copies (review before deleting): " + rels + extra)
+        return "; ".join(notes)
+    except Exception:
+        return ""
 
 
 def migrate_legacy_memory(repo_root: Path = REPO_ROOT) -> None:
@@ -251,13 +358,17 @@ def main(argv: "list[str] | None" = None) -> int:
         part = 1
         if "--part" in argv:
             part = 4 if "4" in argv else (3 if "3" in argv else (2 if "2" in argv else 1))
+        heal_note = ""
         if not remind and part == 1:
             migrate_legacy_memory()  # session start: pick up a pre-0.19 checkout's memory/ folder
+            heal_note = heal_sync_conflicts()
         ide = detect_ide()
         # Cursor carries hook context as JSON without spilling large payloads to a file, so it
         # keeps the full set; the inline budget exists for Claude Code's stdout-persist behavior.
         full_budget = 1_000_000 if ide == "cursor" else None
         text = _REMINDER if remind else render_full(budget=full_budget, part=part)
+        if heal_note and "unmerged" in heal_note:
+            text = "[Solaris] " + heal_note + "\n" + text
         emit(text, ide)
     except Exception:
         pass  # fail-safe: a context-loading hook must never break the user's turn

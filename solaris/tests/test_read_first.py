@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import io
 import json
+from pathlib import Path
 
 from solaris.tools import read_first as R
 
@@ -151,3 +152,53 @@ def test_check_covers_all_parts(capsys):
     for n in (1, 2, 3, 4):
         assert ("part %d rendered payload" % n) in out
     assert "OVER BUDGET" not in out
+
+
+def test_canonical_conflict_target():
+    p = Path("/x/.memory/interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl")
+    assert R.canonical_conflict_target(p) == Path("/x/.memory/interactions.jsonl")
+    p = Path("/x/.memory/instructions.sync-conflict-20260930-151157-AAAAAAA.md")
+    assert R.canonical_conflict_target(p) == Path("/x/.memory/instructions.md")
+    assert R.canonical_conflict_target(Path("/x/.memory/interactions.jsonl")) is None
+
+
+def test_heal_sync_conflicts_unions_jsonl_and_leaves_other(tmp_path):
+    mem = tmp_path / ".memory"
+    mem.mkdir()
+    (mem / "interactions.jsonl").write_text('{"ts": "a"}\n{"ts": "b"}\n', encoding="utf-8")
+    (mem / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").write_text(
+        '{"ts": "b"}\n{"ts": "c"}\n', encoding="utf-8"
+    )
+    (mem / "instructions.md").write_text("main\n", encoding="utf-8")
+    leftover = mem / "instructions.sync-conflict-20260930-151157-AAAAAAA.md"
+    leftover.write_text("other\n", encoding="utf-8")
+    # A tree that must not be walked:
+    bulky = tmp_path / "projects" / "my" / "kaggle" / "__out"
+    bulky.mkdir(parents=True)
+    (bulky / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").write_text(
+        '{"ts": "nope"}\n', encoding="utf-8"
+    )
+
+    note = R.heal_sync_conflicts(tmp_path)
+    body = (mem / "interactions.jsonl").read_text(encoding="utf-8")
+    assert '{"ts": "a"}' in body and '{"ts": "c"}' in body
+    assert body.count("\n") == 3
+    assert not (mem / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").exists()
+    assert leftover.exists()
+    assert "unmerged" in note
+    assert "instructions.sync-conflict" in note
+    assert (bulky / "interactions.sync-conflict-20260930-151208-AAAAAAA.jsonl").exists()
+
+
+def test_heal_sync_conflicts_project_memory(tmp_path):
+    mem = tmp_path / "projects" / "my" / "demo" / "ai" / ".memory"
+    mem.mkdir(parents=True)
+    (mem / "interactions.jsonl").write_text('{"ts": "p1"}\n', encoding="utf-8")
+    (mem / "interactions.sync-conflict-20260928-224430-BBBBBBB.jsonl").write_text(
+        '{"ts": "p2"}\n', encoding="utf-8"
+    )
+    note = R.heal_sync_conflicts(tmp_path)
+    body = (mem / "interactions.jsonl").read_text(encoding="utf-8")
+    assert '{"ts": "p1"}' in body and '{"ts": "p2"}' in body
+    assert "ai/.memory/interactions.jsonl" in note
+    assert not (mem / "interactions.sync-conflict-20260928-224430-BBBBBBB.jsonl").exists()
