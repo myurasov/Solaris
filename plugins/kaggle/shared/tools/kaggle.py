@@ -1,4 +1,4 @@
-# rev. 3
+# rev. 4
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
@@ -12,12 +12,18 @@ runs the same pinned CLI from a throwaway uv environment, so nothing is ever
 installed globally.
 
     python3 <plugin-dir>/tools/kaggle.py <kaggle args>
+    python3 <plugin-dir>/tools/kaggle.py --sdk <read> <args>
 
 Run it from the project root or task folder. A copied overlay
 (<project>/<pack>/plugins/kaggle/tools/kaggle.py) also finds its project from
 its own location; the live copy in a Solaris checkout
 (<solaris>/plugins/kaggle/shared/tools/kaggle.py, used by linked projects,
 ad-hoc tasks and the framework root) goes by the working directory only.
+
+With --sdk first it runs kaggle_sdk.py, beside this file, in that same
+environment instead of the CLI, with the rest of the arguments: read-only
+reads of data the CLI drops, through Kaggle's Python SDK. Its output and exit
+code pass through.
 
 Inside a project or task, two hooks from the tools beside this file run first,
 and neither can block or change a Kaggle command: an activity stamp for account
@@ -26,10 +32,11 @@ own monitoring sets), and for a `competitions leaderboard` read (--show or
 --download), a tee through kaggle_lb.py that passes the output through unchanged
 and saves the read (KAGGLE_LB_RECORD=0 turns that off). At the framework root
 the tee runs only when KAGGLE_LB_DIR names a store; otherwise the read is not
-saved and the gateway says so. A failing hook only notes it on stderr.
+saved and the gateway says so. A failing hook only notes it on stderr. An --sdk
+call gets the stamp, never the tee.
 
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
-exactly what the Kaggle CLI printed.
+exactly what the Kaggle CLI (or kaggle_sdk.py) printed.
 """
 
 import fcntl
@@ -55,6 +62,9 @@ QUIET_ENV = "KAGGLE_SHARE_QUIET"
 RECORD_ENV = "KAGGLE_LB_RECORD"
 # a leaderboard store outside any project or task (kaggle_lb's --dir)
 LB_DIR_ENV = "KAGGLE_LB_DIR"
+# a first argument that runs this SDK reader, beside the gateway, instead of the CLI
+SDK_FLAG = "--sdk"
+SDK_TOOL = "kaggle_sdk.py"
 
 
 def say(msg):
@@ -194,19 +204,28 @@ def tee_leaderboard(ctx, cmd, args):
 def main():
     # arguments pass through untouched: the CLI decides which commands may run signed
     # out (auth login, --version, ...) by the raw command line, so no prefix flags
+    # (--sdk never reaches the CLI: it runs kaggle_sdk.py instead)
     args = sys.argv[1:]
+    sdk = args[:1] == [SDK_FLAG]
+    tool = str(Path(__file__).resolve().parent / SDK_TOOL)
     ctx = find_context()
     if ctx is None:
         uv = find_uv()
         say("no project or task folder here - running the pinned CLI from a throwaway uv environment")
         withs = [a for r in REQS for a in ("--with", r)]
-        cmd = [uv, "run", "--quiet", "--no-project", "--python", ">=3.11", *withs, "kaggle"]
+        uv_run = [uv, "run", "--quiet", "--no-project", "--python", ">=3.11", *withs]
+        if sdk:
+            os.execv(uv, [*uv_run, "python", tool, *args[1:]])
+        cmd = [*uv_run, "kaggle"]
         code = tee_leaderboard(None, cmd, args)
         if code is not None:
             sys.exit(code)
         os.execv(uv, [*cmd, *args])
     kaggle = ensure_env(ctx)
     stamp_activity(ctx, args)
+    if sdk:
+        python = str(kaggle.with_name("python"))
+        os.execv(python, [python, tool, *args[1:]])
     code = tee_leaderboard(ctx, [str(kaggle)], args)
     if code is not None:
         sys.exit(code)

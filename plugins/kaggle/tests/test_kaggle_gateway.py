@@ -4,7 +4,8 @@
 
 Each test builds a project whose .venv-kaggle already holds a stand-in `kaggle` executable that logs
 every run, so the gateway's context detection and its two hooks (the activity stamp and the
-leaderboard tee) run for real without installing anything.
+leaderboard tee) run for real without installing anything. The --sdk tests swap in a stand-in
+`python` the same way.
 """
 
 import importlib.util
@@ -58,6 +59,16 @@ import runpy, sys
 a = sys.argv[1:]
 sys.argv = [{cli!r}, *a[a.index("kaggle") + 1:]]
 runpy.run_path({cli!r}, run_name="__main__")
+"""
+# stands in for the venv's python (or uv at the framework root) on an --sdk call: logs what it was asked to run
+FAKE_RUN = """\
+#!{python}
+import json, os, sys
+with open({log!r}, "a") as f:
+    f.write(json.dumps([{name!r}, *sys.argv[1:]]) + "\\n")
+print("SDK " + json.dumps(sys.argv[1:]))
+print("sdk note", file=sys.stderr)
+sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
 
 
@@ -294,6 +305,56 @@ class FrameworkRootTests(Env):
         self.assertEqual((code, out), (0, BOARD))
         self.assertEqual(len((store / SLUG / "index.jsonl").read_text().splitlines()), 1)
         self.assertEqual(len(self.cli_runs()), 2)
+        self.assertEqual(self.stamps(), [])
+
+
+class SdkTests(Env):
+    tool = str(TOOLS / "kaggle_sdk.py")
+
+    def stand_in(self, path, name):
+        # the venv's python is a symlink to the real interpreter: never write through it
+        path.unlink(missing_ok=True)
+        path.write_text(FAKE_RUN.format(python=sys.executable, log=str(self.log), name=name))
+        path.chmod(0o755)
+
+    def sdk_project(self):
+        root = self.project()
+        self.stand_in(root / GW.ENV_DIR / "bin" / "python", "python")
+        return root
+
+    def test_runs_the_sdk_tool_in_the_context_venv_and_is_stamped(self):
+        root = self.sdk_project()
+        code, out, err = self.run_gw(["--sdk", "topic", "7"], root / "aipack")
+        self.assertEqual((code, out), (0, "SDK " + json.dumps([self.tool, "topic", "7"]) + "\n"))
+        self.assertIn("sdk note", err)
+        self.assertEqual(self.cli_runs(), [["python", self.tool, "topic", "7"]])
+        (s,) = self.stamps()
+        self.assertEqual((s["root"], s["calls"]), (str(root), 1))
+
+    def test_exit_codes_pass_through(self):
+        root = self.sdk_project()
+        for code in ("1", "2"):
+            self.assertEqual(self.run_gw(["--sdk", "notebooks", SLUG], root, FAKE_EXIT=code)[0], int(code))
+
+    def test_the_leaderboard_tee_does_not_apply(self):
+        root = self.sdk_project()
+        args = ["--sdk", "competitions", "leaderboard", SLUG, "--show"]
+        self.assertEqual(self.run_gw(args, root)[0], 0)
+        self.assertEqual(self.cli_runs(), [["python", self.tool, *args[1:]]])
+        self.assertFalse((root / "__data").exists())
+
+    def test_framework_root_uses_the_same_pins(self):
+        bindir = self.tmp / "bin"
+        bindir.mkdir()
+        self.stand_in(bindir / "uv", "uv")
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        code, out, _ = self.run_gw(["--sdk", "topic", "7"], bare, FAKE_EXIT="3",
+                                   PATH=f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}")
+        (run,) = self.cli_runs()
+        self.assertEqual(code, 3)
+        self.assertEqual(run[run.index("python"):], ["python", self.tool, "topic", "7"])
+        self.assertEqual([run[i + 1] for i, a in enumerate(run) if a == "--with"], GW.REQS)
         self.assertEqual(self.stamps(), [])
 
 
