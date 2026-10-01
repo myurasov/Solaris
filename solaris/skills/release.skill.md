@@ -52,7 +52,15 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
    ```
 
 6. **Run `uv sync`** so `uv.lock` reflects any dependency changes; stage `uv.lock`. Then run the test
-   suite (`uv run -m pytest solaris/tests -q`) - a release never ships with failing framework tests.
+   suite (`uv run -m pytest solaris/tests -q`) and every tracked plugin's offline tests (pytest also
+   runs the plugins' stdlib unittest suites; symlinked private plugins do not ship, so `git ls-files`
+   leaves them out):
+   ```bash
+   for d in $(git ls-files 'plugins/*/tests/*.py' | cut -d/ -f1-3 | sort -u); do
+     uv run -m pytest "$d" || echo "FAILED: $d"
+   done
+   ```
+   A release never ships with failing framework tests, nor with failing plugin tests.
 
 7. **Commit the release.** Message: `Release Solaris <version>` (version bump + migration + spec + doc refresh + revisions all in one commit, or preceded by a `... (<vX.Y.Z>)` feature commit — match recent history).
 
