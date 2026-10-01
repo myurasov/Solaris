@@ -508,6 +508,13 @@ def test_no_single_pack_is_a_clean_error(tmp_path, capsys):
     assert "more than one ai-pack" in capsys.readouterr().out
 
 
+def test_manifest_errors_name_the_file_plainly():
+    # primary_role sees only the manifest, not its folder: no literal <pack>/ placeholder in its messages
+    for agents in ([], {"roles": ["x"]}, {"primary": "Bad Name"}):
+        with pytest.raises(ValueError, match=r"^ai-pack manifest\.json: "):
+            R.primary_role({"agents": agents})
+
+
 def test_legacy_ai_keys_in_a_renamed_pack(tmp_path):
     # a pack renamed by hand (aipack/) may still hold ai/... revisions keys: they classify exactly like
     # aipack/... keys (a key under the real name wins), and ff / baseline write the real name

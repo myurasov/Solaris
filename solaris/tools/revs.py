@@ -308,15 +308,15 @@ def primary_role(manifest: dict) -> str:
     if agents is None:
         agents = {}
     if not isinstance(agents, dict):
-        raise ValueError('<pack>/manifest.json: "agents" must be an object like {"primary": "engineer"}')
+        raise ValueError('ai-pack manifest.json: "agents" must be an object like {"primary": "engineer"}')
     unknown = sorted(set(agents) - {"primary"})
     if unknown:
-        raise ValueError(f"<pack>/manifest.json: unknown agents key(s) {', '.join(unknown)}; only 'primary' is defined")
+        raise ValueError(f"ai-pack manifest.json: unknown agents key(s) {', '.join(unknown)}; only 'primary' is defined")
     if "primary" not in agents:
         return DEFAULT_PRIMARY
     role = agents["primary"]   # present means set: an empty or null value is a mistake, not the default
     if not isinstance(role, str) or not ROLE_RE.match(role):
-        raise ValueError(f"<pack>/manifest.json: agents.primary must match {ROLE_RE.pattern}, got {role!r}")
+        raise ValueError(f"ai-pack manifest.json: agents.primary must match {ROLE_RE.pattern}, got {role!r}")
     return role
 
 

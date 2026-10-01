@@ -19,7 +19,9 @@ project content: no rev marker, never materialized from a template (stub:
 
 ``--rename-pack`` renames the pack folder itself: the folder moves, its manifest's ``revisions`` keys follow,
 and the project-root AGENTS.md and CLAUDE.md are pointed at the new name. Every other file that still names
-the old folder is listed for review, never edited.
+the old folder is listed for review, never edited. It refuses, moving nothing, while git or the project's
+.stignore would stop ignoring the moved folder's private files (``<pack>/.memory/`` above all) or git would
+start ignoring files it keeps now, and puts everything back when a step after the move fails.
 
 Run::
 
@@ -34,6 +36,7 @@ import argparse
 import json
 import os
 import re
+import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -46,10 +49,10 @@ ACCESS = ("read-only", "full")
 ROLE_KEYS = {"description", "tier", "access"}
 INSTRUCTIONS = "instructions.md"   # <pack>/instructions.md: the one shared instructions store
 ENTRY_FILES = ("AGENTS.md", "CLAUDE.md")   # project-root files --rename-pack rewrites
-IGNORE_FILES = (".gitignore", ".stignore")   # a stale pack path here can expose the private <pack>/.memory/
-SKIP_DIRS = {".git", "node_modules", "__pycache__"}   # never scanned for old pack paths (nor .venv*)
+SKIP_DIRS = {"node_modules"}   # never scanned for old pack paths, nor hidden or __* folders (data, output)
 SCAN_MAX_BYTES = 1 << 20   # bigger files are data, not references worth listing
 LIST_MAX = 40   # leftover files --rename-pack prints before it points at grep for the rest
+PROBE = ".memory/credentials.md"   # checked even when absent: a fresh clone has no .memory/ yet
 
 
 @dataclass
@@ -286,16 +289,104 @@ def rename_primary(project_dir: Path, new: str) -> "tuple[list[str], list[str]]"
 
 
 def _path_re(name: str) -> "re.Pattern[str]":
-    """``<name>/`` opening a path segment, so never the tail of a longer name such as ``openai/``."""
+    """``<name>/`` starting a path, the only form --rename-pack rewrites: never the tail of a longer name
+    (``openai/``) nor a folder under another one (``source/ai/``, ``https://x/ai/``). ``@ai/`` counts: a
+    CLAUDE.md import."""
+    return re.compile(r"(?<![\w./-])" + re.escape(name) + "/")
+
+
+def _mention_re(name: str) -> "re.Pattern[str]":
+    """``<name>/`` as any path segment (``../ai/`` and ``source/ai/`` too): what the leftover scan lists."""
     return re.compile(r"(?<![\w.-])" + re.escape(name) + "/")
 
 
+def _segment_re(name: str) -> "re.Pattern[str]":
+    """``name`` as a whole segment of an ignore rule: at the start or after ``/``, ``!`` or a Syncthing
+    ``(?d)`` prefix, and followed by ``/`` or the end."""
+    return re.compile(r"(?<![^/!)])" + re.escape(name) + r"(?=/|$)")
+
+
+def _check_ignore(project_dir: Path, rels: "list[str]", *flags: str) -> list[str]:
+    """``git check-ignore -z --stdin`` over paths relative to ``project_dir``: its output, split at the NULs."""
+    res = subprocess.run(["git", "-C", str(project_dir), "check-ignore", "-z", "--stdin", *flags],
+                         input=b"".join(os.fsencode(rel) + b"\0" for rel in rels), capture_output=True)
+    if res.returncode not in (0, 1):   # 1: none of them is ignored
+        raise ValueError(f"git check-ignore failed ({os.fsdecode(res.stderr).strip()}); nothing moved")
+    return [os.fsdecode(field) for field in res.stdout.split(b"\0")[:-1]]
+
+
+def _ignore_guard(project_dir: Path, pack: Path, new: str) -> list[str]:
+    """Refuse (ValueError, before anything moves) a rename that would change what git or Syncthing ignores in
+    the pack: each file under the old folder that git ignores now (``.memory/`` above all) must be ignored
+    under the new name too, nothing git keeps now may turn ignored, and a .stignore that names the old folder
+    must name the new one. Returns the ignore entries that name the old folder, to remove once the rename is
+    done."""
+    old = pack.name
+    seg = _segment_re(old)
+    problems: list[str] = []
+    stale: list[str] = []
+    st = project_dir / ".stignore"
+    if st.is_file():   # Syncthing rules are matched on the whole folder name, not evaluated
+        rules = [ln.strip() for ln in st.read_text(encoding="utf-8", errors="replace").splitlines()
+                 if not ln.strip().startswith("//")]
+        named = [ln for ln in rules if seg.search(ln)]
+        stale += [f".stignore '{ln}'" for ln in named]
+        if named and not any(_segment_re(new).search(ln) for ln in rules):
+            problems.append(f".stignore names {old}/ but not {new}/ - add "
+                            + ", ".join(f"'{seg.sub(lambda _m: new, ln)}'" for ln in named)
+                            + " and keep the old ones until the rename is done")
+    try:
+        top = subprocess.run(["git", "-C", str(project_dir), "rev-parse", "--is-inside-work-tree",
+                              "--show-prefix"], capture_output=True, text=True)
+    except OSError:   # no git on this machine, so nothing here commits the files
+        top = None
+    if top is not None and top.returncode == 0 and top.stdout.startswith("true"):
+        prefix = top.stdout.split("\n")[1]   # the project's path in the repo; git prints sources from the top
+
+        def rules_of(out: "list[str]") -> "dict[str, tuple[str, str, str]]":
+            """path -> (source shown from the project, line, pattern) of the ignoring rule in ``-v`` output."""
+            return {rel: (src[len(prefix):] if src.startswith(prefix) else src, line, pat)
+                    for src, line, pat, rel in zip(*[iter(out)] * 4) if not pat.startswith("!")}
+
+        files = [(Path(dirpath) / f).relative_to(project_dir).as_posix()
+                 for dirpath, _dirs, names in os.walk(pack) for f in names]
+        probe = [] if (pack / ".memory").is_symlink() else [f"{old}/{PROBE}"]   # no path past a symlink
+        # read with the index, so a tracked file never counts as ignored
+        ignored = rules_of(_check_ignore(project_dir, list(dict.fromkeys(files + probe)), "-v"))
+        # a rule in a .gitignore inside the pack moves along with it
+        why = {rel: rule for rel, rule in ignored.items() if not rule[0].startswith(f"{old}/")}
+        stale += [f"{src} '{pat}'" for src, _line, pat in dict.fromkeys(why.values()) if seg.search(pat)]
+        moved = {f"{new}{rel[len(old):]}": rule for rel, rule in why.items()}
+        kept = set(_check_ignore(project_dir, list(moved), "--no-index"))
+        lost = [rel for rel in moved if rel not in kept]
+        if lost:
+            adds = []
+            for src, line, pat in dict.fromkeys(moved[rel] for rel in lost):
+                add = seg.sub(lambda _m: new, pat)
+                adds.append(f"'{add}' to {src} (beside '{pat}', line {line})" if add != pat
+                            else f"an entry for {new}/ to {src} (like '{pat}', line {line})")
+            problems.append(f"git would stop ignoring {len(lost)} file(s) such as {lost[0]} - add "
+                            + ", ".join(adds) + " and keep the old entries until the rename is done")
+        # the mirror case: a rule for other folders (build/, or ai/ for strays) would drop kept files from git
+        gained = rules_of(_check_ignore(project_dir, [f"{new}{rel[len(old):]}" for rel in files
+                                                      if rel not in ignored], "-v", "--no-index"))
+        if gained:
+            rel, (src, line, pat) = next(iter(gained.items()))
+            problems.append(f"git would start ignoring {len(gained)} file(s) it keeps now, such as {rel} "
+                            f"({src}, line {line}: '{pat}') - narrow that entry or pick another name")
+    if problems:
+        raise ValueError(f"refusing to move {old}/ to {new}/ (nothing moved): " + "; ".join(problems)
+                         + "; then rerun")
+    return stale
+
+
 def _files_naming(root: Path, rx: "re.Pattern[str]") -> list[str]:
-    """Relative paths (shallow first) of the text files under ``root`` that match ``rx``. Skips SKIP_DIRS,
-    virtualenvs, symlinks, non-regular files, files over SCAN_MAX_BYTES and anything that is not UTF-8."""
+    """Relative paths (shallow first) of the text files under ``root`` that match ``rx``. Skips hidden and
+    ``__*`` folders, SKIP_DIRS, symlinks, non-regular files, files over SCAN_MAX_BYTES and anything that is
+    not UTF-8."""
     hits: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
-        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".venv")]
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith((".", "__"))]
         for name in filenames:
             f = Path(dirpath) / name
             try:
@@ -312,10 +403,13 @@ def _files_naming(root: Path, rx: "re.Pattern[str]") -> list[str]:
 def rename_pack(project_dir: Path, new: str) -> "tuple[list[str], list[str]]":
     """Rename the project's ai-pack folder: move it, carry its manifest's revisions keys along, and point the
     project-root AGENTS.md and CLAUDE.md at the new name. Other files that still name the old folder are
-    listed, never edited. Returns (log lines, warnings)."""
+    listed, never edited. Refuses before the move when the new name would expose ignored files
+    (_ignore_guard); a failure after it moves the folder back and restores every file written. Returns (log
+    lines, warnings)."""
     project_dir = Path(project_dir)
-    if not new or new != new.strip() or "/" in new or "\\" in new or new.startswith("."):
-        raise ValueError(f"pack name {new!r} must be a plain folder name (no slash, not hidden, not . or ..)")
+    if not new or new[0] in ".#!" or re.search(r"[\s/\\*?\[]", new):
+        raise ValueError(f"pack name {new!r} must be a plain folder name (no slash, backslash, whitespace, * ? "
+                         "or [; not starting with . # or !)")
     pack, manifest = load_pack(project_dir)
     old = pack.name
     if new == old:
@@ -323,56 +417,86 @@ def rename_pack(project_dir: Path, new: str) -> "tuple[list[str], list[str]]":
     target = project_dir / new
     if target.exists() or target.is_symlink():
         raise ValueError(f"{target} already exists; pick another name")
+    stale = _ignore_guard(project_dir, pack, new)
+    # every write is computed before the move, so a file that cannot be read leaves the old layout untouched
     rx = _path_re(old)
     revisions = R._revisions(manifest, pack)   # legacy ai/... keys of a hand-renamed pack count as <old>/...
-    # an entry file still at its recorded baseline stays pristine through the rewrite below, so revs ff can
-    # fast-forward it later; a customized one keeps its old baseline and stays a merge
-    pristine = {name for name in ENTRY_FILES if (project_dir / name).is_file()
-                and isinstance(revisions.get(name), dict)
-                and R.file_rev_hash(project_dir / name)[1] == revisions[name].get("hash")}
-    try:
-        pack.rename(target)
-    except OSError as exc:
-        raise ValueError(f"cannot move {old}/ to {new}/: {exc.strerror or exc}") from None
+    writes: list[tuple[Path, bytes, bytes]] = []   # (path after the move, new bytes, bytes to restore)
     log = [f"moved {old}/ -> {new}/"]
     rebased: list[str] = []
     for name in ENTRY_FILES:
         f = project_dir / name
         if not f.is_file():
             continue
-        fixed, n = rx.subn(lambda _m: f"{new}/", f.read_text(encoding="utf-8"))
+        try:
+            raw = f.read_bytes()
+            text = raw.decode("utf-8")
+        except (OSError, UnicodeDecodeError) as exc:
+            raise ValueError(f"cannot read {name} ({exc}); nothing moved") from None
+        fixed, n = rx.subn(lambda _m: f"{new}/", text)
         if not n:
             continue
-        f.write_text(fixed, encoding="utf-8")
+        writes.append((f, fixed.encode("utf-8"), raw))
         log.append(f"{name}: {n} reference(s) to {old}/ now name {new}/")
-        if name in pristine:
-            rev, h = R.file_rev_hash(f)
-            revisions[name] = {"rev": rev, "hash": h}
+        # an entry file still at its recorded baseline stays pristine through the rewrite, so revs ff can
+        # fast-forward it later; a customized one keeps its old baseline and stays a merge
+        base, ext = revisions.get(name), R._ext(name)
+        if isinstance(base, dict) and R.content_hash(text, ext) == base.get("hash"):
+            revisions[name] = {"rev": R.read_rev(fixed, ext), "hash": R.content_hash(fixed, ext)}
             rebased.append(name)
     moved = sum(k.startswith(f"{old}/") for k in revisions)
     if moved or rebased:
         manifest["revisions"] = {(f"{new}/{k[len(old) + 1:]}" if k.startswith(f"{old}/") else k): v
                                  for k, v in revisions.items()}
-        (target / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+        writes.append((target / "manifest.json", (json.dumps(manifest, indent=2) + "\n").encode("utf-8"),
+                       (pack / "manifest.json").read_bytes()))
         log.append(f"{new}/manifest.json: {moved} revisions key(s) moved under {new}/"
                    + (f"; the baseline of {', '.join(rebased)} follows the rewrite" if rebased else ""))
-    others = _files_naming(project_dir, rx)
+    try:
+        pack.rename(target)
+    except OSError as exc:
+        raise ValueError(f"cannot move {old}/ to {new}/: {exc.strerror or exc}") from None
+    done: list[tuple[Path, bytes]] = []
+    try:
+        for f, data, before in writes:
+            with open(f, "r+b") as fh:   # opened first: a refused open has nothing to restore
+                done.append((f, before))
+                fh.write(data)
+                fh.truncate()
+        others = _files_naming(project_dir, _mention_re(old))
+    except BaseException as exc:   # put everything back, Ctrl-C included
+        stuck = []
+        for f, before in reversed(done):
+            try:
+                f.write_bytes(before)
+            except OSError:
+                stuck.append(f.name)
+        try:
+            target.rename(pack)
+        except OSError:
+            stuck.append(f"the folder (still {new}/)")
+        if stuck:
+            raise ValueError(f"cannot finish the rename ({exc}) and could not undo it for {', '.join(stuck)}: "
+                             f"put {old}/, its manifest.json, AGENTS.md and CLAUDE.md back by hand") from None
+        if not isinstance(exc, Exception):
+            raise
+        raise ValueError(f"cannot finish the rename ({exc}); undone: {old}/ and every file it wrote are back "
+                         "as they were") from None
     if others:
-        log.append(f"{len(others)} other file(s) still name {old}/ - not edited (revs ff below re-renders the "
-                   "unedited managed pack files); review the rest by hand:")
+        log.append(f"{len(others)} file(s) still mention {old}/ (revs ff below re-renders the managed pack "
+                   "files among them); review the rest by hand:")
         log += [f"  {rel}" for rel in others[:LIST_MAX]]
         if len(others) > LIST_MAX:
             log.append(f"  ... and {len(others) - LIST_MAX} more: grep -rlE '(^|[^[:alnum:]_.-]){old}/' "
-                       f"{project_dir} --exclude-dir=.git")
+                       f"{project_dir} --exclude-dir='.?*' --exclude-dir='__*' --exclude-dir=node_modules")
     else:
-        log.append(f"no other file under {project_dir} names {old}/")
-    warnings = [f"{rel} still names {old}/ - its patterns miss the moved pack, so private {new}/.memory/ files "
-                "may get committed or synced; fix it before the next commit"
-                for rel in others if Path(rel).name in IGNORE_FILES]
+        log.append(f"no other file under {project_dir} names {old}/ (hidden and __* folders not scanned)")
     log.append(f"next: uv run -m solaris.tools.revs ff --dir {project_dir}")
     log.append(f"then: uv run -m solaris.tools.revs baseline --dir {project_dir} (once anything ff reports "
                "is merged)")
-    return log, warnings
+    if stale:
+        log.append(f"last: remove the ignore entries for {old}/ ({', '.join(stale)})")
+    return log, []
 
 
 def _report(log: list[str], warnings: list[str]) -> int:
@@ -404,7 +528,7 @@ def main(argv: "list[str] | None" = None) -> int:
         if args.rename_pack is not None:
             return _report(*rename_pack(project_dir, args.rename_pack))
         return cmd_check(project_dir)
-    except (ValueError, P.PackError) as exc:   # revs raises PackError too: still one clean line
+    except (ValueError, OSError, P.PackError) as exc:   # revs raises PackError too: still one clean line
         print(f"agents: {exc}")
         return 1
 
