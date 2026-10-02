@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   the rest), and append the mandatory cost-ledger row. Assumes an authenticated CLI
   (else run brev-setup first). Deep CLI reference: the plugin's brev-cli/ upstream mirror.
 ---
-_Rev. 18_
+_Rev. 19_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -79,6 +79,17 @@ their rows land at deletion.
   endpoint from `~/.brev/ssh_config` (after `brev refresh`), authorize the source host's
   key via `brev exec <name> -- bash -c "echo '<pubkey>' >> ~/.ssh/authorized_keys"`, then
   rsync from the source host straight to `<user>@<ip>` with `--partial`.
+- **Port 22 closed on the instance** (seen on some GCP types): Brev's proxy port still reaches
+  its sshd. Make a throwaway key pair for the copy, authorize its public half on the instance
+  with `brev exec`, give the source host that key plus the proxy host and port from
+  `~/.brev/ssh_config`, copy, then delete the key on the source host and its line on the
+  instance. Parallel streams (a big file sent as byte ranges) moved about 58 GB in 8 minutes;
+  compare file counts, bytes and checksums on both ends; move Docker images with
+  `docker save | docker load`.
+- **A copy whose home path changes** (`/root/...` to `/home/<user>/...`) keeps the old
+  absolute paths in text files and symlinks: rewrite both, then check that
+  `find <dir> -lname '<old>*'` and `grep -rl '<old>' <dir>` find nothing before the first
+  run. A missed symlink failed tasks within seconds, and a resume then skipped them as done.
 - Fallback (no outbound from the source host): relay via the local machine's scratch space
   (never cloud-synced paths), then `brev copy <tar> <name>:~/`.
 - Restricted data (NDA/PII) may only go to hosts its handling rules allow - check the
