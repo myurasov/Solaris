@@ -17,6 +17,9 @@ baked into each project's `engineer.agent.md` too.
 
 - **Destructive (local):** `rm -rf`, deleting or overwriting files you did not create, `git reset --hard`,
   `git clean -fd`, force-overwrites, dropping databases.
+- **Synced checkouts:** git commands that rewrite files (`checkout`, `switch`, `restore`, `reset`, `stash`,
+  `pull`, `merge`, `rebase`, `clean`) rewrite them on every synced machine. Run git only where the clone
+  lives; stage files by name.
 - **Remote-mutating:** any `ssh`/remote command that writes, installs, deletes, or restarts services;
   `rsync` that writes to a remote (especially with `--delete`); deploy.
 - **Outward / publishing:** `git push`, opening or commenting on PRs/issues, sending email or messages,
