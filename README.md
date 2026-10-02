@@ -107,11 +107,13 @@ What lands in the pack:
 - **Shareable, long-term** (commits with the repo): `<primary>.agent.md` (the primary persona,
   `engineer` unless renamed), optional `<role>.agent.md` role persona briefs beside it, `instructions.md`
   (the one shared know-how store every persona reads and maintains: build/run/test, conventions, gotchas,
-  lessons), `spec.md` (the contract),
+  lessons), `spec.md` (the contract), `directions.md` (the owner's dated directions log, checked for
+  drift at each push),
   `manifest.json`, always-on pack rules in `rules/` (token economy, subagent delegation, YAGNI mode,
   git collaboration: developer branches + PR-based back-contribution) with their
   committed defaults in `defaults.json`, perishable reference data the rules read in `info/` (model
-  tiers, harness capabilities), and `init` / `refresh` skill stubs in `skills/` for teammates.
+  tiers, harness capabilities), and in `skills/` the `init` / `refresh` stubs for teammates plus a
+  `handover` skill to pause, hand over and resume work.
 - **Private, short-term / machine-local** (`<pack>/.memory/`, gitignored): hosts, secrets, session
   context, logs. Drop this layer to share the project.
 
@@ -183,20 +185,24 @@ servers, optional project types - so any project can opt into it.
   pins the CLI and installs it per project or task, Kaggle's own agent skill vendored at the same
   version, always-on rule confirming every write; plus a generic competition playbook, a saved
   leaderboard history for following every team's progress, public notebooks saved with their
-  scores, one Kaggle account's sessions and GPU hours shared between projects, an hourly
-  competition-forum watch, and a live plan page for the owner), `docker-home` (a per-project Linux container that runs the coding harness itself with
+  scores, one Kaggle account's sessions and GPU hours shared between projects (kernel pushes need a
+  sharing lease), an hourly competition-forum watch, a live plan page for the owner, a pre-submit
+  check of what is new, a gated submit, a one-call hourly pass, and a fetch of named files from
+  huge kernel outputs), `docker-home` (a per-project Linux container that runs the coding harness itself with
   only the project folder and the container's home mounted, so nothing above the project exists
   for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
   strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
   tree), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee eyes and ears: visual QA and transcription; rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
-  rendering via installed Chrome, with a layout check after every render; per-project theme:
-  fonts, accent color, page furniture),
+  rendering via installed Chrome and Node 22+, also on Linux hosts that block Chrome's sandbox,
+  with a layout check after every render - the only check for living documents rebuilt again and
+  again; per-project theme: fonts, accent color, page furniture),
   `resource-sharing` (hosts shared by agents and projects: per-host claim files with pinned,
   watched jobs and yields; sharing links with one owner per host and guest requests; fit against
   new paid instances; an owner audit so no machine is abandoned; guests told of new, gone and
-  changed shared hosts; shared pools for account-level limits).
+  changed shared hosts; shared pools for account-level limits; a GPU host health check whose
+  `--fix` applies safe performance settings; a live dashboard of each host's jobs and load).
 
 ## 9. Keeping Solaris Projects Current
 
@@ -231,11 +237,12 @@ versions, and tasks.
 | "health-check" / "status" | `health-check` | Command-center overview; `--deep` for full checks. |
 
 Stdlib-only tools back the skills and run as modules (`uv run -m solaris.tools.<name>`): `version`,
-`revs`, `mcp_sync`, `agents`, `toc`, plus `uv run pytest` for the test suite. `read_first`, `skill_loader`,
+`revs`, `mcp_sync`, `agents`, `toc`, `ai_spend` (estimated AI spend per project and day),
+`session_clock` (a wake clock for scheduled agent work), plus `uv run pytest` for the test suite. `read_first`, `skill_loader`,
 and `log_interaction` are hooks - never run by hand.
 
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.39.0.md`](solaris/spec/spec-v0.39.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.40.0.md`](solaris/spec/spec-v0.40.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
