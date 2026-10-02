@@ -95,8 +95,8 @@
       ]
     },
     "shared/report.skill.md": {
-      "rev": 10,
-      "hash": "a3114874a9ac3fd3fde989acf238555de0356e633f3d78a93398cb565eb2d54b",
+      "rev": 11,
+      "hash": "bcfc55a9d76691d33d1e2d5de6acaef4ad3659165932689f87b4b032b48d61d1",
       "history": [
         {
           "rev": 1,
@@ -133,6 +133,10 @@
         {
           "rev": 10,
           "hash": "a3114874a9ac3fd3fde989acf238555de0356e633f3d78a93398cb565eb2d54b"
+        },
+        {
+          "rev": 11,
+          "hash": "bcfc55a9d76691d33d1e2d5de6acaef4ad3659165932689f87b4b032b48d61d1"
         }
       ]
     }

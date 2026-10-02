@@ -1,6 +1,6 @@
-_Rev. 21_
+_Rev. 22_
 
-<!-- Minimal pointer. Edit {{PACK}}/{{PRIMARY}}.agent.md, not this file. -->
+<!-- Minimal pointer kept in sync by Solaris. Project rules go in {{PACK}}/instructions.md. -->
 
 # {{NAME}} - Agent Instructions
 

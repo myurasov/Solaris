@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 21_
+_Rev. 22_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -98,8 +98,9 @@ Follow this sequence from minute one; each step points to the section with the r
    - the hourly check is one scripted read-only pass (`tools/kaggle_hourly.py <slug>`); the agent acts on its flags;
    - work with the harness's safety checks, never around them.
    See [Agent Organization](#agent-organization).
-10. **Keep this playbook current:** every owner direction and every change in approach goes in, in the same turn, and
-    each change set ships as a new plugin version. See [Maintaining This Playbook](#maintaining-this-playbook).
+10. **Feed the playbook:** each owner direction or change in approach it should carry becomes a dated suggestion in
+    `<pack>/.memory/improvements.md` in the same turn; the Solaris orchestrator adopts what the owner approves. See
+    [Maintaining This Playbook](#maintaining-this-playbook).
 
 ## Setup
 
@@ -125,7 +126,8 @@ Follow this sequence from minute one; each step points to the section with the r
     as any plan change, submission, score, verdict or launch, and hourly with `--keep-rev` (fresh live figures, same
     rev); `tools/kaggle_live_plan.py` (next to this file) builds it from a hand-edited plan JSON.
   Both live PDFs get a render plus its automated layout check only, with no page-by-page visual check (owner
-  direction). General lessons go into this playbook ([Maintaining This Playbook](#maintaining-this-playbook)). Keep
+  direction). Changes this playbook should get go to `<pack>/.memory/improvements.md` as suggestions
+  ([Maintaining This Playbook](#maintaining-this-playbook)). Keep
   the research folder tidy: documents at the top, scripts, images and data in `research/assets/`.
 - **Owner-facing times in the owner's timezone** (convert UTC deadlines and resets); machine logs stay UTC. Every
   time written anywhere comes from a real clock, never an estimate.
@@ -774,15 +776,20 @@ Follow this sequence from minute one; each step points to the section with the r
 
 ## Maintaining This Playbook
 
-- **One master copy.** This file lives in the Solaris `kaggle` plugin
+- **One master copy, edited by Solaris only.** This file lives in the Solaris `kaggle` plugin
   (`plugins/kaggle/shared/how-to-kaggle.skill.md`); projects get it as an installed plugin skill, copied into
   `<pack>/plugins/kaggle/` (`<pack>` is the project's ai-pack folder: default `aipack/`, `ai/` in older projects,
-  any name). Edit the master copy, never an installed one: a plugin update overwrites installed copies.
-- **Update it in the same turn** as each new owner direction or change in approach that a result causes, not in a
-  later batch; a stale playbook is a lost lesson.
-- **Release each change set as a new plugin version:** from the Solaris root, `uv run -m solaris.tools.revs bump`
-  the edited files and `uv run -m solaris.tools.revs ledger`, raise `version` in the plugin's `manifest.json`, and
-  commit; then update the installed copies in the projects that use the plugin.
+  any name). A competing project never edits the master or its installed copy unless the owner explicitly says
+  so (owner direction); a plugin update overwrites installed copies anyway.
+- **Suggest changes from the project, in the same turn** as each new owner direction or change in approach that a
+  result causes: a dated entry in `<pack>/.memory/improvements.md` (which holds only framework and plugin suggestions)
+  with the evidence and this file as the target. Sessions may tell each other about a suggestion; each writes only
+  its own project's file. The Solaris orchestrator reviews the suggestions ("review project improvements") and
+  implements what the owner approves.
+- **Release each change set as a new plugin version** (the orchestrator): from the Solaris root, `uv run -m
+  solaris.tools.revs bump` the edited files and `uv run -m solaris.tools.revs ledger`, raise `version` in the
+  plugin's `manifest.json`, and commit; installed copies update through `update-project`, on the owner's
+  word.
 - **Keep it universal** (owner direction): no competition names or slugs, scores, slot histories or approach details;
   tell the evidence as generic examples ("a competition with five daily slots", `<slug>`). A project's own facts and
   evidence stay in that project's `instructions.md`, `submissions/PLAN.md` and research notes.

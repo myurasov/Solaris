@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Rule: App Store Connect (Always-On) <!-- omit in toc -->
 
@@ -22,6 +22,7 @@ been triggered.
 - **Verify by re-reading, never by the click/call.** After any mutation, confirm the
   persisted state (fresh snapshot or GET) before reporting it done - ASC fails silently in
   both the UI and some API flows.
-- **Living documents.** New field-verified App Store lessons are folded into the matching
-  skill of this plugin the same session they are learned (see the skills' Maintenance
-  sections).
+- **Living documents.** New field-verified App Store lessons go, the same session they are
+  learned, to the project's `<pack>/.memory/improvements.md` as dated suggestions for the matching
+  skill of this plugin (see the skills' Maintenance sections); the Solaris orchestrator folds
+  in what the owner approves.

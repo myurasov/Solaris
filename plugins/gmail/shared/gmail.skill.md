@@ -3,7 +3,7 @@ name: gmail
 triggers: ["gmail", "check email", "check my email", "check inbox", "check my inbox", "unread emails", "read email", "read the email", "read that email", "search email", "find the email", "send email", "send an email", "send a mail", "reply to the email", "reply to that email", "forward the email", "draft an email", "email <someone>"]
 summary: Read and send Gmail from the terminal with gws (the Google Workspace CLI) - triage or search the inbox, read a message body, send / reply / reply-all / forward / draft with attachments - plus the raw Gmail API form for what the helpers do not cover. Needs gws-setup once per machine.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: gmail - Read and Send Mail With gws <!-- omit in toc -->
 
@@ -116,7 +116,8 @@ prefer `trash` over `delete` (permanent, no undo).
 
 ## Maintenance (Standing Duty)
 
-This skill is a **living document**: fold every field-verified Gmail/gws lesson - a helper
-flag change, an API quirk, an auth failure mode - into this file (or `gws-setup.skill.md`
-for install/sign-in matters) the same session it is learned. Rewrite in place, keep
-addresses and ids out, bump the rev (`revs bump` + `revs ledger`), commit the framework repo.
+This skill is a **living document**: record every field-verified Gmail/gws lesson - a helper
+flag change, an API quirk, an auth failure mode - the same session it is learned, as a dated
+suggestion in the project's `<pack>/.memory/improvements.md` naming this file (or `gws-setup.skill.md`
+for install/sign-in matters). Keep addresses and ids out. The Solaris orchestrator folds
+approved suggestions in (rewrite in place, `revs bump` + `revs ledger`, commit).

@@ -3,7 +3,7 @@ name: asc-api
 triggers: ["app store connect", "asc api", "app store connect api", "app store listing", "submit for review", "app store screenshots", "attach build", "app store pricing", "testflight testers", "age rating"]
 summary: Operate App Store Connect over the ASC REST API (team key + short-lived JWT) - the default path for listings, screenshots, builds, pricing, age rating, review submission, TestFlight - with field-tested endpoints, schema pitfalls, review-time editability, and the policy quirks that gate submissions.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: asc-api - App Store Connect Over the REST API <!-- omit in toc -->
 
@@ -118,9 +118,11 @@ typically lands within ~20 min of "In Review" - poll the state, not the inbox.
 
 ## Maintenance (Standing Duty)
 
-This plugin's skills are **living documents** (owner directive, 2026-08): fold every newly
-field-verified App Store lesson - API schema change, endpoint behavior, review/TestFlight
-behavior, policy quirk - into the matching skill (API material here, browser technique in
-`browserctl.asc.skill.md`) the same session it is learned. Rewrite in place, keep
-identifiers out, bump the file's rev (`revs bump` + `revs ledger`), commit the framework
-repo. A lesson that lives only in memory files or a chat transcript is considered lost.
+This plugin's skills are **living documents** (owner directive, 2026-08; since 2026-10-02
+projects suggest instead of editing): record every newly field-verified App Store lesson -
+API schema change, endpoint behavior, review/TestFlight behavior, policy quirk - the same
+session it is learned, as a dated suggestion in the project's `<pack>/.memory/improvements.md` naming
+the matching skill (API material here, browser technique in `browserctl.asc.skill.md`).
+Keep identifiers out. The Solaris orchestrator folds approved suggestions in (rewrite in
+place, `revs bump` + `revs ledger`, commit). A lesson that lives only in memory files or a
+chat transcript is considered lost.

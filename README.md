@@ -156,9 +156,10 @@ Solaris at all.
   review cleanly in PRs.
 - **Merge without fear.** Solaris sync metadata (`_Rev. N_` markers, the manifest `revisions` map)
   is take-either-side in a conflict; committed `*.jsonl` logs union-merge via `.gitattributes`.
-- **Feed improvements back.** Pack edits merge up into the framework templates and plugin edits
-  fold back into the plugin source (*"update plugin `<name>` from `<project>`"*), so a refinement
-  made on one project reaches every Solaris-based project on its next update.
+- **Feed improvements back.** Projects never edit framework or plugin files: each writes
+  suggestions to its private `.memory/improvements.md`, and *"review project improvements"* folds in what you
+  approve, so a refinement made on one project reaches every Solaris-based project on its next
+  update.
 - **Hand off or publish.** Say *"prepare `<project>` for handoff"*: the `publish-project` skill
   scrubs identities and internals, adds license/disclaimer, and verifies the detached pack stands
   alone - ready for a customer or the public.
@@ -173,7 +174,7 @@ servers, optional project types - so any project can opt into it.
   servers merged. While developing a plugin, use **link mode** (*"link plugin `<name>` to `<project>`"*) -
   a pointer to the live source instead of a copy.
 - **Author one:** *"make a plugin from `<project>`"* factors that project's ways of working into a
-  reusable plugin; the same skill folds later project-local edits back into the plugin source.
+  reusable plugin; the same skill folds later owner-approved changes back into the plugin source.
 - **Bundled plugins:** `browserctl` (CLI browser automation on per-project Chromium profiles -
   the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill and
   defines the `browserctl.<site>` extension-skill format for site-specific browser knowledge),
@@ -232,7 +233,7 @@ versions, and tasks.
 | "publish / share `<project>`" | `publish-project` | Scrub identities/internals, license, verify the pack stands alone. |
 | "create / install / repair a plugin" | `import-plugin`, `install-plugin` | Author, acquire, validate, attach plugins. |
 | "do a release" | `release` | Bump version, author migration, update docs, tag + publish. |
-| "self-reflect" | `self-reflect` | Review interaction logs; propose framework improvements. |
+| "self-reflect", "review project improvements" | `self-reflect` | Review interaction logs and project suggestions; propose framework improvements. |
 | "new task / research X" | `ad-hoc-task` | Start/resume dated ad-hoc work under `tasks/`. |
 | "health-check" / "status" | `health-check` | Command-center overview; `--deep` for full checks. |
 

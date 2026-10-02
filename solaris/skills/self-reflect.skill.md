@@ -1,7 +1,7 @@
 ---
 name: self-reflect
-triggers: ["self-reflect", "improve Solaris", "what should we improve", "tailor Solaris"]
-summary: Review interaction logs, surface ranked framework improvements, and (on approval) apply them.
+triggers: ["self-reflect", "improve Solaris", "what should we improve", "tailor Solaris", "review project improvements"]
+summary: Review interaction logs and the projects' improvement suggestions, surface ranked framework improvements, and (on approval) apply them.
 ---
 
 # self-reflect <!-- omit in toc -->
@@ -24,6 +24,11 @@ default `aipack/`, `ai/` in projects made before 0.39.0, any name) and `tasks/*/
 `tasks/<YYYY>/<MM>/`). Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 
+Read every project's `<pack>/.memory/improvements.md` too: every entry not yet listed in
+`.memory/improvements-review.md`. Projects never edit framework or plugin files themselves (AGENTS.md,
+non-negotiable 7), so these files are how their suggestions reach the framework. On "review project
+improvements", review only these.
+
 ## 2. Propose (Ranked)
 
 Present a short ranked list. For each: the observation (with evidence - which interactions), the suggested
@@ -34,6 +39,9 @@ change, the exact files it would touch (`solaris/...`), and effort. Distinguish:
 - **Project-specific** - belongs in that project's `<pack>/instructions.md`, not the framework.
 - **Plugin-worthy** - a domain workflow that recurs: suggest `import-plugin` (create) or extending an
   existing plugin.
+- **Project improvement suggestions** - for each new `improvements.md` entry: adopt (name the framework or
+  plugin file and how it would read, worded for any project), adapt, or decline with the reason. Merge
+  entries that say the same thing across projects.
 
 **Promote operating memory.** Treat every entry in `.memory/instructions.md` as a candidate: anything important
 and reusable should be **promoted into the core framework** (spec / skills / rules / templates / tools). For
@@ -53,3 +61,6 @@ promotes an item from `.memory/instructions.md` into core, **delete that entry f
 ## 4. Record
 
 Log a turn summarizing what was changed and why: `uv run -m solaris.tools.interactions add --project solaris ...`.
+When project suggestions were reviewed, update `.memory/improvements-review.md`: per project, each entry reviewed (its
+date and first words), and whether it was adopted (target file and revision), adapted, or declined (why). Never
+edit the projects' `improvements.md` files; they stay the projects' own record.

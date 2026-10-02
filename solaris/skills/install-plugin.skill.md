@@ -132,8 +132,8 @@ plugin source is loaded directly. On every turn, treat the plugin as if it were 
 - **Plugin root:** `<path to plugins/<name>/>` - relative to this ai-pack's root, the directory **above**
   `<pack>/` (not to this file). Shared files are in `shared/` there; the live version is in its `manifest.json`.
 - Load each `shared/*.rule.md` as always-on; treat each `shared/*.skill.md` as trigger-invoked.
-- Edits to those files change the **plugin source** for every consumer - only edit them when the user is
-  deliberately developing the plugin.
+- Edits to those files change the **plugin source** for every consumer - edit them only when the owner
+  explicitly asks you to develop the plugin; otherwise suggest changes in `<pack>/.memory/improvements.md`.
 
 Link mode is a development convenience and is **not portable**: a shared or standalone ai-pack cannot
 resolve the path. Convert to a real install ("install plugin <name> to <project>") before sharing.
@@ -156,7 +156,7 @@ are unless noted):
   current version), then `revs baseline --dir projects/<slug>`.
 - **copy -> link** ("link plugin <name> to <project>" on a copied install): first
   `revs classify --dir projects/<slug>` - fold any `merge-up`/`conflict` in `<pack>/plugins/<name>/` back into the
-  plugin (`import-plugin`) so no project-local edit is lost; then delete `<pack>/plugins/<name>/` (confirm - this is
+  plugin (`import-plugin`, on the owner's yes) so no project-local edit is lost; then delete `<pack>/plugins/<name>/` (confirm - this is
   destructive), write the link file, set the manifest entry to `{name, "mode": "link"}`, and
   `revs baseline --dir projects/<slug>` (it rebuilds the `revisions` map and drops the deleted files).
 - **unlink / detach** ("unlink plugin <name>", "detach plugin <name> from <project>"): fully remove the
@@ -173,7 +173,7 @@ For a plugin already attached to a project (driven here or by `update-project`).
 
 - **update** (source advanced): `uv run -m solaris.tools.revs classify --dir projects/<slug>`. For any
   `<pack>/plugins/<name>/` file with verdict `merge-up` or `conflict`, resolve first (`import-plugin`
-  update-from-project for `merge-up`; smart-merge + ask for `conflict`). Then `revs ff` the safe files,
+  update-from-project for `merge-up`, on the owner's yes; smart-merge + ask for `conflict`). Then `revs ff` the safe files,
   re-merge `mcps.json`, and bump the recorded plugin `version` only on a minor/major plugin release.
 - **migrate** (plugin minor/major bump with `migrations/`): apply `plugins/<name>/migrations/<to>.md`
   against `<pack>/plugins/<name>/`, then update the recorded version.

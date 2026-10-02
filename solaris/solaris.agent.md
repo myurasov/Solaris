@@ -144,8 +144,8 @@ Three independent mechanisms:
 - **Per-file revisions** (`solaris.tools.revs`): every materialized framework/plugin file carries a rev
   integer + a rev-excluded content hash. ai-packs record a baseline in `<pack>/manifest.json` -> `revisions`.
   On `update-project` / plugin update, compare per file: identical -> in sync; user untouched and master
-  advanced -> fast-forward; user rev higher -> merge **up** into the master (via `import-plugin` for
-  plugins); both changed -> smart merge, asking the user per conflict. This is how master copies and
+  advanced -> fast-forward; user rev higher -> merge **up** into the master on the owner's yes (via
+  `import-plugin` for plugins); both changed -> smart merge, asking the user per conflict. This is how master copies and
   ai-packs stay in sync - not version numbers. Plugin revs live in the plugin's own
   `plugins/<name>/revisions.json`, not the framework ledger. After editing a revisioned file,
   `revs bump <file>` it and `revs ledger`. **Scope:** rev markers belong ONLY on files that materialize
@@ -298,11 +298,18 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   in `context.md`; secrets in `credentials.md`.
 - `self-reflect` is the only path by which the orchestrator edits framework files for self-improvement, and
   it shows the diff and follows the commit policy.
-- **Coordinated edits.** When several live sessions may edit the same framework or plugin files: claim a
-  file with an end time ("editing <file> until <time>") and wait while another session holds it; re-read
-  it and compare its revision just before writing; change only your lines, never copying a whole file over
-  the master; bump the revision where the file has one; then announce "done <file> Rev. N" with a one-line
-  summary so the other sessions resync. A claim lapses at its stated end time.
-- **Plugin lessons.** Fold each generic lesson a project learns into the plugin's master copy the same day,
-  worded universally (no project, host or event names); owner permissions stay project facts in that
-  project's pack.
+- **Coordinated edits.** When several live sessions may edit the same framework or plugin files
+  (orchestrator sessions, or a project session the owner explicitly told to): claim a file with an end time
+  ("editing <file> until <time>") and wait while another session holds it; re-read it and compare its
+  revision just before writing; change only your lines, never copying a whole file over the master; bump
+  the revision where the file has one; then announce "done <file> Rev. N" with a one-line summary so the
+  other sessions resync. A claim lapses at its stated end time.
+- **Improvement suggestions.** Project sessions never edit framework or plugin files unless the owner
+  explicitly says so (AGENTS.md, non-negotiable 7). Each writes its suggestions for improving the framework or
+  a plugin, and only those, to its private `<pack>/.memory/improvements.md` (dated, with the evidence and the file to change);
+  the project's own lessons stay in `<pack>/instructions.md`. Sessions may tell each other about a
+  suggestion. On "review project improvements", and as an input to `self-reflect`, the orchestrator reads
+  every entry not yet listed in `.memory/improvements-review.md`, proposes what to
+  adopt, implements only what the owner approves (worded universally: no project, host or event names; owner
+  permissions stay project facts in that project's pack), and records each decision in
+  `.memory/improvements-review.md`.

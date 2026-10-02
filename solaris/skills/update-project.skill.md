@@ -26,14 +26,21 @@ manifest's `agents.primary`):
 
 - **in-sync / fast-forward / missing** -> `uv run -m solaris.tools.revs ff --dir projects/<slug>` applies
   them (copies master -> project, updates the baseline). Files the user never touched just move forward.
-- **merge-up** (user rev > master): the user improved the materialized copy. For a plugin file, run
-  `import-plugin` (update-from-project) to fold it into the plugin source and bump the master; for a core
-  template file, copy the improvement up into `solaris/templates/ai-pack/...` and `revs bump` it. Re-run ff.
+- **merge-up** (user rev > master): the project changed the materialized copy (projects should suggest such
+  changes in `<pack>/.memory/improvements.md` instead). Show the diff and fold it up only on the owner's yes: for a
+  plugin file, run `import-plugin` (update-from-project) to fold it into the plugin source and bump the master;
+  for a core template file, copy the change up into `solaris/templates/ai-pack/...` and `revs bump` it.
+  Re-run ff. Without that yes, ask before overwriting the project's version.
   Exception: a **project-customized pack stub** (an `init.skill.md`/`refresh.skill.md` filled in with that
   project's real resources and steps) classifies merge-up permanently - that is correct and safe (ff never
   touches it); keep the project side and do NOT fold project-specific content into the template.
 - **conflict** (both changed): show a 3-way view (baseline / master / project) and ask the user, per file or
   hunk, which side wins; write the merged result; `revs bump` the master if it changed.
+
+If `<pack>/.memory/improvements.md` is missing (packs made before it existed), move a stray
+`<pack>/improvements.md` or `<pack>/lessons.md` there if one exists (the project's own session then commits
+the removal), else seed it from the template's `.memory/improvements.md` with `{{NAME}}` filled; never
+overwrite an existing one, which is the project's own record.
 
 Finish by re-recording the baseline: `uv run -m solaris.tools.revs baseline --dir projects/<slug>`.
 

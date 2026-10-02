@@ -21,8 +21,8 @@
       ]
     },
     "shared/gmail.skill.md": {
-      "rev": 4,
-      "hash": "9eb7c4bc949f48e031454d29ba58bf159b1bb0abc6f1783db9a1649aa8b008ad",
+      "rev": 5,
+      "hash": "b3e88a049bdb12a066640f00600e486e5740c73cdb4fbe2edf6238e6ac2201fa",
       "history": [
         {
           "rev": 1,
@@ -39,6 +39,10 @@
         {
           "rev": 4,
           "hash": "9eb7c4bc949f48e031454d29ba58bf159b1bb0abc6f1783db9a1649aa8b008ad"
+        },
+        {
+          "rev": 5,
+          "hash": "b3e88a049bdb12a066640f00600e486e5740c73cdb4fbe2edf6238e6ac2201fa"
         }
       ]
     },

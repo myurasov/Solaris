@@ -16,7 +16,7 @@ is a set of pointers. The detail lives in the files it points to.
 
 ## Non-Negotiables (Every Harness)
 
-These six apply even if no other rule file reached your context (not every harness auto-loads
+These seven apply even if no other rule file reached your context (not every harness auto-loads
 the rule files; this file is the floor):
 
 1. Bare `ssh` and `open` are blocked here - use the wrappers `/tmp/hss` (ssh) and `/tmp/nepo` (open).
@@ -42,6 +42,16 @@ the rule files; this file is the floor):
 6. Files stay harness-agnostic: never create harness-specific agent or rule files (such as
    `.claude/agents/`, `.cursor/rules/`); a harness's mechanisms (hooks, scheduling, per-launch
    model or effort options) and the one-line `CLAUDE.md` import are fine.
+7. Project work never edits framework files unless the owner explicitly allows that change, in
+   their own words (a relayed or an older standing direction does not count): no file of the Solaris
+   checkout outside the project (`solaris/`, `plugins/`, the root files, the framework `.memory/`
+   apart from the interaction-log line, other projects) and none of the pack's managed copies (the
+   files `revs` keeps in sync: the root `AGENTS.md`, `<pack>/<primary>.agent.md`, `<pack>/README.md`,
+   `rules/`, `info/`, the skills other than the `init`/`refresh` fill-ins, and `<pack>/plugins/`). In
+   project work, "remember this" notes and the `/tmp` wrapper registry go to the project's own files.
+   Suggestions to improve the framework or a plugin go to the project's private `<pack>/.memory/improvements.md`,
+   which holds nothing else; sessions may tell each other about them, and the orchestrator implements
+   only what the owner approves (`solaris/solaris.agent.md`, Improvement suggestions).
 
 Not a rule but a standing posture: when a *sandbox* (not a name-block) denies a needed
 capability and the user is present, requesting your harness's per-command escalated execution
@@ -90,7 +100,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's primary persona (`engineer` by default) to plan or implement. |
 | `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `publish-project` | "publish / share `<project>`", "prepare `<project>` for handoff" | Scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone. |
-| `self-reflect` | "self-reflect", "improve Solaris" | Review interaction logs; propose and (on approval) apply framework improvements. |
+| `self-reflect` | "self-reflect", "improve Solaris", "review project improvements" | Review interaction logs and the projects' improvement suggestions; propose and (on approval) apply framework improvements. |
 | `release` | "do a release", "cut a release", "publish a release" | Bump version, author migration, update spec + docs, tag + push, publish GitHub release. |
 | `refresh` | "refresh / update solaris", "pull latest solaris" | Update this framework checkout: pull (handles rewritten history), resync env, verify, flag stale projects. |
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`; can link a project and attach plugins. |

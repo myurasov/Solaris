@@ -3,7 +3,7 @@ name: browserctl.asc
 triggers: ["asc web", "drive app store connect", "app store connect browser", "app privacy", "trader status", "app store agreements", "manage the iap", "apple developer site"]
 summary: Operate App Store Connect (and developer.apple.com) through browserctl - for the flows the ASC API cannot reach: App Privacy questionnaire, EU DSA trader status, agreements, IAP setup, API-key creation, visual verification - with the field-tested drive loop, dialog technique, and upload pitfalls.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: browserctl.asc - Driving App Store Connect in the Browser <!-- omit in toc -->
 
@@ -259,9 +259,10 @@ Nearly every mutation happens in a `role=dialog` overlay:
 
 ## Maintenance (Standing Duty)
 
-This plugin's skills are **living documents** (owner directive, 2026-08): fold every newly
-field-verified App Store lesson into the matching skill (browser technique here, API
-material in [`asc-api.skill.md`](asc-api.skill.md)) the same session it is learned. Rewrite
-in place, keep identifiers out, bump the file's rev (`revs bump` + `revs ledger`), commit
-the framework repo. A lesson that lives only in memory files or a chat transcript is
-considered lost.
+This plugin's skills are **living documents** (owner directive, 2026-08; since 2026-10-02
+projects suggest instead of editing): record every newly field-verified App Store lesson the
+same session it is learned, as a dated suggestion in the project's `<pack>/.memory/improvements.md`
+naming the matching skill (browser technique here, API material in
+[`asc-api.skill.md`](asc-api.skill.md)). Keep identifiers out. The Solaris orchestrator folds
+approved suggestions in (rewrite in place, `revs bump` + `revs ledger`, commit). A lesson that
+lives only in memory files or a chat transcript is considered lost.

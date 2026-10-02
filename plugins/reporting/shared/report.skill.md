@@ -10,7 +10,7 @@ summary: Author and render a project findings report - HTML source in
   pages, runts). Styling/rendering tooling is this plugin's assets/; theme and page
   furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
@@ -69,8 +69,10 @@ the visual check (Page Layout, Checklist Before Done).
 
 The styling + rendering tooling is materialized from the `reporting` plugin into
 `<pack>/plugins/reporting/assets/`; the plugin masters (`plugins/reporting/shared/assets/`
-under a Solaris checkout) are the editing source of truth. Standalone, edit the materialized copies and
-they fold back on the next plugin update (import-plugin Mode A picks up the higher revs).
+under a Solaris checkout) change only through the Solaris orchestrator: a project edits neither them nor
+its copies (it suggests changes in `<pack>/.memory/improvements.md`) and puts its own look in `reports/theme.css`.
+Standalone, edit the materialized copies; they fold back on the next plugin update (import-plugin Mode A
+picks up the higher revs).
 
 | File | What it is |
 |---|---|

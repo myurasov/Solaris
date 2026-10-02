@@ -106,5 +106,8 @@ Follow the engineer agent's workflows:
   rewritten in place) current at its save points: before context compaction (automatic or manual), and
   whenever the user says "save/remember/update/retain/keep context" or similar.
 
-If a plugin edit emerges (the user changes how a domain workflow should behave), point them at
-`import-plugin` to fold it back into the plugin source.
+If a plugin or framework change emerges (the user changes how a domain workflow should behave), record it as
+a dated suggestion in `<pack>/.memory/improvements.md` instead of editing the plugin or framework file: project work
+never edits those unless the owner explicitly says so (AGENTS.md, non-negotiable 7). The orchestrator
+implements approved suggestions later (`self-reflect`, "review project improvements"; `import-plugin` for
+plugin files).

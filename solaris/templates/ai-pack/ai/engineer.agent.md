@@ -1,4 +1,4 @@
-_Rev. 45_
+_Rev. 46_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -9,6 +9,7 @@ _Rev. 45_
 - [Long-Running Work](#long-running-work)
 - [Sandboxed Harnesses](#sandboxed-harnesses)
 - [Workspaces](#workspaces)
+- [Framework Files and Improvements](#framework-files-and-improvements)
 - [Memory](#memory)
 - [Authoring ai Files (Diff-Friendly)](#authoring-ai-files-diff-friendly)
 - [Project Version](#project-version)
@@ -24,8 +25,9 @@ inside a Solaris checkout are marked "under a Solaris checkout" - ignore them wh
 This file sits in the project's ai-pack folder (`{{PACK}}/`; default `aipack/` for new projects, `ai/` in projects
 made before Solaris 0.39.0, any name).
 Files carry Solaris sync metadata (`_Rev. N_` markers - line 1, or right after a skill file's frontmatter - and the `revisions` map in
-`{{PACK}}/manifest.json`) - leave it as-is; the Solaris-side maintainer manages it. Edit this file to tune how
-this project is developed.
+`{{PACK}}/manifest.json`) - leave it as-is; the Solaris-side maintainer manages it. Under a Solaris checkout this
+file is a managed copy: tune how this project is developed in `{{PACK}}/instructions.md` and suggest changes to
+this file in `{{PACK}}/.memory/improvements.md`; standalone, edit it directly.
 
 ## Context to Load (Every Turn)
 
@@ -50,8 +52,8 @@ this project is developed.
 6. Every `{{PACK}}/plugins/<plugin>/` overlay: load each `*.rule.md` (always-on) and treat each `*.skill.md` as a
    trigger-invoked skill. Follow every `{{PACK}}/plugins/<name>.link.md` (a **linked** plugin, attached in link mode
    without a copy): load the plugin's `shared/` rules and skills from the path it names, the same way -
-   but only edit those files when deliberately developing the plugin (they are the live source for every
-   consumer).
+   but edit those files only when the owner explicitly asks you to develop the plugin (they are the live
+   source for every consumer).
 7. local mode: `source/AGENTS.md` if present, as **gap-filling** project rules. The ai-pack (this file,
    `{{PACK}}/*` rules and instructions, plugin overlays) **strictly overrides** anything the codebase carries
    (`source/AGENTS.md`, `CLAUDE.md`, CONTRIBUTING, repo conventions): repo rules fill gaps only, and on
@@ -173,6 +175,21 @@ A project holds one or more **workspaces** - top-level folders, each a self-cont
   workspace's files (under a Solaris checkout, `solaris/templates/workspace/` has stubs) - and register
   it in `{{PACK}}/instructions.md`'s workspace table (and `{{PACK}}/manifest.json` `project.workspaces`
   when present).
+
+## Framework Files and Improvements
+
+- **Under a Solaris checkout, never edit framework files unless the owner explicitly allows that change,** in
+  their own words (a relayed or an older standing direction does not count): no file of the checkout outside
+  this project (`solaris/`, `plugins/`, the root files, the framework `.memory/` apart from your interaction-log
+  line, other projects), and none of this pack's managed copies (the files `revs` keeps in sync: the root
+  `AGENTS.md`, this file, `{{PACK}}/README.md`, `rules/`, `info/`, the skills other than your `init`/`refresh`
+  fill-ins, and `{{PACK}}/plugins/`), which Solaris keeps in sync from its masters. Standalone (no Solaris
+  checkout around the pack), the whole pack is yours to edit.
+- **Suggest framework improvements in `{{PACK}}/.memory/improvements.md` instead** (private, never committed): a dated entry for each change you
+  would make to a framework or plugin file, worded for any project, with the evidence and the file to change.
+  That file holds nothing else: this project's own lessons, facts and gotchas stay in `{{PACK}}/instructions.md`.
+  You may tell other sessions about a suggestion; each writes only its own project's file. Under a Solaris
+  checkout, the orchestrator reviews these files and implements what the owner approves.
 
 ## Memory
 

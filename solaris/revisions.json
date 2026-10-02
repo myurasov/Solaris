@@ -3,13 +3,9 @@
   "schema_version": 1,
   "files": {
     "solaris/templates/ai-pack/AGENTS.md": {
-      "rev": 21,
-      "hash": "19da1a357df576a4ec116195d5e4d645babed64d8dce84a47f33bea714bbc7f8",
+      "rev": 22,
+      "hash": "2ecd275f01dcbdf32f32f7c6dc6d3b37d9a95157d5cd273fd0ee2eb25cc54048",
       "history": [
-        {
-          "rev": 12,
-          "hash": "3ed751fd649aad0fe0bd81fc67c30dd870a5fb46bf8f58a88a5220a84eadca41"
-        },
         {
           "rev": 13,
           "hash": "5e1b5a9da856a2cf3b0a9c60b676c9227b0689b652209e1cab9cce9679b9cef2"
@@ -45,12 +41,16 @@
         {
           "rev": 21,
           "hash": "19da1a357df576a4ec116195d5e4d645babed64d8dce84a47f33bea714bbc7f8"
+        },
+        {
+          "rev": 22,
+          "hash": "2ecd275f01dcbdf32f32f7c6dc6d3b37d9a95157d5cd273fd0ee2eb25cc54048"
         }
       ]
     },
     "solaris/templates/ai-pack/ai/README.md": {
-      "rev": 8,
-      "hash": "02e3b294f7a581a3cbd36a5d561645556252f58955c479286ce14f4a1e15ba66",
+      "rev": 9,
+      "hash": "bc7b69366522251449ad352407e6c1f8422d8b6792ccfce3719b0a48fc824532",
       "history": [
         {
           "rev": 1,
@@ -87,17 +87,17 @@
         {
           "rev": 8,
           "hash": "02e3b294f7a581a3cbd36a5d561645556252f58955c479286ce14f4a1e15ba66"
+        },
+        {
+          "rev": 9,
+          "hash": "bc7b69366522251449ad352407e6c1f8422d8b6792ccfce3719b0a48fc824532"
         }
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 45,
-      "hash": "3f79ff48a122757ecd5fc0751c0ad8afdeb731693338c85fc2ef92460d69ad47",
+      "rev": 46,
+      "hash": "334514c911e50c4dfcc888dee35d2accb78776a56bcd8bb2d67ffe671f3901ad",
       "history": [
-        {
-          "rev": 36,
-          "hash": "5576bdaf8edadf51546315826b264a93ad7858bef74d56594b88e215ab0ed334"
-        },
         {
           "rev": 37,
           "hash": "c4371854660bf6ee7f1a378de57495a1ce7e0a4aaa3be99c7cc4e728de27f3bb"
@@ -133,6 +133,10 @@
         {
           "rev": 45,
           "hash": "3f79ff48a122757ecd5fc0751c0ad8afdeb731693338c85fc2ef92460d69ad47"
+        },
+        {
+          "rev": 46,
+          "hash": "334514c911e50c4dfcc888dee35d2accb78776a56bcd8bb2d67ffe671f3901ad"
         }
       ]
     },

@@ -1,4 +1,4 @@
-_Rev. 8_
+_Rev. 9_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -176,9 +176,10 @@ name.
 ### Update the Pack Itself
 
 Under a Solaris checkout, say "update `<project>`": Solaris syncs the pack's managed files
-per-file (untouched files fast-forward, your improvements merge upstream, real conflicts ask)
-and applies any framework migrations — this README re-renders with the current plugin list.
-Standalone, just edit files normally and leave the sync metadata alone.
+per-file (untouched files fast-forward, real conflicts ask) and applies any framework
+migrations — this README re-renders with the current plugin list. The project never edits those
+managed files itself; it suggests changes in `.memory/improvements.md`. Standalone, just edit files
+normally and leave the sync metadata alone.
 
 ## Available Skills
 
