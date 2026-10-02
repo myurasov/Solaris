@@ -11,7 +11,7 @@ implements what the owner approves.
 ## How to Use This File
 
 - **Only framework and plugin suggestions belong here.** This project's own lessons, facts, gotchas and
-  decisions stay in `instructions.md`; owner directions stay in `directions.md`.
+  decisions stay in `instructions.md`; the owner's directions are logged in `.memory/directions.md`.
 - **Write at once:** when a framework or plugin file should change, add a dated entry before moving on, so the
   suggestion survives compaction, restarts and a change of session.
 - **One entry per suggestion:** `- [YYYY-MM-DD] <the change, worded for any project> | why: <what happened,

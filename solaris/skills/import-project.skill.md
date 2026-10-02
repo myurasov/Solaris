@@ -90,7 +90,8 @@ into the generic `<pack>/instructions.md`.
   `.gitignore`), the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root
   `mcp.json.example` plus any plugin servers). Seed `<pack>/defaults.json` from
   `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it) and
-  `<pack>/directions.md` from the template's `directions.md` (owner-directions log; `{{NAME}}` filled) and
+  `<pack>/.memory/directions.md` from the template's `.memory/directions.md` (the private owner-directions log;
+  `{{NAME}}` filled) and
   `<pack>/.memory/improvements.md` from the template's `.memory/improvements.md` (private framework and
   plugin improvement suggestions; `{{NAME}}` filled),
   materialize the managed pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>` writes the

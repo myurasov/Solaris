@@ -37,6 +37,10 @@ manifest's `agents.primary`):
 - **conflict** (both changed): show a 3-way view (baseline / master / project) and ask the user, per file or
   hunk, which side wins; write the merged result; `revs bump` the master if it changed.
 
+If `<pack>/directions.md` exists (packs made before the directions log became private), move it to
+`<pack>/.memory/directions.md`, appending it to an existing one; the project's own session then folds the
+long-standing entries into `<pack>/instructions.md` and commits the removal.
+
 If `<pack>/.memory/improvements.md` is missing (packs made before it existed), move a stray
 `<pack>/improvements.md` or `<pack>/lessons.md` there if one exists (the project's own session then commits
 the removal), else seed it from the template's `.memory/improvements.md` with `{{NAME}}` filled; never

@@ -1,4 +1,4 @@
-_Rev. 46_
+_Rev. 47_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -33,7 +33,7 @@ this file in `{{PACK}}/.memory/improvements.md`; standalone, edit it directly.
 
 1. This file.
 2. `{{PACK}}/spec.md` - the current spec (the contract). `{{PACK}}/.memory/spec-v0.md`, if the project keeps one, is
-   the preserved initial spec. `{{PACK}}/directions.md`, if present, is the owner's dated directions log; its
+   the preserved initial spec. `{{PACK}}/.memory/directions.md`, if present, is the owner's dated directions log; its
    entries override this pack's and its plugins' defaults.
 3. `{{PACK}}/instructions.md` - the one shared instructions store every persona reads and maintains:
    build/run/test commands, conventions, gotchas, lessons (sits in `{{PACK}}/` beside this file; portable, no
@@ -287,7 +287,8 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
   below); never push without confirmation. A durable "work autonomously until X" instruction
   or `commit!` waives the per-message confirmation. The same ASCII / no-`--` rules apply to code comments
   (keep them short and casual).
-- **Before each push,** run the drift check described in `{{PACK}}/directions.md` (if present).
+- **Before each push,** run the drift check described in `{{PACK}}/.memory/directions.md` (if present), so
+  long-standing directions also live in the committed `{{PACK}}/instructions.md`.
 - **Developer branches** (`{{PACK}}/rules/git-collab.rule.md`; `"git.developer_branches"` on by default):
   never commit on `main`/`develop` - switch to (or create) the personal `<id>-develop` branch first.
   There, commits are automatic (format rules above, no per-message confirmation); pushes are NEVER

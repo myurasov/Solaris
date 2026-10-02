@@ -107,15 +107,15 @@ What lands in the pack:
 - **Shareable, long-term** (commits with the repo): `<primary>.agent.md` (the primary persona,
   `engineer` unless renamed), optional `<role>.agent.md` role persona briefs beside it, `instructions.md`
   (the one shared know-how store every persona reads and maintains: build/run/test, conventions, gotchas,
-  lessons), `spec.md` (the contract), `directions.md` (the owner's dated directions log, checked for
-  drift at each push),
-  `manifest.json`, always-on pack rules in `rules/` (token economy, subagent delegation, YAGNI mode,
+  lessons), `spec.md` (the contract), `manifest.json`, always-on pack rules in `rules/` (token economy, subagent delegation, YAGNI mode,
   git collaboration: developer branches + PR-based back-contribution) with their
   committed defaults in `defaults.json`, perishable reference data the rules read in `info/` (model
   tiers, harness capabilities), and in `skills/` the `init` / `refresh` stubs for teammates plus a
   `handover` skill to pause, hand over and resume work.
-- **Private, short-term** (`<pack>/.memory/`, gitignored): hosts, secrets, session context, logs (one
-  file per machine). Drop this layer to share the project.
+- **Private, short-term** (`<pack>/.memory/`, gitignored): the owner's directions log (`directions.md`,
+  checked for drift at each push so long-standing ones reach `instructions.md`), suggestions for the
+  framework and plugins (`improvements.md`), hosts, secrets, session context, logs (one file per
+  machine). Drop this layer to share the project.
 
 Every project also carries its own semver in a root `.version` file (new projects start at `0.1.0`;
 imports adopt an existing `v*` tag or `1.0.0` for already-shipped work): the engineer

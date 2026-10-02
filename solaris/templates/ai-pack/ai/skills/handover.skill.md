@@ -3,7 +3,7 @@ name: handover
 triggers: ["handover", "stop for handover", "pause for handover", "resume after handover"]
 summary: Pause {{NAME}} or hand it to another session or machine without losing work - save context, write a dated handover note, commit, leave remote jobs running - and resume from that note after re-checking hosts, leases and jobs.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: handover - Pause, Hand Over, Resume <!-- omit in toc -->
 
@@ -52,7 +52,7 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
 
 Only on the owner's explicit word.
 
-1. **Read** the newest `{{PACK}}/.memory/handover-*.md`, then `context.md` (and `{{PACK}}/directions.md`
+1. **Read** the newest `{{PACK}}/.memory/handover-*.md`, then `context.md` (and `{{PACK}}/.memory/directions.md`
    when the project keeps one).
 2. **Confirm sole control:** the old session has stopped, as its note says. On another machine, work from
    that machine's own clone, brought up to date with what was pushed, and copy across what git does not

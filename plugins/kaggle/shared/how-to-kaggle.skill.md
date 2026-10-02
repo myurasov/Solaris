@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 22_
+_Rev. 23_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -114,7 +114,8 @@ Follow this sequence from minute one; each step points to the section with the r
   (`GH_TOKEN=$(gh auth token --user <account>)`), and read the author/committer/tagger emails of what you are about
   to push.
 - **Standing files** the agent keeps current:
-  - `directions.md`: every owner direction, dated, written the moment it arrives (survives compaction and restarts);
+  - `.memory/directions.md`: every owner direction, dated, written the moment it arrives (private; survives
+    compaction and restarts; long-standing ones are folded into `instructions.md`);
   - `instructions.md`: how-to, conventions, gotchas, lessons, and the competition facts sheet (one shared store for
     every persona);
   - `submissions/PLAN.md`: today's and tomorrow's submission slots with purposes;

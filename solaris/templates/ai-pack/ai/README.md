@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -59,13 +59,12 @@ as-is.
 | `<role>.agent.md` | Any other `*.agent.md` beside it is a role persona brief — see [Personas](#personas). |
 | [`instructions.md`](instructions.md) | The one shared instructions store every persona reads and maintains: build/run/test commands, conventions, gotchas, lessons. |
 | [`spec.md`](spec.md) | The living project spec. |
-| [`directions.md`](directions.md) | The owner-directions log: dated entries written as each direction arrives, checked for drift at each push. |
 | [`defaults.json`](defaults.json) | Committed behavior switches (see [Configuration](#configuration)). |
 | [`rules/`](rules/) | Always-on rules: git collaboration, subagent delegation, token economy, YAGNI mode. |
 | [`skills/`](skills/) | Trigger-invoked procedures (see [Available Skills](#available-skills)). |
 | [`info/`](info/) | Reference data the rules point at (model tiers, harness capabilities). |
 | `plugins/` | Files added by attached plugins — extra skills and rules per plugin. |
-| `.memory/` | Private layer (gitignored): session context, resources, credentials, logs, the preserved initial spec. Not for sharing. |
+| `.memory/` | Private layer (gitignored): the owner-directions log (`directions.md`, checked for drift at each push), suggestions for the framework and plugins (`improvements.md`), session context, resources, credentials, logs, the preserved initial spec. Not for sharing. |
 
 ### Attached Plugins
 

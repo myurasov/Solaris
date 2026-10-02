@@ -65,10 +65,10 @@ Create `projects/` if it does not exist (gitignored, lazily created). The templa
 
 1. Write `<pack>/manifest.json` first, from the template's, with its placeholders filled - the manifest is
    what makes the folder the pack.
-2. Copy the files `revs` never renders - `<pack>/instructions.md`, `spec.md`, `directions.md` (the
-   owner-directions log),
-   `defaults.json` and `.memory/*` (including `.memory/improvements.md`, the project's private
-   suggestions for the framework and plugins, which it never edits itself), the root `CLAUDE.md`, and the `source/` stub -
+2. Copy the files `revs` never renders - `<pack>/instructions.md`, `spec.md`, `defaults.json` and
+   `.memory/*` (including the private owner-directions log `.memory/directions.md` and
+   `.memory/improvements.md`, the project's suggestions for the framework and plugins, which it never
+   edits itself), the root `CLAUDE.md`, and the `source/` stub -
    and substitute placeholders in each:
    `{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO),
    `{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`), `{{PACK}}` (the pack folder
