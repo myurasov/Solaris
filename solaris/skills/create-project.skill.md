@@ -65,8 +65,9 @@ Create `projects/` if it does not exist (gitignored, lazily created). The templa
 
 1. Write `<pack>/manifest.json` first, from the template's, with its placeholders filled - the manifest is
    what makes the folder the pack.
-2. Copy the files `revs` never renders - `<pack>/instructions.md`, `spec.md`, `defaults.json` and
-   `.memory/*`, the root `CLAUDE.md`, and the `source/` stub - and substitute placeholders in each:
+2. Copy the files `revs` never renders - `<pack>/instructions.md`, `spec.md`, `directions.md` (the
+   owner-directions log), `defaults.json` and `.memory/*`, the root `CLAUDE.md`, and the `source/` stub -
+   and substitute placeholders in each:
    `{{SLUG}}`, `{{NAME}}`, `{{TYPE}}`, `{{MODE}}`, `{{DESCRIPTION}}`, `{{DATE}}` (today, ISO),
    `{{FRAMEWORK_VERSION}}` (from `uv run -m solaris.tools.version current`), `{{PACK}}` (the pack folder
    name from step 1, `aipack` by default), and `{{PRIMARY}}` / `{{PRIMARY_TITLE}}` (the chosen primary
@@ -144,7 +145,8 @@ records `{name, version}` in `<pack>/manifest.json` -> `plugins`.
   `uv run -m solaris.tools.agents --rename-primary <role> --dir projects/<slug>` (after the baseline; it
   moves `<pack>/engineer.agent.md` to `<pack>/<role>.agent.md`, sets the manifest's `agents.primary`, fixes the
   references in `<pack>/instructions.md`, and re-renders the managed files). Each role persona -> copy
-  `solaris/templates/agents/role.agent.md` to `<pack>/<role>.agent.md` (beside the primary), fill the
+  `solaris/templates/agents/role.agent.md` (or, for a worker or a reviewer, the ready-made
+  `worker.agent.md` / `reviewer.agent.md` beside it) to `<pack>/<role>.agent.md` (beside the primary), fill the
   frontmatter and brief with the user, put any starting know-how into the shared `<pack>/instructions.md`
   (under a heading named for the role when only that role uses it), validate
   (`uv run -m solaris.tools.agents --check --dir projects/<slug>`), then re-run `revs ff` + `revs baseline`

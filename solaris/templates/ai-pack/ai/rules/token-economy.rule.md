@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: Token Economy <!-- omit in toc -->
 
@@ -108,6 +108,11 @@ round-trip too - merge remote steps into compound commands. Pacing is level-inde
 pacing rule, not a hard cap: correctness and data integrity win over speed - when in doubt, slow
 down rather than drop steps. **Per-request override:** `asap` anywhere in the message - burst for
 that request only.
+
+**Daily spend:** an optional approximate daily AI spending limit, `"ai.daily_budget_usd"` (same
+config files as the level); under a Solaris checkout, check it at each periodic pass with
+`uv run -m solaris.tools.ai_spend --dir <project> --today` (exit 3 = over), and when over,
+economize and tell the owner.
 
 ## Hard Floors (Never Trimmed)
 

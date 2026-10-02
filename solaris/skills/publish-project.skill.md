@@ -17,7 +17,8 @@ public. Everything below is a checklist against the **tracked** content only - t
 (`__*/`, `<pack>/.memory/`) stay behind by design; `<pack>/` is the project's ai-pack folder (default
 `aipack/`, `ai/` in projects made before 0.39.0, any name). `<pack>/instructions.md` is shareable and
 **ships**: relocate any machine-local notes in it (wrapper registry, host specifics) to `<pack>/.memory/`
-as part of the sweep. This skill
+as part of the sweep. `<pack>/directions.md` ships too and quotes the owner word for word: review it in
+the sweep like any other text. This skill
 is read-mostly; every fix is shown as a diff and confirmed before it is made, and nothing is pushed or
 published without explicit confirmation (safety rule).
 

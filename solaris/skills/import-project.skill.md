@@ -88,12 +88,18 @@ into the generic `<pack>/instructions.md`.
   `CLAUDE.md` `@AGENTS.md` shim - `revs ff` below writes `AGENTS.md`; no `.cursor/` / `mcp.json.example` /
   `.gitignore`), the gitignored runtime MCP (`.mcp.json` + `.cursor/mcp.json` from the framework root
   `mcp.json.example` plus any plugin servers). Seed `<pack>/defaults.json` from
-  `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it),
+  `solaris/templates/ai-pack/ai/defaults.json` (committed behavior defaults - the pack rules read it) and
+  `<pack>/directions.md` from the template's `directions.md` (owner-directions log; `{{NAME}}` filled),
   materialize the managed pack files (`uv run -m solaris.tools.revs ff --dir projects/<slug>` writes the
   root `AGENTS.md`, `<pack>/engineer.agent.md`, `<pack>/rules/`, `skills/`, `info/` and `<pack>/README.md`,
   the pack overview, with every placeholder rendered, `{{PACK}}` (the pack folder name) included - let it
   write them, since a hand-filled copy that differs by one byte classifies as a conflict), and
   record the revisions baseline (`uv run -m solaris.tools.revs baseline --dir projects/<slug>`).
+- Role personas (only when the user describes distinct agent roles): copy
+  `solaris/templates/agents/role.agent.md`, or the ready-made `worker.agent.md` / `reviewer.agent.md`
+  beside it, to `<pack>/<role>.agent.md`; fit it with the user, validate
+  (`uv run -m solaris.tools.agents --check --dir projects/<slug>`), then re-run `revs ff` + `revs baseline`
+  so the pack README lists it.
 - Seed the project's own version (root `.version` file): adopt the highest existing semver `v*` git tag
   if the imported repo has them; else `1.0.0` if it has already shipped to users/partners (ask when
   unclear), else `0.1.0`. `uv run -m solaris.tools.version project-set --dir projects/<slug> <X.Y.Z>`.

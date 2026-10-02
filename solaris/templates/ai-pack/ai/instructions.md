@@ -67,9 +67,25 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
 - Concrete hosts/paths/ports live in `<pack>/.memory/resources.md`; procedures here reference them generically.
 - Deploy with `rsync` (excludes per the safety policy: `.venv`, `.git`, secrets, build artifacts; no
   `--delete` by default). Create the remote parent first (`ssh <host> mkdir -p <parent>`) - some rsync
-  builds (macOS openrsync) do not create nested remote dirs.
+  builds (macOS openrsync) do not create nested remote dirs. To a root login, add `--no-owner --no-group`:
+  `-a` copies this machine's owner and group onto the files, which then belong to some other user there.
 - **Stream remote output live** (run in a tmux session and read the screen with `capture-pane`, or stream
   to the terminal) rather than redirecting to a file and polling it.
+- **Detached jobs end with a per-run done marker** (a file the job writes as its last step); poll for that
+  file. Over ssh, `pgrep -f <pattern>` matches the polling command's own command line, so it never reports
+  the job finished, and `pkill -f <pattern>` kills its own shell; an END line in an appended log may be an
+  earlier run's.
+- **Shell traps:** `a && nohup b &` puts `a` in the background too, with empty stdin (a `cat > file` there
+  writes an empty file) - write `a; nohup b > log 2>&1 &`, or run `a` in a call of its own. An ssh inside a
+  loop or a heredoc script needs `-n`, or it swallows the rest of the input. Quote heredocs that write
+  generated text (`<<'EOF'`): an unquoted one expands every `$` and runs every backticked command in it.
+- Model servers, notebooks and container daemons listen on `127.0.0.1` only (publish container ports as
+  `-p 127.0.0.1:<port>:<port>`; a bare `-p` opens every interface); reach them through an ssh tunnel
+  (`ssh -L <port>:127.0.0.1:<port> <host>`), never a public port.
+- **Bulk copies:** copy host to host rather than through this machine (forward a temporary
+  `ssh-agent -t <secs>` that holds only the key the copy needs, and kill it afterwards); split big files
+  into parallel ranges; start parallel ssh connections a few seconds apart - sshd starts dropping new ones
+  once about 10 are still logging in (its default `MaxStartups`).
 - Leave the host as you found it: stop what you started, and keep any footprint under one project dir.
 
 ## Runtime Notes & Gotchas
@@ -90,4 +106,13 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
 
 - Default working style: terse responses; tables when comparing options; lead with an
   explicit recommendation; give the bare command first, then variants.
+- **Third-party pickle files run code when loaded** (`*.pkl`, many model checkpoints): inspect one with
+  `pickletools` first (it reads the opcodes, runs nothing), load it through an unpickler whose `find_class`
+  admits only the classes it needs, and keep torch's `weights_only` on (allowlist a missing class with
+  `torch.serialization.add_safe_globals` rather than turning it off).
+- **Validate a config change by running the tool that consumes it**, not by reading the file back or
+  probing an API by hand.
+- (Optional) **AI spending limit:** the owner may set an approximate daily limit for this project, in
+  dollars, as `"ai.daily_budget_usd"` in `<pack>/.memory/config.json`; under a Solaris checkout,
+  `uv run -m solaris.tools.ai_spend` checks the day's spend against it.
 - (add project-specific conventions here as you learn them)

@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # Info: Model Tiers <!-- omit in toc -->
 
@@ -35,8 +35,8 @@ As of **2026-09-30** (re-verify per "Keeping This Current"):
 
 **Avoid Fable 5.x** (owner direction 2026-09-30, standing): Fable 5 and 5.1 are not used unless the owner explicitly
 asks. The owner rates them less capable than Opus 5.5, and they cost more ($10/$50 vs $4/$20 per million tokens).
-Frontier-tier work runs on Opus 5.5 at `xhigh` or `max` effort; in Claude Code pass `model: opus` (an agent
-definition can also pin `effort:`).
+Frontier-tier work runs on Opus 5.5 at `xhigh` or `max` effort; in Claude Code pass `model: opus` on each
+launch and run the session at that effort (Solaris keeps roles in harness-agnostic briefs, no agent definitions).
 
 Notes: Anthropic's own guidance (overridden here by the owner: see Avoid Fable 5.x) is to start with Opus 5.5 for
 most work and step up to Fable 5.1 for
@@ -58,8 +58,8 @@ session model. The OpenAI / xAI column gives API model ids for harnesses that ta
 Where the harness takes a reasoning effort per delegated call (Cursor: a model-ID suffix,
 `<model-id>[effort=high]`), match it to the tier: cheap -> `low`, mid -> the model's default, high ->
 `high`, frontier -> `xhigh`/`max` (model-dependent; Haiku 4.5 has no effort setting). Claude Code has
-no per-call knob: subagents run at the session's effort (set with `/effort` or `--effort`) unless
-their agent definition sets `effort:`; sessions on Opus 5.5 and Sonnet 5.5 default to `medium`
+no per-call knob: subagents run at the session's effort (set with `/effort`, `--effort` or the
+`effortLevel` setting; Solaris uses no agent definitions to pin it); sessions on Opus 5.5 and Sonnet 5.5 default to `medium`
 (Fable 5.1: `high`), so raise it for judgment-heavy work. Leave extended thinking ON wherever it is
 available - never worth toggling off per task.
 

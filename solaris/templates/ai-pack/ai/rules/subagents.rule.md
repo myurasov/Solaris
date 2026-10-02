@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # Rule: Subagents (Bulk-Read Floor + Leveled Delegation) <!-- omit in toc -->
 
@@ -25,9 +25,9 @@ dump) and the session continues afterward, run it in a subagent - read-only agen
 sweeps, read-write only when it must write - returning the synthesized answer (named facts,
 quotes, file:line pointers), never raw dumps. At economy level `full` the threshold tightens to
 ~10k. Floor tiering, regardless of posture: mechanical sweeps run on the cheapest tier at low
-effort (names: `{{PACK}}/info/model-tiers.md`); keep the session model for judgment-heavy synthesis.
-Independent sweeps launch in one parallel batch (the batching floor in
-`{{PACK}}/rules/token-economy.rule.md`).
+effort (a project or plugin rule may raise it; names: `{{PACK}}/info/model-tiers.md`); keep the
+session model for judgment-heavy synthesis. Independent sweeps launch in one parallel batch (the
+batching floor in `{{PACK}}/rules/token-economy.rule.md`).
 
 No subagent tool in this harness (see `{{PACK}}/info/harnesses.md`)? Do not skip the lookup - run it
 checkpointed inline: sliced/grepped reads within the read budget, notes accumulated in a scratch
@@ -76,12 +76,11 @@ parallel batch. Before starting any multi-step lookup or mechanical task inline,
 not a subagent?" - proceed inline only on a carve-out below. Repeatedly doing delegable work
 inline is a defect - notice and correct it.
 
-Delegation buys **context headroom**, not one-shot savings: raw reads die with the subagent,
-which compounds across every later round-trip - but delegating short work measured 7-22% MORE
-than inline (each spawn pays a fresh system prompt). Delegate for long-session headroom,
-wall-clock parallelism, and tier arbitrage. For a mechanical sweep over greppable material, a
-single batched shell call (`{{PACK}}/rules/token-economy.rule.md`, batching floor) protects context
-cheaper still - delegate when the work needs judgment per item, when raw volume would flood a
+Delegation buys context room, parallelism and cheaper tiers, not one-shot savings: raw reads die
+with the subagent, which pays off on every later round-trip, but delegating short work measured
+7-22% MORE than inline (each spawn pays a fresh system prompt). A mechanical sweep over greppable
+material is cheaper still as one batched shell call (`{{PACK}}/rules/token-economy.rule.md`,
+batching floor); delegate when the work needs judgment per item, when raw volume would flood a
 continuing session, or when independent sub-questions can run in parallel.
 
 ## Task Contract (Every Delegated Prompt)
@@ -92,7 +91,9 @@ A delegated task must be executable by a weaker model. Every subagent prompt car
 2. **Exact procedure** - which tools/commands, in what order, with the project's known invocations
    (from `{{PACK}}/instructions.md`) spelled out, not rediscovered.
 3. **Exact return shape** - named facts, file:line pointers, a verdict, a table; never raw dumps.
-4. **Boundaries** - read-only vs write, what not to touch, any confidentiality rules in scope.
+4. **Boundaries** - read-only vs write, what not to touch, any confidentiality rules in scope. A
+   subagent writes only in its own scratch subfolder plus the files its brief names, and calls the
+   existing `/tmp` wrappers but never creates one (only the main session does).
 5. **Active modes restated** - subagents do not see this pack's always-on rules; restate any
    active mode that shapes the deliverable (the economy level, YAGNI, requested word counts,
    output conventions). Subagents follow the token-economy floor too - bulk reads in a helper are
@@ -100,6 +101,10 @@ A delegated task must be executable by a weaker model. Every subagent prompt car
 
 If a task cannot be phrased this way, split it until it can - or keep it inline only when judgment
 is genuinely inseparable from the reading.
+
+**Long work** (durable delegation): a brief file per job, written before launch, pointing to a shared
+rules file; a status file updated at milestones; a hard return time. A run over about 30 minutes
+returns "launched"; the delegator resumes when its done marker appears.
 
 ## Model Tiering
 
@@ -117,6 +122,14 @@ class, then read the active posture's column:
 | Judgment-heavy (anything acted on directly) | session model, or inline | session model, never below high |
 
 In doubt at `cost`, take the cheaper tier; in doubt at `quality`, the stronger one.
+
+Roles are harness-agnostic briefs (`{{PACK}}/<role>.agent.md`); never create harness-specific agent or
+rule files (`.claude/agents/`, `.cursor/rules/`, `.opencode/agents/`), but a harness's mechanisms
+(hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`
+and `effort` (low|medium|high|xhigh|max): pass the tier's model on every launch, never the default,
+and the effort where the harness takes it per launch (Cursor: an `[effort=...]` model suffix). Where
+effort is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), run the
+session at least at the highest effort its briefs declare, and tell the owner when it is lower.
 
 ## Stopped or Failed Subagents (Always-On)
 
@@ -143,6 +156,6 @@ trajectories into its context, and it describes them in neutral terms.
 
 - Single reads of known-small files, or one sliced/grepped read - spin-up costs more than it saves.
 - Steps whose output the very next decision depends on, completing in one round-trip.
-- Destructive / remote-mutating / outward actions and their confirmations (safety policy) - these
-  never delegate.
+- Confirmations (safety policy) - delegate a confirm-first action only when the brief names it and
+  the owner's approval or standing grant covers it.
 - Work where the deliverable IS the reading (the user asked to see the file).

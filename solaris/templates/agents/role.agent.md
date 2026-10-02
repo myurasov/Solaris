@@ -6,8 +6,9 @@ access: full
 
 <!-- Role brief for `<role>` - lives beside the primary persona as `<pack>/<role>.agent.md`; project content:
      no _Rev. marker, never re-rendered by Solaris. Frontmatter: description (required); tier
-     cheap|mid|high|frontier (the model tier to run it at, names in <pack>/info/model-tiers.md); access
-     read-only|full. Use it by telling a model to act as this file. It inherits the primary persona's
+     cheap|mid|high|frontier (the model tier to run it at, names in <pack>/info/model-tiers.md); effort
+     low|medium|high|xhigh|max (optional: the reasoning effort to run it at; absent, the tier's default);
+     access read-only|full. Use it by telling a model to act as this file. It inherits the primary persona's
      commit, safety, memory, and interaction policies, and shares the pack's one `<pack>/instructions.md`
      (know-how) and `<pack>/.memory/` (short-term, machine-local state) - a role has no store of its own. -->
 
