@@ -1,4 +1,4 @@
-/* rev. 7 */
+/* rev. 8 */
 
 /* ==========================================================================
    Report stylesheet - the plugin-managed base for report styling.
@@ -73,6 +73,7 @@ body.viz-root {
 }
 main { max-width: var(--content-width); margin: 0 auto; }
 p, li { font-size: var(--fs-base); color: var(--ink-1); }
+p, li { text-wrap: pretty; }               /* Chrome avoids a one-word last line (a runt) */
 section p { margin: 0.35em 0; }
 ul { margin: 0.6em 0 0.6em 2em; padding: 0; }
 li { margin: 0.35em 0; }
@@ -151,6 +152,7 @@ th, td {
 }
 th { background: var(--th-tint); font-weight: 500; color: var(--ink-heading); }
 td { font-variant-numeric: tabular-nums; }
+th, td { text-wrap: balance; }             /* even cell lines, so no runt (Chrome balances up to 6 lines) */
 .num { text-align: center; }
 .lft { text-align: left; }  th.lft { text-align: left; }
 .match { font-weight: 500; }               /* emphasized (matching/verdict) values */

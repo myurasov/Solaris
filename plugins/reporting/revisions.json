@@ -57,8 +57,8 @@
       ]
     },
     "shared/assets/style.css": {
-      "rev": 7,
-      "hash": "2a15a28d3474251f0ff895ebf31a346ea949232e3ebdc934825781dc4ed2a2c1",
+      "rev": 8,
+      "hash": "28ca2ce48792842dc646f7c73e8d9b830d780f55c97ef215c67e4d3af3e037f5",
       "history": [
         {
           "rev": 1,
@@ -87,6 +87,10 @@
         {
           "rev": 7,
           "hash": "2a15a28d3474251f0ff895ebf31a346ea949232e3ebdc934825781dc4ed2a2c1"
+        },
+        {
+          "rev": 8,
+          "hash": "28ca2ce48792842dc646f7c73e8d9b830d780f55c97ef215c67e4d3af3e037f5"
         }
       ]
     },
