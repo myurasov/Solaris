@@ -137,6 +137,7 @@ def test_load_role_validation(tmp_path):
         "nodesc.agent.md": ("---\ntier: mid\n---\nbody\n", "description"),
         "unknown.agent.md": ("---\ndescription: x\nmode: primary\n---\nbody\n", "unknown frontmatter key"),
         "tier.agent.md": ("---\ndescription: x\ntier: huge\n---\nbody\n", "tier must be"),
+        "effort.agent.md": ("---\ndescription: x\neffort: extreme\n---\nbody\n", "effort must be"),
         "access.agent.md": ("---\ndescription: x\naccess: rw\n---\nbody\n", "access must be"),
         "empty.agent.md": ("---\ndescription: x\n---\n\n", "empty"),
         "nofm.agent.md": ("# just a heading\n", "missing frontmatter"),
@@ -153,7 +154,11 @@ def test_load_role_validation(tmp_path):
                                    encoding="utf-8")
     r = A.load_role(d / "ok.agent.md", "engineer")
     assert (r.name, r.description, r.tier, r.access, r.source) == ("ok", "Quoted: yes", "mid", "full", "ai/ok.agent.md")
-    assert r.body.startswith("**Owns:**")
+    assert r.body.startswith("**Owns:**") and r.effort is None
+    for effort in A.EFFORTS:
+        (d / "deep.agent.md").write_text(f"---\ndescription: x\ntier: high\neffort: {effort}\n---\n\nbody\n",
+                                         encoding="utf-8")
+        assert A.load_role(d / "deep.agent.md", "engineer").effort == effort
 
 
 def test_check_cli(tmp_path, capsys):
@@ -313,12 +318,15 @@ def test_brief_edge_cases(tmp_path):
     assert "INVALID" in R._agents_block({}, proj)   # a directory renders as an invalid brief, never a traceback
 
 
-def test_role_stub_validates(tmp_path):
+def test_role_stubs_validate(tmp_path):
+    # Every shipped role template (the blank stub and the ready-made roles) passes --check as a brief.
     proj = _project(tmp_path)
-    stub = (TEMPLATE_DIR.parent / "agents" / "role.agent.md").read_text(encoding="utf-8")
-    (proj / "ai" / "scout.agent.md").write_text(stub, encoding="utf-8")
+    stubs = sorted((TEMPLATE_DIR.parent / "agents").glob("*.agent.md"))
+    assert "role.agent.md" in [s.name for s in stubs]
+    for stub in stubs:
+        (proj / "ai" / stub.name).write_text(stub.read_text(encoding="utf-8"), encoding="utf-8")
     prim, roles, problems = A.load_personas(proj)
-    assert [r.name for r in roles] == ["scout"] and not problems
+    assert [r.name for r in roles] == [s.name[: -len(".agent.md")] for s in stubs] and not problems
     assert A.main(["--dir", str(proj)]) == 0
 
 

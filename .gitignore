@@ -32,7 +32,6 @@ solaris/spec/references/
 
 # Claude Code: keep project settings tracked, ignore per-user local overrides
 .claude/settings.local.json
-.claude/agents/
 
 .playwright*
 

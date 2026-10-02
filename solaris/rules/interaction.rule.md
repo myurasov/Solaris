@@ -19,3 +19,7 @@ How to talk to and write for the owner - chat, docs, reports. Applies always, in
 - **Explain jargon inline**: each technical term/acronym gets a ~10-15-word parenthetical on first use,
   e.g. "SDPA (PyTorch's fused attention: the whole attention math in one GPU operation)".
 - Markdown docs: Title Case headings; reader-facing docs carry a TOC (`solaris.tools.toc` maintains it).
+- **Times come from the clock**: every time you write (brief, plan, report, context) is read from the clock
+  in the same step, never recalled or estimated. Owner-facing times use the owner's timezone
+  (`"owner.timezone"` in `.memory/config.json`, an IANA name such as `Europe/London`; absent = the
+  machine's local zone); logs stay UTC.

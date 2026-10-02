@@ -7,8 +7,9 @@ The ai-pack is the project's pack folder, ``<pack>/`` below: ``aipack/`` by defa
 before 0.39.0, any plain folder name in general (solaris.tools.pack finds it). It has one **primary persona** -
 ``<pack>/<primary>.agent.md``, ``engineer`` by default, renamed through ``<pack>/manifest.json`` ->
 ``agents.primary`` - and any number of **role personas**, each a brief ``<pack>/<role>.agent.md`` right beside
-it: a small YAML frontmatter (``description`` required; optional ``tier`` cheap|mid|high|frontier and
-``access`` read-only|full) above the markdown brief itself. Every ``<pack>/*.agent.md`` other than the
+it: a small YAML frontmatter (``description`` required; optional ``tier`` cheap|mid|high|frontier,
+``effort`` low|medium|high|xhigh|max and ``access`` read-only|full) above the markdown brief itself; a
+delegator runs the brief at that tier and effort (subagents rule). Every ``<pack>/*.agent.md`` other than the
 primary's is a role. All personas read and maintain the one shared instructions store,
 ``<pack>/instructions.md`` (persistent, committable know-how: procedures, gotchas, lessons); short-term and
 machine-local state lives in the pack's ``.memory/``. A role is used by telling a model to act as its brief
@@ -45,8 +46,9 @@ from solaris.tools import revs as R
 
 ROLE_RE = R.ROLE_RE
 TIERS = ("cheap", "mid", "high", "frontier")
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
 ACCESS = ("read-only", "full")
-ROLE_KEYS = {"description", "tier", "access"}
+ROLE_KEYS = {"description", "tier", "effort", "access"}
 INSTRUCTIONS = "instructions.md"   # <pack>/instructions.md: the one shared instructions store
 ENTRY_FILES = ("AGENTS.md", "CLAUDE.md")   # project-root files --rename-pack rewrites
 SKIP_DIRS = {"node_modules"}   # never scanned for old pack paths, nor hidden or __* folders (data, output)
@@ -61,6 +63,7 @@ class Persona:
     description: str
     tier: "str | None" = None
     access: str = "full"
+    effort: "str | None" = None
     body: str = ""
     source: str = ""            # pack-relative path of the brief
     primary: bool = False
@@ -137,13 +140,16 @@ def load_role(path: Path, primary: str) -> Persona:
     tier = fields.get("tier") or None
     if tier is not None and tier not in TIERS:
         raise ValueError(f"{where}: tier must be one of {'|'.join(TIERS)}, got {tier!r}")
+    effort = fields.get("effort") or None
+    if effort is not None and effort not in EFFORTS:
+        raise ValueError(f"{where}: effort must be one of {'|'.join(EFFORTS)}, got {effort!r}")
     access = fields.get("access") or "full"
     if access not in ACCESS:
         raise ValueError(f"{where}: access must be one of {'|'.join(ACCESS)}, got {access!r}")
     if not body.strip():
         raise ValueError(f"{where}: the brief body (below the frontmatter) is empty")
-    return Persona(name=name, description=" ".join(desc.split()), tier=tier, access=access, body=body,
-                   source=where)
+    return Persona(name=name, description=" ".join(desc.split()), tier=tier, access=access, effort=effort,
+                   body=body, source=where)
 
 
 # ----------------------------------------------------------------- pack reading
