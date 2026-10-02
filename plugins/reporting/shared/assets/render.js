@@ -1,4 +1,4 @@
-// rev. 4
+// rev. 5
 
 // Render a report HTML to PDF in the Co-SA document style - ZERO npm deps.
 // Drives the installed Google Chrome over the DevTools protocol using Node's
@@ -18,7 +18,11 @@
 // After rendering, check.js reports half-empty pages and runts (non-fatal).
 // Project-owned config `report.json` next to the OUTPUT pdf (all optional):
 //   { "prepared_by": "...", "watermark": "...", "furniture_font": "..." }
-// Chrome binary: $CHROME overrides the default macOS path.
+// Chrome binary: $CHROME overrides the default macOS path. Only when Chrome says it cannot set up its sandbox
+// ("No usable sandbox" on Linux hosts that block unprivileged user namespaces, a broken SUID helper, running as
+// root) does the render retry once with --no-sandbox, on a fresh profile and with every network load refused
+// (only local HTML is rendered); RENDER_NO_SANDBOX=1 goes straight to that mode. Node 22+ is required (built-in
+// WebSocket).
 // Chrome cannot vary headers per page, so page 1 and pages 2+ render as two
 // passes over the same layout and are concatenated.
 const fs = require('fs');
@@ -26,8 +30,17 @@ const os = require('os');
 const path = require('path');
 const { spawn, execFileSync } = require('child_process');
 
+if (Number(process.versions.node.split('.')[0]) < 22) {
+  console.error(`render.js needs Node 22+ (built-in WebSocket); this is ${process.version}. Put a Node 22+ first `
+    + 'on PATH (render.sh also tries ~/.solaris/render/node/bin).');
+  process.exit(2);
+}
+
 const CHROME = process.env.CHROME ||
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+// Chrome's stderr when it cannot set up its sandbox - the only start failure retried with --no-sandbox
+const SANDBOX_FAILED =
+  /No usable sandbox|SUID sandbox helper binary|Failed to move to new namespace|Running as root without --no-sandbox/;
 // Scratch space (Chrome profile + intermediate PDFs) - kept outside the project.
 const TMP_ROOT = path.join(os.homedir(), '.solaris', 'tmp');
 
@@ -161,28 +174,64 @@ function cdp(ws) {
 (async () => {
   fs.mkdirSync(TMP_ROOT, { recursive: true });
   const tmp = fs.mkdtempSync(path.join(TMP_ROOT, 'render-'));
-  const chrome = spawn(CHROME, [
-    '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${tmp}`,
-    '--no-first-run', '--disable-extensions', 'about:blank',
-  ], { stdio: ['ignore', 'ignore', 'pipe'] });
-
-  const wsUrl = await new Promise((resolve, reject) => {
-    let buf = '';
-    const to = setTimeout(() => reject(new Error('Chrome did not start')), 20000);
-    chrome.on('error', e => {
-      clearTimeout(to);
+  // start Chrome on a fresh profile folder and wait for its DevTools endpoint: { proc, wsUrl },
+  // or { log } (its stderr) when it exits or stalls before that
+  const startChrome = noSandbox => new Promise((resolve, reject) => {
+    const profile = fs.mkdtempSync(path.join(tmp, 'profile-'));
+    const proc = spawn(CHROME, [
+      '--headless=new', '--remote-debugging-port=0', `--user-data-dir=${profile}`,
+      '--no-first-run', '--disable-extensions',
+      // unsandboxed: resolve no host names (http/https requests are also refused over CDP below)
+      ...(noSandbox ? ['--no-sandbox', '--host-resolver-rules=MAP * ~NOTFOUND'] : []), 'about:blank',
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let log = '', done = false;
+    const finish = v => {
+      if (done) return;
+      done = true; clearTimeout(to);
+      if (!v.wsUrl) proc.stderr.destroy(); // a failed start: stop reading, even if a leftover helper holds stderr
+      resolve(v);
+    };
+    const to = setTimeout(() => { proc.kill(); finish({ log, timedOut: true }); }, 20000);
+    proc.on('error', e => {
+      done = true; clearTimeout(to);
       reject(new Error(`Chrome did not start: ${e.message} (set $CHROME to the Chrome binary)`));
     });
-    chrome.stderr.on('data', c => {
-      buf += c;
-      const mm = buf.match(/DevTools listening on (ws:\/\/\S+)/);
-      if (mm) { clearTimeout(to); resolve(mm[1]); }
+    // 'close' comes once stderr is drained; the grace covers helper processes that keep it open
+    proc.on('close', () => finish({ log }));
+    proc.on('exit', () => { if (!done) setTimeout(() => finish({ log }), 1000); });
+    proc.stderr.on('data', c => {
+      log += c;
+      const mm = log.match(/DevTools listening on (ws:\/\/\S+)/);
+      if (mm) finish({ proc, wsUrl: mm[1] });
     });
   });
+  let noSandbox = process.env.RENDER_NO_SANDBOX === '1';
+  if (noSandbox) console.error('note: RENDER_NO_SANDBOX=1 - rendering with --no-sandbox, network loads blocked');
+  let started = await startChrome(noSandbox);
+  if (!started.wsUrl && !noSandbox && SANDBOX_FAILED.test(started.log)) {
+    console.error('note: Chrome could not set up its sandbox; retrying with --no-sandbox, network loads blocked');
+    noSandbox = true;
+    started = await startChrome(true);
+  }
+  if (!started.wsUrl) {
+    const tail = started.log.trim().split('\n').slice(-5).join('\n');
+    throw new Error(`Chrome did not start${started.timedOut ? ' within 20 s' : ''}${noSandbox ? ' with --no-sandbox' : ''}`
+      + ` (set $CHROME to the Chrome binary)${tail ? `; its stderr ends:\n${tail}` : ''}`);
+  }
+  const { proc: chrome, wsUrl } = started;
 
   const ws = new WebSocket(wsUrl);
   await new Promise((res, rej) => { ws.onopen = res; ws.onerror = rej; });
   const c = cdp(ws);
+  if (noSandbox) {
+    // refuse every http(s) request from any target, set up before the page starts loading
+    c.on(msg => {
+      if (msg.method !== 'Fetch.requestPaused') return;
+      c.send('Fetch.failRequest', { requestId: msg.params.requestId, errorReason: 'BlockedByClient' }, msg.sessionId)
+        .catch(() => {});
+    });
+    await c.send('Fetch.enable', { patterns: [{ urlPattern: 'http://*' }, { urlPattern: 'https://*' }] });
+  }
 
   const { targetId } = await c.send('Target.createTarget', { url: 'file://' + htmlPath });
   const { sessionId } = await c.send('Target.attachToTarget', { targetId, flatten: true });

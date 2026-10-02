@@ -1,5 +1,5 @@
 #!/bin/sh
-# rev. 2
+# rev. 3
 # Render report HTML sources (reports/html/<slug>.html) to PDFs (reports/<slug>.pdf).
 # Run from the project root or from the reports/ dir:
 #
@@ -27,9 +27,14 @@ done
 [ -z "$(echo $SLUGS)" ] && SLUGS=$(ls "$HTML"/*.html 2>/dev/null | sed 's|.*/||; s|\.html$||')
 [ -z "$(echo $SLUGS)" ] && { echo "render.sh: no HTML sources in $HTML/"; exit 1; }
 
+# render.js needs Node 22+: use PATH's node when new enough, else the user-level one in ~/.solaris/render
+NODE=node
+if ! node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' 2>/dev/null \
+   && [ -x "$HOME/.solaris/render/node/bin/node" ]; then NODE="$HOME/.solaris/render/node/bin/node"; fi
+
 FAILED=0
 render_one() {
-  node "$SELF/render.js" "$HTML/$1.html" "$RDIR/$1.pdf" || FAILED=1
+  "$NODE" "$SELF/render.js" "$HTML/$1.html" "$RDIR/$1.pdf" || FAILED=1
 }
 
 render_all() {

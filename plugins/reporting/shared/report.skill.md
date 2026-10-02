@@ -10,7 +10,7 @@ summary: Author and render a project findings report - HTML source in
   pages, runts). Styling/rendering tooling is this plugin's assets/; theme and page
   furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
@@ -32,6 +32,12 @@ reproductions, optimization experiments, phase summaries, finals). **Living over
 documents** are updated the same turn new results land - refresh their
 graphs/tables/status and bump their Rev. One self-contained HTML file per report; the PDF
 is a render artifact of that HTML, never hand-edited.
+
+**Living documents** (these overviews and any PDF rebuilt again and again, hourly or on
+events: a live plan, a status page, a progress report updated with every result) get the
+render and its automated layout check (`check.js`) only at each rebuild: fix what the check
+lists, but no page-by-page visual check, by eye or with a vision model. One-off reports keep
+the visual check (Page Layout, Checklist Before Done).
 
 ## Files and Naming
 
@@ -232,11 +238,13 @@ re-render after each round.
   vanishes at the top and bottom of a page and the figure stays on its page. Margins inside
   a grid row are not dropped - `.fig-row` carries its own. Neighboring margins collapse (the
   larger wins), so judge a spacing change in the PDF, not in the CSS.
-- **Optional visual check**: rasterize the pages into a scratch folder
+- **Visual check (one-off reports only)**: the look at every page in Checklist Before Done.
+  To automate it, rasterize the pages into a scratch folder
   (`mkdir -p $HOME/.solaris/tmp/<slug>-pages`, then
   `pdftoppm -r 100 -png reports/<slug>.pdf $HOME/.solaris/tmp/<slug>-pages/p`)
   and have a vision model (the `aisee` or `visual-qa` plugin) assert "No text on this page
-  overlaps other text or graphics" for each page (about 1-2 s per page).
+  overlaps other text or graphics" for each page (about 1-2 s per page). Living documents
+  skip it (When to Use): their rebuilds stop at the layout check.
 
 ## Rendering the PDF
 
@@ -258,9 +266,10 @@ body - the render script owns all page furniture.
 
 1. HTML opens correctly in a browser (TOC anchors jump; any diagrams render).
 2. PDF re-rendered from the final HTML; the layout check reports 0 half-empty pages (last
-   page excepted) and 0 runts; open it and eyeball every page: header/footer slots, no
-   orphaned headings, no hanging table headers, captions in plain words, no highlighted
-   rows, no paragraph over ~60 words.
+   page excepted) and 0 runts. For a one-off report, open it and eyeball every page:
+   header/footer slots, no orphaned headings, no hanging table headers, captions in plain
+   words, no highlighted rows, no paragraph over ~60 words. A living document stops at the
+   layout check (no page-by-page look).
 3. PDF committed (with this skill rev-bumped if a rule changed);
    report referenced from the project README's results section when it is a milestone.
 4. Log the interaction; update the project's living plan/status doc with the milestone.
