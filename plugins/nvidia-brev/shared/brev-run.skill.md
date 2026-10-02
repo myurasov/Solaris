@@ -5,11 +5,11 @@ triggers:
   - "train on brev" / "provision and train" / "remote training run"
 summary: Full autonomous lifecycle for running project workloads on Brev cloud GPUs -
   pick and create the instance, ship the payload, set up, run + monitor the job, pull
-  results back, ALWAYS tear down, and append the mandatory cost-ledger row. Assumes an
-  authenticated CLI (else run brev-setup first). Deep CLI reference: the plugin's
-  brev-cli/ upstream mirror.
+  results back, ALWAYS tear down (stop an instance reused within about a day, delete
+  the rest), and append the mandatory cost-ledger row. Assumes an authenticated CLI
+  (else run brev-setup first). Deep CLI reference: the plugin's brev-cli/ upstream mirror.
 ---
-_Rev. 17_
+_Rev. 18_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -49,7 +49,7 @@ read the upstream directly at `github.com/brevdev/brev-cli` under `.agents/skill
    pass `--timeout 900` for slow boots). Name convention: `<project-or-org-prefix>-<job>`.
 4. Record start time + $/h at creation. **Every instance gets a row in
    `<pack>/.memory/brev-costs.md`** (created/deleted UTC, rate, hours, cost, purpose) - appended
-   at teardown, including aborted attempts. The run report must state the actual cost.
+   when it is deleted, including aborted attempts. The run report must state the actual cost.
 
 Ledger template (`<pack>/.memory/brev-costs.md`):
 
@@ -65,8 +65,9 @@ rate, actual cost (billed while the instance exists, incl. setup/idle).
 ```
 
 Keep the **TOTAL** row as the last line: update its hours/cost/count when appending an
-instance row, and note still-running instances (rate + start time) in its outcome cell
-until their rows land at teardown.
+instance row, and note still-running and stopped instances (rate + start time; for a
+stopped one also when it stopped and the reuse it waits for) in its outcome cell until
+their rows land at deletion.
 
 ## 2. Ship the payload
 
@@ -115,10 +116,21 @@ until their rows land at teardown.
 1. Pull results to their canonical project location - metrics, logs, and **always both
    trained checkpoints (`best.pt` and `last.pt`)**: weights enable re-evaluation and reuse
    later; once the instance is deleted they are gone.
-2. `brev delete <name>` - **unconditional**, also on failure/abort paths. Verify with
-   `brev ls` that nothing from this job lingers (also check stopped instances and any
-   launchables created along the way - stopped is not free on all providers).
-3. Append the ledger row (created/deleted UTC, hours, actual cost, outcome). **Verify the
+2. Tear down - **always**, also on failure/abort paths, in one of two ways:
+   - **Stop** (`brev stop <name>`) an instance you will reuse within about a day: the
+     next run is planned and due by then, and the provider supports stop. Its root disk
+     survives (venv, payload, caches; ephemeral NVMe data does not), so the restart
+     (about 12 minutes back to SHELL READY) skips setup and staging, and billing drops to
+     its storage. Note the stop and the planned reuse in the ledger's TOTAL row; when
+     that reuse has not started by its time, delete the instance.
+   - **Delete** (`brev delete <name>`) every other instance: the default, and always
+     when the next use is unplanned or more than about a day away.
+
+   Verify the teardown with `brev ls` in the SAME turn: a deleted instance is gone, a
+   stopped one shows STOPPED, and nothing else from this job lingers (also check any
+   launchables created along the way).
+3. Append the ledger row (created/deleted UTC, hours, actual cost, outcome) once the
+   instance is deleted; a stopped one stays noted in the TOTAL row until then. **Verify the
    cost against actual billing** rather than estimating from wall-clock x rate - Brev bills
    per-second on RUNNING time only (BUILDING/provisioning is free; no hour round-up), so
    estimates overshoot. Actuals per instance:
@@ -188,8 +200,9 @@ until their rows land at teardown.
   from the instance), with the brev key (`~/.brev/brev.pem`).
 - Billing model (observed): per-second, RUNNING state only - slow BUILDING costs nothing,
   and an advertised $/h may appear in the usage feed split into components at fractional
-  rates (sum matches). A STOPPED instance still accrues storage charges indefinitely -
-  stopped is not free; delete, don't stop, when done.
+  rates (sum matches). A STOPPED instance still accrues storage charges until it is
+  deleted - stopped is not free: stop only an instance you will reuse within about a day
+  (step 5), and delete the rest.
 - Stop/start (verified on gcp): the disk persists (venv/payload intact) but the **public IP
   changes** - re-run `brev refresh` and re-resolve the direct endpoint after every restart,
   and re-authorize nothing (keys ride the disk). Restart back to SHELL READY took ~12 min;
@@ -209,16 +222,19 @@ until their rows land at teardown.
   type". A piped `brev search ... | brev create <name>`, as the upstream examples show,
   then falls back silently to create's default types, so the instance is not the one
   picked. Pass one explicit `--type`, and check the type `brev ls` shows.
-- A `brev delete` can be lost without a trace when the agent session/harness restarts around
-  the call (field incident: a lost delete billed ~50 extra minutes). Verify every delete with
-  `brev ls` in the SAME turn it is issued, and make the stray-instance check the first action
-  after any session restart - the same discipline as the end-of-session teardown check.
+- A `brev delete` (or `brev stop`) can be lost without a trace when the agent session/harness
+  restarts around the call (field incident: a lost delete billed ~50 extra minutes). Verify
+  every delete and stop with `brev ls` in the SAME turn it is issued, and make the
+  stray-instance check (running instances, and stopped ones past their planned reuse) the
+  first action after any session restart - the same discipline as the end-of-session
+  teardown check.
 - Provider switch mid-job is cheap before the payload lands: `brev delete` the laggard,
   `brev create` the alternative - ledger both.
 
 ## Guardrails
 
-- Never leave an instance running unattended without an owner + teardown plan; if the
-  session ends mid-run, the teardown check is the FIRST thing the next session does.
+- Never leave an instance running unattended, or stopped, without an owner + teardown plan
+  (for a stopped one: the reuse it waits for, else its delete); if the session ends
+  mid-run, the teardown check is the FIRST thing the next session does.
 - Confirm with the user before creating instances above ~$15/h or beyond 8 GPUs.
 - All costs come out of the org's budget - always state $/h at creation time.
