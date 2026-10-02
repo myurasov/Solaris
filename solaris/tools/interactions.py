@@ -170,7 +170,9 @@ def read_entries(memory) -> "tuple[list[dict], int]":
 
 
 def last_entry(path) -> "dict | None":
-    """The last JSON object in a log file, reading only its tail unless the tail holds none."""
+    """The newest JSON object (by ts) in a log file's tail, else its last one; the whole file only when the
+    tail holds none. A merged conflict copy appends older lines after newer ones, so the last line is not
+    always the newest."""
     try:
         with open(path, "rb") as fh:
             size = fh.seek(0, os.SEEK_END)
@@ -178,13 +180,20 @@ def last_entry(path) -> "dict | None":
                 start = size - chunk if chunk and size > chunk else 0
                 fh.seek(start)
                 lines = fh.read().split(b"\n")
-                for line in reversed(lines[1:] if start else lines):  # a tail's first line may be cut
+                newest, newest_ts, last = None, None, None
+                for line in lines[1:] if start else lines:  # a tail's first line may be cut
                     try:
                         entry = json.loads(line)
                     except ValueError:
                         continue
-                    if isinstance(entry, dict):
-                        return entry
+                    if not isinstance(entry, dict):
+                        continue
+                    last = entry
+                    ts = parse_ts(entry.get("ts"))
+                    if ts is not None and (newest_ts is None or ts >= newest_ts):
+                        newest, newest_ts = entry, ts
+                if last is not None:
+                    return newest or last
                 if not start:
                     break
     except OSError:
@@ -316,11 +325,17 @@ def cmd_who(a) -> int:
         stamp = r["ts"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["ts"] else "-"
         project = f"  [{r['project']}]" if r["project"] else ""
         print(f"{label:<24} {stamp}  {_age(r['ts'], now)}{project}")
-        if r["machine"] not in ("-", me) and r["ts"] and now - r["ts"].timestamp() <= a.minutes * 60:
+        # The history file is read-only now, so a recent line there means a session still on older
+        # instructions, on a machine we cannot name: count it as activity too.
+        if r["machine"] != me and r["ts"] and now - r["ts"].timestamp() <= a.minutes * 60:
             busy.append(r)
     scope = "this project" if a.dir else "this checkout"
     for r in busy:
-        print(f"{r['machine']} logged {_age(r['ts'], now)}: {scope} may be in use there (as of the last sync)")
+        if r["machine"] == "-":
+            print(f"history file written {_age(r['ts'], now)}: a session on older instructions may be using "
+                  f"{scope} (machine unknown)")
+        else:
+            print(f"{r['machine']} logged {_age(r['ts'], now)}: {scope} may be in use there (as of the last sync)")
     return 3 if busy else 0
 
 

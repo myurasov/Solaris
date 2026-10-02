@@ -131,6 +131,23 @@ def test_who_flags_another_machine_active_within_the_window(repo, capsys):
     assert "may be in use" not in capsys.readouterr().out
 
 
+def test_who_counts_a_recent_history_write_as_unknown_activity(repo, capsys):
+    project = repo / "projects" / "my" / "demo"
+    history = project / "aipack" / ".memory" / "interactions.jsonl"
+    history.write_text('{"ts": "2026-10-02T11:55:00Z", "project": "demo"}\n', encoding="utf-8")
+    assert I.main(["who", "--dir", str(project)]) == 3
+    assert "history file written 5 min ago: a session on older instructions" in capsys.readouterr().out
+    history.write_text('{"ts": "2026-10-01T11:55:00Z", "project": "demo"}\n', encoding="utf-8")
+    assert I.main(["who", "--dir", str(project)]) == 0
+
+
+def test_last_entry_prefers_the_newest_ts_over_a_merged_older_line(tmp_path):
+    log = tmp_path / "box2.jsonl"
+    log.write_text('{"ts": "2026-10-02T11:57:00Z", "i": 1}\n{"ts": "2026-09-30T08:00:00Z", "i": 2}\n',
+                   encoding="utf-8")
+    assert I.last_entry(log) == {"ts": "2026-10-02T11:57:00Z", "i": 1}
+
+
 def test_last_entry_reads_the_tail_and_skips_a_broken_last_line(tmp_path):
     log = tmp_path / "box1.jsonl"
     filler = "".join(json.dumps({"ts": "x", "i": i}) + "\n" for i in range(3000))  # well past one tail chunk
