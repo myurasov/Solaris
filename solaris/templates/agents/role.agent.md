@@ -10,7 +10,7 @@ access: full
      low|medium|high|xhigh|max (optional: the reasoning effort to run it at; absent, the tier's default);
      access read-only|full. Use it by telling a model to act as this file. It inherits the primary persona's
      commit, safety, memory, and interaction policies, and shares the pack's one `<pack>/instructions.md`
-     (know-how) and `<pack>/.memory/` (short-term, machine-local state) - a role has no store of its own. -->
+     (know-how) and `<pack>/.memory/` (short-term, private state) - a role has no store of its own. -->
 
 **Owns:** what this persona is responsible for delivering.
 

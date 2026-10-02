@@ -17,9 +17,10 @@ framework files for self-improvement. No separate tailor/coder split.
 ## 1. Gather Signal
 
 Read `.memory/instructions.md` (the accumulated operating lessons + user preferences - the **primary** source)
-and `.memory/interactions.jsonl` (framework) and, if relevant, recent `projects/*/*/<pack>/.memory/interactions.jsonl`
-(projects are grouped one level below `projects/`; `<pack>/` is the project's ai-pack folder - default
-`aipack/`, `ai/` in projects made before 0.39.0, any name) and `tasks/*/*/*/notes.md` (tasks live under
+and the interaction logs, every machine's file merged by time: `uv run -m solaris.tools.interactions show
+--last 0 --since <ISO date> --json` (framework) and, if relevant, the same with `--dir projects/<group>/<slug>`
+for a project (projects are grouped one level below `projects/`; `<pack>/` is the project's ai-pack folder -
+default `aipack/`, `ai/` in projects made before 0.39.0, any name) and `tasks/*/*/*/notes.md` (tasks live under
 `tasks/<YYYY>/<MM>/`). Look for: repeated friction, the same manual fix done more than once, skills that
 were hard to follow, missing capabilities the user reached for, and stale or contradictory instructions.
 
@@ -51,4 +52,4 @@ promotes an item from `.memory/instructions.md` into core, **delete that entry f
 
 ## 4. Record
 
-Append a line to `.memory/interactions.jsonl` summarizing what was changed and why.
+Log a turn summarizing what was changed and why: `uv run -m solaris.tools.interactions add --project solaris ...`.

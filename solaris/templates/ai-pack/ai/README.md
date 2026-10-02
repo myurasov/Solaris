@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # {{NAME}} - AI Pack <!-- omit in toc -->
 
@@ -65,7 +65,7 @@ as-is.
 | [`skills/`](skills/) | Trigger-invoked procedures (see [Available Skills](#available-skills)). |
 | [`info/`](info/) | Reference data the rules point at (model tiers, harness capabilities). |
 | `plugins/` | Files added by attached plugins — extra skills and rules per plugin. |
-| `.memory/` | Private, machine-local layer: session context, resources, credentials, logs, the preserved initial spec. Not for sharing. |
+| `.memory/` | Private layer (gitignored): session context, resources, credentials, logs, the preserved initial spec. Not for sharing. |
 
 ### Attached Plugins
 
@@ -86,7 +86,7 @@ itself. A model uses a role by acting as that file: the opening instruction of a
 a whole session. Every persona — primary and roles alike — reads and maintains the one shared
 [`instructions.md`](instructions.md) (persistent, committable know-how; a lesson is written once, by
 whoever learns it, and a role running without write access hands it back in its report) and uses this
-pack's private `.memory/` for short-term, machine-local state. Every role inherits the primary persona's
+pack's private `.memory/` for short-term state. Every role inherits the primary persona's
 policies:
 
 {{AGENTS}}
@@ -94,7 +94,7 @@ policies:
 ## Configuration
 
 Behavior switches live in [`defaults.json`](defaults.json) (committed, shared with the team); a
-private `.memory/config.json` overrides them per key on this machine:
+private `.memory/config.json` overrides them per key in your checkout:
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -190,6 +190,8 @@ Trigger-invoked procedures in this pack — say a trigger phrase to run one:
 
 `.memory/` is the pack's private layer: `context.md` (session context), `resources.md` (your
 machine's hosts and paths), `credentials.md` (secrets — never committed, never echoed),
-`interactions.jsonl` (work log), `config.json` (per-machine switch overrides), and `spec-v0.md`
-(the initial spec, captured at creation). It stays on your machine; everything else in this
-folder is the shareable part of the pack.
+`interactions/` (work log, one `<machine>.jsonl` file per machine so a folder synced between
+machines never has two writers on one file; an older `interactions.jsonl` is read-only history),
+`config.json` (your switch overrides), and `spec-v0.md` (the initial spec, captured at creation).
+It is gitignored and never leaves your own machines; everything else in this folder is the
+shareable part of the pack.

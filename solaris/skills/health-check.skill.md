@@ -36,11 +36,12 @@ demand.
    `notes.md`.
 5. **MCP** - `uv run -m solaris.tools.mcp_sync --check` at the root (fix: `mcp_sync --sync`).
 6. **Framework** - `uv run -m solaris.tools.version current`.
-7. **Interaction log** - spot-check the tail of `.memory/interactions.jsonl`: recent meaningful turns should
-   carry agent-authored `{ts, project, prompt, request, outcome}` entries, not just the hook's
-   `{ts, cwd, ide, prompt}` backstop lines. If full entries are missing for substantive turns, flag it and
-   author them by hand (never run `log_interaction` as a CLI). Likewise nudge if `.memory/instructions.md`
-   looks stale given recent lessons.
+7. **Interaction log** - spot-check `uv run -m solaris.tools.interactions show --last 20` (every machine's file,
+   merged): recent meaningful turns should carry agent-authored `{ts, project, prompt, request, outcome}`
+   entries, not just the hook's `{ts, cwd, ide, prompt}` backstop lines. If full entries are missing for
+   substantive turns, flag it and log them with `interactions add` (never run `log_interaction` as a CLI).
+   `interactions who` shows which machines logged lately. Likewise nudge if `.memory/instructions.md` looks
+   stale given recent lessons.
 
 Print a compact table; end with any recommended actions.
 
@@ -71,11 +72,17 @@ Everything above, plus:
   include loses to the shared list and a `!` exception there never takes effect). Fix: if `.stignore`
   is missing, write `// Device-only rules for this machine go above the include.` and then
   `#include .stglobalignore`; otherwise put the include (adding it if absent) on the last line,
-  keeping every existing line above it. Scan the memory folders the session-start sweep covers
-  (`.memory/` and each project's `<pack>/.memory/`, embedded packs included) for
-  leftover `*.sync-conflict-*`: the sweep merges every `.jsonl` copy (any log, not only
-  `interactions.jsonl`) and keeps one it cannot merge safely for the next start; other copies need a
-  review. `.git` on this machine is expected (each device keeps its own clone; commit only here if
-  this is the clone that owns the repo). `.memory/` must not appear in `.stglobalignore`.
+  keeping every existing line above it. List conflict copies anywhere in the tree:
+  `find . \( -name .git -o -name .venv -o -name node_modules -o -name __data -o -name __out -o -name .stversions \) -prune -o -name '*.sync-conflict-*' -print`.
+  In the memory folders (`.memory/`, each project's `<pack>/.memory/`, embedded packs included, and their
+  `interactions/` folders) the sweep merges every `.jsonl` copy at each session start and prompt, and
+  keeps one it cannot merge safely for the next try; every other copy needs a review (diff it against its
+  file, merge what is missing, then delete it). `.git` on this machine is expected only if this is the
+  machine that holds the repo's clone (git runs only there; see the safety rule). `.memory/` must not
+  appear in `.stglobalignore`. Folder settings: watcher delay (`fsWatcherDelayS`) 2, full rescan
+  (`rescanIntervalS`) 600, `maxConflicts` -1, versioning on (solaris.agent.md, Boundaries); read them from
+  Syncthing's `config.xml` (macOS `~/Library/Application Support/Syncthing/`, Linux
+  `~/.local/state/syncthing/` or `~/.config/syncthing/`) by extracting those fields only - the file holds the
+  API key, so never print it whole.
 
 Report findings grouped as OK / warnings / suggested fixes. Apply nothing without the user asking.

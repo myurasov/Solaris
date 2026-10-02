@@ -161,6 +161,6 @@ Write the project's `.mcp.json` and `.cursor/mcp.json` from the framework root `
 ## 8. Stop + Hand Off
 
 Print what was created. **Do not** generate source or enter planning. Tell the user:
-"Run `develop-project <slug>` to plan and build." Append one line to `.memory/interactions.jsonl`.
+"Run `develop-project <slug>` to plan and build." Log the turn with `uv run -m solaris.tools.interactions add`.
 If this checkout is a Syncthing folder (`.stfolder` present), the root `.stglobalignore` already
 excludes `__data/`, `__out/`, and `.git`; do not add a nested Syncthing folder for the project.

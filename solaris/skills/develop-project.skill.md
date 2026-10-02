@@ -65,6 +65,13 @@ separate `source/`.
 Set the working directory to `projects/<slug>/source/` (local), `projects/<slug>/<repo>/` (embedded), or
 operate over Remote-SSH against `remote.json` (remote-code).
 
+**One machine at a time:** run `uv run -m solaris.tools.interactions who --dir projects/<slug>`. Exit 3 means
+another machine logged work on this project within the last hour (it names the machine and when; the
+reading is as of the last Syncthing sync). Then tell the owner and ask before writing anything under
+`<pack>/.memory/` (`context.md`, schedules, job notes): two machines rewriting one file is what Syncthing
+turns into conflict copies. Offer a handover (the session there saves its context and stops, following the
+pack's `handover` skill) over running both; reading the project meanwhile is fine.
+
 **Workspaces:** when the project has more than one workspace (manifest `project.workspaces`, or the
 workspace table in `<pack>/instructions.md`), determine which one the request targets - from the
 prompt, or ask when ambiguous - and work inside that folder, honoring the self-containment rules in
@@ -91,8 +98,10 @@ Follow the engineer agent's workflows:
   `uv run -m solaris.tools.agents --check --dir projects/<slug>`, and run `revs ff` so `<pack>/README.md` lists
   it; renaming the primary persona is `agents --rename-primary <role>`.
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
-  prompt, `request` your interpretation, `outcome` the result) in **both** the project's
-  `<pack>/.memory/interactions.jsonl` and the framework master `.memory/interactions.jsonl` (all work).
+  prompt, `request` your interpretation, `outcome` the result) with
+  `uv run -m solaris.tools.interactions add --dir projects/<slug> --project <slug> --prompt ... --request ...
+  --outcome ...`: one call writes **both** this machine's file in the project's `<pack>/.memory/interactions/`
+  and the framework master log (all work).
 - **Save context:** keep the project's `<pack>/.memory/context.md` (the detailed session-context summary,
   rewritten in place) current at its save points: before context compaction (automatic or manual), and
   whenever the user says "save/remember/update/retain/keep context" or similar.

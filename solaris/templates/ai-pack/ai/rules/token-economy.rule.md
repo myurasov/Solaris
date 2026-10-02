@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Rule: Token Economy <!-- omit in toc -->
 
@@ -51,8 +51,9 @@ Applies at every level, including `off`:
   files unless editing them.
 - **Unbounded files.** Bounded-by-design files (config, `{{PACK}}/.memory/context.md` - rewritten in
   place) may be read whole. Append-only stores are never read whole: tail-read the latest entries
-  with a negative offset (`{{PACK}}/.memory/interactions.jsonl`), grep for a known id, or filter through
-  a tool. A new unbounded store gets its filtering access path decided before anything starts
+  with a negative offset (each file in `{{PACK}}/.memory/interactions/`, or `uv run -m
+  solaris.tools.interactions show --last N --dir <project>` under Solaris), grep for a known id, or
+  filter through a tool. A new unbounded store gets its filtering access path decided before anything starts
   reading it.
 - **Batching.** Independent tool calls (no data dependency, no decision between them, no shared
   mutated state) go in one parallel batch - never one call per message. A mechanical survey of 4+

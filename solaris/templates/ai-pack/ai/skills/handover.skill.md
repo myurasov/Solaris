@@ -3,7 +3,7 @@ name: handover
 triggers: ["handover", "stop for handover", "pause for handover", "resume after handover"]
 summary: Pause {{NAME}} or hand it to another session or machine without losing work - save context, write a dated handover note, commit, leave remote jobs running - and resume from that note after re-checking hosts, leases and jobs.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: handover - Pause, Hand Over, Resume <!-- omit in toc -->
 
@@ -45,7 +45,8 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
    those you will reuse within about a day, per the owner's rule, and add them to the handover note; list
    the rest, with what they cost, and ask the owner what to do with them.
 7. **Report** in one line: paused at what time, what is still running, and the phrase that resumes. Log the
-   turn in `{{PACK}}/.memory/interactions.jsonl`.
+   turn in this machine's file in `{{PACK}}/.memory/interactions/` (see `engineer.agent.md`, Memory), so a
+   session on another machine can tell when this one stopped.
 
 ## 3. Resume
 

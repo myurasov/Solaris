@@ -82,7 +82,8 @@ into the generic `<pack>/instructions.md`.
 - `<pack>/.memory/context.md` - the session-context summary; seed its `## Session Context` with the import
   session's context (what the codebase is, the code map, run/deploy, gotchas - the working context just
   gathered). Durable orientation also goes into `<pack>/instructions.md`, which survives future rewrites.
-- Seed `<pack>/.memory/interactions.jsonl` (empty). `<pack>/manifest.json` (written in step 2) holds
+- The interaction log needs no seed: the first `interactions add --dir` creates `<pack>/.memory/interactions/`
+  (one file per machine). `<pack>/manifest.json` (written in step 2) holds
   `project.{name,slug,type,mode,description}` - the one-line description feeds the pack README -
   `framework_version` from `version current`, and `plugins`. Write the minimal project root (a one-line
   `CLAUDE.md` `@AGENTS.md` shim - `revs ff` below writes `AGENTS.md`; no `.cursor/` / `mcp.json.example` /
@@ -113,4 +114,4 @@ load-bearing details.
 ## 7. Confirm + Summary
 
 Report detected vs assumed vs needs-your-eyes; point at `<pack>/engineer.agent.md`; suggest
-`develop-project <slug>`. Log one line to `.memory/interactions.jsonl`.
+`develop-project <slug>`. Log the turn with `uv run -m solaris.tools.interactions add`.

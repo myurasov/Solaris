@@ -68,5 +68,5 @@ framework memory around it:
 ## 5. Final Pass + Record
 
 Re-run the step-2 greps clean, show the user a summary of every change made, and stop - pushing /
-transferring is a separate, confirmed action. Log one line to `.memory/interactions.jsonl` (and the
-project's `<pack>/.memory/interactions.jsonl`).
+transferring is a separate, confirmed action. Log the turn with
+`uv run -m solaris.tools.interactions add --dir projects/<slug> ...` (framework and project logs).

@@ -3,7 +3,7 @@ name: init
 triggers: ["init project", "initialize the project", "initialize this project", "set up my environment", "onboard me", "getting started", "register resources"]
 summary: One-time onboarding for a fresh checkout of {{NAME}} - collect environment resources, verify reachability, write the private {{PACK}}/.memory layer, and bring the environment up.
 ---
-_Rev. 11_
+_Rev. 12_
 
 # Skill: init - Environment Onboarding <!-- omit in toc -->
 
@@ -66,4 +66,4 @@ cache the full branch name as `"git.branch"` (plus `"git.branch_email"`) in
 ## 5. Hand Off
 
 Point the user at `README.md`, `{{PACK}}/spec.md`, and `{{PACK}}/instructions.md` (in that order), plus any
-live links just brought up. Log the init in `{{PACK}}/.memory/interactions.jsonl`.
+live links just brought up. Log the init in this machine's file in `{{PACK}}/.memory/interactions/`.

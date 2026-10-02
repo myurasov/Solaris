@@ -3,7 +3,7 @@ name: refresh
 triggers: ["refresh", "refresh project", "update my checkout", "pull latest", "sync with upstream", "get the new version"]
 summary: Bring a team member's existing checkout of {{NAME}} up to date - auto-stash local edits, pull main, rebase the personal branch (agent-resolved conflicts), migrate the private layer and environment to any new layout/conventions, re-apply the stash, and report what changed.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: refresh - Update and Migrate a Local Checkout <!-- omit in toc -->
 
@@ -74,4 +74,4 @@ Apply in order; each step is idempotent (skips itself when already done):
   the user's own re-applied changes.
 - Summarize: commit range pulled, rebase result (conflicts resolved; force-with-lease note when
   the personal branch was already pushed), migrations applied, dependency refreshes run, anything
-  the user should read. Log the turn in `{{PACK}}/.memory/interactions.jsonl`.
+  the user should read. Log the turn in this machine's file in `{{PACK}}/.memory/interactions/`.

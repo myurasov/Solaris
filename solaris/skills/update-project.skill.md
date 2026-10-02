@@ -85,4 +85,5 @@ whitespace, `*`, `?` or `[`, and not starting with `.`, `#` or `!`).
 Report what synced, what merged, and any versions set. Run
 `uv run -m solaris.tools.agents --check --dir projects/<slug>` too (personas and the shared
 `<pack>/instructions.md`; it flags pre-0.37 layout leftovers). `revs ff` is idempotent; migrations
-revert via their Revert section. Log one line to `.memory/interactions.jsonl`.
+revert via their Revert section. Log the turn with
+`uv run -m solaris.tools.interactions add --dir projects/<slug> ...`.

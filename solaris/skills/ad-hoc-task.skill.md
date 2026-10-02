@@ -117,9 +117,9 @@ at once.
 
 ## 5. Capture + Close
 
-Keep `notes.md` current (steps tried, findings, outcome) - it is the durable record. Append a line to
-`.memory/interactions.jsonl`; if the task is linked to a project, append the same line to that project's
-`<pack>/.memory/interactions.jsonl` too.
+Keep `notes.md` current (steps tried, findings, outcome) - it is the durable record. Log each turn with
+`uv run -m solaris.tools.interactions add`; if the task is linked to a project, add `--dir <project>` so the
+same line lands in that project's log too.
 
 ## 6. Graduate (Optional)
 

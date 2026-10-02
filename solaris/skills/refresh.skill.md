@@ -68,4 +68,4 @@ git step here - only framework files move.
    (do not run the migrations here; that is per-project work on request).
 2. Summarize: commit range pulled, version old -> new (with the release notes' one-liners for any
    releases in between), environment steps run, verification results, stale projects flagged, and
-   whether a session restart is needed. Log the turn to `.memory/interactions.jsonl`.
+   whether a session restart is needed. Log the turn with `uv run -m solaris.tools.interactions add`.

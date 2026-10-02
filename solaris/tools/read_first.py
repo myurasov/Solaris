@@ -24,14 +24,17 @@ Two modes:
 - **``--remind``** - print a one-line forcing reminder that the set was loaded. Wired to Claude Code's
   ``UserPromptSubmit`` so the Hybrid model gets a cheap per-turn nudge on top of the once-per-session load.
   (Cursor's ``beforeSubmitPrompt`` cannot inject context - its output is only ``{continue, user_message}`` -
-  so the per-prompt remind is Claude-only; Cursor relies on the ``sessionStart`` load alone.)
+  so the per-prompt remind is Claude-only; Cursor relies on the ``sessionStart`` load alone.) It also runs
+  the Syncthing conflict sweep below and puts its note in front of the reminder, so a conflict is repaired
+  and reported on the next prompt; under Cursor the ``log_interaction`` prompt hook runs the sweep instead.
 
 Output format is IDE-aware: Cursor hooks read a JSON object (``additional_context``); Claude Code hooks read
 plain stdout. The tool detects the IDE from the environment and emits whichever the caller expects.
 
 On a part-4 session start it also merges Syncthing ``*.sync-conflict-*`` copies of any ``.jsonl`` log
-in a memory folder (framework ``.memory/`` and each project pack's ``.memory/``, never ``__data/`` or
-``__out/``) into the canonical file: it appends only the missing lines under a non-blocking lock,
+in a memory folder (framework ``.memory/`` and each project pack's ``.memory/``, each with its per-machine
+``interactions/`` log folder, never ``__data/`` or ``__out/``) into the canonical file: it appends only the
+missing lines under a non-blocking lock,
 re-reads to verify them, and only then deletes the copies. A merge can bring back a line that was
 deliberately removed from the canonical log on another device, since the copy still holds it. A group
 it cannot merge safely (a missing, unreadable, locked or mid-line file) keeps its copies for the next
@@ -113,7 +116,8 @@ _REMINDER = (
     "`nepo`); confirm before destructive / remote-mutating / outward actions; answer a direct "
     "question in the reply's first line; delegate per the subagents rule (posture default `auto` - "
     "follows the economy level) and honor the token-economy floor; `subagents:`/`economy:`/`yagni:`/"
-    "`asap` in a prompt are per-request overrides; log the turn to .memory/interactions.jsonl (UTC ts)."
+    "`asap` in a prompt are per-request overrides; log the turn with `uv run -m solaris.tools.interactions "
+    "add` (`--dir <project>` for project work)."
 )
 
 
@@ -210,13 +214,15 @@ def heal_sync_conflicts(repo_root: Path = REPO_ROOT) -> str:
         found: list[Path] = []
         grouped: dict[Path, list[Path]] = {}
         for root in _memory_roots(repo_root):
-            for path in root.glob("*sync-conflict-*"):
-                if not path.is_file():
-                    continue
-                found.append(path)
-                target = canonical_conflict_target(path)
-                if target is not None and target.suffix == ".jsonl":
-                    grouped.setdefault(target, []).append(path)
+            # Per-machine logs have one writer each, so a copy there means two machines share a name.
+            for folder in (root, root / "interactions"):
+                for path in folder.glob("*sync-conflict-*"):
+                    if not path.is_file():
+                        continue
+                    found.append(path)
+                    target = canonical_conflict_target(path)
+                    if target is not None and target.suffix == ".jsonl":
+                        grouped.setdefault(target, []).append(path)
         for canonical, copies in grouped.items():
             _merge_jsonl(canonical, sorted(copies))
         left = sorted(p for p in found if p.exists())
@@ -374,9 +380,10 @@ def main(argv: "list[str] | None" = None) -> int:
         # keeps the full set; the inline budget exists for Claude Code's stdout-persist behavior.
         full_budget = 1_000_000 if ide == "cursor" else None
         text = _REMINDER if remind else render_full(budget=full_budget, part=part)
-        if not remind and part == 4:
+        if remind or part == 4:
             # The sweep and its note ride on part 4, the smallest payload: part 1 sits near the
-            # budget, and past 10,000 characters the harness stops inlining it.
+            # budget, and past 10,000 characters the harness stops inlining it. The per-prompt
+            # remind repeats the sweep so a conflict that happens mid-session is caught too.
             note = heal_sync_conflicts()
             if note:
                 text = "[Solaris] " + note + "\n" + text

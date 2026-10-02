@@ -183,4 +183,5 @@ For a plugin already attached to a project (driven here or by `update-project`).
 ## 7. Report
 
 Summarize: source, name + version, what was repaired, and (if a project was named) the install mode
-(copy / link) and the install / update / health-check result. Log one line to `.memory/interactions.jsonl`.
+(copy / link) and the install / update / health-check result. Log the turn with
+`uv run -m solaris.tools.interactions add` (plus `--dir projects/<slug>` when a project was named).

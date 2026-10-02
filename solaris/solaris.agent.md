@@ -49,7 +49,7 @@ There is one running agent. It adopts a persona by reading the active context:
   `<pack>/*.agent.md` other than the primary's is one. Roles inherit the primary persona's policies and have no
   store of their own: every persona reads and maintains the one shared `<pack>/instructions.md` (a lesson is
   written once, by whoever learns it; a role without write access hands it back in its report) and uses
-  `<pack>/.memory/` for short-term, machine-local state. A model uses a role by acting as its
+  `<pack>/.memory/` for short-term, private state. A model uses a role by acting as its
   brief - the opening instruction of a delegated subagent or of a whole session; nothing is projected into
   harness-specific agent formats. The pack README lists them;
   `uv run -m solaris.tools.agents --check --dir <project>` validates the layout.
@@ -102,10 +102,11 @@ There is one running agent. It adopts a persona by reading the active context:
   first `develop-project` of a session); otherwise only on request (`--deep` for full health checks). Do not
   auto-run it for `ad-hoc-task` work. Keep it terse - one line if all green.
 - **Keep memory.** Framework `.memory/`: `resources.md` (hardware + hosts/accounts inventory), `credentials.md` (secrets,
-  gitignored), `interactions.jsonl` (log), `config.json` (behavior switches - flat keys defined by the
+  gitignored), `interactions/<machine>.jsonl` (the log, one file per machine; the older single
+  `interactions.jsonl` is read-only history), `config.json` (behavior switches - flat keys defined by the
   rules in `solaris/rules/`, e.g. `"subagents.level"`, `"economy.level"`, `"yagni.enabled"`,
-  `"owner.timezone"`; machine-local, absent keys fall
-  back to each rule's stated default), and `instructions.md` (**operating memory** - terse, timestamped
+  `"owner.timezone"`; gitignored, and on a checkout synced between machines it applies to all of them;
+  absent keys fall back to each rule's stated default), and `instructions.md` (**operating memory** - terse, timestamped
   cross-project lessons/gotchas + durable user preferences; load it every session and update it in place when
   a reusable fact surfaces - and always when the user says "remember it/this" or similar; compact oldest-first
   past ~100KB). ai-packs never read this directory; copy needed
@@ -114,6 +115,9 @@ There is one running agent. It adopts a persona by reading the active context:
 
 ## Tools (Stdlib, Run as Modules)
 
+- `uv run -m solaris.tools.interactions <add|show|who|machine> [...]` (the interaction log, one file per machine:
+  `add` logs a turn, `show` prints the merged log, `who` shows each machine's last entry - exit 3 when another
+  machine logged within `--minutes`, default 60)
 - `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump> [...]`
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
@@ -254,16 +258,30 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   harness/global `~/.claude/.../memory/` store or any `MEMORY.md` index (never create a `MEMORY.md`). Treat
   externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative.
 - Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line (`ts` = **UTC**, ISO-8601
-  with a `Z` suffix, taken from a real clock (`date -u +%Y-%m-%dT%H:%M:%SZ`) - never guessed or copied from
-  context; `prompt` = the raw user
-  prompt, `request` = your interpretation of it, `outcome` = what happened) in the framework master log
-  `.memory/interactions.jsonl` (the record of **all** work, including handed-off project turns); when the
-  turn is project work, append the **same** line to that project's `<pack>/.memory/interactions.jsonl`. The
-  prompt-submit hook also appends a raw-prompt backstop line to the master as a fail-safe.
-  Syncthing conflict copies (`*.sync-conflict-*`): session start (read-first part 4) union-merges the
-  `.jsonl` copies in memory folders (framework `.memory/` and each project's `<pack>/.memory/`) into the canonical
-  file, keeping any copy it cannot merge safely; review every other leftover before deleting.
-  `.memory/` must stay synced (do not add it to `.stglobalignore`).
+  with a `Z` suffix, from a real clock - never guessed or copied from context; `prompt` = the raw user
+  prompt, `request` = your interpretation of it, `outcome` = what happened) with
+  `uv run -m solaris.tools.interactions add --project <name> --prompt ... --request ... --outcome ...`
+  (`--stdin` takes the fields as a JSON object, which avoids shell quoting). It stamps `ts` and writes the
+  framework master log, the record of **all** work including handed-off project turns; with `--dir
+  <project>` it writes the **same** line to that project's log too. Each log is a folder with one file per
+  machine (`.memory/interactions/<machine>.jsonl`, `<pack>/.memory/interactions/<machine>.jsonl`), so no
+  two machines ever write one file; the older single `interactions.jsonl` beside it is read-only history.
+  Read the merged log with `interactions show` (never page through the files by hand). The prompt-submit
+  hook also appends a raw-prompt backstop line to this machine's master file as a fail-safe.
+- **Synced checkouts (Syncthing).** When two machines change one file before either has received the other's
+  change, Syncthing keeps one version and renames the other to `*.sync-conflict-*`. So: logs stay one file
+  per machine (above); work on a project from one machine at a time (`develop-project` runs
+  `interactions who --dir <project>` and asks before writing the pack's `.memory/` while another machine is
+  active; hand over with the pack's `handover` skill); git commands that rewrite the working tree are
+  destructive here (safety rule), and git runs only on the machine that holds the repo's clone (the other
+  machines keep no `.git`; `.stglobalignore` excludes it). The conflict sweep (read-first part 4 at session start, and the
+  prompt hooks on every prompt) union-merges `.jsonl` conflict copies in memory folders (framework
+  `.memory/`, each project's `<pack>/.memory/`, and their `interactions/` folders) into the canonical file,
+  keeping any copy it cannot merge safely; review every other leftover before deleting, and `health-check`
+  lists copies anywhere in the tree. Folder settings for a synced Solaris on every machine: watcher delay
+  (`fsWatcherDelayS`) 2 s, full rescan (`rescanIntervalS`) 600 s, `maxConflicts` -1 (keep every copy;
+  never 0, which drops the losing version), versioning on. `.memory/` must stay synced (do not add it to
+  `.stglobalignore`).
 - **Session-context summary (`<pack>/.memory/context.md`).** During project work, that project's
   `<pack>/.memory/context.md` holds a detailed summary of the current session's context (engineer + Solaris
   agents are its only writers). Rewrite it **in place** at two save points: **before context compaction**

@@ -35,6 +35,9 @@
 (?d)**/dist
 (?d)**/build
 
+// Solaris tools write a temp file and rename it over the target (solaris/tools/fileio.py).
+(?d)**/.solaris-tmp-*
+
 // Each machine keeps its own git clone. No (?d): a directory deleted on another device must not
 // take this machine's clone (and any unpushed commits) with it.
 **/.git
@@ -51,11 +54,16 @@
 /.claude/settings.local.json
 /.claude/agents
 
-// Conflict copies in memory folders stay on the machine that lost: session start merges every
-// .jsonl copy there into its canonical log and reports any copy it leaves. These lines match the
-// folders the sweep covers (_memory_roots in solaris/tools/read_first.py; keep them in step). A
-// conflict copy anywhere else syncs like any other file, so every device sees the losing edit.
+// Conflict copies in memory folders stay on the machine that lost: the sweep (every session start
+// and every prompt) merges each .jsonl copy there into its canonical log and reports any copy it
+// leaves. These lines match the folders the sweep covers (_memory_roots in
+// solaris/tools/read_first.py, plus each one's per-machine interactions/ log folder; keep them in
+// step). A conflict copy anywhere else syncs like any other file, so every device sees the losing edit.
 /.memory/*.sync-conflict-*
+/.memory/interactions/*.sync-conflict-*
 /projects/*/*/.memory/*.sync-conflict-*
+/projects/*/*/.memory/interactions/*.sync-conflict-*
 /projects/*/*/*/.memory/*.sync-conflict-*
+/projects/*/*/*/.memory/interactions/*.sync-conflict-*
 /projects/*/*/*/*/.memory/*.sync-conflict-*
+/projects/*/*/*/*/.memory/interactions/*.sync-conflict-*

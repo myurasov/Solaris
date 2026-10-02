@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # {{NAME}} - Context <!-- omit in toc -->
 
@@ -7,8 +7,8 @@ _Rev. 3_
 
 A **detailed summary of the current session's context** for {{NAME}}: what is being worked on, what was
 decided and why, what was found, and where things stand - everything a fresh session (or this session after
-compaction) needs to continue immediately. Complements `interactions.jsonl` (the terse
-`{ts, project, prompt, request, outcome}` machine record). Private/local layer; companion to `../spec.md`
+compaction) needs to continue immediately. Complements the interaction log in `interactions/` (the terse
+`{ts, project, prompt, request, outcome}` record, one file per machine). Private/local layer; companion to `../spec.md`
 (the contract) and `../instructions.md` (build/run). Gitignored - never shared or committed.
 
 ## How to Use This File

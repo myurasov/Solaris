@@ -53,7 +53,8 @@ def test_emit_is_json_for_cursor_plain_for_others():
     assert buf.getvalue() == "hello"
 
 
-def test_main_remind_vs_full(capsys):
+def test_main_remind_vs_full(capsys, monkeypatch):
+    monkeypatch.setattr(R, "heal_sync_conflicts", lambda: "")  # never sweep the real tree in tests
     assert R.main(["--remind"]) == 0
     out = capsys.readouterr().out
     assert "read-first" in out.lower()
@@ -395,10 +396,31 @@ def test_sweep_note_rides_on_part4_within_budget(tmp_path, monkeypatch, capsys):
     calls = []
     monkeypatch.setattr(R, "heal_sync_conflicts", lambda: calls.append(1) or note)
     monkeypatch.setattr(R, "detect_ide", lambda env=None: "claude")
-    for argv in ([], ["--part", "2"], ["--part", "3"], ["--remind"]):
+    for argv in ([], ["--part", "2"], ["--part", "3"]):
         assert R.main(argv) == 0
     assert calls == [] and note not in capsys.readouterr().out
     assert R.main(["--part", "4"]) == 0
     out = capsys.readouterr().out
     assert calls == [1] and out.startswith("[Solaris] " + note + "\n") and "READ-FIRST, PART 4" in out
     assert len(out) <= R._budget()
+    # The per-prompt reminder sweeps too, so a mid-session conflict surfaces on the next prompt.
+    assert R.main(["--remind"]) == 0
+    out = capsys.readouterr().out
+    assert calls == [1, 1] and out.startswith("[Solaris] " + note + "\n") and R._REMINDER in out
+
+
+def test_heal_sweeps_per_machine_log_folders(tmp_path):
+    # A copy of a per-machine log (two machines sharing a name) is merged like any other log.
+    for rel in (".memory", "projects/my/demo/aipack/.memory"):
+        mem = tmp_path / rel
+        logs = mem / "interactions"
+        logs.mkdir(parents=True)
+        if rel != ".memory":
+            (mem.parent / "manifest.json").write_text("{}\n", encoding="utf-8")
+        (logs / "box1.jsonl").write_bytes(b'{"ts": "a"}\n')
+        (logs / "box1.sync-conflict-20261002-101500-AAAAAAA.jsonl").write_bytes(b'{"ts": "a"}\n{"ts": "b"}\n')
+    assert R.heal_sync_conflicts(tmp_path) == ""
+    for rel in (".memory", "projects/my/demo/aipack/.memory"):
+        logs = tmp_path / rel / "interactions"
+        assert (logs / "box1.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "b"}\n'
+        assert sorted(p.name for p in logs.iterdir()) == ["box1.jsonl"]

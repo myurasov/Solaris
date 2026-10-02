@@ -46,8 +46,8 @@ Applies at every level, including `off`:
   context - never re-open those files unless editing them.
 - **Unbounded files.** Bounded-by-design files (config, `.memory/instructions.md` at its ~100KB
   cap) may be read whole. Append-only stores are never read whole: tail-read the latest entries
-  with a negative offset (`.memory/interactions.jsonl` - full scans only in `self-reflect`), grep
-  for a known id, or filter through a tool. A new unbounded store gets its filtering access path
+  (the interaction log through `uv run -m solaris.tools.interactions show --last N` - full scans only
+  in `self-reflect`), grep for a known id, or filter through a tool. A new unbounded store gets its filtering access path
   decided before anything starts reading it.
 - **Batching.** Independent tool calls (no data dependency, no decision between them, no shared
   mutated state) go in one parallel batch - never one call per message. A mechanical survey of 4+

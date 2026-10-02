@@ -114,8 +114,8 @@ What lands in the pack:
   committed defaults in `defaults.json`, perishable reference data the rules read in `info/` (model
   tiers, harness capabilities), and in `skills/` the `init` / `refresh` stubs for teammates plus a
   `handover` skill to pause, hand over and resume work.
-- **Private, short-term / machine-local** (`<pack>/.memory/`, gitignored): hosts, secrets, session
-  context, logs. Drop this layer to share the project.
+- **Private, short-term** (`<pack>/.memory/`, gitignored): hosts, secrets, session context, logs (one
+  file per machine). Drop this layer to share the project.
 
 Every project also carries its own semver in a root `.version` file (new projects start at `0.1.0`;
 imports adopt an existing `v*` tag or `1.0.0` for already-shipped work): the engineer
