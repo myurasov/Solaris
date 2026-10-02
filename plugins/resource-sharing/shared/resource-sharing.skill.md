@@ -1,9 +1,9 @@
 ---
 name: resource-sharing
-triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance"]
-summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield, moves stale claims aside, reports usage, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit.
+triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance", "host health", "gpu health", "host dashboard", "hosts dashboard"]
+summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield, moves stale claims aside, reports usage, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit; hosthealth.py checks GPU hosts (and applies the safe performance settings where the sharing rules allow) and hostdash.py shows their jobs and load live.
 ---
-_Rev. 6_
+_Rev. 7_
 
 # Skill: resource-sharing - Hosts Shared by Many Agents <!-- omit in toc -->
 
@@ -16,6 +16,7 @@ _Rev. 6_
 - [Picking Up Shared Hosts](#picking-up-shared-hosts)
 - [Paid Hosts and Fit](#paid-hosts-and-fit)
 - [Owner Audit](#owner-audit)
+- [Host Health and Live View](#host-health-and-live-view)
 - [Pools](#pools)
 - [Conventions for Agents](#conventions-for-agents)
 - [Troubleshooting](#troubleshooting)
@@ -211,7 +212,8 @@ on its first start, and installers write to `~/.config` and `~/.local/share`. Ch
 but the claims folder and temporary files (`$HOME` is named because `-xdev` keeps `find /` out of a home on
 another filesystem). Problems found later (leftover GPU memory, a missing package, a stray
 process that is not yours) go to the owner the same way, as a maintenance `request` plus a message; a guest
-never fixes the owner's host itself.
+never fixes the owner's host itself (the one exception: `hosthealth.py --fix`, which touches only the cores of
+the guest's own live claims and the GPUs nothing else uses, never with `sudo`; see Host Health and Live View).
 
 ## Picking Up Shared Hosts
 
@@ -264,9 +266,10 @@ python3 <tool> install --host <new> --lease kind=paid --lease planned_end=<end> 
   --lease usd_per_hour=<rate> --lease gpu_type=<type> --lease instance=<name>
 ```
 
-Before any teardown of a shared instance (brev-run deletes unconditionally at its end), the owner runs
-`audit --host <new>` and deletes only on a `delete` advice, then `uninstall`s; otherwise the instance stays
-and its guests are told why.
+Before any teardown of a shared instance (brev-run stops an instance it will reuse within about a day and
+deletes the others), the owner runs `audit --host <new>` and stops or deletes only on a `delete` advice
+(`uninstall` first when deleting); otherwise the instance stays and its guests are told why. A stopped
+instance answers no ssh, so `status` and `audit` show it unreachable until it is started again.
 
 ## Owner Audit
 
@@ -289,9 +292,44 @@ recommendation:
   under it), or a pending objection to decide first.
 
 Owners run `audit` at least every two hours (hourly is better, beside other scheduled checks), answer the
-open requests it lists, and act on every line: never leave a paid instance idle without a decision.
-Releases and deletions still need the owner's (or its human's) confirmation under the project's safety
-rules.
+open requests it lists, and act on every line: never leave a paid instance idle without a decision. On a
+`delete` advice, an instance the owner will reuse within about a day is stopped instead (a stopped instance
+still bills its storage); any other is deleted. Releases, stops and deletions still need the owner's (or its
+human's) confirmation under the project's safety rules.
+
+## Host Health and Live View
+
+Two companions of `hostclaims.py` sit beside it (`<tools>` below is the folder holding `<tool>`) and read the
+same inventory (the project's `hosts.json` plus the hosts shared with it; `--host`, `--hosts`, `--project`,
+`--local-root` and `--ssh` work as there):
+
+- `python3 <tools>/hosthealth.py [--host H] [--fix] [--json]` checks each GPU host over ssh: the GPUs visible
+  against the inventory's `gpus` count (a GPU in confidential-computing mode, off the bus or failing to start
+  is missing from the driver's list), Xid codes in the kernel log since boot (the application-class codes 13,
+  31, 43 and 45 are left out), GPU start failures, and per GPU persistence mode, MIG and compute modes, power
+  limit against its default, throttling (hardware or thermal slowdown, power brake) and uncorrected ECC errors;
+  plus load, free memory and disk, and the CPU governor. Exit codes: 0 healthy, 3 problems found, 4 a host did
+  not answer.
+- `--fix` first applies three settings that are safe under running jobs: persistence mode on, each GPU's power
+  limit back up to its default (never above it: a maximum over the default can overload a power supply the
+  GPUs share), and the `performance` CPU governor. A reboot resets them (persistence mode survives only where
+  the persistence daemon runs), so owners run `hosthealth.py --fix` with their hourly checks. It acts as the
+  calling project and follows ownership: on a host the project owns on record (the host's `host.json` from
+  `install`, else an `owner` its inventory entry names; a host listed without one is nobody's here), every GPU
+  and core (and it enables the persistence daemon); on a host where it only holds live claims, the cores of
+  those claims and the GPUs they hold that nothing else uses (a GPU another claim or work outside the claims
+  also uses, and a core whose frequency policy also covers other cores, are left alone); elsewhere nothing. The
+  rest it only reports: the owner repairs it (driver, reboot, GPU reset, modes), and a guest files what it
+  printed as a maintenance `request`. Fixing and reading the kernel log need root, which a login other than root
+  gets through passwordless `sudo`, used only by `--fix` on a host the project owns (on another's host a sudo
+  attempt lands in the owner's security log): guests and runs without `--fix` read and change only what the
+  login may, and the output says what it could not do or read.
+- `python3 <tools>/hostdash.py` is a live full-screen view, refreshed every 5 seconds (`-n` to change; `q`
+  quits), of each host's load, memory, disk and GPU use, its claims (project/job, class, GPUs, cores, age; `no
+  process` once the process a claim is tied to has gone), tmux sessions and busiest processes (another login's
+  by program name only, as a command line can carry secrets), over one ssh connection per host kept open
+  between refreshes. `--once` prints one snapshot: after a restart it is a quick first look, before `status`
+  and the done markers.
 
 ## Pools
 
@@ -333,6 +371,8 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
   `install --all` after adding machines or changing `share_with`, and tell the projects they share with.
 - Guests keep everything they write on a host, caches included, inside their own folder there, and report
   host problems to the owner instead of fixing them (see Owners, Guests and Requests).
+- Owners run `hosthealth.py --fix` with their hourly checks and repair what it reports; anyone may look with
+  `hosthealth.py` or `hostdash.py --once`.
 
 ## Troubleshooting
 

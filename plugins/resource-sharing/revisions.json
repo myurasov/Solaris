@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/resource-sharing.rule.md": {
-      "rev": 3,
-      "hash": "84f2301604ebb805b73c4a075c7f22d9bb3e8d454daac307df870ad7d86e46e3",
+      "rev": 4,
+      "hash": "a6590d347543058598b50bf81bf3361482c953c76deeea768bb45cd18d45d407",
       "history": [
         {
           "rev": 1,
@@ -17,12 +17,16 @@
         {
           "rev": 3,
           "hash": "84f2301604ebb805b73c4a075c7f22d9bb3e8d454daac307df870ad7d86e46e3"
+        },
+        {
+          "rev": 4,
+          "hash": "a6590d347543058598b50bf81bf3361482c953c76deeea768bb45cd18d45d407"
         }
       ]
     },
     "shared/resource-sharing.skill.md": {
-      "rev": 6,
-      "hash": "1b45f9d6b1cbc3844523027dd1fcc4894a34f79b3d2ce267c1b25a990f39bea7",
+      "rev": 7,
+      "hash": "d6d20bbda7709b18ab6a71443a2567f020da2bfea728896663ba7a65c4e87f53",
       "history": [
         {
           "rev": 1,
@@ -43,6 +47,10 @@
         {
           "rev": 6,
           "hash": "1b45f9d6b1cbc3844523027dd1fcc4894a34f79b3d2ce267c1b25a990f39bea7"
+        },
+        {
+          "rev": 7,
+          "hash": "d6d20bbda7709b18ab6a71443a2567f020da2bfea728896663ba7a65c4e87f53"
         }
       ]
     },
@@ -65,6 +73,26 @@
         {
           "rev": 4,
           "hash": "d098699756d1ede9f20747cb54dbc790c378b9766fa8f0fef07a61dae1fff805"
+        }
+      ]
+    },
+    "shared/tools/hostdash.py": {
+      "rev": 1,
+      "hash": "3fde1231af6d1682727c4bd336bb5f2f4ba607146316d932d33b0b0b4d13ec5d",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "3fde1231af6d1682727c4bd336bb5f2f4ba607146316d932d33b0b0b4d13ec5d"
+        }
+      ]
+    },
+    "shared/tools/hosthealth.py": {
+      "rev": 1,
+      "hash": "5952285ca20d58fd8789d864ee98883da23bd5f03148afa87548e2333671e36c",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "5952285ca20d58fd8789d864ee98883da23bd5f03148afa87548e2333671e36c"
         }
       ]
     }

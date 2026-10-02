@@ -15,16 +15,21 @@ an agent works from) claims capacity under a file lock, launches jobs pinned to 
 heartbeat, asks lower-priority jobs to yield, and moves crashed jobs' claims aside. On top of it: sharing
 links between projects in one Solaris tree, exactly one owner per host with guest requests, an owner audit
 against abandoned (and billing) machines, a fit ranking against launching a new paid instance, and shared
-counters for account-level limits. No daemon, no central server, no root.
+counters for account-level limits. Beside it, a GPU host health check (which also applies the safe
+performance settings where the sharing rules allow) and a live dashboard of each host's jobs and load read the
+same inventory. No daemon, no central server, no root.
 
 ## Files
 
 | File | Role |
 |---|---|
 | `shared/tools/hostclaims.py` | The tool, stdlib only, Python 3.8 or newer. Runs on the controller and sends itself to each host over ssh (`python3 -`, script on stdin). Commands: `install` (`--all` for every owned host), `uninstall`, `status`, `shared`, `claim`, `run`, `release`, `reap`, `yield`, `usage`, `pool`, `lease`, `extend`, `request`, `approve`, `decline`, `fit`, `audit`. |
-| `shared/resource-sharing.skill.md` | Setup, commands, launching jobs, priorities and yield, owners and guests, picking up shared hosts, paid hosts and fit, the owner audit, pools, conventions, troubleshooting. |
-| `shared/resource-sharing.rule.md` | Always-on: launch through claims and stay within them, never touch another project's claim, one owner per host (guests keep what they write on a host inside their own folder there), pick up sharing changes (guests run `shared`, owners `install --all`), no self-extension of paid hosts, honour yields, done markers. |
+| `shared/tools/hosthealth.py` | GPU host health over the same inventory, over ssh: GPUs visible against the inventory's `gpus`, Xid codes since boot, GPU start failures, throttling, uncorrected ECC errors, persistence, MIG and compute modes, power limits, the CPU governor. `--fix` applies the safe settings (persistence mode, GPU power limit back to its default, `performance` governor) on hosts with an owner record naming the project, or on the GPUs and cores of its live claims that no other claim shares. Exit 3 on problems, 4 on an unreachable host. |
+| `shared/tools/hostdash.py` | Live full-screen view of each host's load, memory, disk, GPU use, claims, tmux sessions and busiest processes, over one reused ssh connection per host; `--once` prints a snapshot. |
+| `shared/resource-sharing.skill.md` | Setup, commands, launching jobs, priorities and yield, owners and guests, picking up shared hosts, paid hosts and fit, the owner audit, host health and the live view, pools, conventions, troubleshooting. |
+| `shared/resource-sharing.rule.md` | Always-on: launch through claims and stay within them, never touch another project's claim, one owner per host (guests keep what they write on a host inside their own folder there, and fix nothing but what `hosthealth.py --fix` sets on their own claims), pick up sharing changes (guests run `shared`, owners `install --all`), never delete or stop a shared host without the audit's advice, no self-extension of paid hosts, honour yields, done markers. |
 | `tests/test_hostclaims.py` | Unit tests (stdlib `unittest`), run against temp folders with simulated host readings; not copied into projects. |
+| `tests/test_hosttools.py` | Offline tests for `hosthealth.py` and `hostdash.py`: canned host output, and the real scripts run here through a fake ssh with stand-in `nvidia-smi`, `dmesg` and `systemctl` and a fake CPU folder (no sudo, no real setting touched). |
 
 `manifest.json` and `revisions.json` (rev ledger, managed by `solaris.tools.revs`) complete the plugin.
 
@@ -80,7 +85,11 @@ the working folder, `--project` or a copied install; two packs are an error; the
 folder), shared-host changes (new, gone, changed, unreadable owner files, the seen list, `--probe` admission),
 `install --all` and the audit's sync flags, ownership rules, the owner audit, the ssh path through a fake ssh program, hardening cases from a code review (a released claim is
 never revived, yield admission, pending yields, stop signals, an unwritable run folder, machine binding and
-network homes, pool definers), and Python 3.8 grammar.
+network homes, pool definers), and Python 3.8 grammar. For the health check and the dashboard: parsing of
+healthy, failing, unified-memory and driverless hosts and of older drivers, the fix scope by ownership and live
+claims (owner, guest, a project with no claim, the host's record over the inventory's), fixes that touch only
+what the scope allows (a shared frequency policy left alone, a second run changing nothing), read-only and
+unreachable sweeps through a fake ssh, and the dashboard's rendering, connection reuse and snapshot.
 
 ## Limits
 
@@ -105,3 +114,9 @@ network homes, pool definers), and Python 3.8 grammar.
   deleted only on the owner audit's `delete` advice), since those plugins do not know about claims.
 - `simulate.json` in a claims folder replaces the host's readings only when `HOSTCLAIMS_SIMULATE=1` is set
   (tests).
+- A reboot resets what `hosthealth.py --fix` sets (persistence mode survives only where the persistence
+  daemon runs), so it is run periodically. Xid codes count from the last boot. Only the owner's `--fix` uses
+  sudo (passwordless `sudo` for a login other than root); read-only runs and guests never do, so a host that
+  restricts the kernel log shows it as not readable. It repairs nothing disruptive (driver, reboot,
+  GPU reset, modes): those stay with the owner.
+- `hostdash.py` shows the claim files as they are; only `status` tells live claims from stale ones.

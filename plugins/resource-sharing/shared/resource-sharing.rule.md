@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: Resource Sharing (Always-On) <!-- omit in toc -->
 
@@ -21,14 +21,16 @@ hosts. The how-to is in `resource-sharing.skill.md`.
   `--agent` naming another project; outside a project only with an explicit `--as-owner`). Guests file `extend` or `request` and show the printed text to the
   owner; nothing is approved for a human owner without their yes. Guests keep everything they write on a
   host, caches included, inside their own folder there (point the cache homes at it before the first job),
-  and report problems they find to the owner with a maintenance `request` instead of fixing them.
+  and report problems they find to the owner with a maintenance `request` instead of fixing them; the one
+  exception is `hosthealth.py --fix`, which changes only what their own live claims hold alone, without sudo.
 - **Pick up sharing changes.** Guests run `shared` at every audit and at least hourly: bring NEW hosts into use
   through claims, stop using GONE ones (release your claims there), then `shared --ack`. Owners run `install --all`
   right after adding machines or changing `share_with`, and tell the projects they share with.
-- **Never delete a shared host blind.** Before deleting or releasing a host other projects may use -
-  including a teardown step of another plugin's flow, such as a cloud run's unconditional delete - run
-  `audit --host <name>` and go ahead only on a `delete` or `release` advice (no live claims, no work outside
-  claims, no open objection); then `uninstall` and delete. Otherwise keep it and tell the owner why.
+- **Never delete or stop a shared host blind.** Before deleting, stopping or releasing a host other projects
+  may use - including a teardown step of another plugin's flow, such as a cloud run's stop or delete at its
+  end - run `audit --host <name>` and go ahead only on a `delete` or `release` advice (no live claims, no work
+  outside claims, no open objection); then `uninstall` and delete (a stopped host keeps its install).
+  Otherwise keep it and tell the owner why.
 - **Paid hosts.** Never extend a paid instance on your own: past its planned end, file an extension request
   or launch new. Owners run `audit` at least every two hours (hourly is better), answer open requests there,
   and never leave a paid instance idle without a decision.
