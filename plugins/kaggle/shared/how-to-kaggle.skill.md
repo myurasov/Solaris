@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 19_
+_Rev. 21_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -359,6 +359,11 @@ Follow this sequence from minute one; each step points to the section with the r
   in a shipped package), read every finalist on both, and when they disagree, trust the one that orders the scored
   submissions as the board does: a set built from other repositories ranked two agent families in the board's order
   while the public set had them level. A second set also exercises environment paths the first never touched.
+- **Local solve rates can rank whole agent families backwards:** two local sets can agree that one family solves
+  clearly more while the board ranks it lower. When families differ in per-task limits (time, turns, tool calls),
+  measure how often their local solves end near those limits before trusting the order: hidden tasks that run longer
+  get cut off, so a limit that costs nothing locally can cost many tasks on the board. Read the family difference on
+  the board with one slot before building further on either family.
 - **Calibrate each kind of change on the board:** a holdout that ranks submissions correctly can still misjudge one
   kind of change.
   - Swaps of one model component can score consistently below the holdout's prediction, and an add-on's holdout gain
@@ -570,6 +575,11 @@ Follow this sequence from minute one; each step points to the section with the r
   why, until when), and the hourly check alerts on any stopped queue without one. Collectors that wait for done
   markers never see a job that a reboot killed: an unannounced host reboot left a queue dead for about ten hours,
   because its status read like a deliberate hold.
+- **Keep every queue deeper than the next check can drain:** an autopilot that tops lanes up only while run targets
+  are unmet lets every lane go idle once the targets are reached. Set each target above what the lanes can run before
+  the next check, keep a minimum queue depth per lane, and stage each new candidate on every host of its lane group
+  before adding it to the plan: an autopilot queues only staged copies, so a host without one silently gets nothing
+  and the gap shows only as uneven queue depth.
 - **Verify autonomy in the actual harness:** distinguish a persistent session from something that wakes it. Install
   an owner-approved service when native session timers are unavailable. Persist schedules and pending events,
   recover missed checkpoints after downtime, wait while the master is busy, and test delivery and pause across a
@@ -577,7 +587,9 @@ Follow this sequence from minute one; each step points to the section with the r
   A stored prompt is not proof the agent started: require a reply linked to that prompt and recover orphaned
   requests. Re-arm completed watches on a new run, and detect idle workers whose last turn never finished.
   Test these against the installed API, not assumptions about upstream internals: a real API can accept a
-  deliberately backdated id that a review expected it to skip.
+  deliberately backdated id that a review expected it to skip. Some harnesses stop a background command after about
+  30 minutes: a sleep-until-next-event clock caps each sleep below that limit and re-arms (under a Solaris checkout,
+  `solaris.tools.session_clock` does).
 - **Budget context and checkpoint compaction:** automatic compaction needs a reserve of free context, set
   explicitly, and a bounded recent-history budget. A retained-history budget is not a total-context cap: summaries
   and instructions add to it. Save decisions, owner constraints, exact job/artifact references and pending actions
@@ -643,14 +655,17 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Stack your changes on the strongest base, and move them when a stronger one appears.** Fork each new strongest
   public notebook within the hour and port every pending change onto it as the same patch, checked hunk for hunk
   against the older base's variant, so the reads measured on the old base carry over; a change stacked on an older
-  base forfeits the newer base's public gains. A faithful fork of a deterministic notebook scores exactly what the
-  original scored (unless time budgets inside it bind on a slower scoring machine), so its variants can read against
-  the author's public score, and the fork's own slot buys the team a floor at that score but no information. An older
-  fork whose score is already known needs no slot, and its one-change probes become fallbacks.
+  base forfeits the newer base's public gains. A faithful fork of a deterministic notebook, run on the author's own
+  inputs, scores exactly what the original scored (unless time budgets inside it bind on a slower scoring machine),
+  so its variants can read against the author's public score, and the fork's own slot buys the team a floor at that
+  score but no information. An older fork whose score is already known needs no slot, and its one-change probes
+  become fallbacks.
 - **Smoke-only commit runs:** some public notebooks run a smoke subset on the commit run (a few rows whenever the test
   is the visible one) and the full set only on the hidden rerun. Verify such a fork on the smoke rows and markers
   only, and plan the hidden run's time from full-run timings (the author's logs, or those of the notebooks it
-  combines), never from the commit run.
+  combines), never from the commit run. Where the project's own submit check requires one notebook family's smoke
+  marker, make it accept a hand-verified check line for a fork of another family, recorded with how it was verified
+  (against the author's commit output, say), instead of blocking the fork or being bypassed.
 - **Say what a commit run cannot show:** a change whose gate never opens on the visible test (it acts only on cases
   the visible test lacks) can be checked there only for loading: its inputs found, its markers printed, rows equal to
   the base's. Record it as checked for loading only, and let the board read its effect. Likewise, a smoke whose
@@ -678,7 +693,10 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Rebuild a public notebook's private inputs:** arrays it reads from someone's private dataset can often be rebuilt
   from public sources (per-candidate counts from a public database, say), aligned row for row with the notebook's
   own tables. Check the alignment at the notebook's own indexing, and record the upstream files' checksums: the
-  alignment holds only for those files.
+  alignment holds only for those files. A fork whose private inputs were replaced with public or rebuilt ones is no
+  longer a faithful fork, even with every cell unchanged: its score is unknown until the fork itself is scored (one
+  matched the author's commit output on every visible row, none of which exercised the replaced arrays). Read its
+  own score before stacking variants on it, and keep a fallback build on another source of those inputs.
 - **Hardware banner** at the start of every kernel (CPU count, RAM, GPU) to learn the real environment.
 - **Evaluate the exact shipped bytes;** after any rebase, re-smoke.
 - **Mirror the grader exactly in local runs:** its command line, environment and config keys, read from the

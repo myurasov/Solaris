@@ -3,17 +3,9 @@
   "schema_version": 1,
   "files": {
     "shared/how-to-kaggle.skill.md": {
-      "rev": 19,
-      "hash": "6d66ef9dcedb68f525ad939a5da1fe1ac2265478ab3404c33f9f83c3c302b11e",
+      "rev": 21,
+      "hash": "9e7c18ae7a885d4322007946e92a2ef9b49a3c360c2a42fcac6e9ce314cadbd2",
       "history": [
-        {
-          "rev": 1,
-          "hash": "6b8cf6a77f3c0467d8e9ed6a3ff0913fc022cc5d0e90868678febdc8d97fa7b2"
-        },
-        {
-          "rev": 1,
-          "hash": "74c2e91bf2be7127c20d468d7dadf234d34a7853c7e5828b3df617731fd01183"
-        },
         {
           "rev": 2,
           "hash": "a3ee0e1003a5e058db948a105232d67ef0a9ab07cc17ab7dd919529754c0af0f"
@@ -45,6 +37,14 @@
         {
           "rev": 19,
           "hash": "6d66ef9dcedb68f525ad939a5da1fe1ac2265478ab3404c33f9f83c3c302b11e"
+        },
+        {
+          "rev": 20,
+          "hash": "52aa10c24324dedd3535d5c33632b3390bc900cf7f677e608f531e74201095f7"
+        },
+        {
+          "rev": 21,
+          "hash": "9e7c18ae7a885d4322007946e92a2ef9b49a3c360c2a42fcac6e9ce314cadbd2"
         }
       ]
     },
