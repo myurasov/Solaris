@@ -43,6 +43,7 @@ import re
 from pathlib import Path
 
 from solaris.tools import pack as P
+from solaris.tools.fileio import write_text_atomic
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 TEMPLATE_DIR = REPO_ROOT / "solaris" / "templates" / "ai-pack"
@@ -169,7 +170,7 @@ def bump_file(path: Path) -> int:
     ext = _ext(path)
     text = path.read_text(encoding="utf-8")
     new_text, new_rev = bump_text(text, ext)
-    path.write_text(new_text, encoding="utf-8")
+    write_text_atomic(path, new_text)
     return new_rev
 
 
@@ -236,7 +237,7 @@ def rebuild_ledger(repo_root: Path = REPO_ROOT, path: Path = LEDGER_PATH) -> dic
     led = load_ledger(path)
     items = [(str(p.relative_to(repo_root)), p) for p in iter_tracked(repo_root)]
     led["files"] = _rebuild_files(led.get("files", {}), items)
-    path.write_text(json.dumps(led, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(path, json.dumps(led, indent=2) + "\n")
     return led
 
 
@@ -247,7 +248,7 @@ def rebuild_plugin_ledger(plugin_dir: Path) -> dict:
     led = load_ledger(path)
     items = [(str(p.relative_to(plugin_dir)), p) for p in iter_plugin_shared(plugin_dir)]
     led["files"] = _rebuild_files(led.get("files", {}), items)
-    path.write_text(json.dumps(led, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(path, json.dumps(led, indent=2) + "\n")
     return led
 
 
@@ -605,7 +606,7 @@ def record_baseline(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             rev, h = file_rev_hash(proj)
             baseline[rel] = {"rev": rev, "hash": h}
     manifest["revisions"] = baseline
-    (pack / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(pack / "manifest.json", json.dumps(manifest, indent=2) + "\n")
     return baseline
 
 
@@ -626,12 +627,12 @@ def fast_forward(project_dir: Path, template_dir: Path = TEMPLATE_DIR,
             mext = _ext(master)
             if v in ("missing", "fast-forward"):
                 proj.parent.mkdir(parents=True, exist_ok=True)
-                proj.write_text(mtext, encoding="utf-8")
+                write_text_atomic(proj, mtext)
             revisions[rel] = {"rev": read_rev(mtext, mext), "hash": content_hash(mtext, mext)}
             applied.append((rel, v))
         elif v in ("merge-up", "conflict"):
             skipped.append((rel, v))
-    (pack / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(pack / "manifest.json", json.dumps(manifest, indent=2) + "\n")
     return {"applied": applied, "skipped": skipped}
 
 

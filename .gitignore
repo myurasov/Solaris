@@ -17,6 +17,9 @@ __pycache__/
 .tmp/
 .tools/
 
+# Temp files of an atomic write (solaris/tools/fileio.py), left only if a write is killed mid-way
+.solaris-tmp-*
+
 # Runtime MCP configs carry tokens; the *.example templates stay committed.
 .mcp.json
 .cursor/mcp.json

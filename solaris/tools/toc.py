@@ -25,6 +25,8 @@ import os
 import re
 from pathlib import Path
 
+from solaris.tools.fileio import write_text_atomic
+
 REPO_ROOT = Path(__file__).resolve().parents[2]
 OMIT = "<!-- omit in toc -->"
 _FENCE = re.compile(r"^\s*(```|~~~)")
@@ -197,7 +199,7 @@ def process(path: Path, write: bool) -> str:
     if updated == original:
         return "current"
     if write:
-        path.write_text(updated, encoding="utf-8")
+        write_text_atomic(path, updated)
         return "written"
     return "stale"
 

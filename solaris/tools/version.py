@@ -38,6 +38,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from solaris.tools import pack as P
+from solaris.tools.fileio import write_text_atomic
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 PYPROJECT = REPO_ROOT / "pyproject.toml"
@@ -109,10 +110,7 @@ def read_manifest(project_dir: "str | Path") -> dict:
 
 
 def write_manifest(project_dir: "str | Path", data: dict) -> None:
-    path = _manifest_path(project_dir)
-    with open(path, "w", encoding="utf-8") as fh:
-        json.dump(data, fh, indent=2)
-        fh.write("\n")
+    write_text_atomic(_manifest_path(project_dir), json.dumps(data, indent=2) + "\n")
 
 
 def aipack_version(project_dir: "str | Path") -> str:
@@ -145,7 +143,7 @@ def project_version(project_dir: "str | Path") -> str:
 
 def set_project_version(project_dir: "str | Path", version: "str | Version") -> str:
     v = parse(version)  # validate before writing
-    project_version_path(project_dir).write_text(f"{v}\n", encoding="utf-8")
+    write_text_atomic(project_version_path(project_dir), f"{v}\n")
     return str(v)
 
 

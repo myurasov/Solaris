@@ -43,6 +43,7 @@ from pathlib import Path
 
 from solaris.tools import pack as P
 from solaris.tools import revs as R
+from solaris.tools.fileio import write_text_atomic
 
 ROLE_RE = R.ROLE_RE
 TIERS = ("cheap", "mid", "high", "frontier")
@@ -270,7 +271,7 @@ def rename_primary(project_dir: Path, new: str) -> "tuple[list[str], list[str]]"
         text = instr.read_text(encoding="utf-8")
         fixed = text.replace(f"{old}.agent.md", f"{new}.agent.md")
         if fixed != text:
-            instr.write_text(fixed, encoding="utf-8")
+            write_text_atomic(instr, fixed)
             log.append(f"{p}/{INSTRUCTIONS}: references to {old}.agent.md now name {new}.agent.md")
     else:
         warnings.append(f"{p}/{INSTRUCTIONS} is absent - every persona reads it; seed it from "
@@ -278,7 +279,7 @@ def rename_primary(project_dir: Path, new: str) -> "tuple[list[str], list[str]]"
     manifest.setdefault("agents", {})["primary"] = new
     if f"{p}/{old}.agent.md" in revisions:
         revisions[f"{p}/{new}.agent.md"] = revisions.pop(f"{p}/{old}.agent.md")
-    (pack / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    write_text_atomic(pack / "manifest.json", json.dumps(manifest, indent=2) + "\n")
     log.append(f"{p}/manifest.json: agents.primary = {new!r}")
     res = R.fast_forward(project_dir)
     log.append(f"re-rendered the managed pack files via revs ff ({len(res['applied'])} applied; any pending "
