@@ -64,13 +64,12 @@ def test_main_remind_vs_full(capsys):
 
 
 def test_render_full_respects_inline_budget():
-    # Default (Claude-shaped) rendering fits the budget; all always-on rules arrive whole.
+    # Default (Claude-shaped) rendering fits the budget; the part-1 rules arrive whole.
     out = R.render_full()
     assert len(out) <= R._budget()
     for rel in (
         "solaris/rules/commits.rule.md",
         "solaris/rules/safety.rule.md",
-        "solaris/rules/interaction.rule.md",
     ):
         body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
         assert body in out, rel + " must be inlined whole"
@@ -128,11 +127,12 @@ def test_main_part3(capsys):
     assert "READ-FIRST, PART 3" in capsys.readouterr().out
 
 
-def test_render_part4_inlines_yagni_rule_whole():
-    # Part 4 (fourth SessionStart hook call) carries the YAGNI rule, whole and in budget.
+def test_render_part4_inlines_interaction_and_yagni_rules_whole():
+    # Part 4 (fourth SessionStart hook call) carries the interaction and YAGNI rules, whole and in budget.
     out = R.render_full(part=4)
     assert len(out) <= R._budget()
     assert "READ-FIRST, PART 4" in out
+    assert R.READ_FIRST_4 == ("solaris/rules/interaction.rule.md", "solaris/rules/yagni.rule.md")
     for rel in R.READ_FIRST_4:
         body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
         assert body in out, rel + " must be inlined whole"
@@ -153,6 +153,22 @@ def test_check_covers_all_parts(capsys):
     for n in (1, 2, 3, 4):
         assert ("part %d rendered payload" % n) in out
     assert "OVER BUDGET" not in out
+
+
+def test_every_framework_rule_arrives_whole_in_exactly_one_part():
+    # A rebalance must never drop a rule or leave one truncated: each solaris/rules/*.rule.md sits in one
+    # part and is inlined whole there, within the budget.
+    parts = {1: R.READ_FIRST, 2: R.READ_FIRST_2, 3: R.READ_FIRST_3, 4: R.READ_FIRST_4}
+    placed = [rel for files in parts.values() for rel in files if rel.endswith(".rule.md")]
+    rules = sorted("solaris/rules/" + p.name for p in (R.REPO_ROOT / "solaris" / "rules").glob("*.rule.md"))
+    assert sorted(placed) == rules
+    for part, files in parts.items():
+        out = R.render_full(part=part)
+        assert len(out) <= R._budget()
+        for rel in files:
+            if rel.endswith(".rule.md"):
+                body = (R.REPO_ROOT / rel).read_text(encoding="utf-8")
+                assert "\n----- " + rel + " -----\n" + body in out, rel + " must be inlined whole"
 
 
 # Dummy Syncthing device IDs only: never a real device's ID in this public repo.

@@ -10,14 +10,15 @@ deterministic by emitting their contents from a hook, so the harness (not the mo
 
 Two modes:
 
-- **no args** - full load, part 1 (rules + memory + orchestrator role). Print the concatenated read-first
-  files under an authoritative header. Wired to the session-start hook (Claude Code ``SessionStart``;
-  Cursor ``sessionStart``) so it fires once per session and again after a compaction / clear / resume.
+- **no args** - full load, part 1 (the commit + safety rules, memory, orchestrator role). Print the
+  concatenated read-first files under an authoritative header. Wired to the session-start hook (Claude
+  Code ``SessionStart``; Cursor ``sessionStart``) so it fires once per session and again after a
+  compaction / clear / resume.
 - **``--part 2``** - full load, part 2 (the subagents rule); **``--part 3``** - full load, part 3 (the
-  token-economy rule); **``--part 4``** - full load, part 4 (the YAGNI rule, plus the Syncthing
-  conflict sweep below). Wired as additional session-start hook entries: the harness inline threshold
-  applies per hook call, so splitting the set across calls multiplies the inline room without risking
-  a spill.
+  token-economy rule); **``--part 4``** - full load, part 4 (the interaction + YAGNI rules, plus the
+  Syncthing conflict sweep below). Wired as additional session-start hook entries: the harness inline
+  threshold applies per hook call, so splitting the set across calls multiplies the inline room without
+  risking a spill.
 - **``--check``** - print per-file sizes, the inline budget, and whether the rendered payload fits
   (the size assertion; run after growing any read-first file, especially ``.memory/instructions.md``).
 - **``--remind``** - print a one-line forcing reminder that the set was loaded. Wired to Claude Code's
@@ -65,7 +66,6 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 READ_FIRST = (
     "solaris/rules/commits.rule.md",
     "solaris/rules/safety.rule.md",
-    "solaris/rules/interaction.rule.md",
     ".memory/instructions.md",
     "solaris/solaris.agent.md",
 )
@@ -75,7 +75,9 @@ READ_FIRST_2 = (
 READ_FIRST_3 = (
     "solaris/rules/token-economy.rule.md",
 )
+# Part 1 is full with the commit and safety rules, so the interaction rule rides here.
 READ_FIRST_4 = (
+    "solaris/rules/interaction.rule.md",
     "solaris/rules/yagni.rule.md",
 )
 
@@ -97,25 +99,11 @@ _HEADER = (
     "it yourself.\n"
 )
 
-_HEADER_2 = (
-    "=== SOLARIS READ-FIRST, PART 2 (auto-loaded every session by the read_first hook) ===\n"
-    "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
+# Parts 2-4 share one short header: every character here is room taken from the rule below it.
+_HEADER_N = (
+    "=== SOLARIS READ-FIRST, PART %d (auto-loaded by the read_first hook) ===\n"
     "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
-    "read it yourself before relying on it.\n"
-)
-
-_HEADER_3 = (
-    "=== SOLARIS READ-FIRST, PART 3 (auto-loaded every session by the read_first hook) ===\n"
-    "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
-    "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
-    "read it yourself before relying on it.\n"
-)
-
-_HEADER_4 = (
-    "=== SOLARIS READ-FIRST, PART 4 (auto-loaded every session by the read_first hook) ===\n"
-    "Continuation of the authoritative read-first set (split across hook calls to stay inline). "
-    "Same authority as part 1: obey before acting. A file marked TRUNCATED or POINTER did not fit - "
-    "read it yourself before relying on it.\n"
+    "read it yourself.\n"
 )
 
 _REMINDER = (
@@ -301,7 +289,7 @@ def render_full(repo_root: Path = REPO_ROOT, budget: "int | None" = None, part: 
     so each part is wired as its own SessionStart hook).
     """
     files = {2: READ_FIRST_2, 3: READ_FIRST_3, 4: READ_FIRST_4}.get(part, READ_FIRST)
-    header = {2: _HEADER_2, 3: _HEADER_3, 4: _HEADER_4}.get(part, _HEADER)
+    header = _HEADER_N % part if part in (2, 3, 4) else _HEADER
     budget = _budget() if budget is None else budget
     remaining = budget - len(header)
     parts = [header]
