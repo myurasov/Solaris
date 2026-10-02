@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 18_
+_Rev. 19_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -81,6 +81,8 @@ Follow this sequence from minute one; each step points to the section with the r
    - don't rush the slots: hold them for research that can finish in time, and fill any still open with the best
      verified fallback before the day ends;
    - reviewed kernels finish their runs before a cutoff set from the reset time and the kernel runtime;
+   - every submit goes through `tools/kaggle_submit.py`, after `tools/kaggle_presubmit.py <slug>` shows what is new
+     since the last review;
    - completion notifications wake the master to review results and make the next submission;
    - each submission is a paired read against a scored base.
    See [Daily Submission Discipline](#daily-submission-discipline).
@@ -91,8 +93,9 @@ Follow this sequence from minute one; each step points to the section with the r
    See [Research and Ideas](#research-and-ideas) and [Phases](#phases).
 9. **Agents:**
    - the master plans, decides and reviews;
-   - each worker does one bounded job;
+   - each worker does one bounded job, on the strongest model at xhigh or max effort;
    - adversarial review before every Kaggle push;
+   - the hourly check is one scripted read-only pass (`tools/kaggle_hourly.py <slug>`); the agent acts on its flags;
    - work with the harness's safety checks, never around them.
    See [Agent Organization](#agent-organization).
 10. **Keep this playbook current:** every owner direction and every change in approach goes in, in the same turn, and
@@ -121,8 +124,9 @@ Follow this sequence from minute one; each step points to the section with the r
     beside live figures (board place and medal lines, slots used, GPU week, lease ends). Rebuild it in the same turn
     as any plan change, submission, score, verdict or launch, and hourly with `--keep-rev` (fresh live figures, same
     rev); `tools/kaggle_live_plan.py` (next to this file) builds it from a hand-edited plan JSON.
-  General lessons go into this playbook ([Maintaining This Playbook](#maintaining-this-playbook)). Keep the research
-  folder tidy: documents at the top, scripts, images and data in `research/assets/`.
+  Both live PDFs get a render plus its automated layout check only, with no page-by-page visual check (owner
+  direction). General lessons go into this playbook ([Maintaining This Playbook](#maintaining-this-playbook)). Keep
+  the research folder tidy: documents at the top, scripts, images and data in `research/assets/`.
 - **Owner-facing times in the owner's timezone** (convert UTC deadlines and resets); machine logs stay UTC. Every
   time written anywhere comes from a real clock, never an estimate.
 - **Data and outputs** live in ignored folders at the project root (`__data/`, `__out/`); submitted files and their
@@ -203,21 +207,21 @@ Follow this sequence from minute one; each step points to the section with the r
   still ask.
 - **Leased machines need upkeep:**
   - check leases hourly; when one falls below 60 h left, extend it to 72 h from now. When an account-wide quota
-    refuses, the refusal usually states the projected total: the headroom is the quota minus (projected minus
-    requested). Extend by that headroom, split evenly across the leases that need time, and retry every hour, since
-    the headroom changes as bookings start and end. Learn the headroom before granting anything (a request larger
-    than it could be, but within the pool's maximum lease length, is refused with the total), because extending
-    leases one by one in full can use it all on the first ones. Aim for equal end times: the first lease to expire
-    is the one that may not come back, so where the pool can set an exact end, rebalance by shrinking the longest
-    (total hours unchanged). If someone else booked the machine next, extend to the maximum allowed, then lease a
-    replacement and move the work;
+    refuses, the refusal usually states the projected total: the hours still free are the quota minus (projected
+    minus requested). Extend by those free hours, split evenly across the leases that need time, and retry every
+    hour, since the free hours change as bookings start and end. Learn the free hours before granting anything (ask
+    for more than could be free, within the pool's maximum lease length, and read the total in the refusal),
+    because extending leases one by one in full can use them all on the first ones. Aim for equal end times: the
+    first lease to expire is the one that may not come back, so where the pool can set an exact end, rebalance by
+    shrinking the longest (total hours unchanged). If someone else booked the machine next, extend to the maximum
+    allowed, then lease a replacement and move the work;
   - when a lease ends (or is about to end with no extension possible), book a replacement of the same kind right away
     (same GPU model and count, same CPU architecture) for the standard window, or the longest the quota allows, and
     onboard it like any new machine; copy results off the old host before its lease ends. If the quota cannot cover
     the same number of machines for at least 48 h each, book instead a single machine of the most powerful kind
     available (by total GPU compute: GPU count and generation) for the longest the quota and the pool allow: quotas
-    usually count lease hours per machine, so one big machine turns little headroom into the most GPU time (booking
-    without asking needs the owner's standing permission, and covers these replacements only);
+    usually count lease hours per machine, so one big machine turns few free quota hours into the most GPU time
+    (booking without asking needs the owner's standing permission, and covers these replacements only);
   - a host can drop off the network while the pool's API still says "ready" (a failing network card, for example):
     after about 15 min, power-cycle it (only under the owner's standing permission), read the previous boot's kernel
     log for the cause, and keep every job checkpointed and its inputs staged on a second host so a move takes
@@ -228,11 +232,11 @@ Follow this sequence from minute one; each step points to the section with the r
   extended; collect finished results hourly so an ending lease costs at most the run in flight; stop work on a host
   only when its end is under two hours away and its owner confirms no extension.
 - **Paid cloud instances: lifecycle decisions are the agent's** under the owner's standing permission (otherwise
-  ask). Copy results off first. Where the provider's run skill sets the teardown (`brev-run` always deletes), follow
-  it; otherwise stop an idle instance that will likely be needed again within about a day and delete one that is
-  unlikely to be needed soon (a stopped disk still bills, and recreating one costs a couple of hours, cheap next to
-  days of idle charges). Review every paid instance at each hourly audit so none is forgotten. Prefer shared or
-  leased hardware whenever it fits the job; launch paid capacity only when none does, within the owner's daily cap.
+  ask). Copy results off first. Stop an idle instance you will reuse within about a day, and delete one you will not
+  (owner decision): a stopped disk still bills, and recreating one costs a couple of hours, cheap next to days of
+  idle charges. The provider's run skill has the details. Review every paid instance at each hourly audit so none is
+  forgotten. Prefer shared or leased hardware whenever it fits the job; launch paid capacity only when none does,
+  within the owner's daily cap.
 - **Match Kaggle's environment where it matters:** Kaggle runs x86 with a pinned image; local ARM runs can match
   Kaggle on the top answer but not on full ranked lists (numpy's SIMD kernels: sort tie order, last-bit exp/log), so
   compare variants on one platform and use an x86 box when exact parity matters. Pin the libraries that change model
@@ -285,7 +289,8 @@ Follow this sequence from minute one; each step points to the section with the r
     600).
 - **Disk hygiene:** prune as you go, not at the end. Delete dataset staging copies once uploaded, outputs of scored
   and superseded submissions, superseded checkpoints and rebuildable caches, and downloads nothing uses. Keep the
-  competition data, holdout definitions, current and fallback weights, and anything a running job reads.
+  competition data, holdout definitions, current and fallback weights, anything a running job reads, and the
+  write-up evidence (run folders, records and the scripts behind numbers; see [Validation](#validation)).
 
 ## Phases
 
@@ -369,9 +374,9 @@ Follow this sequence from minute one; each step points to the section with the r
   holdout's number corrected by the fitted board term for its kind of change) and the honest holdout's own. A
   public-board goal follows the board calibration: a gain that public notebooks show on the board while the honest
   holdout calls it flat can be taken by forking the notebook that carries it, with the honest verdict kept on record.
-  The final picks for the private board follow the honest holdout. When the two disagree on a lever, spend a paired
-  probe on the calibration's main claim, with the step its score triggers written in advance (say, the next step on
-  that lever when the probe beats its base by more than the board's noise).
+  The final picks for the private board follow the honest holdout. When the two disagree on a setting, spend a
+  paired probe on the calibration's main claim, with the step its score triggers written in advance (say, the next
+  step of that setting when the probe beats its base by more than the board's noise).
 - **Check whether the holdout can see a mechanism before spending a slot on it.** A suspected train/serve mismatch can
   be ruled out in minutes when the holdout runs the pipeline exactly as the kernel does, since it then already
   contains the mismatch. A robustness ablation still needs a paired read against matched retrained controls:
@@ -390,12 +395,15 @@ Follow this sequence from minute one; each step points to the section with the r
   public notebooks with known board scores on your evaluator, then fit board score against local score. Packages that
   fail to load score zero on both sides and inflate the fit's apparent quality: judge it on the working points only,
   and with a handful of them expect it to separate broad levels, not neighbouring scores.
-- **Evaluate for the scorer as it is, not as announced.** Announced fixes to the scoring environment can land late,
-  apply only to new submissions, or never land. Simulate one to learn what it changes, but choose submissions on runs
-  that match the scorer as it is, and let the simulated change break ties only. When the first board scores
-  contradict the local ranking, look for what the local setup assumes that the scorer does not (a setting, a patch,
-  an environment difference) before tuning further: local runs that had adopted an announced scorer fix ranked the
-  agents that relied on it first, and the board scored them below public agents that did not.
+- **Evaluate for the scorer that is live, not as announced.** Announced fixes to the scoring environment can land
+  late, apply only to new submissions, or never land. Simulate one to learn what it changes, but choose submissions
+  on runs that match the live scorer, and let the simulated change break ties only. Whether a newly published scorer
+  version counts as live before the hosts confirm it is the owner's call per competition (record it in the facts
+  sheet); without one, treat it as live only once the hosts say it scores submissions or the board shows its effect,
+  and until then as an announced change like any other. When the first board scores contradict the local ranking, look for what the
+  local setup assumes that the scorer does not (a setting, a patch, an environment difference) before tuning
+  further: local runs that had adopted an announced scorer fix ranked the agents that relied on it first, and the
+  board scored them below public agents that did not.
 - **Pick among many variants with repeats.** The best of several runs of one family on the same tasks sits about one
   standard deviation above that family's mean; require a repeat run and a non-negative holdout read before claiming
   one variant beats another, and compare task by task (identical totals can hide many differing tasks).
@@ -404,6 +412,36 @@ Follow this sequence from minute one; each step points to the section with the r
   their first two runs, then matched over the next four pairs, with every input (model files, server command line,
   environment, GPU health) identical. Before blaming a host, compare what it does on identical work: the verdicts on
   the same outputs, the results of the same calls.
+- **Score every arm in one identical setting** (device, batch split, threads, library versions), the baselines
+  included, never against stored runs from another setting: one model rerun on the CPU in other batches, against
+  its stored GPU run, flipped its top answer on about 7% of a holdout's items, because it makes discrete top-k
+  choices.
+- **A determinism kit makes reruns exact:** a fixed hash seed (`PYTHONHASHSEED=0`; Python's string hashing is random
+  per process, on Kaggle too, and set order follows it, so ties can break differently), one BLAS and torch thread
+  per worker, deterministic boosting (LightGBM: `deterministic` and `force_col_wise` with a fixed `num_threads`),
+  training jobs in a fixed order, and stable sorts (`kind="stable"`). Unpinned, a quarter of a pipeline's jobs
+  differed from pinned runs of the same code; with the kit, full reruns matched bit for bit.
+- **Separate refit churn from rerun noise.** With reruns exact, any refit still moves results: another seed, or
+  another compute path on identical features, moved under a tenth of the ranks and single strata by up to about a
+  hundredth. That churn is the bar a gain must clear: measure it by refitting the unchanged base (another seed),
+  since per-stratum bootstraps of one fit understate it, and averaging several seeds shrank it little.
+- **Tag every run at launch with its full environment** (scorer version, patches, seed, hardware, task set, and any
+  other setting that can move results), and never pool or compare runs across tags: even which reference answers
+  fail depends on the harness version, so pooled runs compare different task sets. Write the tags when the run
+  starts: a run ledger that did not store two settings needed side scripts to group its runs.
+- **Run a placebo through any cut chosen on the outcome.** A subset defined by the result ("the answer is not at
+  rank 1") makes any re-scorer look good: a placebo with shuffled scores read a clear gain there. Cut on what the
+  model sees before scoring (the candidate list's makeup, the ranker's own score gap).
+- **Ablate by rerunning with the switch off,** not by deleting a part's output afterwards: downstream models were
+  trained with the part on, and their inputs shift without it. Dropping a stage's candidates from finished lists
+  understated the loss of running without that stage by about 30%.
+- **Diff the shipped assets before describing a change:** a one-factor change can refit downstream models too (a
+  training-data ablation of one model changed the trees of another whose features depend on it). Describe what the
+  diff shows; never assume downstream weights stayed fixed.
+- **Keep the evidence for a write-up** (owner direction): never prune run folders (per-item results, logs, settings)
+  or records (the run ledger, packages, submission records, notes, board and forum snapshots); copy runs off
+  temporary hosts before they end; commit the script behind each reported number beside it, before any host
+  cleanup. A paper or solution write-up can cite only what was kept.
 - **Protecting the top answer does not protect the rest of the ranking.** A re-ranker that keeps every first
   candidate can still demote correct answers further down and fail its confirmation. For ranked outputs, measure
   the whole list, not only top-1 agreement.
@@ -430,17 +468,19 @@ Follow this sequence from minute one; each step points to the section with the r
   from the reset time and the slowest observed run; an erroring submission still spends a slot. A candidate that
   misses its check is replaced by the next most informative one (an ablation), never skipped.
 - **Pre-build the day's ladder and verify it before the reset:** build every candidate and the follow-ups its result
-  would trigger (the next step on a lever that reads up, the combination of two that both read up), and verify each
-  commit run before the reset; write each slot's prediction with an interval, and the rule its score triggers,
-  before the first submission. The reset then submits only verified versions, and a follow-up goes up the moment its
-  trigger's score lands. In a code competition the hidden rerun can take hours to score, so the slots that depend on
-  the reset's scores come late in the day.
+  would trigger (the next step of a setting that reads up, the combination of two changes that both read up), and
+  verify each commit run before the reset; write each slot's prediction with an interval, and the rule its score
+  triggers, before the first submission. The reset then submits only verified versions, and a follow-up goes up the
+  moment its trigger's score lands. In a code competition the hidden rerun can take hours to score, so the slots
+  that depend on the reset's scores come late in the day.
 - **Right before every submission, check the forum and announcements, and re-decide the pick:** new or changed
   topics, host posts and pinned threads, the competition pages, other teams' reported results, new or re-scored public
   notebooks, and board moves. The check exists to change your mind: a scorer or harness change, a host ruling, a
   reported failure mode, a better public package on the board, or evidence against the pick's design each call for
   switching to a better version, building one, or delaying the slot. Record the decision (keep, switch or delay, and
-  why) in the submission record, and build the check into the submit step so it cannot be skipped.
+  why) in the submission record. `tools/kaggle_presubmit.py <slug>` lists what is new since the last review (exit 10
+  while something needs review; `--ack` marks it reviewed), and `tools/kaggle_submit.py` submits only after that
+  acknowledgement, with the record complete, the kernel run finished and a one-line review given.
 - **Before submitting, read the kernel log** for the change's own "ON" marker: a silent fallback would submit a copy
   of an earlier version. Record the version number `kernels push` prints, since the CLI may not name a private
   kernel's version later, and budget the runway on the slowest observed run: identical code on identical sessions
@@ -449,7 +489,7 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Parallel submissions are fine** (Kaggle scores each independently; leave a few minutes between submits).
 - **No blind resubmit:** after a submit that errored, timed out or lost its output, read `competitions submissions
   <slug>` and `competitions submission-limits <slug>` before asking to submit again: the first one may have landed
-  and spent its slot.
+  and spent its slot (`tools/kaggle_submit.py` never retries on its own).
 - **Watch runs and scores** with the harness's own background commands inside the session (a background sleep or
   poll that exits when the event lands, which wakes the session); a host daemon, cron job or launchd agent only
   when the owner approved one (Agent Organization).
@@ -486,21 +526,29 @@ Follow this sequence from minute one; each step points to the section with the r
   for a "New ideas" block and a "for instructions.md" block.
 - **Adversarial review before every push to Kaggle** caught real problems every time (a missing image pin,
   uncalibrated thresholds, uncoupled fallbacks, duplicate training rows, a two-factor change that needed isolating).
-- **Model and effort:** choose them explicitly using the actual harness API. Claude Code inherits effort; OpenCode
-  supports a per-prompt model/variant. Verify the model on the worker's recorded message, rather than assuming it
-  inherited the parent's settings. Include the variant on control/steering messages as well; an omitted variant can
-  reset the worker to its provider default. Require early saved milestones so a long model step does not leave all
-  progress transient.
+- **Workers run on the strongest model at xhigh or max effort** (owner direction). The master launches every worker
+  with an explicit model and, where the harness takes one per launch, an explicit effort. Where effort is
+  session-wide (Claude Code workers inherit the session's), the master session itself runs at max: if it does not,
+  ask the owner to start it with `--effort max` or to switch it with `/effort max`.
+- **Model and effort through the actual harness API:** OpenCode takes a model and variant per prompt; include the
+  variant on control and steering messages too, since an omitted one can reset the worker to its provider default.
+  Verify both on the worker's recorded messages rather than assuming them. Roles stay harness-agnostic briefs in the
+  pack, never harness-specific agent files (owner decision). Require early saved milestones so a long model step
+  does not leave all progress transient.
 - **Never idle:** an hourly check starts research on the next idea, launches experiments on free compute, keeps
   leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and refreshes the
   live report.
-- **Script the hourly check:** one command that reads the board, the public notebooks, the forum, the compute (hosts,
-  leases, jobs) and the Kaggle account (sessions, quota) and prints a few lines of flags saves most of an autonomous
-  loop's tokens; the agent acts on the flags. Track AI token spend per project per day from the harness's own usage
-  logs, and set budgets. Script routine run-watching and result collection the same way: long-lived agents that
-  polled hosts and fed an evaluation queue were among a day's most expensive jobs, ahead of the analysis and build
-  work, because every turn re-reads the agent's growing context, so its cost grows with how long it lives, not with
-  what it decides. Wake an agent only to decide.
+- **Script the hourly check:** one read-only pass over the board, the public notebooks, the forum, the compute
+  (hosts, leases, jobs, queues) and the Kaggle account (sessions, quota) that prints a few lines of flags saves most
+  of an autonomous loop's tokens; the agent acts on the flags. `tools/kaggle_hourly.py <slug>` is that pass; run the
+  project's own host and queue checks beside it where it does not reach them. Script routine run-watching and result
+  collection the same way: long-lived agents that polled hosts and fed an evaluation queue were among a day's most
+  expensive jobs, ahead of the analysis and build work, because every turn re-reads the agent's growing context, so
+  its cost grows with how long it lives, not with what it decides. Wake an agent only to decide.
+- **Daily AI spending limit** (owner decision): the owner may set an approximate daily AI spending limit per project
+  (`ai.daily_budget_usd` in the pack's `.memory/config.json`). Check it at each hourly pass with
+  `uv run -m solaris.tools.ai_spend --dir <project> --today` (exit 3 when today is over the limit); when over,
+  economize or pause new work, and tell the owner.
 - **Give each worker a private scratch subfolder;** a shared scratch folder lets one worker delete another's files.
 - **Interruption tolerance** (owner direction). Assume the agent session can vanish at any moment: an accidental
   interrupt, a network outage, a harness restart, under any harness.
@@ -518,6 +566,10 @@ Follow this sequence from minute one; each step points to the section with the r
   A harness restart can cut off every worker while their GPU jobs keep running. A reboot-persistent scheduler
   (owner-approved) restores scheduled wakeups and completion notifications: it delivers events to the master, and
   the master reviews results and submits within the plan.
+- **Tell a paused queue from a dead one:** a queue stopped on purpose carries an explicit hold or yield marker (who,
+  why, until when), and the hourly check alerts on any stopped queue without one. Collectors that wait for done
+  markers never see a job that a reboot killed: an unannounced host reboot left a queue dead for about ten hours,
+  because its status read like a deliberate hold.
 - **Verify autonomy in the actual harness:** distinguish a persistent session from something that wakes it. Install
   an owner-approved service when native session timers are unavailable. Persist schedules and pending events,
   recover missed checkpoints after downtime, wait while the master is busy, and test delivery and pause across a
@@ -526,12 +578,12 @@ Follow this sequence from minute one; each step points to the section with the r
   requests. Re-arm completed watches on a new run, and detect idle workers whose last turn never finished.
   Test these against the installed API, not assumptions about upstream internals: a real API can accept a
   deliberately backdated id that a review expected it to skip.
-- **Budget context and checkpoint compaction:** automatic compaction needs explicit headroom and a bounded
-  recent-history budget. A retained-history budget is not a total-context cap: summaries and instructions add to it.
-  Save decisions, owner constraints, exact job/artifact references and pending actions durably before compacting;
-  retain the last good checkpoint if a write or model call fails. Test process-kill recovery in the real harness:
-  check that native compaction keeps the key decisions and pending work, and that the same session reopens after
-  the harness server is killed and restarted.
+- **Budget context and checkpoint compaction:** automatic compaction needs a reserve of free context, set
+  explicitly, and a bounded recent-history budget. A retained-history budget is not a total-context cap: summaries
+  and instructions add to it. Save decisions, owner constraints, exact job/artifact references and pending actions
+  durably before compacting; retain the last good checkpoint if a write or model call fails. Test process-kill
+  recovery in the real harness: check that native compaction keeps the key decisions and pending work, and that the
+  same session reopens after the harness server is killed and restarted.
 - **Errors must not acknowledge work:** a watcher should require a successful final reply, not merely an assistant
   message or tool call. Back off after provider failures, bound context recovery, and retain pending events on
   failure. Re-check external side effects before replaying a partially completed batch. An outage and a failed
@@ -545,7 +597,7 @@ Follow this sequence from minute one; each step points to the section with the r
     and its data deleted.
   - Workers call the existing wrappers directly and never write new wrapper scripts. A wrapper around the ssh
     wrapper was blocked as a bypass.
-  - When something is blocked, report it to the owner. Allow rules for recurring commands are the owner's lever.
+  - When something is blocked, report it to the owner. Allow rules for recurring commands are the owner's to add.
 - **When the owner approves commands by hand** (auto mode off): allow-list the routine, low-risk commands (ssh to
   leased hosts, the lease tool, the Kaggle gateway, read-only git), and have workers batch shell steps and run long
   jobs in tmux. Workers' report calls may be refused; their reports then arrive through the task notice.
@@ -601,11 +653,24 @@ Follow this sequence from minute one; each step points to the section with the r
   combines), never from the commit run.
 - **Say what a commit run cannot show:** a change whose gate never opens on the visible test (it acts only on cases
   the visible test lacks) can be checked there only for loading: its inputs found, its markers printed, rows equal to
-  the base's. Record it as checked for loading only, and let the board read its effect.
+  the base's. Record it as checked for loading only, and let the board read its effect. Likewise, a smoke whose
+  stage budget runs out proves nothing about that stage: one stage spent its whole smoke time budget before
+  processing a single item, so the smoke rows matched the base's whatever the change did. Read each stage's
+  processed count in the log, and check a change to such a stage by a diff of the built kernel and its own log line.
+- **Freeze smoke inputs:** never rewrite staged datasets or notebooks while a smoke runs, and hash every input at
+  launch and again at the end (`find -L <roots> -type f | sha256sum`); a smoke whose inputs changed verifies nothing.
 - **Coupled fallbacks:** every new input or step falls back, all-or-nothing, to the last evaluated configuration,
   with a logged marker; worker pools use timeouts (`map_async(...).get(timeout)`) so a crash cannot hang the run.
-- **Private datasets:** create them before the kernel push and wait for "ready" (subtitle 20-80 characters); mount
-  paths vary (`/kaggle/input/datasets/<owner>/<slug>/`), so search recursively.
+- **Decode `kernels logs` before matching markers:** it returns JSON records whose text escapes quotes, so a raw
+  grep for a marker that contains quotes reports it missing. Match the line that names the whole configured state,
+  never a bare `ON` token that a fallback state can print too.
+- **Private datasets:** create them before the kernel push and wait for "ready" (subtitle 20-80 characters). Mount
+  paths vary (`/kaggle/input/datasets/<owner>/<slug>/`), so resolve your own datasets' folders first and look files
+  up only inside them: a recursive search of all of `/kaggle/input` picks up same-named files from other attached
+  datasets (with two kernels' inputs attached, a lookup took the other's file and a wheel glob found two wheels).
+- **Never publish a new version of a dataset that a pushed or submitted kernel attaches;** give new assets a new
+  dataset. `dataset_sources` names bare slugs, so every later push mounts the latest version: a re-push or a
+  sibling kernel would run on files nobody reviewed, while the submitted version keeps the old ones.
 - **Dataset uploads:** `datasets create|version` skip subfolders by default, with one easy-to-miss line (none under
   `-q`): pass `--dir-mode zip`. Collaborators listed in `dataset-metadata.json` are ignored on create. Before
   `datasets metadata --update`, check the file holds `"isPrivate": true` and every field: CLI 2.2.4 sends
@@ -616,6 +681,16 @@ Follow this sequence from minute one; each step points to the section with the r
   alignment holds only for those files.
 - **Hardware banner** at the start of every kernel (CPU count, RAM, GPU) to learn the real environment.
 - **Evaluate the exact shipped bytes;** after any rebase, re-smoke.
+- **Mirror the grader exactly in local runs:** its command line, environment and config keys, read from the
+  grader's own code. A host's convenience runner ignored the package's config file and skipped a step the scorer
+  runs, and a local test timeout followed a package setting that the grader's own test step ignores.
+- **Gate every package on the hosts' own validator at the pinned version:** run their packaging or compile step on
+  the exact bytes you ship, and again after every scorer update: a package that fails it can score zero with no
+  error shown.
+- **Build every package from a clean export:** copy only what the package needs into a fresh folder, with no
+  bytecode (`__pycache__`, `.pyc`; set `PYTHONDONTWRITEBYTECODE=1` for checks run on it), no `*.sync-conflict-*`
+  copies and no notes: stray `.pyc` files failed a host's file-type check, and every file in a scripts folder is
+  loaded on each call.
 - **Replay every candidate kernel in Kaggle's exact image on an x86 host before pushing** (disabling numpy's AVX-512
   kernels, for example, can make CPU output match Kaggle's row for row). It takes minutes, catches silent fallbacks,
   and gives exact outputs for ensembles.
@@ -626,6 +701,9 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Check `kernel-metadata.json` before each push:** `id`, a `code_file` that exists, `is_private` true,
   `enable_internet` as the rules allow (a missing key means on), the accelerator and machine (`enable_gpu`,
   `machine_shape`), the image pin (`docker_image`), and only the sources the code reads.
+- **A notebook submission names a saved version,** N being the one `kernels push` printed:
+  `competitions submit <slug> -k <owner>/<kernel> -v <N> -f <output file> -m <message>` (2.2.4 refuses `-k`
+  without `-v`; `-f` names the kernel's output file). It goes through `tools/kaggle_submit.py`.
 - **Kaggle decompresses `.gz` files in datasets,** even inside a zip. Ship plain files, list in the manifest the
   names the kernel will actually see, and check `datasets files` after every upload: a checksum check keyed on the
   `.gz` names would silently fall back and waste a slot.

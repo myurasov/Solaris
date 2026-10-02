@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -73,6 +73,9 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
   save; `KAGGLE_LB_RECORD=0` turns that off). At the framework root it saves a read only when
   `KAGGLE_LB_DIR` names a store. The output and the exit code stay the CLI's own; a hook that fails
   only notes it on stderr.
+- **Push gate.** Unlike the hooks, a check can stop a call: the gateway refuses `kernels push`
+  without an account-sharing lease (the `kaggle-sharing` skill). `KAGGLE_PUSH_WITHOUT_LEASE=1`
+  overrides it, only on the owner's word.
 
 ## Signing In
 
@@ -129,11 +132,13 @@ Corrections to it, verified against 2.2.4:
   an unanchored regex search).
 - **`kernels output` on a kernel with thousands of output files** (one that writes a whole
   Python environment, say) answers 429 from its first page, every time and at any
-  `--page-size`, while `kernels files` still pages: not a rate limit. Take a `Next Page Token`
-  from `kernels files <kernel> --page-size 1`: it is base64 (padding may be dropped) of
-  `{"GcsPageToken":"<session>/output/<name>"}`. Keep the `<session>/output/` prefix, append the
-  wanted file's name minus its last character (the page starts after that name), re-encode,
-  and pass it as `--page-token` with the anchored `--file-pattern`.
+  `--page-size`, while `kernels files` still pages: not a rate limit. `tools/kaggle_output.py
+  <owner>/<kernel> <file>... -p <folder>` does the steps below for you. By
+  hand, take a `Next Page Token` from `kernels files <kernel> --page-size 1`; it is base64
+  (padding may be dropped) of `{"GcsPageToken":"<session>/output/<name>"}`. Keep the
+  `<session>/output/` prefix, append the wanted file's name minus its last character (the page
+  starts after that name), re-encode, and pass it as `--page-token` with the anchored
+  `--file-pattern`.
 - **`kernels list` has no score field** in any format: `--sort-by scoreDescending` gives the
   order only. `tools/kaggle_lb.py notebooks <slug>` reads the real public scores (through the
   SDK); a score found only in a notebook's title or text stays marked claimed.
@@ -147,7 +152,11 @@ Corrections to it, verified against 2.2.4:
 - **Downloads** always take an explicit output path inside the context:
   `-p <absolute path>` (e.g. `<project>/data/kaggle/<slug>`), or `-o` for
   `benchmarks tasks download` - never the Solaris root. Data and outputs stay out of git.
-- **Submissions:** check `competitions submission-limits <slug>` first; afterwards read the
+- **Submissions** go through `tools/kaggle_submit.py` (the kaggle rule); the gateway refuses a bare
+  `competitions submit` unless the owner sets `KAGGLE_SUBMIT_WITHOUT_GATE=1`. Check
+  `competitions submission-limits <slug>` first. A code competition submits a saved kernel
+  version: `competitions submit <slug> -k <owner>/<kernel> -v <N> -f <output file> -m <message>`
+  (2.2.4 refuses `-k` without `-v`, which Kaggle's reference calls optional). Afterwards read the
   score with `competitions submissions <slug>` (2.2.4 has no `submit --wait`; poll sparingly).
 
 ## Troubleshooting
@@ -162,7 +171,7 @@ Corrections to it, verified against 2.2.4:
 - **429:** rate limited. The CLI retries on its own only for uploads, dataset/model creation
   and benchmarks calls; after a 429 from anything else (lists, downloads, submit, leaderboard)
   back off yourself - never loop. A `kernels output` 429 on every try is the many-files case
-  under Kaggle's Own Skill, not a rate limit.
+  under Kaggle's Own Skill, not a rate limit: use `tools/kaggle_output.py`.
 - **Versioned kernel refs** (`<user>/<kernel>/<N>`): in 2.2.4, `kernels output`, `status`,
   `files` and `logs` may silently use the latest version instead of N - confirm the version
   in what comes back.
