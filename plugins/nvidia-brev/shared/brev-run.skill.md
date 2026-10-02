@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   the rest), and append the mandatory cost-ledger row. Assumes an authenticated CLI
   (else run brev-setup first). Deep CLI reference: the plugin's brev-cli/ upstream mirror.
 ---
-_Rev. 19_
+_Rev. 20_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -149,8 +149,9 @@ their rows land at deletion.
    The usage feed lags real time - re-check a while after teardown for the final number,
    and mark the row "billed" once verified.
 4. Report: what ran, where results landed, wall-clock, actual cost.
-5. Log the run in the project's `<pack>/.memory/interactions.jsonl`; record durable host facts
-   in `<pack>/.memory/resources.md`.
+5. Log the run with `uv run -m solaris.tools.interactions add --dir <project> ...` (standalone:
+   this machine's file in `<pack>/.memory/interactions/`); record durable host facts in
+   `<pack>/.memory/resources.md`.
 
 ## Field Gotchas (learned on real runs)
 
