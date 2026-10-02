@@ -161,7 +161,7 @@ def _merge_jsonl(canonical: Path, copies: list[Path]) -> bool:
 
     The canonical file is only appended to (one O_APPEND write under a non-blocking flock), so a log
     line another session appends meanwhile is never lost, and the file keeps its inode and mode.
-    Returns False and keeps every copy for the next session start when the canonical file is missing
+    Returns False and keeps every copy for the next sweep (session start or prompt) when the canonical file is missing
     or locked, when any file is mid-line or cannot be read, or when the re-read lacks a copy line.
     """
     try:

@@ -11,8 +11,8 @@ it: a small YAML frontmatter (``description`` required; optional ``tier`` cheap|
 ``effort`` low|medium|high|xhigh|max and ``access`` read-only|full) above the markdown brief itself; a
 delegator runs the brief at that tier and effort (subagents rule). Every ``<pack>/*.agent.md`` other than the
 primary's is a role. All personas read and maintain the one shared instructions store,
-``<pack>/instructions.md`` (persistent, committable know-how: procedures, gotchas, lessons); short-term and
-machine-local state lives in the pack's ``.memory/``. A role is used by telling a model to act as its brief
+``<pack>/instructions.md`` (persistent, committable know-how: procedures, gotchas, lessons); short-term,
+private state lives in the pack's ``.memory/``. A role is used by telling a model to act as its brief
 ("act as ``<pack>/reviewer.agent.md``"), in a delegated subagent or as a session's opening instruction - there
 is no per-harness agent format to keep in sync. Every role inherits the primary persona's policies. Briefs are
 project content: no rev marker, never materialized from a template (stub:

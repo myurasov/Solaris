@@ -38,8 +38,8 @@
 // Solaris tools write a temp file and rename it over the target (solaris/tools/fileio.py).
 (?d)**/.solaris-tmp-*
 
-// Each machine keeps its own git clone. No (?d): a directory deleted on another device must not
-// take this machine's clone (and any unpushed commits) with it.
+// Git runs only on the machine that holds a repo's clone; the other machines keep no .git. No (?d):
+// a directory deleted on another device must not take that clone (and any unpushed commits) with it.
 **/.git
 
 // Project data and run outputs (the ai-pack's local-only `__data/` and `__out/`): large,
