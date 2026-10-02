@@ -555,6 +555,46 @@ class LeaseTests(Tmp):
             S.release(self.base, ids=["nope"])
 
 
+class PushLeaseTests(Tmp):
+    """push_lease: the gateway's question before a `kernels push`."""
+
+    def leases(self, *leases):
+        S.write_json(self.base / "state.json", {"leases": {f"L{i}": dict(x, id=f"L{i}") for i, x in
+                                                           enumerate(leases)}, "waiters": {}})
+
+    def lease(self, root, kernel="alice/alpha-gpu", expires=1, **kw):
+        return {"project": Path(root).name if root else "elsewhere", "root": str(root) if root else None, "kind": "gpu",
+                "kernel": kernel, "acquired": at(2), "expires": at(-expires), **kw}
+
+    def covers(self, folder, kernel="Alice/Alpha-GPU"):
+        lease = S.push_lease(folder, kernel, now=NOW, base=self.base)
+        return lease and lease["id"]
+
+    def test_a_lease_covers_its_own_projects_push_of_its_kernel(self):
+        sol = self.tree()
+        alpha, beta = sol / "projects" / "my" / "alpha", sol / "projects" / "nv" / "beta"
+        k = alpha / "source" / "kaggle" / "k1"
+        self.assertIsNone(self.covers(k))
+        cases = [(self.lease(alpha), "L0"), (self.lease(alpha, expires=-1), None),
+                 (self.lease(alpha, kernel="alice/alpha-cpu"), None), (self.lease(beta), None),
+                 (self.lease(alpha, kernel=None), "L0"), (dict(self.lease(None), project="alpha"), "L0"),
+                 ({"project": "alpha", "root": str(alpha), "kernel": "alice/alpha-gpu"}, None)]
+        for lease, want in cases:
+            self.leases(lease)
+            self.assertEqual(self.covers(k), want, lease)
+        # the first of several that cover it
+        self.leases(self.lease(beta), self.lease(alpha, acquired=at(1)), self.lease(alpha, kernel=None))
+        self.assertEqual(self.covers(k), "L2")
+
+    def test_outside_any_project_only_a_lease_naming_the_kernel_covers(self):
+        k = self.tmp / "loose" / "k1"
+        k.mkdir(parents=True)
+        self.leases(self.lease(None, kernel=None))
+        self.assertIsNone(self.covers(k))
+        self.leases(self.lease(self.tmp / "some" / "project"))
+        self.assertEqual(self.covers(k), "L0")
+
+
 class ConcurrencyTests(Tmp):
     def test_parallel_acquires_never_overbook_the_pool(self):
         S.write_json(self.base / "sharing.json", {"limits": {"gpu": 2}})

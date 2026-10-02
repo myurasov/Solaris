@@ -17,6 +17,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -83,6 +84,8 @@ def load(path):
 
 
 GW = load(GATEWAY)
+# the gated submit, for the mark it sets on its own submit call
+SUBMIT = load(TOOLS / "kaggle_submit.py")
 
 
 class Env(unittest.TestCase):
@@ -177,9 +180,11 @@ class ContextTests(Env):
             pack.mkdir()
             (pack / "manifest.json").write_text(PACK_MANIFEST)
         (home / "notes.md").write_text("made with the ad-hoc-task skill\n")
-        tools = [load(TOOLS / f"{n}.py") for n in ("kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan")]
+        tools = [load(TOOLS / f"{n}.py") for n in ("kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan",
+                                                   "kaggle_presubmit")]
+        # kaggle_submit.py and kaggle_hourly.py find their project through kaggle_presubmit.py
         finders = [self.where, tools[0].find_root, tools[1].find_root, tools[2].find_context,
-                   lambda d: tools[3].find_root(str(d))]
+                   lambda d: tools[3].find_root(str(d)), tools[4].find_root]
         with mock.patch.dict(os.environ, {"HOME": str(home)}):
             for find in finders:
                 found = [find(d) for d in (proj / "src", home / "work", self.tmp / "other")]
@@ -189,7 +194,7 @@ class ContextTests(Env):
     def test_no_copied_overlay_takes_home_or_above_for_its_project(self):
         home, other = self.tmp / "home", self.tmp / "other"
         other.mkdir()
-        names = ("kaggle", "kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan")
+        names = ("kaggle", "kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan", "kaggle_presubmit")
         found = []
         # copied overlays whose project root would be home, the folder above it, and a project under home
         for root in (home, self.tmp, home / "proj"):
@@ -198,11 +203,11 @@ class ContextTests(Env):
             (root / "aipack" / "manifest.json").write_text(PACK_MANIFEST)
             for n in names:
                 shutil.copyfile(TOOLS / f"{n}.py", tools / f"{n}.py")
-            forum, lb, share, plan = (load(tools / f"{n}.py") for n in names[1:])
+            forum, lb, share, plan, presubmit = (load(tools / f"{n}.py") for n in names[1:])
             with mock.patch.dict(os.environ, {"HOME": str(home)}):
                 found.append([self.where(other, tools / "kaggle.py"), forum.find_root(other), lb.find_root(other),
-                              share.find_context(other), plan.find_root(str(other))])
-        self.assertEqual([[f and Path(f) for f in row] for row in found], [[None] * 5, [None] * 5, [home / "proj"] * 5])
+                              share.find_context(other), plan.find_root(str(other)), presubmit.find_root(other)])
+        self.assertEqual([[f and Path(f) for f in row] for row in found], [[None] * 6, [None] * 6, [home / "proj"] * 6])
 
     def test_project_wins_over_task_notes_inside_it(self):
         root = self.project()
@@ -364,6 +369,160 @@ class FrameworkRootTests(Env):
         self.assertEqual(len((store / SLUG / "index.jsonl").read_text().splitlines()), 1)
         self.assertEqual(len(self.cli_runs()), 2)
         self.assertEqual(self.stamps(), [])
+
+
+class LeaseGateTests(Env):
+    REF = "alice/demo-kernel"
+
+    def kernel(self, root, name="k"):
+        d = root / name
+        d.mkdir(parents=True)
+        (d / "kernel-metadata.json").write_text(json.dumps({"id": "Alice/Demo-Kernel", "enable_gpu": True}))
+        return d
+
+    def lease(self, root=None, kernel=REF, hours=12, project=None, lid="L1"):
+        """A lease in kaggle_share's state.json, as `kaggle_share.py acquire` writes one."""
+        now = datetime.now(timezone.utc)
+        path = self.state / "state.json"
+        state = json.loads(path.read_text()) if path.exists() else {"leases": {}, "waiters": {}}
+        state["leases"][lid] = {"id": lid, "project": project or (root.name if root else "elsewhere"),
+                                "root": str(root) if root else None, "kind": "gpu", "kernel": kernel,
+                                "acquired": (now - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                                "expires": (now + timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")}
+        self.state.mkdir(exist_ok=True)
+        path.write_text(json.dumps(state))
+
+    def test_a_push_without_a_lease_is_refused_before_any_install_stamp_or_kaggle_call(self):
+        root = self.project()
+        self.kernel(root)
+        pushes = (["kernels", "push", "-p", "k"], ["kernels", "update", "-p", "k"], ["k", "update", "--pa", "k"],
+                  ["-W", "k", "push", "--path=k"], ["kernels", "push", "-t", "60", "-pk"])
+        for args in pushes:
+            for env in ({}, {"KAGGLE_SHARE_QUIET": "1"}):
+                code, out, err = self.run_gw(args, root, **env)
+                self.assertEqual((code, out), (3, ""), (args, env, err))
+                self.assertIn(f"kernels push refused: no open account-sharing lease covers {self.REF}; take one "
+                              "first: python3 ", err)
+                self.assertIn("kaggle_share.py acquire --path k (only the owner overrides this, with "
+                              "KAGGLE_PUSH_WITHOUT_LEASE=1)", err)
+                self.assertEqual(err.count("\n"), 1)
+        self.assertEqual((self.cli_runs(), self.stamps()), ([], []))
+
+    def test_a_lease_for_the_kernel_lets_the_push_through(self):
+        root = self.project()
+        self.kernel(root)
+        self.lease(root)
+        for args, cwd in ((["kernels", "update", "-p", "k"], root), (["kernels", "push"], root / "k")):
+            code, out, err = self.run_gw(args, cwd)
+            self.assertEqual((code, out), (0, f"ARGS {json.dumps(args)}\n"), err)
+            self.assertIn(f"kernels push of {self.REF} under lease L1", err)
+        self.assertEqual(len(self.cli_runs()), 2)
+        self.assertEqual(self.stamps()[0]["command"], "kernels push")
+
+    def test_leases_that_do_not_cover_the_push(self):
+        root, other = self.project(), self.project("other")
+        self.kernel(root)
+        for lease in (dict(root=root, hours=-1), dict(root=root, kernel="alice/another"), dict(root=other)):
+            (self.state / "state.json").unlink(missing_ok=True)
+            self.lease(**lease)
+            self.assertEqual(self.run_gw(["kernels", "push", "-p", "k"], root)[0], 3, lease)
+        # a lease of this project naming no kernel covers it, and so does one taken with --project naming its folder
+        for lease in (dict(root=root, kernel=None), dict(project="proj")):
+            (self.state / "state.json").unlink()
+            self.lease(**lease)
+            self.assertEqual(self.run_gw(["kernels", "push", "-p", "k"], root)[0], 0, lease)
+
+    def test_only_the_owners_explicit_override_skips_the_gate(self):
+        root = self.project()
+        self.kernel(root)
+        self.assertEqual(self.run_gw(["kernels", "push", "-p", "k"], root, KAGGLE_PUSH_WITHOUT_LEASE="0")[0], 3)
+        code, out, err = self.run_gw(["kernels", "push", "-p", "k"], root, KAGGLE_PUSH_WITHOUT_LEASE="1")
+        self.assertEqual(code, 0, err)
+        self.assertIn("kernels push without an account-sharing lease (KAGGLE_PUSH_WITHOUT_LEASE=1)", err)
+
+    def test_help_and_other_commands_pass(self):
+        root = self.project()
+        for args in (["kernels", "push", "-h"], ["kernels", "pull", self.REF, "-p", "k"], ["-v", "kernels", "push"]):
+            self.assertEqual(self.run_gw(args, root)[0], 0, args)
+        self.assertEqual(len(self.cli_runs()), 3)
+
+    def test_a_lease_that_cannot_be_checked_refuses(self):
+        root = self.project()
+        (root / "k").mkdir()
+        code, _, err = self.run_gw(["kernels", "push", "-p", "k"], root)
+        self.assertEqual(code, 3)
+        self.assertIn("kernels push refused: the account-sharing lease cannot be checked (no kernel id in k)", err)
+        self.kernel(root, "k2")
+        self.lease(root)
+        gw = self.overlay(root, tools={"kaggle_share.py": "import sys\nsys.exit(7)\n"})
+        code, _, err = self.run_gw(["kernels", "push", "-p", "k2"], root, gateway=gw)
+        self.assertEqual(code, 3)
+        self.assertIn("the account-sharing lease cannot be checked (SystemExit(7))", err)
+        self.assertEqual(self.cli_runs(), [])
+
+    def test_at_the_framework_root_a_lease_naming_the_kernel_covers_it(self):
+        bindir = self.tmp / "bin"
+        bindir.mkdir()
+        cli = self.tmp / "cli.py"
+        cli.write_text(FAKE_CLI.format(python=sys.executable, log=str(self.log), board=BOARD, csv=CSV))
+        (bindir / "uv").write_text(FAKE_UV.format(python=sys.executable, cli=str(cli)))
+        (bindir / "uv").chmod(0o755)
+        bare = self.tmp / "bare"
+        self.kernel(bare)
+        path = {"PATH": f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}"}
+        self.assertEqual(self.run_gw(["kernels", "push", "-p", "k"], bare, **path)[0], 3)
+        self.lease(None, kernel=self.REF)
+        self.assertEqual(self.run_gw(["kernels", "push", "-p", "k"], bare, **path)[0], 0)
+        (self.state / "state.json").unlink()
+        self.lease(None, kernel=None)
+        self.assertEqual(self.run_gw(["kernels", "push", "-p", "k"], bare, **path)[0], 3)
+
+
+class SubmitGateTests(Env):
+    ARGS = ["competitions", "submit", SLUG, "-f", "submission.csv", "-m", "S1"]
+
+    def test_a_bare_submit_is_refused_before_any_install_stamp_or_kaggle_call(self):
+        root = self.project()
+        submits = (self.ARGS, ["c", "submit", SLUG, "-k", "alice/k", "-v", "3", "-f", "s.csv", "-m", "S1"],
+                   ["-W", "competitions", "submit", "-c", SLUG, "-m", "S1"], ["c", "submit", SLUG, "-m=-h"],
+                   ["c", "submit", "-m", "S1", "--", "-h"])
+        for args in submits:
+            for env in ({}, {"KAGGLE_SHARE_QUIET": "1"}, {"KAGGLE_SUBMIT_WITHOUT_GATE": "0"}, {SUBMIT.GATE_MARK: "0"}):
+                code, out, err = self.run_gw(args, root, **env)
+                self.assertEqual((code, out), (3, ""), (args, env, err))
+                self.assertIn("competitions submit refused: submits go through the gated tool, python3 ", err)
+                self.assertIn("kaggle_submit.py <record.json> (its checks, then --go); only the owner overrides this, "
+                              "with KAGGLE_SUBMIT_WITHOUT_GATE=1", err)
+                self.assertEqual(err.count("\n"), 1)
+        self.assertEqual((self.cli_runs(), self.stamps()), ([], []))
+        # no install either: a project without the CLI, and no uv to install it with
+        bare = self.tmp / "bare"
+        (bare / "aipack").mkdir(parents=True)
+        (bare / "aipack" / "manifest.json").write_text(PACK_MANIFEST)
+        self.assertEqual(self.run_gw(self.ARGS, bare, PATH=str(self.tmp / "no-bin"))[0], 3)
+        self.assertFalse((bare / GW.ENV_DIR).exists())
+
+    def test_help_and_other_competition_commands_pass(self):
+        root = self.project()
+        for args in (["competitions", "submit", "-h"], ["c", "submit", SLUG, "--help"],
+                     ["-v", "competitions", "submit"], ["competitions", "submissions", SLUG],
+                     ["c", "submission-limits", SLUG]):
+            self.assertEqual(self.run_gw(args, root)[0], 0, args)
+        self.assertEqual(len(self.cli_runs()), 5)
+
+    def test_the_mark_kaggle_submit_sets_on_its_own_call_passes(self):
+        root = self.project()
+        code, out, err = self.run_gw(self.ARGS, root, **{SUBMIT.GATE_MARK: "1"})
+        self.assertEqual((code, out, err), (0, f"ARGS {json.dumps(self.ARGS)}\n", ""))
+        self.assertEqual(self.cli_runs(), [self.ARGS])
+        self.assertEqual(self.stamps()[0]["command"], "competitions submit")
+
+    def test_only_the_owners_explicit_override_lets_a_bare_submit_through(self):
+        root = self.project()
+        code, out, err = self.run_gw(self.ARGS, root, KAGGLE_SUBMIT_WITHOUT_GATE="1")
+        self.assertEqual((code, out), (0, f"ARGS {json.dumps(self.ARGS)}\n"), err)
+        self.assertIn("competitions submit without kaggle_submit.py (KAGGLE_SUBMIT_WITHOUT_GATE=1)", err)
+        self.assertEqual(self.cli_runs(), [self.ARGS])
 
 
 class SdkTests(Env):

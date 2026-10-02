@@ -3,7 +3,7 @@ name: kaggle-sharing
 triggers: ["kaggle sessions", "share the kaggle account", "kaggle quota", "kaggle sharing", "kaggle gpu quota", "kaggle concurrent sessions"]
 summary: Share one Kaggle account between the projects using it - detects the active projects (account-wide queued and running kernels, local gateway activity), splits the concurrent CPU and GPU sessions and the weekly GPU hours equally or as the user directs, and hands out a lease around each kernel run. Covers kaggle_share.py (status, acquire, release, ledger, config, stamp) and the agent routine.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: kaggle-sharing - One Kaggle Account, Several Projects <!-- omit in toc -->
 
@@ -116,7 +116,11 @@ only a release ends that lease early.
 1. **Before each run:** `acquire --path <kernel dir>` (with `--wait 30` when waiting is fine). If it
    is refused, do not push: report the reason and retry later, or ask the owner to change the split.
 2. **Push** the kernel as usual, after the owner's go-ahead (the kaggle rule). **If the push fails or
-   the owner declines it,** release the lease at once: `release --path <kernel dir>`.
+   the owner declines it,** release the lease at once: `release --path <kernel dir>`. The gateway
+   checks the lease: a `kernels push` (or `kernels update`) that no open lease covers (one this
+   project took for that kernel, or for no kernel) stops with exit 3 before any Kaggle call.
+   `KAGGLE_SHARE_QUIET` does not bypass it; only the owner overrides it, with
+   `KAGGLE_PUSH_WITHOUT_LEASE=1`.
 3. **When the run ends** (complete, failed or cancelled): `release --path <kernel dir>`. A lease that
    names its kernel also closes itself at the next `status` once Kaggle shows the run finished.
 4. **Upkeep** (hourly, or with each planning pass): `status` - is the project within its share, is a

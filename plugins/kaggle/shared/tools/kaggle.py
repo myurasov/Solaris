@@ -1,4 +1,4 @@
-# rev. 5
+# rev. 6
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
@@ -38,14 +38,32 @@ the tee runs only when KAGGLE_LB_DIR names a store; otherwise the read is not
 saved and the gateway says so. A failing hook only notes it on stderr. An --sdk
 call gets the stamp, never the tee.
 
+Two gates can block. A `kernels push` (or its alias `kernels update`; `k` for
+`kernels`) runs only while an open account-sharing lease covers the pushed
+kernel (kaggle_share.py push_lease: the kernel in <folder>/kernel-metadata.json,
+the lease taken with `kaggle_share.py acquire --path <folder>`). Otherwise the
+gateway exits 3 before any install, stamp or Kaggle call, with a one-line
+message on how to take one; the gate fails closed when the lease cannot be
+checked. KAGGLE_SHARE_QUIET does not bypass it; KAGGLE_PUSH_WITHOUT_LEASE=1,
+the owner's explicit override, does.
+
+The second holds submits to kaggle_submit.py, the gated submit beside this
+file: a `competitions submit` (`c` for `competitions`) runs only when the call
+carries KAGGLE_SUBMIT_GATED=1, which that tool sets on its own submit call.
+Any other submit exits 3 the same way, before any install, stamp or Kaggle
+call, with a one-line pointer to that tool. KAGGLE_SHARE_QUIET does not bypass
+it; KAGGLE_SUBMIT_WITHOUT_GATE=1, the owner's explicit override, does.
+
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
 exactly what the Kaggle CLI (or kaggle_sdk.py) printed.
 """
 
+import argparse
 import fcntl
 import importlib.util
 import json
 import os
+import shlex
 import shutil
 import subprocess
 import sys
@@ -67,10 +85,30 @@ LB_DIR_ENV = "KAGGLE_LB_DIR"
 # a first argument that runs this SDK reader, beside the gateway, instead of the CLI
 SDK_FLAG = "--sdk"
 SDK_TOOL = "kaggle_sdk.py"
+# the owner's explicit override of the lease gate on `kernels push`; a refused push exits with EXIT_REFUSED
+PUSH_ENV = "KAGGLE_PUSH_WITHOUT_LEASE"
+# a `competitions submit` runs only with kaggle_submit.py's mark on its own call, or the owner's explicit override
+SUBMIT_MARK = "KAGGLE_SUBMIT_GATED"
+SUBMIT_ENV = "KAGGLE_SUBMIT_WITHOUT_GATE"
+EXIT_REFUSED = 3
 
 
 def say(msg):
     print(f"kaggle gateway: {msg}", file=sys.stderr)
+
+
+def refuse(msg):
+    say(msg)
+    sys.exit(EXIT_REFUSED)
+
+
+def rel(p):
+    # relative to the working folder when inside it, else absolute
+    p = Path(p)
+    try:
+        return str(p.relative_to(Path.cwd()))
+    except ValueError:
+        return str(p)
 
 
 def find_uv():
@@ -204,6 +242,85 @@ def stamp_activity(ctx, args):
         say(f"activity stamp skipped ({e!r})")
 
 
+class _Quiet(argparse.ArgumentParser):
+    # raise instead of printing usage: the gate only inspects the arguments
+    def error(self, message):
+        raise ValueError(message)
+
+
+def push_folder(args):
+    """The kernel folder a `kernels push` call would push (alias `update`, group alias `k`; default the working
+    folder), else None. Before the command only the CLI's flags can come (-W, -v, -h); -v and -h print and exit."""
+    args = [str(a) for a in args]
+    words = [i for i, a in enumerate(args) if not a.startswith("-")][:2]
+    if len(words) < 2 or args[words[0]] not in ("kernels", "k") or args[words[1]] not in ("push", "update"):
+        return None
+    rest = args[words[1] + 1:]
+    if {"-h", "--help", "-v", "--version"} & set(args[:words[1]]) or {"-h", "--help"} & set(rest):
+        return None
+    p = _Quiet(add_help=False)
+    # the push options of the pinned CLI, so an abbreviation (--pa) reads as the CLI reads it
+    p.add_argument("-p", "--path")
+    p.add_argument("-t", "--timeout")
+    p.add_argument("--accelerator")
+    try:
+        ns = p.parse_known_args(rest)[0]
+    except (ValueError, argparse.ArgumentError):
+        return None  # the CLI stops on these arguments too: nothing is pushed
+    return Path(ns.path or ".")
+
+
+def lease_gate(args):
+    """Refuse a `kernels push` that no open account-sharing lease covers (exit 3), before any Kaggle call."""
+    folder = push_folder(args)
+    if folder is None:
+        return
+    if os.environ.get(PUSH_ENV) == "1":
+        say(f"kernels push without an account-sharing lease ({PUSH_ENV}=1)")
+        return
+    acquire = (f"python3 {shlex.quote(rel(Path(__file__).resolve().parent / 'kaggle_share.py'))} acquire --path "
+               f"{shlex.quote(str(folder))}")
+    share = None
+    try:
+        share = load_tool("kaggle_share")
+        ref = share.read_kernel(folder)[0]
+        lease = share.push_lease(folder, ref)
+    except (Exception, SystemExit) as e:
+        # fail closed: an unchecked push could overbook the shared account
+        why = str(e) if share is not None and isinstance(e, share.ShareError) else repr(e)
+        refuse(f"kernels push refused: the account-sharing lease cannot be checked ({why}); fix that and take a "
+               f"lease ({acquire}), or the owner sets {PUSH_ENV}=1")
+    if lease is None:
+        refuse(f"kernels push refused: no open account-sharing lease covers {ref}; take one first: {acquire} "
+               f"(only the owner overrides this, with {PUSH_ENV}=1)")
+    say(f"kernels push of {ref} under lease {lease.get('id')}")
+
+
+def submit_call(args):
+    """Whether a call is a `competitions submit` (group alias `c`) that would reach Kaggle: -h and -v only print.
+    Before the command only the CLI's flags can come (-W, -v, -h); after it, -v is the kernel version."""
+    args = [str(a) for a in args]
+    words = [i for i, a in enumerate(args) if not a.startswith("-")][:2]
+    if len(words) < 2 or args[words[0]] not in ("competitions", "c") or args[words[1]] != "submit":
+        return False
+    rest = args[words[1] + 1:]
+    # after "--" every word is a value, never an option
+    rest = rest[:rest.index("--")] if "--" in rest else rest
+    return not ({"-h", "--help", "-v", "--version"} & set(args[:words[1]]) or {"-h", "--help"} & set(rest))
+
+
+def submit_gate(args):
+    """Refuse a `competitions submit` that does not come from kaggle_submit.py (exit 3), before any Kaggle call."""
+    if not submit_call(args) or os.environ.get(SUBMIT_MARK) == "1":
+        return
+    if os.environ.get(SUBMIT_ENV) == "1":
+        say(f"competitions submit without kaggle_submit.py ({SUBMIT_ENV}=1)")
+        return
+    tool = shlex.quote(rel(Path(__file__).resolve().parent / "kaggle_submit.py"))
+    refuse(f"competitions submit refused: submits go through the gated tool, python3 {tool} <record.json> (its checks, "
+           f"then --go); only the owner overrides this, with {SUBMIT_ENV}=1")
+
+
 def tee_leaderboard(ctx, cmd, args):
     """Run a leaderboard read (--show or --download) through kaggle_lb, which saves it; None means exec as usual."""
     if os.environ.get(RECORD_ENV, "1") == "0":
@@ -241,6 +358,10 @@ def main():
     sdk = args[:1] == [SDK_FLAG]
     tool = str(Path(__file__).resolve().parent / SDK_TOOL)
     ctx = find_context()
+    # a push needs an account-sharing lease and a submit kaggle_submit.py: checked before any install, stamp or
+    # Kaggle call
+    lease_gate(args)
+    submit_gate(args)
     if ctx is None:
         uv = find_uv()
         say("no project or task folder here - running the pinned CLI from a throwaway uv environment")

@@ -1,4 +1,4 @@
-# rev. 5
+# rev. 6
 
 """kaggle_share: share one Kaggle account's sessions and GPU quota between projects.
 
@@ -39,7 +39,9 @@ State lives in ~/.solaris/kaggle/ (KAGGLE_SHARE_DIR or --state moves it; never
 ~/.kaggle, which holds credentials): activity/ (stamps), sharing.json (the
 split), state.json (leases, waiting requests), ledger.jsonl (closed leases: the
 hours by project), account.json (the last account read), .lock (flock). Kaggle
-is only read. Exit codes: 0 ok, 1 error, 2 bad usage, 3 refused. Stdlib only.
+is only read. The gateway asks push_lease() before each `kernels push` (or
+`kernels update`) and refuses the push when no open lease covers its kernel.
+Exit codes: 0 ok, 1 error, 2 bad usage, 3 refused. Stdlib only.
 """
 
 from __future__ import annotations
@@ -830,6 +832,30 @@ def release(base, *, ids=(), project=None, root=None, kernel=None, kind=None, al
         closed = [close_lease(base, state, i, "released", now) for i in match]
         write_json(Path(base) / "state.json", state)
     return closed
+
+
+def push_lease(folder, kernel, now=None, base=None):
+    """The open lease covering a `kernels push` of kernel from the kernel folder folder, else None (the gateway's
+    lease gate; read-only).
+
+    A lease covers the push when it has not expired, names that kernel or no kernel, and belongs to the project or
+    task folder around folder, as acquire --path records it (or was taken with --project naming that folder).
+    Where no project or task folder is around, only a lease naming that kernel covers it, whoever holds it.
+    """
+    now = now or now_utc()
+    holder = find_context(folder)
+    ref = str(kernel).lower()
+    leases = load_state(state_dir(base))["leases"].values()
+    for lease in sorted((x for x in leases if isinstance(x, dict)), key=lambda x: str(x.get("acquired"))):
+        named = str(lease.get("kernel") or "").lower()
+        try:
+            if now >= parse_time(lease["expires"]) or (named and named != ref):
+                continue
+            if (named if holder is None else _owner_is(lease, holder.name, holder)):
+                return lease
+        except (KeyError, TypeError, ValueError):
+            continue  # a hand-edited lease without a readable end or holder covers nothing
+    return None
 
 
 def gpu_ledger(base, now=None, week_start=None):
