@@ -3,13 +3,9 @@
   "schema_version": 1,
   "files": {
     "shared/how-to-kaggle.skill.md": {
-      "rev": 23,
-      "hash": "69b9e727b6e05713d47caeaaca2ff8e2c637d400c604dd5bcbe4c44bd5b86b20",
+      "rev": 24,
+      "hash": "888dbefb3082704c3f2f183861aad1dade93278cfb14ae1e63a37f70e1dd4746",
       "history": [
-        {
-          "rev": 11,
-          "hash": "ef5995f3094cfe7bdaa340e07b0d68c6ce73df2e3f60d1715e16fda9bd6e47fd"
-        },
         {
           "rev": 12,
           "hash": "69503b1ecb955dab18c79791a8e53e9092c0302154be29f80fbbeeef77930900"
@@ -45,6 +41,10 @@
         {
           "rev": 23,
           "hash": "69b9e727b6e05713d47caeaaca2ff8e2c637d400c604dd5bcbe4c44bd5b86b20"
+        },
+        {
+          "rev": 24,
+          "hash": "888dbefb3082704c3f2f183861aad1dade93278cfb14ae1e63a37f70e1dd4746"
         }
       ]
     },

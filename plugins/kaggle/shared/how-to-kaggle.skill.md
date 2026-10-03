@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 23_
+_Rev. 24_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -180,6 +180,11 @@ Follow this sequence from minute one; each step points to the section with the r
   one's lineage (which notebook it forked, what it changed). When one beats your best, fork it faithfully (see [Kernel
   Engineering](#kernel-engineering)) as a board read and a candidate base: a public notebook that passes a team's
   best in one evening can become both the next day's board read and the base of its next candidates.
+- **Trace and judge public notebooks by their code.** A search by parent (`kernels list --parent <ref>`) misses
+  copies that were uploaded rather than forked: find those by a dataset they attach (`kernels list --dataset
+  <owner>/<dataset> --sort-by dateRun`) and diff their code against your own fork. A new last-run time is not a new
+  version: compare code checksums before treating a notebook as changed. Read the code, not the description: a copy
+  can describe a step its code removed.
 - **Credentials:** the CLI's OAuth login expires after about 12 hours, and calls then fail with "Authentication
   required". For unattended work, the owner creates a long-lived API token and saves it straight from the clipboard
   without displaying it (on macOS: `umask 077; pbpaste > ~/.kaggle/access_token`); a token takes precedence over
@@ -347,9 +352,9 @@ Follow this sequence from minute one; each step points to the section with the r
   swap that changes a large share of answers is noisier on a small board than one answer's worth. When scoring runs a
   sampled model or agent, identical submissions differ too: one byte-identical public package, resubmitted by
   several teams, scored anywhere in a band that spanned the board's whole top group (about 5% of the public split).
-  Measure that band from identical resubmissions (public copies of one package, found with `kernels list --parent
-  <ref>` and checked byte-identical by pulling and diffing them, give it for free), treat gaps inside it as ties, and
-  rank candidates by many local runs, not by one board score.
+  Measure that band from identical resubmissions (public copies of one package, found by parent and by attached
+  dataset as [Kaggle Access](#kaggle-access) describes, and checked byte-identical by pulling and diffing them, give
+  it for free), treat gaps inside it as ties, and rank candidates by many local runs, not by one board score.
 - **Don't spend slots on changes smaller than the board's noise for their kind.** Judge them on the holdout and bring
   them to the board only inside larger changes. Several model variants of similar quality can spread across a range
   of public scores wider than their true differences, so single scores cannot rank them.
@@ -371,6 +376,10 @@ Follow this sequence from minute one; each step points to the section with the r
   kind of change.
   - Swaps of one model component can score consistently below the holdout's prediction, and an add-on's holdout gain
     can shrink to almost nothing on the board.
+  - A strong public notebook with its public checkpoint swapped for one you retrained lost on the board twice (by
+    about one and two hundredths) while local reads called the swap flat or up. Read such a swap on the board in a
+    slot of its own before stacking other changes on it, and find why your retrained checkpoints generalize worse to
+    the hidden test before trying another swap.
   - After a miss, treat the holdout's number for that kind of change as an upper bound and look for the mechanism;
     measure each explanation's size before acting on it (a plausible one can explain only a small part of the gap).
 - **When the holdouts and the board disagree on one kind of change, fit the disagreement.** Add a term for that kind
