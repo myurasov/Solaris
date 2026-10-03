@@ -1,4 +1,4 @@
-/* rev. 8 */
+/* rev. 9 */
 
 /* ==========================================================================
    Report stylesheet - the plugin-managed base for report styling.
@@ -211,6 +211,8 @@ figure:not(.chart-block) figcaption { font-size: var(--fs-small); color: var(--i
   table { break-inside: avoid; }           /* short tables move whole to next page */
   table.split { break-inside: auto; }      /* opt-in: may break; thead repeats */
   tr { break-inside: avoid; }              /* rows stay whole */
+  table.split tr { break-inside: auto; }   /* in a split table a tall row may split instead of leaving a gap */
+  table.split td { box-decoration-break: clone; }  /* each part keeps its padding */
   thead { break-inside: avoid; break-after: avoid; }  /* header never hangs alone */
   h2 { break-after: avoid; }
   .diagram, .diagram-key, figure:not(.chart-block), .fig-row { break-inside: avoid; }
