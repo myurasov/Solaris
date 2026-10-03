@@ -1,4 +1,4 @@
-// rev. 5
+// rev. 6
 
 // Render a report HTML to PDF in the Co-SA document style - ZERO npm deps.
 // Drives the installed Google Chrome over the DevTools protocol using Node's
@@ -6,6 +6,7 @@
 // poppler's pdfunite (brew install poppler).
 //
 //   node render.js <input.html> <output.pdf> [--watermark "text"]
+//   node render.js --reap     close report-render Chromes an interrupted render left running
 //
 // Page furniture (all pages unless noted), parsed from the HTML + config:
 //   header: page numbers top-right; top-left = italic "<prepared_by> on ..."
@@ -22,7 +23,8 @@
 // ("No usable sandbox" on Linux hosts that block unprivileged user namespaces, a broken SUID helper, running as
 // root) does the render retry once with --no-sandbox, on a fresh profile and with every network load refused
 // (only local HTML is rendered); RENDER_NO_SANDBOX=1 goes straight to that mode. Node 22+ is required (built-in
-// WebSocket).
+// WebSocket). Chrome never outlives the render: it is closed on every exit (errors and signals too), and each
+// render first closes any Chrome an earlier, interrupted render left running (--reap does only that).
 // Chrome cannot vary headers per page, so page 1 and pages 2+ render as two
 // passes over the same layout and are concatenated.
 const fs = require('fs');
@@ -44,7 +46,88 @@ const SANDBOX_FAILED =
 // Scratch space (Chrome profile + intermediate PDFs) - kept outside the project.
 const TMP_ROOT = path.join(os.homedir(), '.solaris', 'tmp');
 
+// A Chrome whose render.js died mid-render (a crash, a kill, a timeout) is re-parented to init or systemd --user
+// and keeps running. Such an orphan is a main Chrome process (no --type=) on a profile under TMP_ROOT/render-*
+// whose parent is no longer a render.js.
+function renderChromes() {
+  let out = '';
+  try {
+    out = execFileSync('ps', ['-A', '-ww', '-o', 'pid=,ppid=,command='], { encoding: 'utf8', maxBuffer: 64 << 20 });
+  } catch (e) {
+    return [];
+  }
+  const procs = new Map();
+  for (const line of out.split('\n')) {
+    const mm = line.match(/^\s*(\d+)\s+(\d+)\s+(.*)$/);
+    if (mm) procs.set(Number(mm[1]), { ppid: Number(mm[2]), cmd: mm[3] });
+  }
+  const flag = `--user-data-dir=${path.join(TMP_ROOT, 'render-')}`;
+  const found = [];
+  for (const [pid, p] of procs) {
+    const at = p.cmd.indexOf(flag);
+    if (at === -1 || p.cmd.includes('--type=')) continue;
+    // its render-* folder (older renderers used that folder itself as the profile)
+    const dir = path.join(TMP_ROOT, p.cmd.slice(at + flag.length - 'render-'.length).split(/[\s/]/)[0]);
+    const parent = procs.get(p.ppid);
+    found.push({ pid, dir, orphan: !(parent && parent.cmd.includes('render.js')) });
+  }
+  return found;
+}
+
+const alive = pid => {
+  try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; }
+};
+const pause = ms => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+// Close orphaned render Chromes and remove their folders, plus render folders over a day old that no Chrome uses.
+function reapOrphans() {
+  const all = renderChromes();
+  const orphans = all.filter(c => c.orphan);
+  for (const { pid } of orphans) {
+    try { process.kill(pid, 'SIGTERM'); } catch (e) { /* already gone */ }
+  }
+  for (let i = 0; i < 30 && orphans.some(c => alive(c.pid)); i++) pause(100);
+  for (const { pid } of orphans) {
+    if (alive(pid)) {
+      try { process.kill(pid, 'SIGKILL'); } catch (e) { /* not ours to stop */ }
+    }
+  }
+  const inUse = new Set(all.filter(c => !c.orphan).map(c => c.dir));
+  const old = new Set(orphans.map(c => c.dir));
+  try {
+    for (const name of fs.readdirSync(TMP_ROOT)) {
+      const d = path.join(TMP_ROOT, name);
+      if (name.startsWith('render-') && Date.now() - fs.statSync(d).mtimeMs > 24 * 3600e3) old.add(d);
+    }
+  } catch (e) { /* no scratch root yet */ }
+  for (const d of old) {
+    if (inUse.has(d)) continue;
+    try { fs.rmSync(d, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); } catch (e) { /* next run */ }
+  }
+  return orphans;
+}
+
+// Chrome and the scratch folder never outlive this process: closed on every exit, errors and signals included.
+let chromeProc = null;
+let scratch = null;
+process.on('exit', () => {
+  if (chromeProc && chromeProc.exitCode === null && chromeProc.signalCode === null) {
+    try { chromeProc.kill('SIGKILL'); } catch (e) { /* already gone */ }
+  }
+  if (scratch) {
+    try { fs.rmSync(scratch, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }); } catch (e) { /* next run */ }
+  }
+});
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, () => process.exit(128 + os.constants.signals[sig]));
+
 const args = process.argv.slice(2);
+if (args.includes('--reap')) {
+  const gone = reapOrphans();
+  console.log(gone.length
+    ? `closed ${gone.length} report-render Chrome(s) an interrupted render left running: pid ${gone.map(c => c.pid).join(', ')}`
+    : 'no report-render Chrome left running');
+  process.exit(0);
+}
 const wmIdx = args.indexOf('--watermark');
 let watermark = null;
 if (wmIdx !== -1) watermark = args.splice(wmIdx, 2)[1];
@@ -172,8 +255,11 @@ function cdp(ws) {
 }
 
 (async () => {
+  const reaped = reapOrphans();
+  if (reaped.length) console.error(`note: closed ${reaped.length} report-render Chrome(s) an interrupted render left running`);
   fs.mkdirSync(TMP_ROOT, { recursive: true });
-  const tmp = fs.mkdtempSync(path.join(TMP_ROOT, 'render-'));
+  scratch = fs.mkdtempSync(path.join(TMP_ROOT, 'render-'));
+  const tmp = scratch;
   // start Chrome on a fresh profile folder and wait for its DevTools endpoint: { proc, wsUrl },
   // or { log } (its stderr) when it exits or stalls before that
   const startChrome = noSandbox => new Promise((resolve, reject) => {
@@ -184,6 +270,7 @@ function cdp(ws) {
       // unsandboxed: resolve no host names (http/https requests are also refused over CDP below)
       ...(noSandbox ? ['--no-sandbox', '--host-resolver-rules=MAP * ~NOTFOUND'] : []), 'about:blank',
     ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    chromeProc = proc; // killed on exit if still running
     let log = '', done = false;
     const finish = v => {
       if (done) return;

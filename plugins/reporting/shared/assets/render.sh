@@ -1,5 +1,5 @@
 #!/bin/sh
-# rev. 3
+# rev. 4
 # Render report HTML sources (reports/html/<slug>.html) to PDFs (reports/<slug>.pdf).
 # Run from the project root or from the reports/ dir:
 #
@@ -8,29 +8,35 @@
 #   render.sh --live [slug ...]  watch html/ + stylesheet + renderer + theme
 #                                and re-render on change (all, or just the
 #                                given slugs). Ctrl-C to stop.
+#   render.sh --reap             close report-render Chromes an interrupted
+#                                render left running, then exit
 #
 # Sources are gitignored working files; the tracked deliverables are the PDFs.
 # Theme + page furniture are project-owned: reports/theme.css, reports/report.json.
 SELF="$(cd "$(dirname "$0")" && pwd)"
 if [ -d reports ]; then RDIR=reports; else RDIR=.; fi
 HTML="$RDIR/html"
-mkdir -p "$HTML"
 
 LIVE=0
+REAP=0
 SLUGS=""
 for a in "$@"; do
   case "$a" in
     --live) LIVE=1 ;;
+    --reap) REAP=1 ;;
     *) SLUGS="$SLUGS ${a%.html}" ;;
   esac
 done
-[ -z "$(echo $SLUGS)" ] && SLUGS=$(ls "$HTML"/*.html 2>/dev/null | sed 's|.*/||; s|\.html$||')
-[ -z "$(echo $SLUGS)" ] && { echo "render.sh: no HTML sources in $HTML/"; exit 1; }
 
 # render.js needs Node 22+: use PATH's node when new enough, else the user-level one in ~/.solaris/render
 NODE=node
 if ! node -e 'process.exit(+process.versions.node.split(".")[0] >= 22 ? 0 : 1)' 2>/dev/null \
    && [ -x "$HOME/.solaris/render/node/bin/node" ]; then NODE="$HOME/.solaris/render/node/bin/node"; fi
+[ "$REAP" -eq 1 ] && exec "$NODE" "$SELF/render.js" --reap
+
+mkdir -p "$HTML"
+[ -z "$(echo $SLUGS)" ] && SLUGS=$(ls "$HTML"/*.html 2>/dev/null | sed 's|.*/||; s|\.html$||')
+[ -z "$(echo $SLUGS)" ] && { echo "render.sh: no HTML sources in $HTML/"; exit 1; }
 
 FAILED=0
 render_one() {
