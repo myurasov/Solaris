@@ -3,7 +3,8 @@
     python3 -m unittest discover -s plugins/kaggle/tests
 
 The pass runs for real: kaggle_presubmit.py's reads (kaggle_forum.py, kaggle_lb.py) and kaggle_share.py status, all
-through the stand-in gateway (kaggle_standin).
+through the stand-in gateway (kaggle_standin). The browsers check reads a made-up process table
+(KAGGLE_HOURLY_PS_FILE), never the machine's.
 """
 
 import json
@@ -12,6 +13,7 @@ import sys
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from kaggle_standin import SLUG, Project, kaggle_time, utc  # noqa: E402
@@ -19,11 +21,26 @@ from kaggle_standin import SLUG, Project, kaggle_time, utc  # noqa: E402
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 
 
+def chrome(profile, *flags):
+    # a Chrome process on a profile folder; a helper process's flags include --type=
+    return " ".join(["/opt/google/chrome/chrome", f"--user-data-dir={profile}", "--remote-debugging-port=0", *flags])
+
+
 class Hourly(Project):
     def setUp(self):
         super().setUp()
         self.subs([])
         self.account([])
+        # the browsers check reads this file instead of `ps`, and finds browserctl's profiles here
+        self.ps_file, self.bhome = self.tmp / "ps.txt", self.tmp / "browserctl"
+        self.ps([])
+        for env in (self.env, os.environ):
+            env.update(KAGGLE_HOURLY_PS_FILE=str(self.ps_file), BROWSERCTL_HOME=str(self.bhome))
+            env.pop("BROWSERCTL_PROJECT", None)
+
+    def ps(self, rows):
+        # rows: (pid, parent pid, elapsed time as ps prints it, command), as `ps -o pid=,ppid=,etime=,command=` does
+        self.ps_file.write_text("".join(f"{pid:>7} {ppid:>7} {up:>11} {cmd}\n" for pid, ppid, up, cmd in rows))
 
     def subs(self, rows, code=0):
         # rows: (ref, description, status, public score)
@@ -66,6 +83,7 @@ class PassTests(Hourly):
         self.assertIn("no list before this one to compare", self.line(out, "notebooks"))
         self.assertEqual(self.line(out, "subs"), "subs       0 scoring now; no earlier pass to compare")
         self.assertIn("3.50 of 30.00 h used this week, 26.50 h left", self.line(out, "gpu"))
+        self.assertEqual(self.line(out, "browsers"), "browsers   none running")
         # its check is not kept, so an --ack cannot record what nobody read
         self.assertFalse(self.store("presubmit", "seen.json").exists())
         self.assertEqual(sorted(json.loads(self.store("hourly", "last.json").read_text())),
@@ -179,6 +197,69 @@ class SourceTests(Hourly):
     def test_bad_arguments(self):
         for args in (["not a slug"], [SLUG, "--vs", "x"]):
             self.assertEqual(self.tool("kaggle_hourly.py", *args)[0], 2, args)
+
+
+class BrowserTests(Hourly):
+    def render(self, name):
+        # the reporting plugin's renderer starts Chrome on a profile under ~/.solaris/tmp/render-*/
+        return Path(os.path.expanduser("~")) / ".solaris" / "tmp" / f"render-{name}" / "profile-1"
+
+    def test_an_orphaned_render_chrome_and_a_long_running_browser_are_flags(self):
+        ours = self.bhome / "profiles" / "demo"
+        self.ps([(1, 0, "40-01:00:00", "/sbin/init"),
+                 (3438989, 1, "1-09:23:31", chrome(self.render("a"), "--headless=new")),
+                 (3438990, 3438989, "1-09:23:30", chrome(self.render("a"), "--type=renderer")),
+                 (500, 1, "03:05:00", chrome(ours / "kaggle")),
+                 (501, 500, "03:04:59", chrome(ours / "kaggle", "--type=gpu-process")),
+                 (600, 1, "2-00:00:00", chrome(self.bhome / "profiles" / "other" / "default", "--headless=new"))])
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "browsers"), "browsers   FLAG this project: kaggle up 3.1 h; 1 orphaned "
+                                                     "report-render Chrome (pid 3438989, up 33.4 h); 1 other browser "
+                                                     "not this project's")
+        self.assertIn("  - browsers: stop what no running task needs: browserctl.py stop --profile <name>; the "
+                      "reporting plugin's render.sh --reap closes an orphaned render Chrome", out)
+
+    def test_a_live_render_a_young_browser_and_other_browsers_are_not_flags(self):
+        self.ps([(700, 1, "00:12", "node /x/plugins/reporting/shared/assets/render.js html/a.html a.pdf"),
+                 (701, 700, "00:11", chrome(self.render("b"), "--headless=new")),
+                 (702, 701, "00:11", chrome(self.render("b"), "--type=renderer")),
+                 (800, 1, "10:00", chrome(self.bhome / "profiles" / "demo" / "kaggle", "--headless=new")),
+                 (801, 800, "09:59", chrome(self.bhome / "profiles" / "demo" / "kaggle", "--type=utility")),
+                 (900, 1, "9-00:00:00", chrome(self.bhome / "profiles" / "other" / "default")),
+                 (901, 1, "9-00:00:00", "/usr/lib/slack/slack --user-data-dir=/home/u/.config/Slack")])
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.line(out, "browsers"), "browsers   this project: kaggle up 10 min (headless); 1 report "
+                                                     "render running; 2 other browsers not this project's")
+        # a process table that cannot be read is a flag like any failed read
+        self.ps_file.unlink()
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10)
+        self.assertEqual(self.line(out, "browsers"), "browsers   FLAG not read")
+        self.assertIn(f"  - browsers: the read failed: cannot read {self.ps_file}", out)
+
+    def test_elapsed_times(self):
+        H = self.module("kaggle_hourly")
+        for text, secs in (("23:31", 1411), ("09:23:31", 33811), ("1-09:23:31", 120211), ("06-01:15:54", 522954)):
+            self.assertEqual(H.etime_seconds(text), secs, text)
+        for text in ("", "31", "1-23:31", "1:2:3:4", "ELAPSED"):
+            self.assertIsNone(H.etime_seconds(text), text)
+
+    def test_this_projects_id_is_the_one_browserctl_derives(self):
+        H, P = self.module("kaggle_hourly"), self.module("kaggle_presubmit")
+        # the ai-pack's project slug, else its name
+        self.assertEqual(H.browser_project(P, self.root), "demo")
+        (self.root / "aipack" / "manifest.json").write_text(
+            json.dumps({"framework_version": "0.39.0", "project": {"slug": "My_Comp.2026", "name": "demo"}}))
+        self.assertEqual(H.browser_project(P, self.root), "my-comp-2026")
+        with mock.patch.dict(os.environ, BROWSERCTL_PROJECT="Other Project"):
+            self.assertEqual(H.browser_project(P, self.root), "other-project")
+        # no ai-pack, as in an ad-hoc task: the nearest git root's name
+        task = self.tmp / "Git Root" / "tasks" / "t1"
+        task.mkdir(parents=True)
+        (self.tmp / "Git Root" / ".git").mkdir()
+        self.assertEqual(H.browser_project(P, task), "git-root")
 
 
 if __name__ == "__main__":

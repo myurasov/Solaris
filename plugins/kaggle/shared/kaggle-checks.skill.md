@@ -3,7 +3,7 @@ name: kaggle-checks
 triggers: ["presubmit", "pre-submit check", "pre-submit review", "hourly check", "hourly pass", "gated submit"]
 summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; never retried blindly); kaggle_hourly.py runs the hourly read-only checks in one call and prints a line per check, flagging what needs a decision.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-checks - Pre-Submit Check, Gated Submit, Hourly Pass <!-- omit in toc -->
 
@@ -97,10 +97,14 @@ call); `KAGGLE_SUBMIT_WITHOUT_GATE=1` overrides that, only on the owner's word.
 Run `kaggle_hourly.py <slug>` at the agent's hourly pass; it wakes nothing and schedules nothing (a
 host scheduler runs it only when the owner approved one). Lines: `review` (the pre-submit reads and
 triggers since the last review, not kept as a check, so `--ack` still needs a check you read),
-`board`, `notebooks`, `forum`, `subs`, `kernels`, `gpu` and, when the plan exists, `live plan`.
-Flags: a host post or page change since the last review; a new or re-scored notebook in the top 15
-(or at or better than `--vs`); topics the forum watch has not shown and committed; a score that landed
-or a submission that errored since the last pass; a run of this project's that ended since the last
-pass; a live plan page that is missing, older than the plan or over 2 hours old; any read that failed.
+`board`, `notebooks`, `forum`, `subs`, `kernels`, `gpu`, when the plan exists `live plan`, and
+`browsers` (one `ps` read: this project's browserctl browsers and their age, orphaned report-render
+Chromes, and a count of the other browsers, which may be the owner's or another project's and are
+never flagged). Flags: a host post or page change since the last review; a new or re-scored notebook
+in the top 15 (or at or better than `--vs`); topics the forum watch has not shown and committed; a
+score that landed or a submission that errored since the last pass; a run of this project's that
+ended since the last pass; a live plan page that is missing, older than the plan or over 2 hours old;
+an orphaned render Chrome or a browser of this project's up over 2 hours (stop what no running task
+needs); any read that failed.
 Act on each flag (each names its next step); with exit 0, nothing needs a decision. State:
 `<context>/__data/kaggle/<slug>/hourly/last.json`.

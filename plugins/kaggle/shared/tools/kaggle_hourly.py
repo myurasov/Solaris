@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_hourly: one scripted hourly pass of the read-only Kaggle checks, printed as flags.
 
@@ -34,6 +34,10 @@ file), read-only and unstamped (KAGGLE_SHARE_QUIET=1):
   live plan  when the plan exists (--plan, default submissions/live-plan.json):
              its page reports/html/<name>.html. FLAG: missing, older than the
              plan, or more than 2 hours old
+  browsers   one `ps` read: this project's browserctl browsers and their age,
+             orphaned report-render Chromes (their render.js gone) and a count
+             of the other browsers, never flagged. FLAG: an orphaned render
+             Chrome, or a browser of this project's up more than 2 hours
   A read that failed is a FLAG too.
 
 The first pass has no earlier one to compare submissions and kernel runs with.
@@ -45,9 +49,10 @@ decision, 10 a FLAG was raised, 1 error, 2 bad usage. Stdlib only.
 import argparse
 import importlib.util
 import os
+import re
 import subprocess
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
@@ -56,6 +61,8 @@ EXIT_FLAG = 10
 NB_TOP = 15
 STALE_HOURS = 2.0
 PLAN_SLACK = 60
+# a browser of this project's up longer than this is worth a look: stop it unless a running task needs it
+BROWSER_HOURS = 2.0
 # classes of review triggers that need a decision now, not only before the next submission
 URGENT = ("host", "pages")
 SCORING_DONE = ("COMPLETE", "ERROR")
@@ -147,6 +154,115 @@ def live_plan(P, root, plan_path, now):
     return line, None
 
 
+def etime_seconds(text):
+    """Seconds from an elapsed time as `ps` prints it, [[dd-]hh:]mm:ss, else None."""
+    m = re.fullmatch(r"(?:(?:(\d+)-)?(\d+):)?(\d+):(\d+)", text.strip())
+    if not m:
+        return None
+    days, hours, mins, secs = (int(x or 0) for x in m.groups())
+    return ((days * 24 + hours) * 60 + mins) * 60 + secs
+
+
+def read_processes(P, root):
+    """The process table from one `ps` read: ([(pid, parent pid, seconds up, command)], error). KAGGLE_HOURLY_PS_FILE
+    names a file of that ps output to read instead (the tests)."""
+    fake = os.environ.get("KAGGLE_HOURLY_PS_FILE")
+    if fake:
+        try:
+            out = Path(fake).read_text(encoding="utf-8", errors="replace")
+        except OSError as e:
+            return None, f"cannot read {fake}: {e.strerror or e}"
+    else:
+        try:
+            code, out, err = _run(["ps", "-A", "-ww", "-o", "pid=,ppid=,etime=,command="], root, timeout=60)
+        except OSError as e:
+            return None, f"ps did not run: {e.strerror or e}"
+        if code != 0:
+            return None, f"ps failed (exit {code}): {P.tail(err or out)}"
+    procs = []
+    for row in out.splitlines():
+        cols = row.split(None, 3)
+        up = etime_seconds(cols[2]) if len(cols) == 4 and cols[0].isdigit() and cols[1].isdigit() else None
+        if up is not None:
+            procs.append((int(cols[0]), int(cols[1]), up, cols[3].rstrip()))
+    return procs, None
+
+
+def sanitize_id(raw):
+    # browserctl.py's project and profile ids: lowercase, each run of other characters one "-", none at either end
+    return re.sub(r"[^a-z0-9-]+", "-", str(raw).strip().lower()).strip("-")
+
+
+def browser_project(P, root):
+    """This project's id in browserctl, as browserctl.py derives it when run in root: $BROWSERCTL_PROJECT, else the
+    ai-pack's project slug or name, else the name of the nearest folder at or above root with a .git, else root's."""
+    env = sanitize_id(os.environ.get("BROWSERCTL_PROJECT") or "")
+    if env:
+        return env
+    try:
+        pack = P.pack_of(root)
+    except P.PresubmitError:
+        pack = None
+    manifest = P.read_json(pack / "manifest.json", None) if pack else None
+    project = manifest.get("project") if isinstance(manifest, dict) else None
+    if isinstance(project, dict):
+        name = sanitize_id(project.get("slug") or project.get("name") or "")
+        if name:
+            return name
+    return sanitize_id(next((d for d in (root, *root.parents) if (d / ".git").exists()), root).name)
+
+
+def browsers(P, root, now):
+    """(line, flag or None) for the browsers running on this machine (see browser_line)."""
+    procs, err = read_processes(P, root)
+    if err:
+        return "not read", f"the read failed: {err}"
+    # browserctl.py keeps its profiles in $BROWSERCTL_HOME, else ~/.solaris/browserctl
+    bhome = Path(os.path.expanduser(os.environ.get("BROWSERCTL_HOME") or "~/.solaris/browserctl"))
+    return browser_line(procs, now, Path(os.path.expanduser("~")), bhome, browser_project(P, root))
+
+
+def browser_line(procs, now, home, bhome, project):
+    """(line, flag or None) for the browsers in procs (see read_processes): this project's browserctl profiles
+    (<bhome>/profiles/<project>/<profile>) with their age, the report renderer's Chromes (a profile under
+    <home>/.solaris/tmp/render-*) whose render.js is gone, and a count of the others, which are never flagged."""
+    commands = {pid: cmd for pid, _ppid, _up, cmd in procs}
+    render = f"--user-data-dir={home / '.solaris' / 'tmp'}/render-"
+    ours = re.compile(re.escape(f"--user-data-dir={bhome / 'profiles' / project}/") + r"([^/\s]+)") if project else None
+    mine, orphans, rendering, others = [], [], 0, 0
+    for pid, ppid, up, cmd in procs:
+        # only a browser's main process counts; its helpers carry --type=
+        if "--user-data-dir=" not in cmd or "--type=" in cmd:
+            continue
+        m = ours.search(cmd) if ours else None
+        if render in cmd:
+            # a live render's Chrome is a child of render.js; an orphan was re-parented to init or systemd --user
+            if "render.js" in commands.get(ppid, ""):
+                rendering += 1
+            else:
+                orphans.append(f"pid {pid}, up {ago(now - timedelta(seconds=up), now)}")
+        elif m:
+            mine.append((m.group(1), up, "--headless" in cmd))
+        else:
+            others += 1
+    parts = []
+    if mine:
+        parts.append("this project: " + ", ".join(f"{name} up {ago(now - timedelta(seconds=up), now)}"
+                                                  + (" (headless)" if headless else "")
+                                                  for name, up, headless in sorted(mine)))
+    if orphans:
+        parts.append(f"{len(orphans)} orphaned report-render Chrome{'s' if len(orphans) > 1 else ''} ("
+                     + "; ".join(orphans[:4]) + (f"; +{len(orphans) - 4} more" if len(orphans) > 4 else "") + ")")
+    if rendering:
+        parts.append(f"{rendering} report render{'s' if rendering > 1 else ''} running")
+    if others:
+        parts.append(f"{others} other browser{'s' if others > 1 else ''} not this project's")
+    long_up = any(up > BROWSER_HOURS * 3600 for _name, up, _headless in mine)
+    flag = ("stop what no running task needs: browserctl.py stop --profile <name>; the reporting plugin's render.sh "
+            "--reap closes an orphaned render Chrome") if orphans or long_up else None
+    return "; ".join(parts) or "none running", flag
+
+
 def run_pass(P, slug, root, *, gateway=None, vs=None, plan=None, now=None):
     """One hourly pass with the kaggle_presubmit module P: ([(check, line, flag or None)], the state for last.json,
     its path)."""
@@ -218,6 +334,7 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, plan=None, now=None):
     plan_line = live_plan(P, root, Path(plan) if plan else root / "submissions" / "live-plan.json", now)
     if plan_line:
         add("live plan", *plan_line)
+    add("browsers", *browsers(P, root, now))
     return lines, dict(keep, schema=1, at=P.iso(now)), state_path
 
 

@@ -3,7 +3,7 @@ name: handover
 triggers: ["handover", "stop for handover", "pause for handover", "resume after handover"]
 summary: Pause {{NAME}} or hand it to another session or machine without losing work - save context, write a dated handover note, commit, leave remote jobs running - and resume from that note after re-checking hosts, leases and jobs.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: handover - Pause, Hand Over, Resume <!-- omit in toc -->
 
@@ -28,23 +28,27 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
 
 1. **Stop starting.** Launch nothing new; stop schedules and periodic checks first, so nothing wakes the
    session mid-pause. Let running steps reach a safe point, or note exactly where each one stopped.
-2. **Save `{{PACK}}/.memory/context.md`** (a save point; rewrite it in place): the goals and current plan;
+2. **Close the browsers** this session started, headed or headless, unless the owner asked to keep one open:
+   with the browserctl plugin, `browserctl.py status` lists them and `stop --profile <name>` closes one (a
+   persistent profile keeps its login); with the reporting plugin, `render.sh --reap` closes a Chrome an
+   interrupted render left. Name any browser you keep open in the handover note.
+3. **Save `{{PACK}}/.memory/context.md`** (a save point; rewrite it in place): the goals and current plan;
    jobs in flight, each with its host, tmux session, log, done marker and next step; unfinished subagents,
    each with its brief file and what it has done so far; pending decisions and open questions for the
    owner; the next actions, in order.
-3. **Write a dated handover note**, `{{PACK}}/.memory/handover-<YYYY-MM-DD-HHMM>.md` (time read from a
+4. **Write a dated handover note**, `{{PACK}}/.memory/handover-<YYYY-MM-DD-HHMM>.md` (time read from a
    clock): when and why the session stopped, who resumes it (this harness later, or another harness or
    machine), what still runs where, what the next session must recreate (subagents, schedules, clocks,
    periodic checks), and a short resume prompt the owner can paste. It names hosts, so it stays in the
    private `.memory/` and never goes into git.
-4. **Commit** the work in progress per the commit policy, so nothing lives only in the working tree. Push
+5. **Commit** the work in progress per the commit policy, so nothing lives only in the working tree. Push
    only where pushing is already allowed (an Autonomy Grant in `{{PACK}}/spec.md`, or the owner's yes); a
    move to another machine needs it.
-5. **Leave remote jobs running**: they outlive the session, and step 2 lists them.
-6. **Paid instances** that would keep billing through a long pause with no job on them: stop (not delete)
+6. **Leave remote jobs running**: they outlive the session, and step 3 lists them.
+7. **Paid instances** that would keep billing through a long pause with no job on them: stop (not delete)
    those you will reuse within about a day, per the owner's rule, and add them to the handover note; list
    the rest, with what they cost, and ask the owner what to do with them.
-7. **Report** in one line: paused at what time, what is still running, and the phrase that resumes. Log the
+8. **Report** in one line: paused at what time, what is still running, and the phrase that resumes. Log the
    turn in this machine's file in `{{PACK}}/.memory/interactions/` (see `engineer.agent.md`, Memory), so a
    session on another machine can tell when this one stopped.
 

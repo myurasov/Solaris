@@ -249,8 +249,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/skills/handover.skill.md": {
-      "rev": 3,
-      "hash": "da0547e483f641143d21f1cad3d271e6f998891b32979dc43b6d769de9bdf5d7",
+      "rev": 4,
+      "hash": "c53a2b2db5c1c201b46f2817516fc72cc798395905c955ad76b7467a2848a366",
       "history": [
         {
           "rev": 1,
@@ -263,6 +263,10 @@
         {
           "rev": 3,
           "hash": "da0547e483f641143d21f1cad3d271e6f998891b32979dc43b6d769de9bdf5d7"
+        },
+        {
+          "rev": 4,
+          "hash": "c53a2b2db5c1c201b46f2817516fc72cc798395905c955ad76b7467a2848a366"
         }
       ]
     },
