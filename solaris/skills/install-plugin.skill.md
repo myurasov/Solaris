@@ -174,7 +174,8 @@ For a plugin already attached to a project (driven here or by `update-project`).
 - **update** (source advanced): `uv run -m solaris.tools.revs classify --dir projects/<slug>`. For any
   `<pack>/plugins/<name>/` file with verdict `merge-up` or `conflict`, resolve first (`import-plugin`
   update-from-project for `merge-up`, on the owner's yes; smart-merge + ask for `conflict`). Then `revs ff` the safe files,
-  re-merge `mcps.json`, and bump the recorded plugin `version` only on a minor/major plugin release.
+  re-merge `mcps.json`, and set the recorded plugin `version` to the source's on every release, patch
+  included (`version check-plugins` wants an exact match).
 - **migrate** (plugin minor/major bump with `migrations/`): apply `plugins/<name>/migrations/<to>.md`
   against `<pack>/plugins/<name>/`, then update the recorded version.
 - **repair** (attached but broken): `revs ff` restores missing files, re-merge `mcps.json`, then
