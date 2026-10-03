@@ -29,7 +29,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.40.0.md`](spec/spec-v0.40.0.md).
+[`spec/spec-v0.41.0.md`](spec/spec-v0.41.0.md).
 
 ## Persona Model
 

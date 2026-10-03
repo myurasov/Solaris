@@ -76,7 +76,7 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.40.0.md`](solaris/spec/spec-v0.40.0.md).
+Full specification: [`solaris/spec/spec-v0.41.0.md`](solaris/spec/spec-v0.41.0.md).
 
 ## Execution Model
 
@@ -96,7 +96,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `create-project` | "create / new project" | Scaffold a new project + ai-pack (pick type / mode / plugins). |
 | `import-project` | "import project", "adopt `<path or host:path>`" | Adopt an existing codebase; derive the ai-pack. |
 | `import-plugin` | "create / update plugin", "make a plugin from `<project>`" | Author a plugin from a project, or fold project-local edits back into a plugin. |
-| `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>` / this task", "link plugin `<X>` to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project (copy, or link mode for plugin development) or an ad-hoc task (live-loaded). |
+| `install-plugin` | "install plugin `<git/folder/zip>`", "repair plugin `<name>`", "add plugin to `<project>` / this task", "update plugin `<X>` in `<project>`", "link plugin `<X>` to `<project>`" | Acquire a plugin (its own repo) into `plugins/`, validate/repair it, optionally attach to a project (copy, or link mode for plugin development) or an ad-hoc task (live-loaded), and update an attached copy. |
 | `develop-project` | "work on / develop / open `<project>`" | Hand off to the project's primary persona (`engineer` by default) to plan or implement. |
 | `update-project` | "update / migrate `<project>`" | Migrate an ai-pack + its plugins to the current framework version. |
 | `publish-project` | "publish / share `<project>`", "prepare `<project>` for handoff" | Scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone. |
@@ -120,4 +120,4 @@ Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignore
 ## Conventions (Pointers)
 
 - Python tools run as modules: `uv run -m solaris.tools.<name>` (`interactions`, `version`, `revs`, `mcp_sync`, `agents`, `toc`, `ai_spend`, `session_clock`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), and `skill_loader` (prompt-submit skill auto-loader) are hooks - never run them by hand.
-- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.40.0.md`](solaris/spec/spec-v0.40.0.md).
+- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.41.0.md`](solaris/spec/spec-v0.41.0.md).
