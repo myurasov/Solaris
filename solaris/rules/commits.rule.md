@@ -56,6 +56,7 @@ commit messages:
 ## Code Comments + Docstrings
 
 - Same ASCII-only, no-`--`, no-emoji rules as commit messages.
+- No banner or separator comment lines (`# ----`).
 - Keep them short and casual - a quick note to the next maintainer, not a textbook. State what + why in a
   sentence; skip "Rationale:" blocks and over-explanation. Avoid backticks in comments; plain text reads
   more naturally. Add a comment where a future maintainer would otherwise ask "why is this here?".

@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # {{NAME}} - Context <!-- omit in toc -->
 
@@ -16,14 +16,16 @@ compaction) needs to continue immediately. Complements the interaction log in `i
 - **Who writes:** only this project's {{PRIMARY}} persona and Solaris's own agents (the orchestrator + skills).
   Plugins and subagents do not write here.
 - **When (save points):** rewrite `## Session Context` **in place** (replace, don't append):
-  1. **Before context compaction** - when the conversation context is about to be compacted, automatically
-     (auto-compaction imminent) or manually (the user compacts) - save first, so no detail is lost.
-  2. **On request** - whenever the user says "save context", "remember context", "update context",
+  1. **At every periodic pass and at each milestone** - automatic compaction gives no turn to save in, so
+     the file must already be current when it comes.
+  2. **Before context compaction** whenever there is a turn to do it (the user compacts) - save first, so no
+     detail is lost.
+  3. **On request** - whenever the user says "save context", "remember context", "update context",
      "retain context", "keep context", or similar.
-- **What:** a detailed prose summary of the session so far: the task(s) and their current state, decisions
-  with their reasons, findings, key file references, open questions, and immediate next steps. Durable
-  cross-session knowledge does not live here - route it to `../instructions.md` (how),
-  `resources.md` (what exists), or `../spec.md` (the contract).
+- **What:** a snapshot of under about 200 lines: Now (the task(s) and their current state), Running jobs,
+  Next actions, Open questions, and Decisions in the last 24 hours (with their reasons), plus findings and
+  key file references. Older history moves to `archive/`. Durable cross-session knowledge does not live
+  here - route it to `../instructions.md` (how), `resources.md` (what exists), or `../spec.md` (the contract).
 - **Read:** at session start (and right after a compaction), read this file first to restore context.
 - **TOC:** after structural edits, regenerate with any Markdown TOC generator (under a Solaris checkout:
   `uv run -m solaris.tools.toc --write` on this file).

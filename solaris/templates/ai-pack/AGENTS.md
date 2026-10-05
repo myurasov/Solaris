@@ -1,4 +1,4 @@
-_Rev. 23_
+_Rev. 24_
 
 <!-- Minimal pointer kept in sync by Solaris. Project rules go in {{PACK}}/instructions.md. -->
 
@@ -26,4 +26,5 @@ is single and shared across all of them - see `{{PACK}}/{{PRIMARY}}.agent.md` (W
 This pack is standalone-first: everything works with just this project checked out. Files carry Solaris
 sync metadata (`_Rev. N_` markers, `{{PACK}}/manifest.json` `revisions`) - leave it as-is when working
 standalone. Under a Solaris checkout, framework tools are additionally available as
-`uv run -m solaris.tools.<name>`.
+`uv run -m solaris.tools.<name>` from the Solaris root, or from any folder as
+`uv run --directory <solaris root> -m solaris.tools.<name>`.

@@ -3,13 +3,9 @@
   "schema_version": 1,
   "files": {
     "solaris/templates/ai-pack/AGENTS.md": {
-      "rev": 23,
-      "hash": "6bd79ccc1b8c7776ca96767659b4c673dd9d32c83e64784804ae72015e8d3b1b",
+      "rev": 24,
+      "hash": "1fbb588f961fbc9b12edf1c42a4ccda6258521f991a9a2349e45e2830f8547b9",
       "history": [
-        {
-          "rev": 14,
-          "hash": "248c8af5990b3117e53608081355070c0dc16b24f6b622ca3b5dc2ee1de1781a"
-        },
         {
           "rev": 15,
           "hash": "403fcda97773d7bce95c61d260f91de5a4e9d87479dd4aa1cdb0c0f68f0b9182"
@@ -45,6 +41,10 @@
         {
           "rev": 23,
           "hash": "6bd79ccc1b8c7776ca96767659b4c673dd9d32c83e64784804ae72015e8d3b1b"
+        },
+        {
+          "rev": 24,
+          "hash": "1fbb588f961fbc9b12edf1c42a4ccda6258521f991a9a2349e45e2830f8547b9"
         }
       ]
     },
@@ -95,13 +95,9 @@
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 47,
-      "hash": "aa44e8f90af2b9a0505ea3454a537be014c4200910e5627e7572507e50966713",
+      "rev": 48,
+      "hash": "84d4c65cbbc41687da1651e795de6522b6d3fad4fb630073ff43574a4a5e8dc3",
       "history": [
-        {
-          "rev": 38,
-          "hash": "e5bdbae41da908552344a078959d072a6e701a36b3cdd572e855f3cef7ee2b27"
-        },
         {
           "rev": 39,
           "hash": "fc7e72fcd2281736a9fa33ec9ccf996e5832446f4ff9a43991e057b6262df395"
@@ -137,6 +133,10 @@
         {
           "rev": 47,
           "hash": "aa44e8f90af2b9a0505ea3454a537be014c4200910e5627e7572507e50966713"
+        },
+        {
+          "rev": 48,
+          "hash": "84d4c65cbbc41687da1651e795de6522b6d3fad4fb630073ff43574a4a5e8dc3"
         }
       ]
     },
@@ -249,8 +249,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/skills/handover.skill.md": {
-      "rev": 4,
-      "hash": "c53a2b2db5c1c201b46f2817516fc72cc798395905c955ad76b7467a2848a366",
+      "rev": 5,
+      "hash": "822a2c6c175a4d7b3bedfe70e4e091e1a6052ab14a4b63a9c2e6ae65abd1b4ed",
       "history": [
         {
           "rev": 1,
@@ -267,6 +267,10 @@
         {
           "rev": 4,
           "hash": "c53a2b2db5c1c201b46f2817516fc72cc798395905c955ad76b7467a2848a366"
+        },
+        {
+          "rev": 5,
+          "hash": "822a2c6c175a4d7b3bedfe70e4e091e1a6052ab14a4b63a9c2e6ae65abd1b4ed"
         }
       ]
     },

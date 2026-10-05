@@ -1,7 +1,8 @@
-_Rev. 12_
+_Rev. 13_
 
 # Instructions - {{NAME}} <!-- omit in toc -->
 
+- [Owner's Standing Rules](#owners-standing-rules)
 - [Workspaces](#workspaces)
 - [Build / Run / Test](#build--run--test)
 - [Deploy](#deploy)
@@ -31,6 +32,12 @@ internal/corporate URLs, concrete deploy targets, remote paths, or secrets - tho
 `<pack>/.memory/resources.md` / `credentials.md`. Procedures still belong here, written as generic patterns
 (e.g. `rsync source/ <host>:<path>`, `--host <host> --port <port>`) that **reference** `resources.md` for the
 concrete values - never drop the procedure, just keep the values out of it.
+
+## Owner's Standing Rules
+
+Each rule the owner set for this project is one line, ending with its registry tag (`<!-- ID -->`) where it has one.
+
+- (none yet)
 
 ## Workspaces
 

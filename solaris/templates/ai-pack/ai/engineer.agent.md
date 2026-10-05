@@ -1,4 +1,4 @@
-_Rev. 47_
+_Rev. 48_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -125,9 +125,15 @@ the work resumes from what is on disk:
 - The job list (host, tmux session, done marker, brief file, next step) lives in `{{PACK}}/.memory/context.md`,
   updated whenever a job starts or ends.
 - Commit work in progress early, at each milestone.
+- Committed code and docs never read a session scratchpad (`/tmp/claude-*` or any other harness temp
+  folder): it dies with the session, so copy each input into the project first. <!-- OD13 -->
 - Keep a recovery runbook in `{{PACK}}/instructions.md` that any harness or person can follow: read
   `context.md`, check each listed job's done marker and log, commit what interrupted work left, then resume
   each job from its brief and notes. To pause or hand over on purpose, follow the `handover` skill.
+- Keep the project's folders within their size budget. Under a Solaris checkout, run `uv run --directory
+  <solaris root> -m solaris.tools.housekeeping --dir <project> report` daily; its `prune --apply` deletes only
+  what the project's `{{PACK}}/housekeeping.json` rules and `.disposable` markers name. Deleting anything else
+  needs the owner's yes. <!-- OD42 -->
 
 ## Sandboxed Harnesses
 
@@ -190,6 +196,10 @@ A project holds one or more **workspaces** - top-level folders, each a self-cont
   That file holds nothing else: this project's own lessons, facts and gotchas stay in `{{PACK}}/instructions.md`.
   You may tell other sessions about a suggestion; each writes only its own project's file. Under a Solaris
   checkout, the orchestrator reviews these files and implements what the owner approves.
+- **After any framework or plugin update** (a new framework or plugin version in `{{PACK}}/manifest.json`, or
+  word that the pack was updated), re-read the updated pack before continuing work: this file,
+  `{{PACK}}/instructions.md`, `{{PACK}}/spec.md`, every rule and plugin rule, the changed skills,
+  `{{PACK}}/info/`, `{{PACK}}/.memory/resources.md` and `context.md`. <!-- OD12 -->
 
 ## Memory
 
@@ -235,11 +245,18 @@ skill) to running both: two machines rewriting one synced file turn it into a co
 
 `{{PACK}}/.memory/context.md` holds a **detailed summary of the current session's context**: the task(s) and their
 state, decisions with reasons, findings, key file references, and next steps - everything needed to continue
-immediately. Rewrite its `## Session Context` **in place** (replace, don't append) at two save points:
-(1) **before context compaction** - when the conversation context is about to be compacted, automatically or
-manually - save first so no detail is lost; (2) whenever the user says "save/remember/update/retain/keep
-context" or similar. Read it first at session start (and right after a compaction) to restore context.
-Only the {{PRIMARY}} persona and Solaris agents write this file.
+immediately. Keep it a snapshot of under about 200 lines (Now, Running jobs, Next actions, Open questions,
+Decisions in the last 24 hours); older history moves to `{{PACK}}/.memory/archive/`. Rewrite its
+`## Session Context` **in place** (replace, don't append) at every periodic pass and at each milestone, because
+automatic compaction gives no turn to save in, and also: (1) **before context compaction** whenever there is a
+turn to do it (a manual compaction) - save first so no detail is lost; (2) whenever the user says
+"save/remember/update/retain/keep context" or similar. Read it first at session start (and right after a
+compaction) to restore context. Only the {{PRIMARY}} persona and Solaris agents write this file.
+
+Keep folders organized: the `{{PACK}}/.memory/` root holds only its canonical files, and leftovers move to
+`{{PACK}}/.memory/archive/` (under a Solaris checkout, run `housekeeping tidy --apply` at each handover and
+daily); job scratch lives in `__out/jobs/`, never in the pack, and each project tool sits in its own folder
+under `tools/`. <!-- OD43 -->
 
 ## Authoring ai Files (Diff-Friendly)
 
@@ -287,6 +304,8 @@ collaborated on through normal git review (GitHub PRs, diffs) - write them so di
   below); never push without confirmation. A durable "work autonomously until X" instruction
   or `commit!` waives the per-message confirmation. The same ASCII / no-`--` rules apply to code comments
   (keep them short and casual).
+- **Code comments:** short plain lines; no banner or separator comment lines (`# ----`, `# ====`, boxed
+  headers). Restate this comment style in every brief that writes code.
 - **Before each push,** run the drift check described in `{{PACK}}/.memory/directions.md` (if present), so
   long-standing directions also live in the committed `{{PACK}}/instructions.md`.
 - **Developer branches** (`{{PACK}}/rules/git-collab.rule.md`; `"git.developer_branches"` on by default):

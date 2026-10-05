@@ -3,7 +3,7 @@ name: handover
 triggers: ["handover", "stop for handover", "pause for handover", "resume after handover"]
 summary: Pause {{NAME}} or hand it to another session or machine without losing work - save context, write a dated handover note, commit, leave remote jobs running - and resume from that note after re-checking hosts, leases and jobs.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: handover - Pause, Hand Over, Resume <!-- omit in toc -->
 
@@ -36,19 +36,25 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
    jobs in flight, each with its host, tmux session, log, done marker and next step; unfinished subagents,
    each with its brief file and what it has done so far; pending decisions and open questions for the
    owner; the next actions, in order.
-4. **Write a dated handover note**, `{{PACK}}/.memory/handover-<YYYY-MM-DD-HHMM>.md` (time read from a
-   clock): when and why the session stopped, who resumes it (this harness later, or another harness or
-   machine), what still runs where, what the next session must recreate (subagents, schedules, clocks,
-   periodic checks), and a short resume prompt the owner can paste. It names hosts, so it stays in the
-   private `.memory/` and never goes into git.
-5. **Commit** the work in progress per the commit policy, so nothing lives only in the working tree. Push
+4. **Write a dated handover note**, `{{PACK}}/.memory/handover-<YYYY-MM-DD-HHMM>.md` (time read from a clock):
+   when and why the session stopped, who resumes it (this harness later, or another harness or machine), what
+   still runs where, what the next session must recreate (subagents, schedules, clocks, periodic checks), and
+   a short resume prompt the owner can paste. It names hosts, so it stays in the private `.memory/` and never
+   goes into git. Under a Solaris checkout, the note also lists every managed file that `uv run --directory
+   <solaris root> -m solaris.tools.revs classify --dir <project>` reports as not in sync, with why it was
+   edited.
+5. **Tidy:** under a Solaris checkout, run `uv run --directory <solaris root> -m solaris.tools.housekeeping
+   --dir <project> tidy`, check its plan, and apply it with `--apply`: leftovers in the `{{PACK}}/.memory/`
+   root move to `{{PACK}}/.memory/archive/` and job scratch to `__out/jobs/` (the newest handover note stays
+   in place).
+6. **Commit** the work in progress per the commit policy, so nothing lives only in the working tree. Push
    only where pushing is already allowed (an Autonomy Grant in `{{PACK}}/spec.md`, or the owner's yes); a
    move to another machine needs it.
-6. **Leave remote jobs running**: they outlive the session, and step 3 lists them.
-7. **Paid instances** that would keep billing through a long pause with no job on them: stop (not delete)
+7. **Leave remote jobs running**: they outlive the session, and step 3 lists them.
+8. **Paid instances** that would keep billing through a long pause with no job on them: stop (not delete)
    those you will reuse within about a day, per the owner's rule, and add them to the handover note; list
    the rest, with what they cost, and ask the owner what to do with them.
-8. **Report** in one line: paused at what time, what is still running, and the phrase that resumes. Log the
+9. **Report** in one line: paused at what time, what is still running, and the phrase that resumes. Log the
    turn in this machine's file in `{{PACK}}/.memory/interactions/` (see `engineer.agent.md`, Memory), so a
    session on another machine can tell when this one stopped.
 
@@ -57,7 +63,8 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
 Only on the owner's explicit word.
 
 1. **Read** the newest `{{PACK}}/.memory/handover-*.md`, then `context.md` (and `{{PACK}}/.memory/directions.md`
-   when the project keeps one).
+   when the project keeps one). If the framework or a plugin was updated during the pause, re-read the
+   updated pack first, as the primary persona says (Framework Files and Improvements).
 2. **Confirm sole control:** the old session has stopped, as its note says. On another machine, work from
    that machine's own clone, brought up to date with what was pushed, and copy across what git does not
    carry (at least the private `{{PACK}}/.memory/`).
