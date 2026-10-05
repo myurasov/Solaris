@@ -29,13 +29,9 @@ As of **2026-09-30** (re-verify per "Keeping This Current"):
 | Tier | Claude Code (Agent tool `model:`) | Cursor | OpenAI / xAI (API model id) |
 |---|---|---|---|
 | cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) | `gpt-6-luna` |
-| mid | `opus` (Opus 5.5; not Sonnet 5.5, see below) | Grok 4.7 (not Sonnet 5.5) | `grok-4.7` |
+| mid | `sonnet` (Sonnet 5.5) | Sonnet 5.5 / Grok 4.7 | `grok-4.7` |
 | high | `opus` (Opus 5.5) | Opus 5.5 | `gpt-6.1-sol` |
 | frontier | `opus` (Opus 5.5) at effort `max`; not Fable 5.x (see below) | Opus 5.5 at `max` (not Fable 5.1) | `gpt-6-astra` |
-
-**Avoid Sonnet 5.5**: on Artificial Analysis's intelligence-vs-cost charts (read 2026-09-30 from the page's data),
-Sonnet 5.5 costs more per task than Opus 5.5 ($7.60 vs $5.98) while scoring lower (56.0 vs 57.6), so Opus dominates
-it; in Claude Code mid-tier work goes to `opus`, and truly mechanical sweeps to `haiku`.
 
 **Avoid Fable 5.x** (owner direction 2026-09-30, standing): Fable 5 and 5.1 are not used unless the owner explicitly
 asks. The owner rates them less capable than Opus 5.5, and they cost more ($10/$50 vs $4/$20 per million tokens).
