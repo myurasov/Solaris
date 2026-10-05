@@ -15,22 +15,22 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.read_first",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.read_first --part 2",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 2",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.read_first --part 3",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 3",
             "timeout": 10
           },
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.read_first --part 4",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 4",
             "timeout": 10
           }
         ]
@@ -41,17 +41,17 @@
         "hooks": [
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.log_interaction",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.log_interaction",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.read_first --remind",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --remind",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "uv run -m solaris.tools.skill_loader",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.skill_loader",
             "timeout": 5
           }
         ]
