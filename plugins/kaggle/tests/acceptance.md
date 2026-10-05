@@ -15,7 +15,7 @@
   5. [Forum: List, Diff, Fetch, Show](#5-forum-list-diff-fetch-show)
   6. [SDK Topic Read](#6-sdk-topic-read)
   7. [SDK Account Read](#7-sdk-account-read)
-  8. [Live Plan Preview, Offline](#8-live-plan-preview-offline)
+  8. [Status Page Preview, Offline](#8-status-page-preview-offline)
   9. [Offline Tests](#9-offline-tests)
 - [Must and Must-Not Checks](#must-and-must-not-checks)
   10. [A Write Request Goes to the Owner](#10-a-write-request-goes-to-the-owner)
@@ -296,31 +296,35 @@ PASS: both exit 0; the keys are `calls`, `errors`, `fetched_at`, `kernels`, `quo
 `quota` lists `gpu` (and `tpu`), or is empty when Kaggle reports none; at most 20 kernels, each with
 `lastRunTime`, `ref` and `status`; `errors: 0` (each error is a failed call).
 
-### 8. Live Plan Preview, Offline
+### 8. Status Page Preview, Offline
 
-A small fake plan built into a preview page with no Kaggle call: `--gateway` names a stand-in folder
-whose `kaggle.py` and `kaggle_share.py` exit at once, so every live figure reads n/a and the real
-sharing tool never runs.
+A small fake status JSON built into a preview page with no Kaggle call: `--offline` skips every
+Kaggle read, `--out` writes only the preview and leaves the JSON's rev alone, and `--gateway` names a
+stand-in folder whose `kaggle.py` and `kaggle_share.py` exit at once, so even a stray call reaches no
+Kaggle. With no saved board, no cost ledger and no Solaris checkout above the scratch folder, the live
+figures read n/a.
 
 ```sh
 . "${TMPDIR:-/tmp}/kaggle-acceptance/env.sh"
 mkdir -p offline && printf 'import sys\nsys.exit(1)\n' > offline/kaggle.py && cp offline/kaggle.py offline/kaggle_share.py
-cat > plan.json <<'EOF'
-{"rev": 1, "title": "Acceptance Plan", "competition": "acceptance-fake", "team": "acceptance-team",
- "timezone": "UTC", "phase": "Phase 1: acceptance", "day": "A fake Kaggle day",
- "slots": [{"id": "A1", "what": "fake slot one", "status": "planned", "prediction": "none", "rule": "none"}],
- "decisions": [{"when": "today", "text": "fake decision"}]}
+cat > status.json <<'EOF'
+{"rev": 1, "title": "Acceptance Status", "competition": "acceptance-fake", "team": "acceptance-team",
+ "timezone": "UTC", "phase": "Phase 1: acceptance", "summary": "A fake project state.",
+ "plan": [{"when": "2026-01-02", "what": "fake plan item", "status": "pending"}],
+ "questions": ["fake open question"]}
 EOF
-cp plan.json plan.before.json
-python3 "$TOOLS/kaggle_live_plan.py" --root "$RUN" --plan plan.json --gateway "$RUN/offline/kaggle.py" \
-  --no-render --out preview.html > out/c8.txt 2> out/c8.err; echo "exit $?"
+cp status.json status.before.json
+python3 "$TOOLS/kaggle_status.py" --root "$RUN" --status status.json --gateway "$RUN/offline/kaggle.py" \
+  --offline --out preview.html > out/c8.txt 2> out/c8.err; echo "exit $?"
 cat out/c8.txt out/c8.err
-cmp plan.json plan.before.json && echo "plan unchanged"
-for s in 'Acceptance Plan' 'fake slot one' 'n/a'; do grep -q "$s" preview.html && echo "found: $s" || echo "MISSING: $s"; done
+cmp status.json status.before.json && echo "status unchanged"
+for s in 'Acceptance Status' 'fake plan item' 'fake open question' 'n/a' 'Current State' 'Leaderboard Progress' \
+  'Plan and Timeline' 'Spending' 'Resources' 'Open Questions' 'Suggestions'; do
+  grep -q "$s" preview.html && echo "found: $s" || echo "MISSING: $s"; done
 test -e reports && echo "reports folder written" || echo "no reports folder"
 ```
 
-PASS: exit 0; it prints `Rev. 1:` and the path of `preview.html`; then `plan unchanged`, three
+PASS: exit 0; it prints `Rev. 1:` and the path of `preview.html`; then `status unchanged`, eleven
 `found` lines and `no reports folder`.
 
 ### 9. Offline Tests
@@ -430,7 +434,7 @@ Kaggle calls: <used> of 13 gateway runs
  5  Forum: list, diff, fetch, show
  6  SDK topic read
  7  SDK account read
- 8  Live plan preview, offline
+ 8  Status page preview, offline
  9  Offline tests                       (<N> tests)
 10  A write request goes to the owner   ask: <the ask, one line>
 11  No write command ran

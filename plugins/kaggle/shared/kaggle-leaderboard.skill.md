@@ -3,7 +3,7 @@ name: kaggle-leaderboard
 triggers: ["leaderboard", "leaderboard history", "competitor progress", "monitor the leaderboard", "leaderboard snapshot", "who is climbing", "public notebooks"]
 summary: Leaderboard history for any Kaggle competition - every leaderboard read is saved as a local snapshot of the public leaderboard fields, so each team's progress can be followed over time, and the public notebooks are saved with their measured public scores, so notebook jumps show. Covers kaggle_lb.py (snapshot, show, history, movers, new-teams, summary, record-raw, import, notebooks), the storage layout, an hourly cadence, privacy, and reading progress over time.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: kaggle-leaderboard - Leaderboard History <!-- omit in toc -->
 
@@ -110,17 +110,10 @@ config. Name the competition, pass `-p`, and call from the project or task folde
 
 - **Every read:** read the board with `show` (or `snapshot`), so every read is saved.
 - **At least hourly while the competition runs,** a board read and a `notebooks` read together, so a
-  public-notebook jump shows within the hour. Run them at the agent's hourly pass inside the session;
-  a host scheduler (cron, launchd) only when the owner approved one, started in the context folder,
-  for example (crontab, a minute off the hour):
-
-  ```text
-  17 * * * * cd <project> && PATH=<uv dir>:$PATH python3 <pack>/plugins/kaggle/tools/kaggle_lb.py snapshot <slug> >> __out/kaggle-lb.log 2>&1
-  18 * * * * cd <project> && PATH=<uv dir>:$PATH python3 <pack>/plugins/kaggle/tools/kaggle_lb.py notebooks <slug> >> __out/kaggle-lb.log 2>&1
-  ```
-
-  The gateway needs `uv` on PATH. The OAuth login expires after about 12 hours, so unattended
-  snapshots need the long-lived API token (the `kaggle-cli` skill's Signing In).
+  public-notebook jump shows within the hour. Run them at the agent's hourly pass inside the session
+  (`kaggle_hourly.py` does both), never from a daemon, cron job or other watcher. The OAuth login
+  expires after about 12 hours, so a long unattended session needs the long-lived API token (the
+  `kaggle-cli` skill's Signing In).
 - **More often around events** - the final days, a notable public notebook, the daily submission
   reset - while reads stay at a few per hour.
 - **At the end:** a snapshot of the final public board before the deadline, and one after the final

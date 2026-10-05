@@ -180,7 +180,7 @@ class ContextTests(Env):
             pack.mkdir()
             (pack / "manifest.json").write_text(PACK_MANIFEST)
         (home / "notes.md").write_text("made with the ad-hoc-task skill\n")
-        tools = [load(TOOLS / f"{n}.py") for n in ("kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan",
+        tools = [load(TOOLS / f"{n}.py") for n in ("kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_status",
                                                    "kaggle_presubmit")]
         # kaggle_submit.py and kaggle_hourly.py find their project through kaggle_presubmit.py
         finders = [self.where, tools[0].find_root, tools[1].find_root, tools[2].find_context,
@@ -194,7 +194,7 @@ class ContextTests(Env):
     def test_no_copied_overlay_takes_home_or_above_for_its_project(self):
         home, other = self.tmp / "home", self.tmp / "other"
         other.mkdir()
-        names = ("kaggle", "kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_live_plan", "kaggle_presubmit")
+        names = ("kaggle", "kaggle_forum", "kaggle_lb", "kaggle_share", "kaggle_status", "kaggle_presubmit")
         found = []
         # copied overlays whose project root would be home, the folder above it, and a project under home
         for root in (home, self.tmp, home / "proj"):

@@ -1,14 +1,14 @@
-# rev. 2
+# rev. 3
 
 """kaggle_hourly: one scripted hourly pass of the read-only Kaggle checks, printed as flags.
 
 An agent working a competition checks it every hour. This tool runs those reads
 in one call and prints one line per check, marked FLAG where something needs a
 decision, so the agent reads a few lines instead of every source. It wakes
-nothing and schedules nothing: the agent runs it at its hourly pass (a host
-scheduler only when the owner approved one).
+nothing and schedules nothing: the agent runs it at its hourly pass, woken by
+its in-session clock (no daemon or host scheduler).
 
-    python3 <plugin-dir>/tools/kaggle_hourly.py <slug> [--vs SCORE] [--plan FILE]
+    python3 <plugin-dir>/tools/kaggle_hourly.py <slug> [--vs SCORE] [--status FILE]
 
 Run it from the project root or task folder. The reads go through the tools
 beside this file and the gateway (--gateway; default the kaggle.py beside this
@@ -31,9 +31,17 @@ file), read-only and unstamped (KAGGLE_SHARE_QUIET=1):
              since the last pass
   gpu        the account's GPU week, and this project's lease hours against
              its budget
-  live plan  when the plan exists (--plan, default submissions/live-plan.json):
-             its page reports/html/<name>.html. FLAG: missing, older than the
-             plan, or more than 2 hours old
+  status     the project's status page (kaggle_status.py): the status JSON
+             (--status, default reports/status.json) and its page,
+             reports/status.pdf when the reporting plugin is attached, else
+             reports/html/status.html. FLAG: the JSON missing or unreadable,
+             the page missing, the JSON changed after the last build, or the
+             page more than 2 hours old; a project still on
+             submissions/live-plan.json without the JSON: the live plan is
+             retired; in a git work tree, a file a build writes (the page,
+             its HTML, the shorter-chart try) that git would not ignore
+             (`git check-ignore`). A task folder without the JSON is not
+             checked
   browsers   one `ps` read: this project's browserctl browsers and their age,
              orphaned report-render Chromes (their render.js gone) and a count
              of the other browsers, never flagged. FLAG: an orphaned render
@@ -57,10 +65,17 @@ from pathlib import Path
 
 TOOLS = Path(__file__).resolve().parent
 EXIT_FLAG = 10
-# a notebook this high in the score-ordered list is worth a look; a live plan page older than this is stale
+# a notebook this high in the score-ordered list is worth a look; a status page older than this is stale
 NB_TOP = 15
 STALE_HOURS = 2.0
+# a build saves the JSON's raised rev just after writing the page: a JSON newer by less is no edit
 PLAN_SLACK = 60
+# the files a status build writes, with the shorter-chart try a killed build can leave: they hold private operations
+# data, so in a git work tree git must ignore each
+PAGE_FILES = ("reports/status.pdf", "reports/html/status.html", "reports/status-short.pdf",
+              "reports/html/status-short.html")
+GIT_HINT = ("keep the page out of git: add reports/status*.pdf and reports/html/status*.html to the project's "
+            ".gitignore (and git rm --cached any already committed)")
 # a browser of this project's up longer than this is worth a look: stop it unless a running task needs it
 BROWSER_HOURS = 2.0
 # classes of review triggers that need a decision now, not only before the next submission
@@ -133,24 +148,63 @@ def read_share(P, gw, root):
     return view, None
 
 
-def live_plan(P, root, plan_path, now):
-    """(line, flag or None) for the live plan's page, or None when there is no plan."""
-    if not plan_path.is_file():
+def status_page(P, root, status_path, now, given=False):
+    """(line, flag or None) for the status page (kaggle_status.py), or None for a folder that needs none: a task
+    folder without a status JSON, unless --status named one. In a git work tree, a page file git would not ignore
+    is a flag too."""
+    got = page_state(P, root, status_path, now, given)
+    loose = not_ignored(root) if got else None
+    if not loose:
+        return got
+    line, flag = got
+    return (f"{line}; not ignored by git: {', '.join(P._rel(root / x) for x in loose)}",
+            "; ".join(x for x in (flag, GIT_HINT) if x))
+
+
+def not_ignored(root, paths=PAGE_FILES):
+    """Those of paths (relative to root) that git would not ignore, a tracked one included; None outside a git work
+    tree or when git does not run."""
+    try:
+        code, out, _err = _run(["git", "-C", str(root), "check-ignore", "--", *paths], root, timeout=60)
+    except OSError:
         return None
-    plan = P.read_json(plan_path, None)
-    name = plan.get("name") if isinstance(plan, dict) else None
-    if not isinstance(plan, dict) or not isinstance(name or "", str):
-        return f"{P._rel(plan_path)} is not a plan", "unreadable: fix the plan, then rebuild it (kaggle_live_plan.py)"
-    page = root / "reports" / "html" / f"{name or 'live-plan'}.html"
+    # check-ignore prints the ignored paths and exits 0 for some, 1 for none, 128 outside a work tree
+    if code not in (0, 1):
+        return None
+    ignored = set(out.splitlines())
+    return [p for p in paths if p not in ignored]
+
+
+def page_state(P, root, status_path, now, given):
+    """(line, flag or None) for the status JSON and its page, or None for a folder that needs none (see
+    status_page)."""
+    try:
+        pack = P.pack_of(root)
+    except P.PresubmitError:
+        pack = None
+    if not status_path.is_file():
+        old = root / "submissions" / "live-plan.json"
+        if old.is_file() and not given:
+            return f"{P._rel(old)} and no {P._rel(status_path)}", "live plan retired: move to reports/status.json"
+        if pack or given:
+            return (f"{P._rel(status_path)} missing",
+                    "no status page: write reports/status.json, then build it (kaggle_status.py)")
+        return None
+    status = P.read_json(status_path, None)
+    if not isinstance(status, dict):
+        return (f"{P._rel(status_path)} is not a status JSON",
+                "unreadable: fix the status JSON, then rebuild the page (kaggle_status.py)")
+    # the PDF is what the owner reads; without the reporting plugin the tool writes the HTML only
+    reporting = pack is not None and (pack / "plugins" / "reporting" / "assets" / "render.sh").is_file()
+    page = root / "reports" / "status.pdf" if reporting else root / "reports" / "html" / "status.html"
     if not page.is_file():
-        return f"{P._rel(page)} not built yet", "never built: build it (kaggle_live_plan.py)"
+        return f"{P._rel(page)} not built yet", "never built: build it (kaggle_status.py)"
     built = datetime.fromtimestamp(page.stat().st_mtime, timezone.utc)
-    line = f"{P._rel(page)} built {ago(built, now)} ago, rev {plan.get('rev')}"
-    # a build saves the plan's raised rev just after the page: only a later edit makes the page stale
-    if plan_path.stat().st_mtime > page.stat().st_mtime + PLAN_SLACK:
-        return line, "the plan changed after the last build: rebuild it (kaggle_live_plan.py)"
+    line = f"{P._rel(page)} built {ago(built, now)} ago, rev {status.get('rev')}"
+    if status_path.stat().st_mtime > page.stat().st_mtime + PLAN_SLACK:
+        return line, "the status JSON changed after the last build: rebuild the page (kaggle_status.py)"
     if (now - built).total_seconds() > STALE_HOURS * 3600:
-        return line, f"the page is {ago(built, now)} old: rebuild it (kaggle_live_plan.py --keep-rev)"
+        return line, f"the page is {ago(built, now)} old: rebuild it (kaggle_status.py --keep-rev)"
     return line, None
 
 
@@ -263,7 +317,7 @@ def browser_line(procs, now, home, bhome, project):
     return "; ".join(parts) or "none running", flag
 
 
-def run_pass(P, slug, root, *, gateway=None, vs=None, plan=None, now=None):
+def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None):
     """One hourly pass with the kaggle_presubmit module P: ([(check, line, flag or None)], the state for last.json,
     its path)."""
     root = Path(root)
@@ -331,9 +385,10 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, plan=None, now=None):
         if share.get("errors"):
             add("account", P.one_line("; ".join(map(str, share["errors"])), 200),
                 "the account read was incomplete: see kaggle_share.py status")
-    plan_line = live_plan(P, root, Path(plan) if plan else root / "submissions" / "live-plan.json", now)
-    if plan_line:
-        add("live plan", *plan_line)
+    page = status_page(P, root, Path(status).resolve() if status else root / "reports" / "status.json", now,
+                       given=bool(status))
+    if page:
+        add("status", *page)
     add("browsers", *browsers(P, root, now))
     return lines, dict(keep, schema=1, at=P.iso(now)), state_path
 
@@ -416,7 +471,7 @@ def main(argv=None):
                                 "a line per check, FLAG where a decision is needed.")
     p.add_argument("slug", help="competition slug")
     p.add_argument("--vs", help="flag new or re-scored public notebooks at or better than this score")
-    p.add_argument("--plan", help="the live plan JSON (default: <root>/submissions/live-plan.json)")
+    p.add_argument("--status", help="the status page's JSON (default: <root>/reports/status.json)")
     p.add_argument("--gateway", help="the kaggle.py gateway to call (default: the one beside this file)")
     a = p.parse_args(argv)
     try:
@@ -434,7 +489,7 @@ def main(argv=None):
         root = P.find_root()
         if root is None:
             raise HourlyError("no project or task folder here: run from one")
-        lines, state, state_path = run_pass(P, a.slug, root, gateway=a.gateway, vs=vs, plan=a.plan)
+        lines, state, state_path = run_pass(P, a.slug, root, gateway=a.gateway, vs=vs, status=a.status)
         P.write_json(state_path, state)
     except (HourlyError, P.PresubmitError) as e:
         print(f"kaggle_hourly: {e}", file=sys.stderr)

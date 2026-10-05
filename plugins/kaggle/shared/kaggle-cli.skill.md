@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -141,7 +141,9 @@ Corrections to it, verified against 2.2.4:
   `--file-pattern`.
 - **`kernels list` has no score field** in any format: `--sort-by scoreDescending` gives the
   order only. `tools/kaggle_lb.py notebooks <slug>` reads the real public scores (through the
-  SDK); a score found only in a notebook's title or text stays marked claimed.
+  SDK); a score found only in a notebook's title or text stays marked claimed. `kernels list` also
+  returns 20 rows a page: for a name or existence check pass `--page-size 100` (or follow the page
+  tokens), or a clash can hide on a later page.
   **`kernels logs <owner>/<kernel>`** also works on other users' public kernels and returns the
   last run's timed stdout: use it for runtimes and stage timings.
 
@@ -158,6 +160,10 @@ Corrections to it, verified against 2.2.4:
   version: `competitions submit <slug> -k <owner>/<kernel> -v <N> -f <output file> -m <message>`
   (2.2.4 refuses `-k` without `-v`, which Kaggle's reference calls optional). Afterwards read the
   score with `competitions submissions <slug>` (2.2.4 has no `submit --wait`; poll sparingly).
+- **Kernel images stay pinned:** never drop `docker_image` from `kernel-metadata.json`, in our
+  kernels or in forks. Kaggle's latest image moves (a new Python version breaks wheels built for
+  the old one). `kernels pull -m` shows only the latest version's image, often a quick save, so read
+  the image a scored version ran on from that version's run log.
 
 ## Troubleshooting
 

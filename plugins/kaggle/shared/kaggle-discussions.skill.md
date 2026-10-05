@@ -3,7 +3,7 @@ name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
 summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -35,9 +35,9 @@ gateway, read-only. Posting, replying and voting are web-only steps for the owne
    newest comment it showed, and the missing topics it listed (as gone). A check that runs between `show` and
    `commit` cannot make unseen topics or comments count as read: they stay pending for the next `show`.
 
-Run `check` at the agent's hourly pass, inside the session. A host scheduler (cron, launchd) runs it only when
-the owner approved one; such unattended checks need `uv` on PATH and the long-lived API token (the `kaggle-cli`
-skill's Signing In).
+Run `check` at the agent's hourly pass, inside the session, never from a daemon, cron job or other watcher. The
+OAuth login expires after about 12 hours, so a long unattended session needs the long-lived API token (the
+`kaggle-cli` skill's Signing In).
 
 ## Commands
 

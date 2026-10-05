@@ -6,4 +6,5 @@ the project's ai-pack folder: default `aipack/`, `ai/` in older projects, any na
 frontmatter; no registry file. Applied via `install-plugin` (migrate), driven by `update-project`.
 
 Migrations: `0.2.0.md` (the gateway moved to `tools/kaggle.py`, the gateway skill renamed `kaggle-cli.skill.md`,
-the leaderboard history and account sharing tools added).
+the leaderboard history and account sharing tools added); `0.7.0.md` (from the live plan and the phase progress
+reports to the single status page, `reports/status.pdf`).

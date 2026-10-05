@@ -9,6 +9,8 @@ through the stand-in gateway (kaggle_standin). The browsers check reads a made-u
 
 import json
 import os
+import shutil
+import subprocess
 import sys
 import time
 import unittest
@@ -37,6 +39,18 @@ class Hourly(Project):
         for env in (self.env, os.environ):
             env.update(KAGGLE_HOURLY_PS_FILE=str(self.ps_file), BROWSERCTL_HOME=str(self.bhome))
             env.pop("BROWSERCTL_PROJECT", None)
+            # the status check's git read finds no work tree above the temp folder, nor the user's git config or
+            # global excludes
+            for k in [k for k in env if k.startswith("GIT_")]:
+                del env[k]
+            env.update(GIT_CEILING_DIRECTORIES=str(self.tmp), GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1",
+                       XDG_CONFIG_HOME=str(self.tmp / "xdg"))
+        # a fresh status page, as kaggle_status.py leaves it (without the reporting plugin the HTML is the page)
+        self.status_json, self.status_html = self.root / "reports" / "status.json", self.root / "reports" / "html" / \
+            "status.html"
+        self.status_html.parent.mkdir(parents=True)
+        self.status_json.write_text(json.dumps({"rev": 1, "competition": SLUG}))
+        self.status_html.write_text("<html></html>")
 
     def ps(self, rows):
         # rows: (pid, parent pid, elapsed time as ps prints it, command), as `ps -o pid=,ppid=,etime=,command=` does
@@ -169,30 +183,104 @@ class SourceTests(Hourly):
         self.assertIn("  - review: a host post or a page change: run kaggle_presubmit.py demo-competition, read it, "
                       "decide, then --ack", out)
 
-    def test_live_plan_staleness(self):
-        self.assertNotIn("live plan", self.hourly()[1])
+    def test_status_page_staleness(self):
+        status, page = self.status_json, self.status_html
+        status.write_text(json.dumps({"rev": 3}))
+        old = time.time() - 600
+        os.utime(status, (old, old))
+        self.assertEqual(self.line(self.hourly()[1], "status"),
+                         "status     reports/html/status.html built 0 min ago, rev 3")
+        page.unlink()
+        out = self.hourly()[1]
+        self.assertEqual(self.line(out, "status"), "status     FLAG reports/html/status.html not built yet")
+        self.assertIn("  - status: never built: build it (kaggle_status.py)", out)
+        page.write_text("<html></html>")
+        # a build saves the raised rev into the JSON a moment after the page: not a change
+        os.utime(page, (old, old))
+        os.utime(status, (old + 2, old + 2))
+        self.assertNotIn("FLAG", self.line(self.hourly()[1], "status"))
+        os.utime(status, None)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10)
+        self.assertIn("  - status: the status JSON changed after the last build: rebuild the page (kaggle_status.py)",
+                      out)
+        stale = time.time() - 3 * 3600
+        os.utime(status, (stale - 60, stale - 60))
+        os.utime(page, (stale, stale))
+        self.assertIn("  - status: the page is 3.0 h old: rebuild it (kaggle_status.py --keep-rev)", self.hourly()[1])
+        # with the reporting plugin attached the PDF is the page the owner reads
+        assets = self.root / "aipack" / "plugins" / "reporting" / "assets"
+        assets.mkdir(parents=True)
+        (assets / "render.sh").write_text("")
+        self.assertEqual(self.line(self.hourly()[1], "status"), "status     FLAG reports/status.pdf not built yet")
+        (self.root / "reports" / "status.pdf").write_bytes(b"%PDF")
+        self.assertEqual(self.line(self.hourly()[1], "status"), "status     reports/status.pdf built 0 min ago, rev 3")
+
+    def test_a_missing_or_unreadable_status_json_and_the_retired_live_plan(self):
+        self.status_json.write_text("{not json")
+        out = self.hourly()[1]
+        self.assertEqual(self.line(out, "status"), "status     FLAG reports/status.json is not a status JSON")
+        self.assertIn("  - status: unreadable: fix the status JSON, then rebuild the page (kaggle_status.py)", out)
+        self.status_json.unlink()
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10)
+        self.assertEqual(self.line(out, "status"), "status     FLAG reports/status.json missing")
+        self.assertIn("  - status: no status page: write reports/status.json, then build it (kaggle_status.py)", out)
         plan = self.root / "submissions" / "live-plan.json"
         plan.parent.mkdir()
-        plan.write_text(json.dumps({"rev": 3, "name": "demo-plan"}))
-        page = self.root / "reports" / "html" / "demo-plan.html"
+        plan.write_text(json.dumps({"rev": 9}))
         out = self.hourly()[1]
-        self.assertEqual(self.line(out, "live plan"), "live plan  FLAG reports/html/demo-plan.html not built yet")
-        page.parent.mkdir(parents=True)
-        page.write_text("<html></html>")
-        old = time.time() - 600
-        os.utime(plan, (old, old))
-        self.assertEqual(self.line(self.hourly()[1], "live plan"),
-                         "live plan  reports/html/demo-plan.html built 0 min ago, rev 3")
-        # a build saves the raised rev into the plan a moment after the page: not a change
-        os.utime(page, (old, old))
-        os.utime(plan, (old + 2, old + 2))
-        self.assertNotIn("FLAG", self.line(self.hourly()[1], "live plan"))
-        os.utime(plan, None)
-        self.assertIn("the plan changed after the last build", self.hourly()[1])
-        stale = time.time() - 3 * 3600
-        os.utime(plan, (stale - 60, stale - 60))
-        os.utime(page, (stale, stale))
-        self.assertIn("live plan: the page is 3.0 h old: rebuild it (kaggle_live_plan.py --keep-rev)", self.hourly()[1])
+        self.assertEqual(self.line(out, "status"),
+                         "status     FLAG submissions/live-plan.json and no reports/status.json")
+        self.assertIn("  - status: live plan retired: move to reports/status.json", out)
+        # --status names another JSON, relative to the working folder
+        (self.root / "other.json").write_text(json.dumps({"rev": 4}))
+        self.assertEqual(self.line(self.hourly("--status", "other.json")[1], "status"),
+                         "status     reports/html/status.html built 0 min ago, rev 4")
+        self.assertEqual(self.line(self.hourly("--status", "none.json")[1], "status"),
+                         "status     FLAG none.json missing")
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_a_page_file_git_would_not_ignore_is_a_flag(self):
+        def git(*args):
+            subprocess.run(["git", "-C", str(self.root), *args], env=self.env, capture_output=True, check=True)
+
+        quiet = "status     reports/html/status.html built 0 min ago, rev 1"
+        # outside a git work tree there is nothing to check
+        self.assertEqual(self.line(self.hourly()[1], "status"), quiet)
+        git("init", "-q")
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10)
+        self.assertEqual(self.line(out, "status"), "status     FLAG reports/html/status.html built 0 min ago, rev 1; "
+                                                   "not ignored by git: reports/status.pdf, reports/html/status.html, "
+                                                   "reports/status-short.pdf, reports/html/status-short.html")
+        self.assertIn("  - status: keep the page out of git: add reports/status*.pdf and reports/html/status*.html to "
+                      "the project's .gitignore (and git rm --cached any already committed)", out)
+        # the page's own names miss the shorter-chart try a killed build can leave
+        gitignore = self.root / ".gitignore"
+        gitignore.write_text("reports/status.pdf\nreports/html/status.html\n")
+        self.assertTrue(self.line(self.hourly()[1], "status").endswith(
+            "rev 1; not ignored by git: reports/status-short.pdf, reports/html/status-short.html"))
+        gitignore.write_text("reports/status*.pdf\nreports/html/status*.html\n")
+        code, out, _ = self.hourly()
+        self.assertEqual((code, self.line(out, "status")), (0, quiet))
+        # a page already committed stays in git whatever .gitignore says
+        git("add", "-f", "reports/html/status.html")
+        line = self.line(self.hourly()[1], "status")
+        self.assertTrue(line.endswith("rev 1; not ignored by git: reports/html/status.html"), line)
+        # and a flag about the page itself comes first
+        (self.root / "reports" / "html" / "status.html").unlink()
+        out = self.hourly()[1]
+        self.assertIn("  - status: never built: build it (kaggle_status.py); keep the page out of git: add ", out)
+
+    def test_a_task_folder_needs_no_status_page(self):
+        H, P = self.module("kaggle_hourly"), self.module("kaggle_presubmit")
+        task = self.tmp / "task"
+        task.mkdir()
+        (task / "notes.md").write_text("made with the ad-hoc-task skill\n")
+        self.assertIsNone(H.status_page(P, task, task / "reports" / "status.json", P.utc_now()))
+        line, flag = H.status_page(P, task, task / "reports" / "status.json", P.utc_now(), given=True)
+        self.assertTrue(line.endswith("status.json missing") and flag.startswith("no status page"), (line, flag))
 
     def test_bad_arguments(self):
         for args in (["not a slug"], [SLUG, "--vs", "x"]):

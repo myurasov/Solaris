@@ -1,4 +1,4 @@
-# rev. 4
+# rev. 5
 
 """kaggle_forum: watch a Kaggle competition's discussions.
 
@@ -183,7 +183,7 @@ def store_dir(slug, directory=None, root=None):
 
 @contextmanager
 def locked(d):
-    # one writer at a time: runs from two sessions (or a scheduler the owner approved) can overlap
+    # one writer at a time: runs from two sessions can overlap
     Path(d).mkdir(parents=True, exist_ok=True)
     with open(Path(d) / ".lock", "a") as f:
         if fcntl:

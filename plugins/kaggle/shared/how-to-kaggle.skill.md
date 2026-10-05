@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Playbook for competing on Kaggle with an autonomous agent team - the first hour and the competition facts sheet, Kaggle access, compute, phases, honest validation, daily submission discipline, agent organization, research, kernel engineering, and a pitfalls log, each rule with the evidence behind it told as a generic example. Kaggle commands themselves go through the kaggle-cli skill's gateway.
 ---
-_Rev. 24_
+_Rev. 25_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -19,6 +19,7 @@ _Rev. 24_
 - [Kernel Engineering](#kernel-engineering)
 - [Pitfalls Log](#pitfalls-log)
 - [Maintaining This Playbook](#maintaining-this-playbook)
+  - [Settled Decisions](#settled-decisions)
 
 A live playbook for running a Kaggle competition with an autonomous agent team, distilled from owner directions and
 from what worked (and failed) in practice. Rules come first, each with the evidence behind it, told as generic
@@ -40,7 +41,7 @@ Follow this sequence from minute one; each step points to the section with the r
 1. **Setup (first hour):**
    - a private repo with the ai-pack;
    - the standing files: directions, instructions (with the competition facts sheet), submission plan, ideas
-     backlog, a live phase report, and a live plan for the owner;
+     backlog, and the owner's status page (`reports/status.pdf`);
    - owner-facing times in the owner's timezone;
    - data in `__data/`, outputs in `__out/`.
    See [Setup](#setup).
@@ -69,13 +70,15 @@ Follow this sequence from minute one; each step points to the section with the r
    - an x86 host with Kaggle's exact image for replays;
    - nothing heavy on the laptop.
    See [Compute](#compute).
-5. **Phase 0 (day 1):** use the first day's full slot allowance (all five in a competition with five daily slots):
-   the simplest baseline of your own, a faithful fork of the best public notebook, and one-change experiments on it.
-   The goal is to learn the whole path. See [Phases](#phases).
-6. **Honest holdout:** build one that reproduces the board's order before trusting it, confirm finalists on a second,
-   independent set, and calibrate each kind of change against the board. See [Validation](#validation).
+5. **Phase 0 (day 1):** learn the whole path with the day's slots: the simplest baseline of your own, a faithful
+   fork of the best public notebook, and one-change experiments on it. With one slot a day, see the fork condition in
+   [Phases](#phases).
+6. **Honest holdout:** build one that reproduces the board's order (unless the board is noisy) before trusting it,
+   confirm finalists on a second, independent set, and calibrate each kind of change against the board. See
+   [Validation](#validation).
 7. **Daily loop:**
-   - plan all slots before the first submission: biggest gain or insight first, one experimental slot;
+   - plan all slots before the first submission: biggest gain or insight first, one experimental slot (in
+     public-first mode, the best chance of a new public best);
    - build and verify the day's candidates, and the follow-ups their scores would trigger, before the reset; write
      each slot's prediction and the rule its score triggers;
    - don't rush the slots: hold them for research that can finish in time, and fill any still open with the best
@@ -93,7 +96,7 @@ Follow this sequence from minute one; each step points to the section with the r
    See [Research and Ideas](#research-and-ideas) and [Phases](#phases).
 9. **Agents:**
    - the master plans, decides and reviews;
-   - each worker does one bounded job, on the strongest model at xhigh or max effort;
+   - each worker does one bounded job, on the model `kaggle.rule.md` sets for its kind of job;
    - adversarial review before every Kaggle push;
    - the hourly check is one scripted read-only pass (`tools/kaggle_hourly.py <slug>`); the agent acts on its flags;
    - work with the harness's safety checks, never around them.
@@ -120,16 +123,16 @@ Follow this sequence from minute one; each step points to the section with the r
     every persona);
   - `submissions/PLAN.md`: today's and tomorrow's submission slots with purposes;
   - `research/ideas.md`: the ranked ideas backlog with statuses and feasibility notes;
-  - a live progress report (PDF) per phase;
-  - a live plan (PDF) for the owner (owner direction): the Kaggle day's slots with status, prediction and decision
-    rule, the later slots and fallbacks, research with gates and compute, settled questions and recent decisions,
-    beside live figures (board place and medal lines, slots used, GPU week, lease ends). Rebuild it in the same turn
-    as any plan change, submission, score, verdict or launch, and hourly with `--keep-rev` (fresh live figures, same
-    rev); `tools/kaggle_live_plan.py` (next to this file) builds it from a hand-edited plan JSON.
-  Both live PDFs get a render plus its automated layout check only, with no page-by-page visual check (owner
-  direction). Changes this playbook should get go to `<pack>/.memory/improvements.md` as suggestions
-  ([Maintaining This Playbook](#maintaining-this-playbook)). Keep
-  the research folder tidy: documents at the top, scripts, images and data in `research/assets/`.
+  - `reports/status.pdf`, the owner's one status page (no other live PDF): current state, leaderboard progress (our
+    score and rank and the top teams' over time), plan and timeline, spending, resources and their use, open
+    questions, and suggestions with the resources needed. The master edits `reports/status.json`;
+    `tools/kaggle_status.py` (next to this file) adds the live data and renders the page. Rebuild it in the same turn
+    as any plan change, submission, score, verdict or launch, and at each hourly pass with `--keep-rev`; a render plus
+    its layout check is enough. It holds private operations data, so `.gitignore` keeps it out of git.
+  Changes this playbook should get go to `<pack>/.memory/improvements.md` as suggestions
+  ([Maintaining This Playbook](#maintaining-this-playbook)). Keep the research folder tidy: documents at the top,
+  scripts, images and data in `research/assets/`.
+- **One folder per tool:** each project tool gets its own subfolder of the tools folder and a line in its README. <!-- OD15 -->
 - **Owner-facing times in the owner's timezone** (convert UTC deadlines and resets); machine logs stay UTC. Every
   time written anywhere comes from a real clock, never an estimate.
 - **Data and outputs** live in ignored folders at the project root (`__data/`, `__out/`); submitted files and their
@@ -192,8 +195,9 @@ Follow this sequence from minute one; each step points to the section with the r
   it and make a new one.
 - **Submissions are final:** a submitted notebook version and its output can't be changed or undone. The web
   editor's Edit button only creates a new version, which needs its own run and slot. Keep the repo as the source of
-  truth, because a browser edit is silently replaced by the next push. A weak submission costs only its slot: at the
-  end the owner picks the final submissions for the private board (often up to two).
+  truth, because a browser edit is silently replaced by the next push. A weak submission costs only its slot, since
+  the owner picks the finals for the private board at the end (often up to two). Not on a bot ladder, where the
+  latest uploads are the finals: a weak upload there pushes a stronger bot out of the final set.
 
 ## Compute
 
@@ -204,15 +208,16 @@ Follow this sequence from minute one; each step points to the section with the r
 - **One Kaggle account serves every competition project** (owner direction): its concurrent sessions and weekly GPU
   hours are shared. Take a lease before each kernel push and release it when the run ends (the `kaggle-sharing`
   skill), stay within this project's share while others use or wait for theirs, and follow the owner's split.
+  When this project will not use its GPU hours, tell the other projects on the account so they can. <!-- OD18 -->
 - **Use the whole lease pool the owner provides** (owner direction): every machine the owner holds joins the team's
   pool, except the ones the owner reserves for other work and machines merely shared with you. Add a new lease as
   soon as it is ready, and a future booking the moment it starts: root key, then a driver check (install the current
-  driver if it is missing or older, with the reboot and persistence mode), performance settings (CPU governor
-  `performance`, since images often boot with a power-saving one, and each GPU's power limit at its maximum; both reset
-  on reboot, so the hourly check re-applies them), then the private host list, the claims
-  system (the `resource-sharing` plugin, if attached) and the dashboard. Drop retired machines from the host list
-  the same hour. Take exactly these steps without asking only under the owner's standing permission; releases
-  still ask.
+  driver if it is missing or older, with the reboot and persistence mode), performance settings, then the private
+  host list, the claims system (the `resource-sharing` plugin, if attached) and the dashboard. Drop retired machines
+  from the host list the same hour. Take exactly these steps without asking only under the owner's standing
+  permission; releases still ask.
+  Performance settings reset on reboot, so the hourly check re-applies them: CPU governor `performance` (images
+  often boot with a power-saving one) and each GPU's power limit at the maximum allowed, not the default. <!-- C3 -->
 - **Leased machines need upkeep:**
   - check leases hourly; when one falls below 60 h left, extend it to 72 h from now. When an account-wide quota
     refuses, the refusal usually states the projected total: the hours still free are the quota minus (projected
@@ -245,6 +250,8 @@ Follow this sequence from minute one; each step points to the section with the r
   idle charges. The provider's run skill has the details. Review every paid instance at each hourly audit so none is
   forgotten. Prefer shared or leased hardware whenever it fits the job; launch paid capacity only when none does,
   within the owner's daily cap.
+  Buy the best performance per dollar at fair rates: no premium-priced types, current GPU generations unless there
+  is a reason, disks sized at creation, cloud work through the CLI, never planned around an owner login. <!-- OD10 -->
 - **Match Kaggle's environment where it matters:** Kaggle runs x86 with a pinned image; local ARM runs can match
   Kaggle on the top answer but not on full ranked lists (numpy's SIMD kernels: sort tie order, last-bit exp/log), so
   compare variants on one platform and use an x86 box when exact parity matters. Pin the libraries that change model
@@ -292,13 +299,12 @@ Follow this sequence from minute one; each step points to the section with the r
   - Keep one control session at a time, and wait for the sync to finish before switching.
   - Keep the pack harness-agnostic: `AGENTS.md` as the entry point, and briefs, notes and the runbook as plain
     files.
-  - Run the harness's web UI as a password-protected user service that survives reboots, with short start and stop
-    commands (for example, `opencode web` under `systemctl --user` with linger, basic auth from an env file of mode
-    600).
-- **Disk hygiene:** prune as you go, not at the end. Delete dataset staging copies once uploaded, outputs of scored
-  and superseded submissions, superseded checkpoints and rebuildable caches, and downloads nothing uses. Keep the
+- **Disk hygiene:** prune as you go, not at the end. What can go: dataset staging copies once uploaded, outputs of
+  scored and superseded submissions, superseded checkpoints, rebuildable caches, downloads nothing uses. Keep the
   competition data, holdout definitions, current and fallback weights, anything a running job reads, and the
-  write-up evidence (run folders, records and the scripts behind numbers; see [Validation](#validation)).
+  write-up evidence (run folders, records and the scripts behind numbers; see [Validation](#validation)). In the
+  project folder, mark what can go (a `.disposable` marker or a rule in `housekeeping.json`) and let
+  `solaris.tools.housekeeping` report sizes against the budget and prune; ask the owner before deleting anything else.
 
 ## Phases
 
@@ -307,12 +313,14 @@ Follow this sequence from minute one; each step points to the section with the r
   (credited, same pinned image, output compared with the original's), then (3 onward) one-change experiments on that
   base. Keep it local and cheap. The baseline shows the ceiling of its approach; the fork should reproduce the
   public notebook's score exactly.
+  With one slot a day, a fork goes in only with our own change and a checked expectation; a project rule wins. <!-- C5 -->
 - **Later phases** have a goal on the board: a target score, or better a place, since the field moves (for example a
   medal place on the public board, then a place that holds on the private board, then the top few, then first; the
   owner sets the ladder), each paired with an understanding goal (a written account of how the scorer works and what
   moves it). Start with a gap analysis: where are the points (per data class or error type), what caps the current
   approach, what the top teams do differently.
-- **Each phase keeps its own plan, live report, and a closing conclusion** that the owner reviews before the next.
+- **Each phase keeps its own plan and a closing conclusion** that the owner reviews before the next; its progress
+  shows on the status page (see [Setup](#setup)), not in a separate report.
 - **Exploration phases, then a clean phase** (owner direction):
   - Until the owner calls the clean phase, research and submissions may use non-clean data and models:
     non-commercial or unlicensed checkpoints, external libraries and simulated data. The point is to learn what
@@ -325,10 +333,12 @@ Follow this sequence from minute one; each step points to the section with the r
 
 ## Validation
 
-- **An honest holdout must reproduce the leaderboard's order before you trust it.** Fit per-class weights so the
-  holdout predicts the scored submissions, and check the order and the error. A holdout drawn from a population
-  unlike the hidden test can predict the opposite of the board's order, while one matched to it reproduces the
-  scored submissions within a small error.
+- **Where the board can rank candidates, an honest holdout must reproduce its order before you trust it.** Fit
+  per-class weights so the holdout predicts the scored submissions, and check the order and the error. A holdout
+  drawn from a population unlike the hidden test can predict the opposite of the board's order, while one matched to
+  it reproduces the scored submissions within a small error. A noisy board (a small public split) is no such test:
+  a holdout that is stable across folds can be right where it disagrees. With no useful board, a grouped backtest
+  decides (whole periods, sites or sources held out the way the hidden test is split off).
 - **Match the test's distribution:** the competition hosts' description of the test matters more than the training
   data's bulk.
 - **Keep test-like guard strata:** holdout cases that resemble the hidden test (the rarer, less-known ones, for
@@ -376,6 +386,7 @@ Follow this sequence from minute one; each step points to the section with the r
   kind of change.
   - Swaps of one model component can score consistently below the holdout's prediction, and an add-on's holdout gain
     can shrink to almost nothing on the board.
+  - The top public notebook carries a fit to the public board, so broad changes on top of it read low there.
   - A strong public notebook with its public checkpoint swapped for one you retrained lost on the board twice (by
     about one and two hundredths) while local reads called the swap flat or up. Read such a swap on the board in a
     slot of its own before stacking other changes on it, and find why your retrained checkpoints generalize worse to
@@ -391,14 +402,15 @@ Follow this sequence from minute one; each step points to the section with the r
   holdout's number corrected by the fitted board term for its kind of change) and the honest holdout's own. A
   public-board goal follows the board calibration: a gain that public notebooks show on the board while the honest
   holdout calls it flat can be taken by forking the notebook that carries it, with the honest verdict kept on record.
-  The final picks for the private board follow the honest holdout. When the two disagree on a setting, spend a
-  paired probe on the calibration's main claim, with the step its score triggers written in advance (say, the next
-  step of that setting when the probe beats its base by more than the board's noise).
+  When the two disagree on a setting, a paired probe on the calibration's main claim settles it, with the step its
+  score triggers written in advance (say, the next step of that setting when the probe beats its base by more than
+  the board's noise). The final picks follow the honest holdout. In public-first mode, honest reads are still
+  recorded for them but never gate a slot: slots go to the best chance of a new public best. <!-- C8 -->
 - **Check whether the holdout can see a mechanism before spending a slot on it.** A suspected train/serve mismatch can
   be ruled out in minutes when the holdout runs the pipeline exactly as the kernel does, since it then already
   contains the mismatch. A robustness ablation still needs a paired read against matched retrained controls:
   removing a suspected feature can also remove useful confidence information; it is not automatically an
-  improvement.
+  improvement. In public-first mode the honest read is recorded, but it does not gate the slot.
 - **Public components carry the public board's selection bias.** A public notebook's model was often picked on the
   same public slice among several variants, and its stated score is often the best of several submissions, so its
   public score is optimistic, and small public-board losses against it can be winner's curse. Where many teams
@@ -408,22 +420,23 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Use a matched base for every added model.** A variant can clear a headline gain while contributing nothing: a
   pilot can gain against the public baseline yet nothing against its own base model. Also audit missing-feature
   patterns: columns absent only from one training source encode that source.
-- **Calibrate the local evaluator on public submissions' board scores** (owner direction): run the exact packages of
-  public notebooks with known board scores on your evaluator, then fit board score against local score. Packages that
-  fail to load score zero on both sides and inflate the fit's apparent quality: judge it on the working points only,
-  and with a handful of them expect it to separate broad levels, not neighbouring scores.
+- **Treat public notebooks' board scores as ground truth and fit a local model of the scorer to them.** <!-- OD17 -->
+  Run the exact packages of public notebooks with known board scores on your evaluator, then fit board score against
+  local score. Packages that fail to load score zero on both sides and inflate the fit's apparent quality: judge it
+  on the working points only, and with a handful of them expect it to separate broad levels, not neighbouring scores.
 - **Evaluate for the scorer that is live, not as announced.** Announced fixes to the scoring environment can land
-  late, apply only to new submissions, or never land. Simulate one to learn what it changes, but choose submissions
-  on runs that match the live scorer, and let the simulated change break ties only. Whether a newly published scorer
-  version counts as live before the hosts confirm it is the owner's call per competition (record it in the facts
-  sheet); without one, treat it as live only once the hosts say it scores submissions or the board shows its effect,
-  and until then as an announced change like any other. When the first board scores contradict the local ranking, look for what the
-  local setup assumes that the scorer does not (a setting, a patch, an environment difference) before tuning
-  further: local runs that had adopted an announced scorer fix ranked the agents that relied on it first, and the
-  board scored them below public agents that did not.
+  late, apply only to new submissions, or never land; quote the hosts' posts on them as written, not paraphrased.
+  Simulate a fix to learn what it changes, but choose submissions on runs that match the live scorer, and let the
+  simulated change break ties only. Whether a newly published scorer version counts as live before the hosts confirm
+  it is the owner's call per competition (record it in the facts sheet); without one, treat it as live only once the
+  hosts say it scores submissions or the board shows its effect. When the first board scores contradict the local
+  ranking, look for what the local setup assumes that the scorer does not (a setting, a patch, an environment
+  difference) before tuning further: local runs that had adopted an announced scorer fix ranked the agents that
+  relied on it first, and the board scored them below public agents that did not.
 - **Pick among many variants with repeats.** The best of several runs of one family on the same tasks sits about one
   standard deviation above that family's mean; require a repeat run and a non-negative holdout read before claiming
-  one variant beats another, and compare task by task (identical totals can hide many differing tasks).
+  one variant beats another, and compare task by task (identical totals can hide many differing tasks). Judge a
+  variant that should send the same requests by its behaviour (the requests and replies), not by solve counts.
 - **Judge a new evaluation host only after several paired runs.** Run the same packages on it and on an established
   host several times before trusting or dismissing it: two new hosts trailed by 5-10 of about a hundred items on
   their first two runs, then matched over the next four pairs, with every input (model files, server command line,
@@ -468,8 +481,12 @@ Follow this sequence from minute one; each step points to the section with the r
 
 ## Daily Submission Discipline
 
-- **Use every slot, every day,** each with a stated purpose. Write the day's plan before its first submission and
+- **Use every slot, every day,** each with a stated purpose (on a bot ladder, where the latest uploads are the
+  finals, upload only bots you would keep as finals). Write the day's plan before its first submission and
   tomorrow's before the daily reset.
+- **Public-first mode, when the owner sets it:** until the owner asks to optimize for both boards, every slot goes
+  to the best chance of a new public best (public tuning included), so the insight, probe and confirmation slots
+  below give way. Kaggle's rules bind: no probing of test answers, nothing keyed by visible-test ids. <!-- OD38 -->
 - **Be strategic; don't rush to fill the slots at the reset** (owner rule). Prefer more research whenever it can
   finish in time (built, verified and reviewed) to fill all of the day's slots. At the reset, submit only what is
   final for the day or whose score later decisions need (the base of the day's ladder); hold the other slots for
@@ -507,22 +524,23 @@ Follow this sequence from minute one; each step points to the section with the r
 - **No blind resubmit:** after a submit that errored, timed out or lost its output, read `competitions submissions
   <slug>` and `competitions submission-limits <slug>` before asking to submit again: the first one may have landed
   and spent its slot (`tools/kaggle_submit.py` never retries on its own).
-- **Watch runs and scores** with the harness's own background commands inside the session (a background sleep or
-  poll that exits when the event lands, which wakes the session); a host daemon, cron job or launchd agent only
-  when the owner approved one (Agent Organization).
-  When a score lands, update the submission's README, the plan, the live plan and the live report in the same turn,
-  and feed what it taught into the ideas backlog. Live reports go stale fast (one missed several scores before the
-  owner noticed): check at every push that the report's Updated time is later than the newest result.
+- **Watch runs and scores from inside the session:** the session clock and the harness's own background commands (a
+  background sleep or poll that exits when the event lands, which wakes the session); no daemon, cron job or other
+  watcher outside the session. <!-- C2 -->
+  When a score lands, update the submission's README, the plan and the status page in the same turn, and feed what
+  it taught into the ideas backlog. A status page goes stale fast: check at every push that it is newer than the
+  newest result.
 - **GPU queues can stall** for hours while CPU sessions start at once: default kernels to CPU when the GPU isn't
   needed.
 - **Design submissions as paired reads:** one change against an already scored base, so the difference reads one
   effect. For example, add one component to a scored submission to measure that component alone, or retrain the
   base's model on all the data to test why it lost.
-- **Don't tune to the public board:** each slot returns one rounded number, so probing can't identify answers, and
-  the private board decides the ranking. Spend slots on questions.
-- **Timers can miss:** session crons fire only when the session is idle, so a one-shot "submit at 5:02 PM" can pass
-  unnoticed. Rely on the in-session background watchers above, and check the submission list right after each
-  daily reset.
+- **Don't tune to the public board** outside public-first mode: the private board decides the ranking, so spend
+  slots on questions. Probing can identify answers (a past winner read hidden data through scorer errors), but we
+  never probe (see [Settled Decisions](#settled-decisions)).
+- **Timers can miss:** session crons fire only when the session is idle, so a one-shot "submit at 5:02 PM" reminder
+  can pass unnoticed. Rely on the in-session background commands above, and check the submission list right after
+  each daily reset.
 
 ## Agent Organization
 
@@ -531,30 +549,31 @@ Follow this sequence from minute one; each step points to the section with the r
   context stays clean: raw work lives in the workers.
   Keep the master responsive with short coordinator turns: delegate preparation, validation and reporting, persist
   early milestones, and return on completion events instead of holding a long turn open to wait.
-  When moving harnesses, stop the old agent turns and scheduler but preserve detached compute. Transfer the live
-  job/connection inventory and pending deadlines, then recreate scheduling natively in the new harness; the old
-  harness's web service can stay as a reference once its custom scheduler is disabled. Do not run two controllers
+  When moving harnesses, stop the old agent turns but preserve detached compute. Transfer the live job/connection
+  inventory and pending deadlines, then re-arm the session clock in the new session. Do not run two controllers
   against the same working tree.
-  On taking over, verify before acting: the handed-over files' hashes on both machines, the old scheduler stopped
-  and disabled with no live agent turns, and the synced tree against the remote branch through a temporary index
+  On taking over, verify before acting: the handed-over files' hashes on both machines, no live agent turns left in
+  the old harness, and the synced tree against the remote branch through a temporary index
   (`GIT_INDEX_FILE=<tmp> git read-tree origin/main`, then `git diff --stat` and `git ls-files --others`), so the
-  index-only `git reset` provably changes no file. Only then clear the pause marker and recreate the schedules.
+  index-only `git reset` provably changes no file. Only then clear the pause marker and re-arm the clock.
 - **Worker briefs** state exact scope, procedure, return shape, boundaries, and the active rules; every brief asks
   for a "New ideas" block and a "for instructions.md" block.
 - **Adversarial review before every push to Kaggle** caught real problems every time (a missing image pin,
   uncalibrated thresholds, uncoupled fallbacks, duplicate training rows, a two-factor change that needed isolating).
-- **Workers run on the strongest model at xhigh or max effort** (owner direction). The master launches every worker
-  with an explicit model and, where the harness takes one per launch, an explicit effort. Where effort is
-  session-wide (Claude Code workers inherit the session's), the master session itself runs at max: if it does not,
-  ask the owner to start it with `--effort max` or to switch it with `/effort max`.
-- **Model and effort through the actual harness API:** OpenCode takes a model and variant per prompt; include the
-  variant on control and steering messages too, since an omitted one can reset the worker to its provider default.
-  Verify both on the worker's recorded messages rather than assuming them. Roles stay harness-agnostic briefs in the
-  pack, never harness-specific agent files (owner decision). Require early saved milestones so a long model step
-  does not leave all progress transient.
+- **Cross-family review:** a model from another vendor, at max effort, reviews the daily plan and each pre-submit
+  pick, read-only, on copies outside the repo; each project uses its own key. <!-- OD08 -->
+- **Outside reviews run through OpenCode:** its config is the truth for model features, verified with a real call;
+  reviewers run with `yolo` and `permission: allow` inside a throwaway folder; OpenCode's own cost figure is the
+  spend of record for those calls. <!-- OD19 -->
+- **Each worker runs on the model `kaggle.rule.md` sets for its kind of job,** passed on every launch with the effort
+  where the harness takes one per launch; where effort is session-wide (Claude Code workers inherit the session's),
+  the master runs at max, or asks the owner to restart it with `--effort max` or switch with `/effort max`. Verify
+  model and effort on the worker's recorded messages; under OpenCode, include the variant on control and steering
+  messages too, since an omitted one can reset the worker to its provider default. Require early saved milestones so
+  a long model step does not leave all progress transient.
 - **Never idle:** an hourly check starts research on the next idea, launches experiments on free compute, keeps
-  leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and refreshes the
-  live report.
+  leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and rebuilds the
+  status page.
 - **Script the hourly check:** one read-only pass over the board, the public notebooks, the forum, the compute
   (hosts, leases, jobs, queues) and the Kaggle account (sessions, quota) that prints a few lines of flags saves most
   of an autonomous loop's tokens; the agent acts on the flags. `tools/kaggle_hourly.py <slug>` is that pass; run the
@@ -569,8 +588,8 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Give each worker a private scratch subfolder;** a shared scratch folder lets one worker delete another's files.
 - **Interruption tolerance** (owner direction). Assume the agent session can vanish at any moment: an accidental
   interrupt, a network outage, a harness restart, under any harness.
-  - Session timers and watchers may die with the harness. OpenCode worker transcripts survive a server restart;
-    recover the saved session and inspect external jobs before relaunching. Runtime guarantees vary by harness.
+  - Session timers and background commands die with the harness; saved worker transcripts can survive (OpenCode's
+    survive a server restart): recover them and inspect external jobs before relaunching.
   - Jobs in tmux on the hosts keep going, and Kaggle runs and scores server-side.
   So:
   - run long jobs in tmux, resumable, ending with a done marker and a log;
@@ -580,9 +599,8 @@ Follow this sequence from minute one; each step points to the section with the r
   - write the recovery steps as a runbook that any harness or a person can follow: the context file and its job
     list, the dashboard, git status, relaunching workers from their briefs ("resume, don't restart"), checking
     Kaggle, and restoring timers.
-  A harness restart can cut off every worker while their GPU jobs keep running. A reboot-persistent scheduler
-  (owner-approved) restores scheduled wakeups and completion notifications: it delivers events to the master, and
-  the master reviews results and submits within the plan.
+  A harness restart can cut off every worker while their GPU jobs keep running: re-arm the session clock, then
+  collect finished results and relaunch from the briefs.
 - **Tell a paused queue from a dead one:** a queue stopped on purpose carries an explicit hold or yield marker (who,
   why, until when), and the hourly check alerts on any stopped queue without one. Collectors that wait for done
   markers never see a job that a reboot killed: an unannounced host reboot left a queue dead for about ten hours,
@@ -592,28 +610,22 @@ Follow this sequence from minute one; each step points to the section with the r
   the next check, keep a minimum queue depth per lane, and stage each new candidate on every host of its lane group
   before adding it to the plan: an autopilot queues only staged copies, so a host without one silently gets nothing
   and the gap shows only as uneven queue depth.
-- **Verify autonomy in the actual harness:** distinguish a persistent session from something that wakes it. Install
-  an owner-approved service when native session timers are unavailable. Persist schedules and pending events,
-  recover missed checkpoints after downtime, wait while the master is busy, and test delivery and pause across a
-  service restart. Keep a durable pause/stop control and a single active master.
-  A stored prompt is not proof the agent started: require a reply linked to that prompt and recover orphaned
-  requests. Re-arm completed watches on a new run, and detect idle workers whose last turn never finished.
-  Test these against the installed API, not assumptions about upstream internals: a real API can accept a
-  deliberately backdated id that a review expected it to skip. Some harnesses stop a background command after about
-  30 minutes: a sleep-until-next-event clock caps each sleep below that limit and re-arms (under a Solaris checkout,
-  `solaris.tools.session_clock` does).
+- **Verify autonomy in the actual harness:** distinguish a persistent session from something that wakes it; only the
+  session's own clock and background commands wake it. Some harnesses stop a background command after about 30
+  minutes: a sleep-until-next-event clock caps each sleep below that limit and re-arms (under a Solaris checkout,
+  `solaris.tools.session_clock` does). Keep a durable pause/stop marker and a single active master, recover missed
+  checkpoints after downtime, and detect idle workers whose last turn never finished.
 - **Budget context and checkpoint compaction:** automatic compaction needs a reserve of free context, set
   explicitly, and a bounded recent-history budget. A retained-history budget is not a total-context cap: summaries
   and instructions add to it. Save decisions, owner constraints, exact job/artifact references and pending actions
   durably before compacting; retain the last good checkpoint if a write or model call fails. Test process-kill
   recovery in the real harness: check that native compaction keeps the key decisions and pending work, and that the
   same session reopens after the harness server is killed and restarted.
-- **Errors must not acknowledge work:** a watcher should require a successful final reply, not merely an assistant
-  message or tool call. Back off after provider failures, bound context recovery, and retain pending events on
-  failure. Re-check external side effects before replaying a partially completed batch. An outage and a failed
-  scientific gate are different findings.
-- **Keep todos live:** update status when work starts, finishes, or blocks. A scheduler prompt must carry this duty
-  too; plans and chat promises are not evidence that a job is running.
+- **Errors must not acknowledge work:** a job counts as done only on a successful final reply, not merely an
+  assistant message or tool call. Back off after provider failures, and re-check external side effects before
+  replaying a partially completed batch. An outage and a failed scientific gate are different findings.
+- **Keep todos live:** update status when work starts, finishes, or blocks; plans and chat promises are not evidence
+  that a job is running.
 - **Work with the harness's safety checks, never around them.**
   - The master runs every deletion itself, with explicit, checked paths; workers only list candidates. A worker told
     to delete "what nothing needs" was blocked.
@@ -635,10 +647,15 @@ Follow this sequence from minute one; each step points to the section with the r
   them with `forums topics list --category competition_write_ups -s "<title>"`, keep that competition's hits, read
   each in full with `kaggle.py --sdk topic <id>` (or the browser, where allowed), and save it locally with its link.
   Write a `summary.md` (rank, team, one-line approach, lessons); each idea joins the backlog, sourced to its link.
+  When mining writeups more widely, go back about six months and weigh newer ones more. <!-- OD14 -->
 - **Research in rank order** whenever a slot is free; re-rank as evidence arrives (a holdout result, a prototype, a
   score); keep at least five `new` ideas, and run an idea-generation pass when fewer remain.
+- **A top-teams research track:** a research job on what the high-ranking teams do differently is always running or
+  queued beside the daily work. It refreshes about every 12 hours and when the hourly pass flags a top-team move; its
+  ranked ideas join the backlog, each recorded as taken, parked or rejected with the reason. <!-- OD39 -->
 - **Feasibility -> experiment -> submission:** an idea reaches a submission only after an honest experiment with a go
   criterion set in advance, and a stop rule for cheap early exits (a one-day probe before a 100-GPU-hour retrain).
+  In public-first mode the experiment's honest read is recorded, but the slot goes to the best public bet.
 - **Map the competition's official answer classes onto your candidate pools** (the data description says what
   the answers are and where they come from). An answer class your pools cannot hold, such as answers found only
   in a large public database, is a retrieval gap, not a modelling gap: no ranker picks an answer its candidates
@@ -660,18 +677,20 @@ Follow this sequence from minute one; each step points to the section with the r
   datasets, credit the authors in a header cell, and compare the commit run's output with the author's own output:
   expect identical rows. Take the image from a version that actually ran (its run log, or a byte-identical copy's
   run): `kernels pull -m` takes the image of the latest version, and a version saved without a run records the CPU
-  image even for a GPU notebook, so a GPU step can silently fall back to the CPU and into its time limits.
+  image even for a GPU notebook, so a GPU step can silently fall back to the CPU and into its time limits. The device
+  is part of the recipe: read the torch build and device from the scored run's log, and match both.
 - **Pull one version** with `kernels pull <owner>/<kernel>/<version> -m` (CLI 2.2.4 takes the version in the ref).
   Take the version number from the notebook's version list in the browser, read-only (neither the CLI nor the SDK
   lists versions), and check that the pulled code is that version's.
 - **Stack your changes on the strongest base, and move them when a stronger one appears.** Fork each new strongest
   public notebook within the hour and port every pending change onto it as the same patch, checked hunk for hunk
   against the older base's variant, so the reads measured on the old base carry over; a change stacked on an older
-  base forfeits the newer base's public gains. A faithful fork of a deterministic notebook, run on the author's own
-  inputs, scores exactly what the original scored (unless time budgets inside it bind on a slower scoring machine),
-  so its variants can read against the author's public score, and the fork's own slot buys the team a floor at that
-  score but no information. An older fork whose score is already known needs no slot, and its one-change probes
-  become fallbacks.
+  base forfeits the newer base's public gains. Check a top notebook for answers keyed by visible test ids before
+  forking it: such a leak spread through forks within hours, and a fork must not carry it. A faithful fork of a
+  deterministic notebook, run on the author's own inputs, scores exactly what the original scored (unless time
+  budgets inside it bind on a slower scoring machine), so its variants can read against the author's public score,
+  and the fork's own slot buys the team a floor at that score but no information. An older fork whose score is
+  already known needs no slot, and its one-change probes become fallbacks.
 - **Smoke-only commit runs:** some public notebooks run a smoke subset on the commit run (a few rows whenever the test
   is the visible one) and the full set only on the hidden rerun. Verify such a fork on the smoke rows and markers
   only, and plan the hidden run's time from full-run timings (the author's logs, or those of the notebooks it
@@ -704,11 +723,12 @@ Follow this sequence from minute one; each step points to the section with the r
   `isPrivate` false and blanks for missing keys.
 - **Rebuild a public notebook's private inputs:** arrays it reads from someone's private dataset can often be rebuilt
   from public sources (per-candidate counts from a public database, say), aligned row for row with the notebook's
-  own tables. Check the alignment at the notebook's own indexing, and record the upstream files' checksums: the
-  alignment holds only for those files. A fork whose private inputs were replaced with public or rebuilt ones is no
-  longer a faithful fork, even with every cell unchanged: its score is unknown until the fork itself is scored (one
-  matched the author's commit output on every visible row, none of which exercised the replaced arrays). Read its
-  own score before stacking variants on it, and keep a fallback build on another source of those inputs.
+  own tables. Check the alignment at the notebook's own indexing, diff your run against the author's visible commit
+  output (it fingerprints the private inputs on the rows that use them), and record the upstream files' checksums:
+  the alignment holds only for those files. A fork whose private inputs were replaced with public or rebuilt ones is
+  no longer a faithful fork, even with every cell unchanged: its score is unknown until the fork itself is scored
+  (one matched the author's commit output on every visible row, none of which exercised the replaced arrays). Read
+  its own score before stacking variants on it, and keep a fallback build on another source of those inputs.
 - **Hardware banner** at the start of every kernel (CPU count, RAM, GPU) to learn the real environment.
 - **Evaluate the exact shipped bytes;** after any rebase, re-smoke.
 - **Mirror the grader exactly in local runs:** its command line, environment and config keys, read from the
@@ -807,3 +827,13 @@ Follow this sequence from minute one; each step points to the section with the r
   names, IPs, internal URLs, lease ids, accounts or usernames, private repo or dataset names, or credentials; write
   "a leased GPU pool" or "a GPU host" instead.
 - Started on 2026-09-27; moved into the kaggle plugin on 2026-09-28.
+
+### Settled Decisions
+
+Not to be proposed again without a new reason:
+
+- No probing of hidden scorers or hidden test data. <!-- D1 -->
+- No hiding our real score with 1-p (inverted) submissions. <!-- D2 -->
+- No pre-tool-call guard hook for our agents. <!-- D3 -->
+- No daemon, external watcher or automatic submission. <!-- D4 -->
+- No harness-specific agent or rule files; roles stay plain briefs in the pack. <!-- D5 -->
