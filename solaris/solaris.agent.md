@@ -29,7 +29,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.41.0.md`](spec/spec-v0.41.0.md).
+[`spec/spec-v0.42.0.md`](spec/spec-v0.42.0.md).
 
 ## Persona Model
 
@@ -136,6 +136,11 @@ There is one running agent. It adopts a persona by reading the active context:
   project's `ai.daily_budget_usd`)
 - `uv run -m solaris.tools.session_clock --dir PATH|--schedule FILE [--after TIME] [--cap MINUTES]` (run as a
   background command; prints the due event from `<pack>/.memory/schedule.json`, or `re-arm` at the cap)
+- `uv run -m solaris.tools.housekeeping --dir PATH [report|tidy|prune] [--apply] [--json]` (a project's size
+  budget and folder order: `report` (read-only) lists sizes, budgets, untidy items, prune candidates and layout
+  notes; `tidy` moves `<pack>/.memory/` leftovers to `.memory/archive/` and job scratch to `__out/jobs/`;
+  `prune` deletes only by the rules in `<pack>/housekeeping.json` and `.disposable` markers; both print their plan
+  unless `--apply`; exit 3 when something needs attention)
 
 ## Versioning and Sync
 
