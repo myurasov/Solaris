@@ -76,6 +76,55 @@ def test_add_refuses_bad_input_without_writing(repo, monkeypatch, capsys):
     assert not (repo / ".memory" / "interactions").exists()
 
 
+def _stdin(monkeypatch, **fields):
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(fields)))
+
+
+def test_add_records_an_optional_trigger_that_show_json_prints(repo, monkeypatch, capsys):
+    base = ["add", "--project", "demo", "--prompt", "p", "--request", "r", "--outcome", "o"]
+    assert I.main(base + ["--trigger", "clock"]) == 0
+    assert I.main(base) == 0  # no trigger given: no key, the line is the plain five fields
+    _stdin(monkeypatch, project="demo", trigger=" Peer ", prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin"]) == 0  # --stdin carries it too, folded to lower case
+    _stdin(monkeypatch, project="demo", trigger="peer", prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin", "--trigger", "worker"]) == 0  # the flag wins
+    _stdin(monkeypatch, project="demo", trigger=None, prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin", "--trigger", "OWNER"]) == 0
+    lines = _lines(repo / ".memory" / "interactions" / "box1.jsonl")
+    assert [line.get("trigger") for line in lines] == ["clock", None, "peer", "worker", "owner"]
+    assert lines[1] == {"ts": "2026-10-02T12:00:00Z", "project": "demo", "prompt": "p", "request": "r",
+                        "outcome": "o"}
+    capsys.readouterr()
+    assert I.main(["show", "--json", "--last", "0"]) == 0
+    shown = [json.loads(line) for line in capsys.readouterr().out.splitlines()]
+    assert [e.get("trigger") for e in shown] == ["clock", None, "peer", "worker", "owner"]
+
+
+def test_add_refuses_an_unknown_trigger(repo, monkeypatch, capsys):
+    base = ["add", "--project", "demo", "--prompt", "p", "--request", "r", "--outcome", "o"]
+    assert I.main(base + ["--trigger", "cron"]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "--trigger must be one of owner, clock, worker, peer" in err
+    for bad in ("", "user", 3, ["owner"]):
+        _stdin(monkeypatch, project="demo", trigger=bad, prompt="p", request="r", outcome="o")
+        assert I.main(["add", "--stdin"]) == 2, bad
+    assert not (repo / ".memory" / "interactions").exists()
+
+
+def test_add_refuses_an_empty_or_dash_project(repo, monkeypatch, capsys):
+    for project in ("-", " - ", "", "   "):
+        assert I.main(["add", "--project", project, "--prompt", "p", "--request", "r", "--outcome", "o"]) == 2
+        err = capsys.readouterr().err
+        assert err.count("\n") == 1 and "names nothing" in err and "solaris for framework work" in err, project
+    _stdin(monkeypatch, project="-", prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin", "--dir", str(repo / "projects" / "my" / "demo")]) == 2
+    # "-" as a flag value never reaches a log, and neither does the stdin one
+    assert not (repo / ".memory" / "interactions").exists()
+    assert not (repo / "projects" / "my" / "demo" / "aipack" / ".memory" / "interactions").exists()
+    # a real name still logs
+    assert I.main(["add", "--project", "solaris", "--prompt", "p", "--request", "r", "--outcome", "o"]) == 0
+
+
 def test_append_line_starts_a_fresh_line_after_a_cut_one(tmp_path):
     log = tmp_path / "interactions" / "box1.jsonl"
     log.parent.mkdir()

@@ -3,8 +3,10 @@
 
 """Interaction logs with one file per machine (stdlib only).
 
-Every meaningful turn is logged as one ``{ts, project, prompt, request, outcome}`` JSON line. Each machine writes
-only its own file - ``.memory/interactions/<machine>.jsonl`` for the framework master log, and
+Every meaningful turn is logged as one ``{ts, project, prompt, request, outcome}`` JSON line, plus an optional
+``trigger`` naming what started the turn: ``owner`` (the owner typed it), ``clock`` (a scheduled wake), ``worker``
+(a subagent's report) or ``peer`` (another session's message). Each machine writes only its own file -
+``.memory/interactions/<machine>.jsonl`` for the framework master log, and
 ``<pack>/.memory/interactions/<machine>.jsonl`` for a project (the pack is the project's ai-pack folder, found by
 solaris.tools.pack) - so a checkout synced between machines (Syncthing) never has two writers on one file, and a
 log can never become a conflict copy. The single ``interactions.jsonl`` that older versions kept beside that
@@ -12,9 +14,9 @@ folder stays as read-only history and is read together with the per-machine file
 
 Run::
 
-    uv run -m solaris.tools.interactions add --project <name> --prompt TEXT --request TEXT --outcome TEXT [--dir <project>]
+    uv run -m solaris.tools.interactions add --project <name> [--trigger WHO] --prompt TEXT --request TEXT --outcome TEXT [--dir <project>]
     uv run -m solaris.tools.interactions add --stdin [--dir <project>] <<'EOF'
-    {"project": "<name>", "prompt": "...", "request": "...", "outcome": "..."}
+    {"project": "<name>", "trigger": "owner", "prompt": "...", "request": "...", "outcome": "..."}
     EOF
     uv run -m solaris.tools.interactions show [--dir <project>] [--last N] [--since ISO] [--project NAME] [--machine NAME] [--json]
     uv run -m solaris.tools.interactions who [--dir <project>] [--minutes N]
@@ -22,10 +24,12 @@ Run::
 
 ``add`` stamps ``ts`` from the clock (UTC, ``Z`` suffix) and appends the line to this machine's framework file and,
 with ``--dir``, the identical line to the project's file (``--stdin`` reads the fields from a JSON object, which
-avoids shell quoting; flags win). ``show`` merges the history file and every machine's file by ``ts`` (``--last 0``
-prints everything). ``who`` lists each log file's latest entry. ``machine`` prints this machine's name:
-``SOLARIS_MACHINE`` when set, else the macOS LocalHostName or the short host name, lowercased, with anything
-outside ``[a-z0-9-]`` turned into ``-``.
+avoids shell quoting; flags win). ``--trigger`` (or a ``trigger`` key on stdin) takes ``owner``, ``clock``,
+``worker`` or ``peer``. It refuses an empty ``project`` or ``-``: name the project, the ad-hoc task, or
+``solaris`` for framework work. ``show`` merges the history file and every machine's file by ``ts`` (``--last 0``
+prints everything; ``--json`` prints whole lines, ``trigger`` included). ``who`` lists each log file's latest
+entry. ``machine`` prints this machine's name: ``SOLARIS_MACHINE`` when set, else the macOS LocalHostName or the
+short host name, lowercased, with anything outside ``[a-z0-9-]`` turned into ``-``.
 
 Exit codes: 0 ok; 1 an error (no ai-pack, an unwritable log); 2 bad arguments; 3 (``who`` only) another machine
 logged within ``--minutes`` (default 60), so the log's project may be in use there - as of the last sync.
@@ -50,6 +54,8 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 FOLDER = "interactions"  # the per-machine files, inside a .memory folder
 HISTORY = "interactions.jsonl"  # the single log older versions kept; read-only history now
 FIELDS = ("project", "prompt", "request", "outcome")
+# What started a turn (the optional trigger key): the owner, a scheduled wake, a worker's report, a peer session.
+TRIGGERS = ("owner", "clock", "worker", "peer")
 ACTIVE_MINUTES = 60
 _EPOCH = datetime.min.replace(tzinfo=timezone.utc)
 
@@ -121,8 +127,12 @@ def utc_stamp(t: "float | None" = None) -> str:
     return datetime.fromtimestamp(_now() if t is None else t, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def build_entry(project: str, prompt: str, request: str, outcome: str, t: "float | None" = None) -> dict:
-    return {"ts": utc_stamp(t), "project": project, "prompt": prompt, "request": request, "outcome": outcome}
+def build_entry(project: str, prompt: str, request: str, outcome: str, t: "float | None" = None,
+                trigger: "str | None" = None) -> dict:
+    entry = {"ts": utc_stamp(t), "project": project, "prompt": prompt, "request": request, "outcome": outcome}
+    if trigger:
+        entry["trigger"] = trigger
+    return entry
 
 
 def append_line(path, entry: dict) -> None:
@@ -255,6 +265,7 @@ def _memory_for(a) -> Path:
 
 def cmd_add(a) -> int:
     fields = {}
+    trigger = None
     if a.stdin:
         if sys.stdin is None or sys.stdin.isatty():
             return _usage("--stdin needs a JSON object piped in (a heredoc works)")
@@ -265,20 +276,30 @@ def cmd_add(a) -> int:
         if not isinstance(data, dict):
             return _usage("--stdin needs a JSON object")
         fields.update({k: data[k] for k in FIELDS if k in data})
+        trigger = data.get("trigger")
     for k in FIELDS:
         if getattr(a, k) is not None:
             fields[k] = getattr(a, k)
+    if a.trigger is not None:
+        trigger = a.trigger
     missing = [k for k in FIELDS if not isinstance(fields.get(k), str)]
     if missing:
         return _usage("missing " + ", ".join("--" + k for k in missing))
-    empty = [k for k in ("project", "request", "outcome") if not fields[k].strip()]
+    if fields["project"].strip() in ("", "-"):
+        return _usage(f"--project {fields['project']!r} names nothing: give the project, the ad-hoc task, "
+                      "or solaris for framework work")
+    empty = [k for k in ("request", "outcome") if not fields[k].strip()]
     if empty:
         return _usage("empty " + ", ".join("--" + k for k in empty))
+    if trigger is not None:
+        if not isinstance(trigger, str) or trigger.strip().lower() not in TRIGGERS:
+            return _usage(f"--trigger must be one of {', '.join(TRIGGERS)} (got {trigger!r})")
+        trigger = trigger.strip().lower()
     machine = machine_name()
     targets = [machine_log(framework_memory(), machine)]
     if a.dir:
         targets.append(machine_log(project_memory(a.dir), machine))
-    entry = build_entry(**fields)
+    entry = build_entry(**fields, trigger=trigger)
     for path in targets:
         try:
             append_line(path, entry)
@@ -350,6 +371,8 @@ def main(argv: "list[str] | None" = None) -> int:
     add = sub.add_parser("add", help="log one turn in this machine's files")
     for k in FIELDS:
         add.add_argument("--" + k)
+    add.add_argument("--trigger", metavar="|".join(TRIGGERS),
+                     help="what started the turn: the owner, a clock wake, a worker's report or a peer session")
     add.add_argument("--stdin", action="store_true", help="read the fields from a JSON object on stdin")
     add.add_argument("--dir", help="project folder: also log the line in its ai-pack")
     show = sub.add_parser("show", help="print the merged log, oldest first")

@@ -99,8 +99,8 @@ Follow the engineer agent's workflows:
   it; renaming the primary persona is `agents --rename-primary <role>`.
 - **Log:** record the turn as one `{ts, project, prompt, request, outcome}` line (`prompt` the raw user
   prompt, `request` your interpretation, `outcome` the result) with
-  `uv run -m solaris.tools.interactions add --dir projects/<slug> --project <slug> --prompt ... --request ...
-  --outcome ...`: one call writes **both** this machine's file in the project's `<pack>/.memory/interactions/`
+  `uv run -m solaris.tools.interactions add --dir projects/<slug> --project <slug> [--trigger owner|clock|worker|peer]
+  --prompt ... --request ... --outcome ...`: one call writes **both** this machine's file in the project's `<pack>/.memory/interactions/`
   and the framework master log (all work).
 - **Save context:** keep the project's `<pack>/.memory/context.md` (the detailed session-context summary,
   rewritten in place) current at its save points: before context compaction (automatic or manual), and

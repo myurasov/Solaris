@@ -1,4 +1,4 @@
-_Rev. 48_
+_Rev. 49_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -227,7 +227,8 @@ pointer to it in `instructions.md` where the procedure would have gone.
 
 Log every meaningful turn as one append-only `{ts, project, prompt, request, outcome}` line - `prompt` the
 user's raw verbatim prompt, `request` your interpreted restatement, `outcome` what happened, `ts` UTC from
-the clock with a `Z` suffix - in this machine's file in the project's log folder,
+the clock with a `Z` suffix, plus an optional `trigger` (`owner`, `clock`, `worker` or `peer`: what started the
+turn) - in this machine's file in the project's log folder,
 `{{PACK}}/.memory/interactions/<machine>.jsonl` (`<machine>`: the short host name, lowercase). One file per
 machine means a pack synced between machines never has two writers on one file. Under a Solaris checkout,
 log with `uv run -m solaris.tools.interactions add --dir <project> --project {{SLUG}} --prompt ... --request
