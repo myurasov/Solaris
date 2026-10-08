@@ -7,9 +7,10 @@ The records are this machine's Claude Code transcripts, ``~/.claude/projects/**/
 ``$CLAUDE_CONFIG_DIR`` when it is set), subagent and workflow transcripts included: the only usage records the
 projects' own spend tools read. Sessions run on another machine are counted only there.
 Of each assistant line only the usage counts, model, response id, timestamp, session id and working directory are
-used; message content is never kept or printed. A response logged on several lines (one per content block, or
-copied into a resumed session) counts once. Calls Claude Code makes for itself (session titles, web page
-summaries) are not in the transcripts, so they are not counted.
+used (with --detail also its effort, sidechain mark and agent id, and of each hook attachment its type, event and the
+start of a failed hook's output); message content is never kept or printed. A response logged on several lines (one
+per content block, or copied into a resumed session) counts once. Calls Claude Code makes for itself (session titles,
+web page summaries) are not in the transcripts, so they are not counted.
 
 Spend is an estimate at list prices (PRICES), not a bill: uncached input, cache writes (1.25x input for 5-minute
 entries, 2x for 1-hour ones), cache reads and output, per model. A model missing from PRICES is counted in tokens
@@ -23,11 +24,20 @@ stays unattributed. Days are the owner's: ``owner.timezone`` (an IANA zone name)
 else the machine's zone. A project's approximate daily limit is ``ai.daily_budget_usd`` in
 ``<pack>/.memory/config.json``, else in ``<pack>/defaults.json``.
 
+--detail adds who answered, for the responses in the window (attributed as above): the main thread's responses
+(``isSidechain`` false, in a session's own transcript) with their models and the ``effort`` each line records; each
+worker transcript (``<session>/subagents/**/agent-<id>.jsonl``, or sidechain lines of an older main transcript) with
+its session (the first 8 characters), agent id, first response, model, effort and estimated spend; and the hook runs
+the transcripts record as attachments (``hook_success``, or a failure: a ``hook_*`` type naming an error or a
+cancel), with the newest 50 failures and the first 120 characters of each one's output. A field an older transcript
+lacks (effort, agent id, hook event) is left out or null, never guessed.
+
 Run::
 
     uv run -m solaris.tools.ai_spend                                  # every project plus unattributed, per day
     uv run -m solaris.tools.ai_spend --dir projects/<slug> --today    # one project, today: the pacing check
     uv run -m solaris.tools.ai_spend --since 2026-09-28 --json        # from a day (or an ISO time) on, as JSON
+    uv run -m solaris.tools.ai_spend --dir projects/<slug> --since 2026-10-07T18:00-07:00 --json --detail
 
 Exit codes: 0 fine; 3 a reported project's estimate for today is over its daily limit; 1 a bad --dir or config
 (the report still prints when only a limit is bad); 2 bad arguments.
@@ -72,6 +82,10 @@ PRICES = {
 WRITE_5M, WRITE_1H = 1.25, 2.0
 # a model id's family and version, without a date or [1m] suffix or a cloud prefix: claude-haiku-4-5-20251001
 _MODEL_RE = re.compile(r"claude-[a-z]+-\d{1,2}(?:-\d{1,2})?(?!\d)")
+# --detail: a session shows by this many characters, a failed hook by this much of its output; failures listed
+SESSION_CHARS, HOOK_TEXT, HOOK_FAILURES = 8, 120, 50
+# a hook attachment whose type names one of these records a failed run; hook_success a run that worked
+HOOK_FAILED = ("error", "cancel")
 
 _now = time.time   # tests swap the clock
 
@@ -131,11 +145,50 @@ def usage_of(d: dict) -> "tuple | None":
     return str(rid), ts, str(d.get("sessionId") or ""), str(d.get("cwd") or ""), model, tokens
 
 
-def scan(root: Path, start: float) -> dict:
+def who_of(d: dict, path: Path, worker_file: bool) -> tuple:
+    """(worker key or None for the main thread, agent id or None, effort or None) of an assistant line. A worker is a
+    transcript under a session's folder, or a sidechain line of an older main transcript (keyed by its agent id)."""
+    agent = d.get("agentId") if isinstance(d.get("agentId"), str) and d.get("agentId") else None
+    if agent is None and worker_file and path.stem.startswith("agent-"):
+        agent = path.stem[len("agent-"):]
+    effort = d.get("effort") if isinstance(d.get("effort"), str) and d.get("effort") else None
+    worker = worker_file or d.get("isSidechain") is True
+    return ((path.as_posix(), agent) if worker else None), agent, effort
+
+
+def hook_of(d: dict) -> "tuple | None":
+    """(epoch, session, cwd, event, failed, text) of a hook attachment that records a run: hook_success, or a failure
+    (a hook_* type naming an error or a cancel), whose text is the start of its output. None for any other line, or
+    a hook attachment that adds context or a decision to a run."""
+    a = d.get("attachment")
+    kind = a.get("type") if isinstance(a, dict) else None
+    if d.get("type") != "attachment" or not isinstance(kind, str) or not kind.startswith("hook_"):
+        return None
+    failed = any(word in kind for word in HOOK_FAILED)
+    if kind != "hook_success" and not failed:
+        return None
+    try:
+        ts = datetime.fromisoformat(d["timestamp"]).timestamp()
+    except (KeyError, TypeError, ValueError):
+        return None
+    text = ""
+    if failed:
+        out = next((a[k] for k in ("stderr", "stdout", "content") if isinstance(a.get(k), str) and a[k].strip()), "")
+        text = " ".join(out.split())[:HOOK_TEXT]
+    event = a.get("hookEvent") if isinstance(a.get("hookEvent"), str) else None
+    return ts, str(d.get("sessionId") or ""), str(d.get("cwd") or ""), event, failed, text
+
+
+def scan(root: Path, start: float, detail: "dict | None" = None) -> dict:
     """{response id: [epoch, session, cwd, model, tokens]} from every transcript under ``root`` written at or after
     ``start`` (a file last written before it holds nothing newer). Older responses in those files come back too:
-    they help place a session in its project."""
+    they help place a session in its project. With ``detail`` (a dict) it also fills detail["who"], {response id:
+    who_of(...)} of the line each response counts at, and detail["hooks"], {line id: hook_of(...)} (a hook line
+    copied into a resumed session counts once)."""
     found: dict = {}
+    who = hooks = None
+    if detail is not None:
+        who, hooks = detail.setdefault("who", {}), detail.setdefault("hooks", {})
     if not root.is_dir():
         return found
     for path in sorted(root.rglob("*.jsonl")):
@@ -147,27 +200,41 @@ def scan(root: Path, start: float) -> dict:
             continue
         parts = path.relative_to(root).parts   # <project dir>/<session>.jsonl or <project dir>/<session>/...
         folder_session = Path(parts[1]).stem if len(parts) > 1 else path.stem
+        worker_file = len(parts) > 2   # subagents/ and subagents/workflows/ transcripts sit in the session's folder
         with fh:
-            for raw in fh:
-                if b'"usage"' not in raw:   # only assistant lines carry usage: skip the rest unparsed
+            for n, raw in enumerate(fh):
+                hook_line = hooks is not None and b'"hook_' in raw
+                if b'"usage"' not in raw and not hook_line:   # only assistant lines carry usage: skip the rest unparsed
                     continue
                 try:
                     d = json.loads(raw)
                 except ValueError:
                     continue
-                rec = usage_of(d) if isinstance(d, dict) else None
+                if not isinstance(d, dict):
+                    continue
+                if hook_line and d.get("type") == "attachment":
+                    hook = hook_of(d)
+                    if hook is not None:
+                        key = d.get("uuid") if isinstance(d.get("uuid"), str) else f"{path}:{n}"
+                        hooks.setdefault(key, (hook[0], hook[1] or folder_session, *hook[2:]))
+                    continue
+                rec = usage_of(d)
                 if rec is None:
                     continue
                 rid, ts, session, cwd, model, tokens = rec
                 old = found.get(rid)
                 if old is None:
                     found[rid] = [ts, session or folder_session, cwd, model, tokens]
+                    if who is not None:
+                        who[rid] = who_of(d, path, worker_file)
                     continue
                 # the same response again: a later content block (output still growing) or a copy in a resumed
                 # session; the largest counts are the final ones, and the earliest line is where it was spent
                 merged = tuple(map(max, old[4], tokens))
                 if ts < old[0]:
                     found[rid] = [ts, session or folder_session, cwd, model, merged]
+                    if who is not None:
+                        who[rid] = who_of(d, path, worker_file)
                 else:
                     old[4] = merged
     return found
@@ -291,16 +358,21 @@ def parse_since(text: str, tz: "ZoneInfo | None") -> float:
 
 # ----------------------------------------------------------------- report
 
-def report(found: dict, tz: "ZoneInfo | None", start: float, now: float, only: "Path | None" = None) -> dict:
-    """Per (day, project) rows from ``start`` on, today's spend against each reported project's daily limit, the
-    unpriced models and any limit that could not be read. ``only`` keeps one project."""
+def attribution(found: dict) -> tuple:
+    """(Projects, {session: the project most of its responses with a project went to})."""
     projects = Projects()
     votes: dict = defaultdict(Counter)
     for _ts, session, cwd, _model, _tokens in found.values():
         root = projects.root_of(cwd)
         if root is not None:
             votes[session][root] += 1
-    lead = {session: c.most_common(1)[0][0] for session, c in votes.items()}
+    return projects, {session: c.most_common(1)[0][0] for session, c in votes.items()}
+
+
+def report(found: dict, tz: "ZoneInfo | None", start: float, now: float, only: "Path | None" = None) -> dict:
+    """Per (day, project) rows from ``start`` on, today's spend against each reported project's daily limit, the
+    unpriced models and any limit that could not be read. ``only`` keeps one project."""
+    projects, lead = attribution(found)
     today0 = day_start(now, tz)
     sums: dict = {}   # (day, root) -> [requests, input, cache writes, cache reads, output, usd]
     today: dict = defaultdict(float)
@@ -340,6 +412,76 @@ def report(found: dict, tz: "ZoneInfo | None", start: float, now: float, only: "
                             "over": spent > limit})
     return {"rows": rows, "budgets": budgets, "unpriced_models": dict(unpriced.most_common()),
             "problems": problems}
+
+
+def _when(ts: float, tz: "ZoneInfo | None") -> str:
+    return datetime.fromtimestamp(ts, timezone.utc).astimezone(tz).isoformat(timespec="seconds")
+
+
+def detail(found: dict, extra: dict, tz: "ZoneInfo | None", start: float, only: "Path | None" = None) -> dict:
+    """Who answered from ``start`` on (see --detail): the main thread's responses with their models and efforts,
+    each worker transcript, and the hook runs with their failures. ``extra`` is what scan() filled; ``only`` keeps
+    one project, attributed as report() does."""
+    projects, lead = attribution(found)
+    who, hooks = extra.get("who") or {}, extra.get("hooks") or {}
+
+    def kept(ts, session, cwd):
+        return ts >= start and (only is None or (projects.root_of(cwd) or lead.get(session)) == only)
+
+    turns, models, efforts, workers = 0, Counter(), Counter(), {}
+    for rid, (ts, session, cwd, model, tokens) in found.items():
+        if not kept(ts, session, cwd):
+            continue
+        key, agent, effort = who.get(rid, (None, None, None))
+        if key is None:
+            turns += 1
+            models[model] += 1
+            if effort:
+                efforts[effort] += 1
+            continue
+        w = workers.setdefault(key, {"session": session[:SESSION_CHARS], "agent": agent, "first": ts,
+                                     "models": Counter(), "efforts": Counter(), "usd": None})
+        w["first"] = min(w["first"], ts)
+        w["models"][model] += 1
+        if effort:
+            w["efforts"][effort] += 1
+        usd = cost(model, tokens)
+        if usd is not None:
+            w["usd"] = (w["usd"] or 0.0) + usd
+    rows = [{"session": w["session"], "agent": w["agent"], "first": _when(w["first"], tz),
+             "model": w["models"].most_common(1)[0][0],
+             "effort": w["efforts"].most_common(1)[0][0] if w["efforts"] else None,
+             "usd": None if w["usd"] is None else round(w["usd"], 4)}
+            for w in sorted(workers.values(), key=lambda w: (w["first"], w["session"], w["agent"] or ""))]
+    runs, failures = 0, []
+    for ts, session, cwd, event, failed, text in hooks.values():
+        if kept(ts, session, cwd):
+            runs += 1
+            if failed:
+                failures.append((ts, event, text))
+    failures.sort(key=lambda f: f[0])
+    return {"main": {"turns": turns, "models": dict(models.most_common()), "effort": dict(efforts.most_common())},
+            "workers": rows,
+            "hooks": {"runs": runs, "failed": len(failures),
+                      "failures": [{"ts": _when(ts, tz), "event": event, "text": text}
+                                   for ts, event, text in failures[-HOOK_FAILURES:]]}}
+
+
+def print_detail(d: dict) -> None:
+    main, hooks = d["main"], d["hooks"]
+
+    def counts(c):
+        return ", ".join(f"{k} {v:,}" for k, v in c.items()) or "none recorded"
+
+    print(f"main thread: {main['turns']:,} responses; models {counts(main['models'])}; effort {counts(main['effort'])}")
+    print(f"workers: {len(d['workers'])}")
+    for w in d["workers"]:
+        usd = "n/a" if w["usd"] is None else f"${w['usd']:,.2f}"
+        print(f"  {w['session']} {w['agent'] or '-'}  from {w['first']}  {w['model']}  effort {w['effort'] or '-'}  "
+              f"{usd}")
+    print(f"hooks: {hooks['runs']:,} runs, {hooks['failed']:,} failed")
+    for f in hooks["failures"][-5:]:
+        print(f"  {f['ts']} {f['event'] or '?'}: {f['text']}")
 
 
 def _tokens(n: int) -> str:
@@ -391,6 +533,9 @@ def main(argv: "list[str] | None" = None) -> int:
     when.add_argument("--since", metavar="ISO",
                       help="from this day (its start in the owner's zone) or ISO time on; default: everything kept")
     parser.add_argument("--json", action="store_true", help="print JSON instead of a table")
+    parser.add_argument("--detail", action="store_true",
+                        help="also who answered: the main thread's models and efforts, each worker transcript, and "
+                             "the hook runs with their failures (in JSON, a \"detail\" object)")
     args = parser.parse_args(argv)
     only = pack = None
     if args.dir is not None:
@@ -420,8 +565,11 @@ def main(argv: "list[str] | None" = None) -> int:
             parser.error(f"--since {args.since!r} is not an ISO day or time (2026-09-28, 2026-09-28T08:00-07:00)")
         if start > now:
             parser.error(f"--since {args.since!r} is in the future")
-    found = scan(transcripts_root(), min(start, day_start(now, tz)))
+    extra = {} if args.detail else None
+    found = scan(transcripts_root(), min(start, day_start(now, tz)), extra)
     rep = report(found, tz, start, now, only)
+    if extra is not None:
+        rep["detail"] = detail(found, extra, tz, start, only)
     zone = tz.key if tz is not None else None
     since = datetime.fromtimestamp(start, timezone.utc).astimezone(tz) if start else None
     if args.json:
@@ -432,6 +580,8 @@ def main(argv: "list[str] | None" = None) -> int:
         days = zone or "the machine's zone"
         print_table(rep, f"AI spend estimate, {window} (days in {days}): Claude Code transcripts at list prices "
                          f"as of {PRICES_AS_OF}" + (f", {label(only)}" if only else ""), per_day_totals=only is None)
+        if extra is not None:
+            print_detail(rep["detail"])
     if rep["problems"]:
         return 1
     return OVER if any(b["over"] for b in rep["budgets"]) else 0

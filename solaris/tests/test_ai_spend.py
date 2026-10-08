@@ -218,3 +218,105 @@ def test_no_transcripts(tmp_path, monkeypatch, capsys, world):
     monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(tmp_path / "empty"))
     code, out = _run(capsys, "--dir", world["beta"], "--today")
     assert code == 0 and "no Claude Code usage in that window" in out and "$0.00 today of about $100.00" in out
+
+
+MAIN = "5e55a0b1-1111-2222-3333-444455556666"
+
+
+def _turn(rid, ts, cwd, session=MAIN, model="claude-opus-5-5", effort=None, agent=None, side=False, out=M):
+    """An assistant line as Claude Code writes it: effort at the top, a sidechain mark, a worker's agent id."""
+    d = json.loads(_line(rid, ts, cwd, session, model=model, out=out))
+    d["isSidechain"] = side
+    if effort is not None:
+        d["effort"] = effort
+    if agent is not None:
+        d["agentId"] = agent
+    return json.dumps(d)
+
+
+def _hook(uuid, ts, cwd, kind="hook_success", event="UserPromptSubmit", session=MAIN, **fields):
+    a = {"type": kind, "hookName": event, "hookEvent": event, "toolUseID": "t", "command": "uv run -m x",
+         "exitCode": 0 if kind == "hook_success" else 1, "durationMs": 40, "stdout": "", "stderr": "", **fields}
+    return json.dumps({"parentUuid": None, "isSidechain": False, "type": "attachment", "attachment": a,
+                       "timestamp": ts, "cwd": str(cwd), "sessionId": session, "uuid": uuid})
+
+
+@pytest.fixture
+def crew(world):
+    """Alpha's master (effort max, then high, and one line from an older harness without effort), two workers on
+    different models (a subagent and a workflow agent), hook runs with one failure, and noise that must not count."""
+    tx, alpha, beta = world["tx"], world["alpha"], world["beta"]
+    long_err = "Traceback: hook failed " + "x" * 200
+    _write(tx / f"{MAIN}.jsonl", [
+        _turn("m1", "2026-10-01T18:40:00.000Z", alpha, effort="max"),
+        _turn("m1", "2026-10-01T18:40:01.000Z", alpha, effort="max"),   # the same response, a later block
+        _turn("m2", "2026-10-01T18:50:00.000Z", alpha, effort="max"),
+        _turn("m3", "2026-10-01T19:00:00.000Z", alpha, effort="high"),
+        _turn("m4", "2026-10-01T19:10:00.000Z", alpha),                 # no effort recorded: not guessed
+        _turn("m0", "2026-10-01T16:00:00.000Z", alpha, effort="low"),   # before the window
+        _hook("h1", "2026-10-01T18:40:00.000Z", alpha),
+        _hook("h2", "2026-10-01T18:45:00.000Z", alpha, event="SessionStart"),
+        _hook("h3", "2026-10-01T18:46:00.000Z", alpha, kind="hook_non_blocking_error", stderr=long_err,
+              stdout="ignored: stderr comes first"),
+        _hook("h4", "2026-10-01T18:47:00.000Z", alpha, kind="hook_additional_context", content="context"),
+        _hook("h0", "2026-10-01T16:00:00.000Z", alpha, kind="hook_blocking_error", stderr="old"),
+    ])
+    _write(tx / MAIN / "subagents" / "agent-a1.jsonl", [
+        _turn("w1", "2026-10-01T18:41:00.000Z", world["root"], model="claude-sonnet-5-5", effort="max", agent="a1",
+              side=True),
+        _turn("w2", "2026-10-01T18:42:00.000Z", world["root"], model="claude-sonnet-5-5", effort="max", agent="a1",
+              side=True)])
+    _write(tx / MAIN / "subagents" / "workflows" / "wf_1" / "agent-b2.jsonl", [
+        _turn("w3", "2026-10-01T18:43:00.000Z", alpha, model="claude-haiku-4-5-20251001", side=True),
+        _turn("w0", "2026-10-01T16:30:00.000Z", alpha, model="claude-haiku-4-5-20251001", side=True)])
+    # a resumed session holding a copy of a hook line, and another project's session
+    _write(tx / "resumed.jsonl", [_hook("h1", "2026-10-01T18:40:00.000Z", alpha, session="resumed")])
+    _write(tx / "beta.jsonl", [_turn("b1", "2026-10-01T18:40:00.000Z", beta, session="beta", effort="medium"),
+                               _hook("hb", "2026-10-01T18:40:00.000Z", beta, session="beta",
+                                     kind="hook_non_blocking_error", stderr="beta's")])
+    return world
+
+
+# 11:30 in Los Angeles, 18:30 UTC: after the world's own responses of the morning
+WINDOW = ("--since", "2026-10-01T11:30:00-07:00")
+
+
+def test_detail_reports_who_answered(crew, capsys):
+    code, out = _run(capsys, "--dir", crew["alpha"], *WINDOW, "--json", "--detail")
+    assert code == A.OVER   # the exit code is the spend report's: alpha is over its $10 limit today
+    d = json.loads(out)["detail"]
+    assert d["main"] == {"turns": 4, "models": {"claude-opus-5-5": 4}, "effort": {"max": 2, "high": 1}}
+    assert d["workers"] == [
+        {"session": "5e55a0b1", "agent": "a1", "first": "2026-10-01T11:41:00-07:00", "model": "claude-sonnet-5-5",
+         "effort": "max", "usd": pytest.approx(20.00)},
+        {"session": "5e55a0b1", "agent": "b2", "first": "2026-10-01T11:43:00-07:00",
+         "model": "claude-haiku-4-5-20251001", "effort": None, "usd": pytest.approx(5.00)}]
+    hooks = d["hooks"]
+    assert (hooks["runs"], hooks["failed"]) == (3, 1)
+    assert hooks["failures"] == [{"ts": "2026-10-01T11:46:00-07:00", "event": "UserPromptSubmit",
+                                  "text": ("Traceback: hook failed " + "x" * 200)[:120]}]
+    # the spend report itself is unchanged by --detail
+    plain = json.loads(_run(capsys, "--dir", crew["alpha"], *WINDOW, "--json")[1])
+    assert "detail" not in plain and plain["rows"] == json.loads(out)["rows"]
+
+
+def test_detail_follows_the_window_and_the_project(crew, capsys):
+    late = ["--since", "2026-10-01T11:55:00-07:00", "--json", "--detail"]
+    d = json.loads(_run(capsys, "--dir", crew["alpha"], *late)[1])["detail"]
+    assert d["main"] == {"turns": 2, "models": {"claude-opus-5-5": 2}, "effort": {"high": 1}}
+    assert d["workers"] == [] and d["hooks"] == {"runs": 0, "failed": 0, "failures": []}
+    d = json.loads(_run(capsys, "--dir", crew["beta"], *late)[1])["detail"]
+    assert d["main"]["effort"] == {} and d["hooks"]["runs"] == 0
+    d = json.loads(_run(capsys, "--dir", crew["beta"], "--since", "2026-10-01", "--json", "--detail")[1])["detail"]
+    assert d["main"]["effort"] == {"medium": 1} and d["workers"] == []
+    assert [f["text"] for f in d["hooks"]["failures"]] == ["beta's"]
+
+
+def test_detail_as_a_table(crew, capsys):
+    code, out = _run(capsys, "--dir", crew["alpha"], *WINDOW, "--detail")
+    assert code == A.OVER
+    assert "main thread: 4 responses; models claude-opus-5-5 4; effort max 2, high 1" in out
+    assert "workers: 2" in out
+    assert "  5e55a0b1 a1  from 2026-10-01T11:41:00-07:00  claude-sonnet-5-5  effort max  $20.00" in out
+    assert "  5e55a0b1 b2  from 2026-10-01T11:43:00-07:00  claude-haiku-4-5-20251001  effort -  $5.00" in out
+    assert "hooks: 3 runs, 1 failed" in out and "11:46:00-07:00 UserPromptSubmit: Traceback: hook failed" in out
