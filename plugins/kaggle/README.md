@@ -129,6 +129,9 @@ the status page - `migrations/0.7.0.md`.
 
 ## Changelog
 
+- 0.8.1: the STATUS block's compute field also counts the machines other projects share with this one
+  (resource-sharing's seen list, as of the last `shared --ack`) with their nearest planned end, so a project that only
+  borrows machines no longer shows "0 machines".
 - 0.8.0: the playbook splits into a core read every session (77 KB down to 64 KB), four kind skills
   (`kaggle-kind-simulation`, `-tabular`, `-llm-agents`, `-ranking`) read once the facts sheet records the contest's
   kind, and `kaggle-kernels` read before building a submission; lease upkeep moves to the booking plugin, cloud

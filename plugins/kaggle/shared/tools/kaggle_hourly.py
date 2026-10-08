@@ -1,4 +1,4 @@
-# rev. 4
+# rev. 5
 
 """kaggle_hourly: one scripted hourly pass of the read-only Kaggle checks, printed as flags.
 
@@ -90,7 +90,8 @@ Then the STATUS block, one line each, n/a where the tool cannot tell: pick
 the status JSON's "pick" text), score (our best public score, the medal lines
 of the newest board snapshot), rank, compute (the machines of
 <pack>/.memory/hosts.json, the nearest booking end in lease-ends.json, the
-Kaggle GPU week), stopped (this project's kernel runs that ended since the
+machines other projects share with this one from resource-sharing's seen list
+with their nearest planned end, the Kaggle GPU week), stopped (this project's kernel runs that ended since the
 last pass; claims live on the hosts), spend (the spend line), for you (the
 status JSON's open questions and owner actions, and the number of FLAG lines).
 --json prints the whole pass, block included, as one JSON object.
@@ -195,6 +196,40 @@ def ago(t, now):
 def usd(v):
     return f"${v:,.2f}"
 
+
+def shared_hosts(path):
+    # the hosts other projects share with this one, from resource-sharing's seen list (as of the last
+    # `hostclaims.py shared --ack`); [] when there is none or it cannot be read
+    try:
+        doc = json.loads(Path(path).read_text())
+    except (OSError, ValueError):
+        return []
+    hosts = doc.get("hosts") if isinstance(doc, dict) else None
+    if not isinstance(hosts, dict):
+        return []
+    return [h for _, h in sorted(hosts.items()) if isinstance(h, dict)]
+
+
+def shared_part(shared, now, P):
+    # "N shared machines from <owners> (names); nearest shared end ..." for the compute field
+    names = [str(h.get("name") or "?") for h in shared]
+    owners = sorted({str(h.get("owner") or h.get("project") or "?") for h in shared})
+    text = (plural(len(names), "shared machine") + " from " + ", ".join(owners) + " (" + ", ".join(names[:4])
+            + (f" +{len(names) - 4} more" if len(names) > 4 else "") + ")")
+    ends = []
+    for h in shared:
+        try:
+            t = datetime.fromisoformat(str(h.get("planned_end")).replace("Z", "+00:00"))
+        except ValueError:
+            continue
+        if t.tzinfo is None:
+            t = t.replace(tzinfo=timezone.utc)
+        if t > now:
+            ends.append((t, str(h.get("name") or "?")))
+    if ends:
+        t, n = min(ends)
+        text += f"; nearest shared end {n} {P.local(t)} ({(t - now).total_seconds() / 3600:.0f} h left)"
+    return text
 
 def plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
@@ -1009,6 +1044,9 @@ def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, s
         else:
             parts.append("every booking in lease-ends.json has ended" if ends else f"booking ends {NA} (no "
                                                                                     "lease-ends.json)")
+        shared = shared_hosts(mem / "resource-sharing-seen.json")
+        if shared:
+            parts.append(shared_part(shared, now, P))
     else:
         parts.append(f"machines {NA} (no ai-pack)")
     parts.append(f"Kaggle GPU week: {gpu_line(P, share, ours)}" if share else f"Kaggle GPU week {NA} ({why})")

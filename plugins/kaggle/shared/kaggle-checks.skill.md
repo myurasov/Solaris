@@ -3,7 +3,7 @@ name: kaggle-checks
 triggers: ["presubmit", "pre-submit check", "pre-submit review", "hourly check", "hourly pass", "gated submit"]
 summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; never retried blindly); kaggle_hourly.py runs the hourly read-only checks in one call and prints a line per check, flagging what needs a decision (board jumps, unpushed commits, agents off their allowed models, a master effort other than the one the pack sets, failed hooks, spend limits, HTTP 429 as one line), then a status block to paste into the status message.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: kaggle-checks - Pre-Submit Check, Gated Submit, Hourly Pass <!-- omit in toc -->
 
@@ -180,7 +180,9 @@ JSON's `daily_slots`, the pending submissions, and the status JSON's optional `"
 the master keeps the next pick and its confidence), `score` (our best public score, by the status
 JSON's `team` on the newest board snapshot, else our best scored submission, with the medal lines),
 `rank` (our place of the number of teams), `compute` (the machines in `<pack>/.memory/hosts.json`,
-the nearest booking end in `lease-ends.json`, the Kaggle GPU week), `stopped` (this project's kernel
+the nearest booking end in `lease-ends.json`, the machines other projects share with this one from
+resource-sharing's seen list `resource-sharing-seen.json` with their nearest planned end, as of the
+last `hostclaims.py shared --ack`, and the Kaggle GPU week), `stopped` (this project's kernel
 runs that ended since the last pass; claims live on the hosts, so `hostclaims.py status` reads
 them), `spend` (the spend line) and `for you` (the status JSON's open questions and owner actions,
 and the number of FLAG lines). `--json` prints the whole pass as one object: `checks` (each with

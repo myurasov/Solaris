@@ -469,6 +469,28 @@ class BlockTests(Hourly):
         self.assertEqual(block["compute"].split("; ")[:2], ["machines n/a (no hosts.json)",
                                                              "booking ends n/a (no lease-ends.json)"])
 
+    def test_compute_counts_the_machines_other_projects_share(self):
+        P = self.module("kaggle_presubmit")
+        self.status_json.write_text(json.dumps({"rev": 1, "team": "Nobody"}))
+        self.status_html.write_text("<html></html>")
+        mem = self.root / "aipack" / ".memory"
+        mem.mkdir()
+        (mem / "hosts.json").write_text(json.dumps({"hosts": []}))
+        end = NOW + timedelta(hours=10)
+        (mem / "resource-sharing-seen.json").write_text(json.dumps({"acked": iso(NOW), "hosts": {
+            "alpha/h1": {"name": "h1", "owner": "alpha", "planned_end": iso(end), "target": "root@10.0.0.1"},
+            "alpha/h2": {"name": "h2", "owner": "alpha", "planned_end": None},
+            "beta/h3": {"name": "h3", "owner": "beta", "planned_end": iso(NOW - timedelta(hours=1))}}}))
+        block = block_of(self.hourly()[1])
+        self.assertEqual(block["compute"].split("; ")[:4], [
+            "0 machines", "booking ends n/a (no lease-ends.json)", "3 shared machines from alpha, beta (h1, h2, h3)",
+            f"nearest shared end h1 {P.local(end)} (10 h left)"])
+        self.assertNotIn("10.0.0.1", block["compute"])
+        # an unreadable seen list adds nothing
+        (mem / "resource-sharing-seen.json").write_text("{not json")
+        block = block_of(self.hourly()[1])
+        self.assertNotIn("shared", block["compute"])
+
 
 class RateLimitTests(Hourly):
     def test_a_429_stops_the_passs_kaggle_reads_with_one_line(self):
