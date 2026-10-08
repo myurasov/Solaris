@@ -528,7 +528,8 @@ of **all** turns - orchestrator work and every handed-off project turn) and, for
 both. Each machine writes only its own file, so a checkout synced between machines never has two writers on
 one log and a log never turns into a conflict copy. The **agent** logs the full entry with
 `uv run -m solaris.tools.interactions add --project <name> --prompt ... --request ... --outcome ...`
-(`--stdin` takes the fields as a JSON object, which avoids shell quoting): it stamps `ts` (UTC, `Z` suffix)
+(`--stdin` takes the fields as a JSON object, which avoids shell quoting; an optional `--trigger owner|clock|worker|peer`
+records what started the turn; an empty or `-` project is refused): it stamps `ts` (UTC, `Z` suffix)
 from the clock and, with `--dir <project>`, writes the identical line to the project's file too. Only the
 agent can author it: it alone knows the interpreted request, the outcome, and the true project, since "hand
 off" does not change the cwd. The merged log is read with `interactions show` (never by paging through the
@@ -612,12 +613,13 @@ Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
   `<pack>/plugins/<plugin>/*.rule.md`, and `<pack>/plugins/*.link.md` file, once per session per project (grouped, flat, and
   embedded layouts). Tolerates a leading `_Rev. N_`
   marker above the skill frontmatter, and skips synthetic turns (task notifications, command transcripts,
-  system reminders) entirely.
+  system reminders, subagent and peer-session messages, compaction summaries, subagent reports) entirely. A
+  `<project>` placeholder matches only a real project slug (or the nouns project, repo and pack).
 - `toc` - generate/verify Markdown tables of contents (`--check`/`--write`, `--all`). Preserves a leading
   rev marker and/or YAML frontmatter (either order) above the TOC; `--all` skips the content trees
   (`projects/`, `plugins/`, `tasks/`, `.memory/`); files inside a plugin's vendored upstream tree are never
   rewritten (see Plugins).
-- `ai_spend` - estimated AI spend per project and day (`[--dir PATH] [--today|--since ISO] [--json]`) from
+- `ai_spend` - estimated AI spend per project and day (`[--dir PATH] [--today|--since ISO] [--json] [--detail]`) from
   this machine's Claude Code transcripts, subagent transcripts included: only each response's usage counts,
   model, id, timestamp, session and working directory are read (message content is never kept or printed),
   and a response logged on several lines counts once. Priced at list prices per model (an estimate, not a
@@ -625,7 +627,9 @@ Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
   working directory, else to the project most of its session went to, else stays unattributed; days are
   the owner's (`owner.timezone`). Exit 3 when a reported project's estimate for today is over its
   `ai.daily_budget_usd` (`<pack>/.memory/config.json`, else `<pack>/defaults.json`); the token-economy rule
-  runs `--dir <project> --today` at each periodic pass.
+  runs `--dir <project> --today` at each periodic pass. `--detail` (JSON with `--json`) adds, for the window, the main
+  thread's models and efforts, each worker transcript's model, effort and spend, and the hook runs with their
+  failures; the kaggle plugin's hourly pass reads it.
 - `housekeeping` - folder sizes, data budgets and folder layout for one project (`--dir PATH [report|tidy|prune] [--apply] [--json]`): `report` (default, read-only) lists the sizes of the project's top-level entries and big data folders against the budgets in `<pack>/housekeeping.json`, the untidy items and the prune candidates; `tidy` moves files that are not on the `<pack>/.memory/` root allowlist into `.memory/archive/<YYYY-MM>/` (the newest handover note stays) and job scratch from `<pack>/.memory/jobs/` into `__out/jobs/`; `prune` deletes only what a config rule or a `.disposable` marker names, never a `.keep` folder, a recently changed tree, a symlink or anything outside `__data/`, `__out/` and the archive. Both act only with `--apply` and log each action to `<pack>/.memory/housekeeping.jsonl`. Exit 3 when something needs attention.
 - `session_clock` - a one-shot wake clock (`--dir PATH|--schedule FILE [--after TIME] [--cap MINUTES]`),
   started as a background command, since a finished background command always wakes the session while
@@ -674,7 +678,8 @@ tracked plugin: its manifest names its folder with a semver version, its skills 
   `<pack>/instructions.md` (seeded from the template) - never in the agent files. A project may edit
   or delete its copy freely.
 - **Revisions:** **every change to a revisioned file increments its rev.** After editing a tracked
-  framework/plugin file (or any file carrying a rev marker), `revs bump` it and `revs ledger`; a pure rev
+  framework/plugin file (or any file carrying a rev marker), `revs bump` it and `revs ledger` (`--plugin <name>` for one
+  plugin's ledger); a pure rev
   bump leaves the content hash unchanged, and `revs status` flags a file changed without a bump.
 - **Self-sufficient spec:** a project's `<pack>/spec.md` is that project's single source of truth and reads
   standalone - it references no other file (no links into `<pack>/.memory/`, plugins, or external docs).
