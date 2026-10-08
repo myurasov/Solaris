@@ -1,9 +1,13 @@
-_Rev. 9_
+_Rev. 10_
 
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
 Always-on while this plugin is attached: what must hold whenever an agent touches Kaggle, even
 when no skill was triggered. The how-to lives in `kaggle-cli.skill.md`.
+
+In a competition, read the playbook core (`how-to-kaggle.skill.md`) at every session start and
+after a compaction, the kind skill (`kaggle-kind-*.skill.md`) once the facts sheet records the
+kind, and `kaggle-kernels.skill.md` before building a submission.
 
 - **Gateway only.** Every Kaggle command runs through this plugin's `tools/kaggle.py`, started from
   the project root or task folder - never a bare `kaggle`, `pip install kaggle`, or
@@ -86,7 +90,7 @@ The owner's standing directions for every Kaggle project. The pack holds the own
   model that actually ran; the playbook's cross-family review adds another vendor's model. <!-- OD07 -->
 - This model list replaces the older line that put every worker on the frontier tier, and for Kaggle work it
   overrides the tier defaults of `info/model-tiers.md` and the subagents rule. <!-- C1 -->
-- Workers inherit the master's max effort until a harness allows effort per launch. <!-- C6 -->
+- Workers inherit the master's effort, which the owner chooses per session; no file fixes the level. <!-- C6 -->
 - Run browsers headless by default, and close every browser you start. <!-- OD09 -->
 - Track spend (AI, cloud GPUs, other paid services) and report it with each status: each cost other than
   Claude Code is one line in `<pack>/.memory/spend.jsonl`. Check the daily AI budget when the pack sets

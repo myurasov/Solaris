@@ -184,6 +184,30 @@ class ChangeTests(Check):
         self.assertIn("note: some topics could not be fetched (kaggle_forum.py exit 1)", out)
 
 
+class RateLimitTests(Check):
+    def test_a_429_stops_the_reads_after_it(self):
+        self.reviewed()
+        baseline = self.state("acked.json")
+        self.answer(f"competitions pages {SLUG} list {SLUG} --content --format json",
+                    "429 Client Error: Too Many Requests for url: https://www.kaggle.com/api/v1/pages\n", code=1)
+        before = len(self.calls())
+        code, out, _ = self.check()
+        self.assertEqual(code, 10)
+        self.assertIn("RATE LIMITED: Kaggle answered HTTP 429 (Too Many Requests) to the pages read; not read after "
+                      "it: notebooks, board. Wait a few minutes before the next Kaggle read, then run the check again",
+                      out)
+        calls = [" ".join(c["args"]) for c in self.calls()[before:]]
+        self.assertFalse([c for c in calls if c.startswith(("--sdk notebooks", "competitions leaderboard"))], calls)
+        self.assertIn("[read failed] pages; notebooks; board", out)
+        self.assertIn("NOTEBOOKS: not read (kaggle_lb.py notebooks failed (exit 75): not read: Kaggle answered HTTP "
+                      "429 (Too Many Requests) to the pages read)", out)
+        # what was not read keeps the view the last review recorded
+        self.assertIn("kept the earlier view of pages, notebooks, board", self.ack()[1])
+        acked = self.state("acked.json")
+        self.assertEqual([acked[k] for k in ("pages", "notebooks", "board")],
+                         [baseline[k] for k in ("pages", "notebooks", "board")])
+
+
 class ReviewStatusTests(Check):
     def test_the_gate_kaggle_submit_applies(self):
         why, summary = P.review_status(SLUG, self.root)
@@ -236,6 +260,50 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(P.direction([{"score": "0.1"}, {"score": "0.5"}]), -1)
         self.assertTrue(P.at_or_better(0.09, 0.1, -1))
         self.assertFalse(P.at_or_better(0.11, 0.1, -1))
+
+    def test_what_reads_as_a_rate_limit(self):
+        # explicit wording only
+        for code, out, err, own in (
+                (1, "", "kaggle_lb: leaderboard read failed: exit 1: 429 - Too Many Requests", False),
+                (1, "429 Client Error: Too Many Requests for url: https://x.org/a", "", False),
+                (1, "", "kaggle_sdk: 429 Too Many Requests: slow down", False),
+                (1, "", "urllib.error.HTTPError: HTTP Error 429: slow down", False),
+                (1, "", "the API answered with status code 429", False),
+                (1, "", "status: 429", False),
+                (1, "", "Rate limit exceeded, retry later", False),
+                (0, "", "rate limited: 3 topics left for the next check (1 2 3)", False),
+                (0, "demo: 400 rows, 2 pages (partial: page 3 failed (exit 1: 429 - Too Many Requests)), Oct 08",
+                 "", True)):
+            self.assertTrue(P.rate_limited(code, out, err, own=own), (out, err))
+        # a bare 429 is a count, a score, a line number or a path; third-party text of a read that worked is not
+        # searched (the first four read as a rate limit before this matcher)
+        for code, out, err, own in (
+                (0, "my-comp: 429 rows, 3 pages (full), Oct 08 01:30 PDT; saved __data/x.json.gz", "", True),
+                (1, "", 'Traceback (most recent call last):\n  File "/x/kaggle_forum.py", line 429, in main\n'
+                        "KeyError: 7", False),
+                (1, "read 429 topics before the error", "", False),
+                (0, "demo: 429 rows, 2 pages (partial: page 3 failed (exit 1: bad token at line 429)), Oct 08",
+                 "", True),
+                (1, "", "saved to /data/run-429/x.json.gz; best 0.429; 4290 rows; HTTP 4290", False),
+                (0, '[{"title": "Too Many Requests when submitting? HTTP 429"}]', "", False),
+                (0, "demo: 400 rows (partial: page 3 failed (exit 1: 429))", "", False),
+                (1, "", "an accurate limit of 429", False)):
+            self.assertFalse(P.rate_limited(code, out, err, own=own), (out, err))
+
+    def test_a_limiter_runs_nothing_after_a_429(self):
+        ran = []
+
+        def run(cmd, cwd):
+            ran.append(cmd[0])
+            return (1, "", "HTTP 429") if cmd[0] == "b" else (0, "ok", "")
+
+        reads = P.Limiter(run)
+        for check in ("a", "b", "c", "d"):
+            reads.check = check
+            code, _out, err = reads([check], ".")
+        self.assertEqual((ran, reads.hit, reads.skipped), (["a", "b"], "b", ["c", "d"]))
+        self.assertEqual((code, err),
+                         (P.SKIPPED, "not read: Kaggle answered HTTP 429 (Too Many Requests) to the b read"))
 
 
 if __name__ == "__main__":

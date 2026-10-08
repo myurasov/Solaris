@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_presubmit: what is new on Kaggle since the last pre-submit review.
 
@@ -9,7 +9,7 @@ reads, compares them with the view the last review recorded, prints what is new
 and a TRIGGERS block, and keeps what it showed; --ack then records exactly that
 as reviewed.
 
-    python3 <plugin-dir>/tools/kaggle_presubmit.py <slug> [--vs SCORE] [--hours H]
+    python3 <plugin-dir>/tools/kaggle_presubmit.py <slug> [--vs SCORE] [--hours H] [--fresh MIN]
     python3 <plugin-dir>/tools/kaggle_presubmit.py <slug> --ack
 
 Run it from the project root or task folder. The reads go through the tools
@@ -19,7 +19,14 @@ file), read-only and unstamped (KAGGLE_SHARE_QUIET=1): `kaggle_forum.py check`
 <slug> list <slug> --content` (the competition pages), `kaggle_lb.py notebooks`
 (the public notebooks with their best public scores) and `kaggle_lb.py
 snapshot` (the whole board). Their stores are read where those tools keep them
-(KAGGLE_FORUM_DIR and KAGGLE_LB_DIR move them). New since the review:
+(KAGGLE_FORUM_DIR and KAGGLE_LB_DIR move them). To spare Kaggle a second burst
+of reads, the board snapshot and the notebook list the last hourly pass
+(kaggle_hourly.py) read are reused when that pass and each read are at most
+--fresh minutes old (default 20; 0 reads both again); the check says which it
+reused. A read answered with HTTP 429 (its output says Too Many Requests, a
+rate limit, or 429 beside HTTP, Client Error or status; a bare 429 is not
+enough) stops the check's reads: those after it are not run, and the check says
+so. New since the review:
 
   forum      topics the review did not record, and comments posted after the
              newest one it recorded; with no review yet, the last --hours
@@ -85,6 +92,17 @@ HOURS = 24.0
 HOST_LINES = 15
 # kaggle_submit.py wants a check at most this old
 FRESH_MINUTES = 30
+# the last hourly pass's board snapshot and notebook list at most this old are reused (--fresh)
+REUSE_MINUTES = 20
+# a Kaggle read answered with HTTP 429 says so in words: Too Many Requests, a rate limit (the forum watch's "rate
+# limited"), or 429 beside HTTP, Client Error or status. A bare 429 is a count, a score or a line number
+RATE_RE = re.compile(r"too many requests|\brate[ -]?limit|\bhttp\S*\s+(?:error\s+)?429\b|\b429\s+client\s+error|"
+                     r"\bstatus(?:[ _]?code)?\W{0,3}429\b", re.I)
+# the exit status a read reports when it was not run after a rate limit; the reads whose stdout is our tools' own
+# text, whose partial-read note can carry a page's error even when the read ended well (kaggle_lb.py keeps a partial
+# board and exits 0)
+SKIPPED = 75
+OWN_OUTPUT = ("board",)
 SEEN, ACKED, CONFIG = "seen.json", "acked.json", "config.json"
 SOURCES = ("forum", "pages", "notebooks", "board")
 TOOLS = Path(__file__).resolve().parent
@@ -329,6 +347,37 @@ def _run(cmd, cwd, timeout=1800):
     return p.returncode, p.stdout, p.stderr
 
 
+def rate_limited(code, out, err, own=False):
+    """Whether a read was answered with HTTP 429, in so many words (RATE_RE): on its stderr, at the end of its stdout
+    when it failed, or in the partial-read note of our own tool's stdout (own; never its counts). Third-party text on
+    a read that worked is never searched."""
+    text = str(err or "")
+    if own:
+        text += "\n" + "\n".join(x.split("partial:", 1)[1] for x in str(out or "").splitlines() if "partial:" in x)
+    if code != 0:
+        text += "\n" + str(out or "")[-400:]
+    return bool(RATE_RE.search(text))
+
+
+class Limiter:
+    """The run for one pass's Kaggle reads: once a read is answered with HTTP 429, the reads after it are not run
+    (each reports exit SKIPPED with the reason). Set check to the source a read is for before running it; hit names
+    the read that met the limit, skipped the sources not read after it."""
+
+    def __init__(self, run=None):
+        self.run, self.check, self.hit, self.skipped = run or _run, None, None, []
+
+    def __call__(self, cmd, cwd, **kw):
+        if self.hit:
+            if self.check and self.check not in self.skipped:
+                self.skipped.append(self.check)
+            return SKIPPED, "", f"not read: Kaggle answered HTTP 429 (Too Many Requests) to the {self.hit} read"
+        code, out, err = self.run(cmd, cwd, **kw)
+        if rate_limited(code, out, err, own=self.check in OWN_OUTPUT):
+            self.hit = self.check or "earlier"
+        return code, out, err
+
+
 def first_json(text, opener):
     """The first JSON value in CLI output that opens with opener, skipping notices before it."""
     lines = str(text or "").splitlines()
@@ -442,6 +491,16 @@ def nb_list(doc):
             for n in doc["notebooks"] if isinstance(n, dict) and n.get("ref")]
 
 
+def notebooks_view(d, name):
+    """The view of the notebook list saved as d/name, or None when it cannot be read."""
+    doc = read_gz(Path(d) / name)
+    nbs = nb_list(doc)
+    if nbs is None:
+        return None
+    return {"ok": True, "file": name, "fetched_at": doc.get("fetched_at"), "complete": bool(doc.get("complete")),
+            "note": doc.get("note"), "notebooks": nbs}
+
+
 def read_notebooks(slug, root, gateway, run):
     """Run kaggle_lb.py notebooks, then take the list it saved."""
     d = lb_dir(root, slug, "notebooks")
@@ -449,12 +508,10 @@ def read_notebooks(slug, root, gateway, run):
     code, out, err = run([sys.executable, str(TOOLS / "kaggle_lb.py"), "notebooks", slug, "--gateway", str(gateway)],
                          root)
     fresh = by_time(d, _files(d, "*.json.gz") - before)
-    doc = read_gz(d / fresh[-1]) if code == 0 and fresh else None
-    nbs = nb_list(doc)
-    if nbs is None:
+    view = notebooks_view(d, fresh[-1]) if code == 0 and fresh else None
+    if view is None:
         return {"ok": False, "error": f"kaggle_lb.py notebooks failed (exit {code}): {tail(err or out)}"}
-    return {"ok": True, "file": fresh[-1], "fetched_at": doc.get("fetched_at"), "complete": bool(doc.get("complete")),
-            "note": doc.get("note"), "notebooks": nbs}
+    return view
 
 
 def direction(rows):
@@ -472,6 +529,17 @@ def board_rows(path):
     return snap, sorted((r for r in rows if isinstance(r, dict)), key=lambda r: r.get("rank") or 10 ** 9)
 
 
+def board_view(d, name, note=None):
+    """The view of the full board snapshot saved as d/name: its size, direction and top rows; None when it cannot
+    be read."""
+    snap, rows = board_rows(Path(d) / name)
+    if not rows:
+        return None
+    top = [{k: r.get(k) for k in ("rank", "team_id", "team_name", "score")} for r in rows[:TOP]]
+    return {"ok": True, "file": name, "fetched_at": snap.get("fetched_at"), "teams": len(rows),
+            "sign": direction(rows), "top": top, "note": note}
+
+
 def read_board(slug, root, gateway, run):
     """Run kaggle_lb.py snapshot, then take the newest full snapshot's size, direction and top rows."""
     d = lb_dir(root, slug)
@@ -483,19 +551,55 @@ def read_board(slug, root, gateway, run):
         return {"ok": False, "error": f"kaggle_lb.py snapshot failed (exit {code}): {tail(err or out)}"}
     # a partial read says so in its name
     full = by_time(d, (n for n in _files(d, "*.json.gz") if "partial" not in n))
-    snap, rows = board_rows(d / full[-1]) if full else (None, None)
-    if not rows:
-        return {"ok": False, "error": "no full snapshot to compare: the read was partial"}
-    note = None if full[-1] in fresh else f"this read was partial: the newest full snapshot is {full[-1]}"
-    top = [{k: r.get(k) for k in ("rank", "team_id", "team_name", "score")} for r in rows[:TOP]]
-    return {"ok": True, "file": full[-1], "fetched_at": snap.get("fetched_at"), "teams": len(rows),
-            "sign": direction(rows), "top": top, "note": note}
+    view = None
+    if full:
+        note = None if full[-1] in fresh else f"this read was partial: the newest full snapshot is {full[-1]}"
+        view = board_view(d, full[-1], note)
+    return view or {"ok": False, "error": "no full snapshot to compare: the read was partial"}
 
 
-def gather(slug, root, gateway, run, d):
-    """One check's reads, the weightiest first."""
-    return {"forum": read_forum(slug, root, gateway, run), "pages": read_pages(slug, root, gateway, run, d),
-            "notebooks": read_notebooks(slug, root, gateway, run), "board": read_board(slug, root, gateway, run)}
+def hourly_reads(root, slug, now, minutes):
+    """{source: view} of the board snapshot and the notebook list the last hourly pass read fresh (kaggle_hourly.py
+    records them in its last.json), when that pass and each read are at most minutes old: this check reuses them."""
+    last = read_json(Path(root) / "__data" / "kaggle" / check_slug(slug) / "hourly" / "last.json", None)
+    reads = last.get("reads") if isinstance(last, dict) else None
+    at = parse_time(last.get("at")) if isinstance(reads, dict) else None
+    limit = minutes * 60
+
+    def young(t):
+        t = parse_time(t)
+        return t is not None and -60 <= (now - t).total_seconds() <= limit
+
+    if at is None or not young(at):
+        return {}
+    out = {}
+    for src, d, view_of in (("board", lb_dir(root, slug), board_view),
+                            ("notebooks", lb_dir(root, slug, "notebooks"), notebooks_view)):
+        name = reads.get(src)
+        # a plain file name of the store, as the pass recorded it
+        if not isinstance(name, str) or not name.endswith(".json.gz") or Path(name).name != name or "partial" in name:
+            continue
+        view = view_of(d, name)
+        if view and young(view.get("fetched_at")):
+            out[src] = dict(view, reused=True)
+    return out
+
+
+def gather(slug, root, gateway, run, d, reuse=None):
+    """One check's reads, the weightiest first: a source in reuse takes that saved read instead, and once a read is
+    answered with HTTP 429 the reads after it are not run (run is a Limiter)."""
+    reads = (("forum", lambda: read_forum(slug, root, gateway, run)),
+             ("pages", lambda: read_pages(slug, root, gateway, run, d)),
+             ("notebooks", lambda: read_notebooks(slug, root, gateway, run)),
+             ("board", lambda: read_board(slug, root, gateway, run)))
+    out = {}
+    for src, read in reads:
+        if reuse and src in reuse:
+            out[src] = reuse[src]
+            continue
+        run.check = src
+        out[src] = read()
+    return out
 
 
 # ---- comparing with the last review
@@ -674,11 +778,22 @@ def _indent(text, pad, limit):
                                        else [])
 
 
-def report(res, slug, cfg, *, vs=None, hours=HOURS, tool="kaggle_presubmit.py", forum_tool="kaggle_forum.py"):
+def report(res, slug, cfg, *, vs=None, hours=HOURS, tool="kaggle_presubmit.py", forum_tool="kaggle_forum.py",
+           fresh=REUSE_MINUTES):
     """The check as text lines: what is new, source by source, then the TRIGGERS block."""
     view = res["view"]
     since = f"against the review recorded {local(res['base_at'])}" if res["base_at"] else "no review recorded yet"
     out = [f"PRE-SUBMIT CHECK {slug}, {local(res['at'])}: {since}", DISCLAIMER]
+    names = {"board": "board snapshot", "notebooks": "notebook list"}
+    reused = [f"{names[src]} of {local(view[src].get('fetched_at'))}" for src in res.get("reused") or ()]
+    if reused:
+        out.append(f"REUSED: the last hourly pass's {' and '.join(reused)} (at most --fresh {fresh:g} min old), not "
+                   "read again")
+    if res.get("limited"):
+        hit, skipped = res["limited"]
+        out.append(f"RATE LIMITED: Kaggle answered HTTP 429 (Too Many Requests) to the {hit} read"
+                   + (f"; not read after it: {', '.join(skipped)}" if skipped else "")
+                   + ". Wait a few minutes before the next Kaggle read, then run the check again")
     items = res["forum"] or []
     host = [i for i in items if (i["new"] and i["by_host"]) or any(c["host"] for c in i["fresh"])]
     if not cfg["hosts"] and not cfg["host_topics"]:
@@ -782,16 +897,23 @@ def report(res, slug, cfg, *, vs=None, hours=HOURS, tool="kaggle_presubmit.py", 
 
 # ---- the check, the ack and the review status
 
-def check(slug, root, *, gateway=None, run=_run, now=None, hours=HOURS, vs=None, save=True):
-    """Read, compare with the last review and, with save, keep the view in seen.json; returns the comparison."""
+def check(slug, root, *, gateway=None, run=_run, now=None, hours=HOURS, vs=None, save=True, fresh=0):
+    """Read, compare with the last review and, with save, keep the view in seen.json; returns the comparison, with
+    "reused" (the sources taken from the last hourly pass, at most fresh minutes old; 0 reads every source) and
+    "limited" ((the read answered with HTTP 429, the sources not read after it), else None). run may be a Limiter
+    the caller goes on using for its own reads."""
     root = Path(root)
     d = state_dir(root, slug)
     cfg = load_config(d)
     gw = find_gateway(gateway)
     at = now or utc_now()
-    view = {"at": iso(at), **gather(slug, root, gw, run, d)}
+    reads = run if isinstance(run, Limiter) else Limiter(run)
+    reuse = hourly_reads(root, slug, at, fresh) if fresh else {}
+    view = {"at": iso(at), **gather(slug, root, gw, reads, d, reuse)}
     res = compare(view, read_json(d / ACKED, None), cfg, root=root, slug=slug, now=at, hours=hours, vs=vs)
     res["cfg"] = cfg
+    res["reused"] = sorted(reuse, key=SOURCES.index)
+    res["limited"] = (reads.hit, list(reads.skipped)) if reads.hit else None
     if save:
         with locked(d):
             # the id tells two checks of one second apart
@@ -877,6 +999,13 @@ def score_arg(text):
     return v
 
 
+def minutes_arg(text):
+    v = num(text)
+    if v is None or not 0 <= v <= 1440:
+        raise argparse.ArgumentTypeError(f"not a number of minutes from 0 to 1440: {text!r}")
+    return v
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(prog="kaggle_presubmit.py", description="What is new on Kaggle since the last "
                                 "pre-submit review (forum, pages, public notebooks, board); --ack records a review.")
@@ -886,12 +1015,15 @@ def main(argv=None):
                    "than this score (the board's direction decides better)")
     p.add_argument("--hours", type=hours_arg, default=HOURS, help="with no review yet, show forum activity of the "
                    f"last H hours (default {HOURS:g})")
+    p.add_argument("--fresh", type=minutes_arg, metavar="MIN", help="reuse the last hourly pass's board snapshot and "
+                   f"notebook list when they are at most MIN minutes old (default {REUSE_MINUTES}; 0 reads them again)")
     p.add_argument("--gateway", help="the kaggle.py gateway to call (default: the one beside this file)")
     a = p.parse_args(argv)
     if not SLUG_RE.fullmatch(a.slug):
         p.error(f"not a competition slug: {a.slug!r}")
-    if a.ack and (a.vs is not None or a.gateway):
+    if a.ack and (a.vs is not None or a.gateway or a.fresh is not None):
         p.error("--ack takes no read option: it records the last check as it was")
+    fresh = REUSE_MINUTES if a.fresh is None else a.fresh
     try:
         root = find_root()
         if root is None:
@@ -905,12 +1037,12 @@ def main(argv=None):
             print(f"review recorded: the check of {local(seen['at'])}, in {_rel(state_dir(root, a.slug) / ACKED)}"
                   + (f"; kept the earlier view of {', '.join(kept)} (not read in that check)" if kept else ""))
             return 0
-        res = check(a.slug, root, gateway=a.gateway, hours=a.hours, vs=a.vs)
+        res = check(a.slug, root, gateway=a.gateway, hours=a.hours, vs=a.vs, fresh=fresh)
     except PresubmitError as e:
         print(f"kaggle_presubmit: {e}", file=sys.stderr)
         return 1
     print("\n".join(report(res, a.slug, res["cfg"], vs=a.vs, hours=a.hours, tool=_rel(Path(__file__).resolve()),
-                           forum_tool=_rel(TOOLS / "kaggle_forum.py"))))
+                           forum_tool=_rel(TOOLS / "kaggle_forum.py"), fresh=fresh)))
     return EXIT_NEW if needs_review(res) else 0
 
 

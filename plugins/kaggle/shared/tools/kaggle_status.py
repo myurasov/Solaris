@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_status: the single status page of a Kaggle competition project.
 
@@ -555,28 +555,38 @@ def solaris_root(root):
     return None
 
 
-def claude_spend(root, since):
-    """{"days": {day: usd}, "limit": the daily limit or None} of the project's Claude Code spend (list-price
-    estimates from solaris.tools.ai_spend); None without a Solaris checkout or when it fails."""
+def ai_spend(root, args, parse):
+    """parse(the JSON report of solaris.tools.ai_spend --dir <root> <args> --json), run in the Solaris checkout above
+    the root: through uv when it is on PATH, else with this Python. The first run whose report parse takes (parse
+    raises on one it cannot use) gives the result; None without a checkout or when every run fails. kaggle_hourly.py
+    runs ai_spend through this too."""
     sol = solaris_root(root)
     if not sol:
         return None
-    args = ["-m", "solaris.tools.ai_spend", "--dir", os.path.abspath(root), "--since", since.isoformat(), "--json"]
+    argv = ["-m", "solaris.tools.ai_spend", "--dir", os.path.abspath(root), *args, "--json"]
     uv = shutil.which("uv")
-    cmds = ([[uv, "run", "--directory", sol, *args]] if uv else []) + [[sys.executable, *args]]
+    cmds = ([[uv, "run", "--directory", sol, *argv]] if uv else []) + [[sys.executable, *argv]]
     for cmd in cmds:
         raw = sh(cmd, sol, timeout=300)
         try:
-            v = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
-            days = {}
-            for r in v["rows"]:
-                day = date.fromisoformat(r["day"])
-                days[day] = days.get(day, 0.0) + float(r["usd"])
+            return parse(json.loads(raw[raw.find("{"):raw.rfind("}") + 1]))
         except Exception:
             continue
+    return None
+
+
+def claude_spend(root, since):
+    """{"days": {day: usd}, "limit": the daily limit or None} of the project's Claude Code spend (list-price
+    estimates from solaris.tools.ai_spend); None without a Solaris checkout or when it fails."""
+    def parse(v):
+        days = {}
+        for r in v["rows"]:
+            day = date.fromisoformat(r["day"])
+            days[day] = days.get(day, 0.0) + float(r["usd"])
         limit = next((num(b.get("daily_budget_usd")) for b in v.get("budgets") or [] if isinstance(b, dict)), None)
         return {"days": days, "limit": limit}
-    return None
+
+    return ai_spend(root, ["--since", since.isoformat()], parse)
 
 
 def read_hosts(path):

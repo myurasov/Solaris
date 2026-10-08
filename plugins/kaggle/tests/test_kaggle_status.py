@@ -486,6 +486,13 @@ class LiveTests(Tmp):
         self.assertIn("Claude $6 of it today (list-price estimate)", page)
         self.assertIn("Claude limit $20", page)
         self.assertNotIn("Claude spend: n/a", page)
+        # the runner kaggle_hourly.py shares: any arguments, the report through parse, None when parse refuses it
+        with mock.patch.dict(os.environ, {"PATH": str(self.tmp / "empty")}):
+            self.assertEqual(K.ai_spend(str(self.root), ["--today"], lambda v: len(v["rows"])), 2)
+            self.assertIsNone(K.ai_spend(str(self.root), ["--today"], lambda v: v["detail"]))
+        args = json.loads((sol / "solaris" / "tools" / "args.json").read_text())
+        self.assertEqual(args, ["--dir", str(self.root), "--today", "--json"])
+        self.assertIsNone(K.ai_spend(str(self.tmp), ["--today"], lambda v: v))
 
 
 class RenderTests(Tmp):
