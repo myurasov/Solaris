@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Core of the playbook for competing on Kaggle with an autonomous agent team, read at every session start and after every compaction - the first hour and the competition facts sheet, Kaggle access, the kinds of contest and their skills, compute, phases, honest validation, daily submission discipline, agent organization, research, the base to stack changes on, a pitfalls log, and the settled decisions, each rule with the evidence behind it told as a generic example. The kind skills (kaggle-kind-*), kaggle-kernels (read before building a submission) and the tool skills hold the rest; Kaggle commands go through the kaggle-cli skill's gateway.
 ---
-_Rev. 26_
+_Rev. 27_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -145,6 +145,8 @@ Follow this sequence from minute one; each step points to the section with the r
 - **Data and outputs** live in ignored folders at the project root (`__data/`, `__out/`); submitted files and their
   code are tracked (`submissions/<NNN>-<mmdd>-<slug>/`, three-digit numbers from 001, each with a README that says
   what the submission verifies, the approach, why, what it checks, and the result).
+- **Role briefs:** the pack keeps `worker.agent.md` and `reviewer.agent.md` beside the master; copy them from the
+  framework's agent templates when a pack lacks them.
 
 ## Kaggle Access
 
@@ -501,20 +503,11 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
 
 ## Agent Organization
 
-- **A master session plans, decides, and delegates;** workers execute one job each (an experiment or a service job)
-  and return short reports; a read-only reviewer attacks every result and kernel before it counts. The master's
-  context stays clean: raw work lives in the workers.
-  Keep the master responsive with short coordinator turns: delegate preparation, validation and reporting, persist
-  early milestones, and return on completion events instead of holding a long turn open to wait.
-  When moving harnesses, stop the old agent turns but preserve detached compute. Transfer the live job/connection
-  inventory and pending deadlines, then re-arm the session clock in the new session. Do not run two controllers
-  against the same working tree.
-  On taking over, verify before acting: the handed-over files' hashes on both machines, no live agent turns left in
-  the old harness, and the synced tree against the remote branch through a temporary index
-  (`GIT_INDEX_FILE=<tmp> git read-tree origin/main`, then `git diff --stat` and `git ls-files --others`), so the
-  index-only `git reset` provably changes no file. Only then clear the pause marker and re-arm the clock.
-- **Worker briefs** state exact scope, procedure, return shape, boundaries, and the active rules; every brief asks
-  for a "New ideas" block and a "for instructions.md" block.
+- **Team:** the master plans, decides and delegates; workers run one brief each, each in its own scratch subfolder,
+  and a read-only reviewer attacks every result and kernel before it counts (the pack's `worker.agent.md` and
+  `reviewer.agent.md`, `rules/subagents.rule.md`; harness moves and take-overs: the `handover` skill).
+- **Worker briefs** follow the subagents rule's task contract and ask for a "New ideas" block and a "for
+  instructions.md" block.
 - **Adversarial review before every push to Kaggle** caught real problems every time (a missing image pin,
   uncalibrated thresholds, uncoupled fallbacks, duplicate training rows, a two-factor change that needed isolating).
 - **Cross-family review:** a model from another vendor reviews the daily plan and each pre-submit pick, read-only,
@@ -522,78 +515,36 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
 - **Outside reviews run through OpenCode:** its config is the truth for model features, verified with a real call;
   reviewers run with `yolo` and `permission: allow` inside a throwaway folder; OpenCode's own cost figure is the
   spend of record for those calls. <!-- OD19 -->
-- **Each worker runs on the model `kaggle.rule.md` sets for its kind of job,** passed on every launch with the effort
-  where the harness takes one per launch; where effort is session-wide (Claude Code workers inherit the session's),
+- **Each worker runs on the model `kaggle.rule.md` sets for its kind of job,** passed on every launch, with the effort the
+  owner chose where the harness takes one per launch; where effort is session-wide (Claude Code workers inherit the session's),
   workers run at the effort the owner chose for the master's session: no file fixes a level, and the master does
-  not ask for another. Verify model and effort on the worker's recorded messages; under OpenCode, include the variant on control and steering
-  messages too, since an omitted one can reset the worker to its provider default. Require early saved milestones so
-  a long model step does not leave all progress transient.
+  not ask for another.
 - **Never idle:** an hourly check starts research on the next idea, launches experiments on free compute, keeps
   leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and rebuilds the
   status page.
-- **Script the hourly check:** one read-only pass over the board, the public notebooks, the forum, the compute
-  (hosts, leases, jobs, queues) and the Kaggle account (sessions, quota) that prints a few lines of flags saves most
-  of an autonomous loop's tokens; the agent acts on the flags. `tools/kaggle_hourly.py <slug>` is that pass; run the
-  project's own host and queue checks beside it where it does not reach them. Script routine run-watching and result
-  collection the same way: long-lived agents that polled hosts and fed an evaluation queue were among a day's most
-  expensive jobs, ahead of the analysis and build work, because every turn re-reads the agent's growing context, so
-  its cost grows with how long it lives, not with what it decides. Wake an agent only to decide.
-- **Daily AI spending limit** (owner decision): the owner may set an approximate daily AI spending limit per project
-  (`ai.daily_budget_usd` in the pack's `.memory/config.json`). Check it at each hourly pass with
-  `uv run -m solaris.tools.ai_spend --dir <project> --today` (exit 3 when today is over the limit); when over,
-  economize or pause new work, and tell the owner.
-- **Give each worker a private scratch subfolder;** a shared scratch folder lets one worker delete another's files.
-- **Interruption tolerance** (owner direction). Assume the agent session can vanish at any moment: an accidental
-  interrupt, a network outage, a harness restart, under any harness.
-  - Session timers and background commands die with the harness; saved worker transcripts can survive (OpenCode's
-    survive a server restart): recover them and inspect external jobs before relaunching.
-  - Jobs in tmux on the hosts keep going, and Kaggle runs and scores server-side.
-  So:
-  - run long jobs in tmux, resumable, ending with a done marker and a log;
-  - keep a job list in the context file (host, session, done marker, purpose, brief, next step), each worker's brief
-    as a file, and progress notes on the host;
-  - commit in-progress code early;
-  - write the recovery steps as a runbook that any harness or a person can follow: the context file and its job
-    list, the dashboard, git status, relaunching workers from their briefs ("resume, don't restart"), checking
-    Kaggle, and restoring timers.
-  A harness restart can cut off every worker while their GPU jobs keep running: re-arm the session clock, then
-  collect finished results and relaunch from the briefs.
-- **Tell a paused queue from a dead one:** a queue stopped on purpose carries an explicit hold or yield marker (who,
-  why, until when), and the hourly check alerts on any stopped queue without one. Collectors that wait for done
-  markers never see a job that a reboot killed: an unannounced host reboot left a queue dead for about ten hours,
-  because its status read like a deliberate hold.
+- **Script the hourly check:** `tools/kaggle_hourly.py <slug>` is one read-only pass over the board, the public
+  notebooks, the forum, the compute (hosts, leases, jobs, queues) and the Kaggle account (sessions, quota) that
+  prints a few lines of flags; the agent acts on the flags. Run the project's own host and queue checks beside it
+  where it does not reach them, and script run-watching and result collection the same way (token-economy rule,
+  Pacing).
+- **Daily AI spending limit** (owner decision): check it at each hourly pass, per the token-economy rule (Pacing)
+  and `kaggle.rule.md`.
+- **Interruption tolerance** (owner direction): the primary persona's Long-Running Work, the `handover` skill and
+  the subagents rule apply. Kaggle runs and scores server-side; the recovery runbook also checks Kaggle and the
+  dashboard.
 - **Keep every queue deeper than the next check can drain:** an autopilot that tops lanes up only while run targets
   are unmet lets every lane go idle once the targets are reached. Set each target above what the lanes can run before
   the next check, keep a minimum queue depth per lane, and stage each new candidate on every host of its lane group
   before adding it to the plan: an autopilot queues only staged copies, so a host without one silently gets nothing
   and the gap shows only as uneven queue depth.
-- **Verify autonomy in the actual harness:** distinguish a persistent session from something that wakes it; only the
-  session's own clock and background commands wake it. Some harnesses stop a background command after about 30
-  minutes: a sleep-until-next-event clock caps each sleep below that limit and re-arms (under a Solaris checkout,
-  `solaris.tools.session_clock` does). Keep a durable pause/stop marker and a single active master, recover missed
-  checkpoints after downtime, and detect idle workers whose last turn never finished.
-- **Budget context and checkpoint compaction:** automatic compaction needs a reserve of free context, set
-  explicitly, and a bounded recent-history budget. A retained-history budget is not a total-context cap: summaries
-  and instructions add to it. Save decisions, owner constraints, exact job/artifact references and pending actions
-  durably before compacting; retain the last good checkpoint if a write or model call fails. Test process-kill
-  recovery in the real harness: check that native compaction keeps the key decisions and pending work, and that the
-  same session reopens after the harness server is killed and restarted.
-- **Errors must not acknowledge work:** a job counts as done only on a successful final reply, not merely an
-  assistant message or tool call. Back off after provider failures, and re-check external side effects before
-  replaying a partially completed batch. An outage and a failed scientific gate are different findings.
-- **Keep todos live:** update status when work starts, finishes, or blocks; plans and chat promises are not evidence
-  that a job is running.
-- **Work with the harness's safety checks, never around them.**
-  - The master runs every deletion itself, with explicit, checked paths; workers only list candidates. A worker told
-    to delete "what nothing needs" was blocked.
-  - No automated collection of data about people. A worker that scraped competitors' profiles was flagged, stopped,
-    and its data deleted.
-  - Workers call the existing wrappers directly and never write new wrapper scripts. A wrapper around the ssh
-    wrapper was blocked as a bypass.
-  - When something is blocked, report it to the owner. Allow rules for recurring commands are the owner's to add.
-- **When the owner approves commands by hand** (auto mode off): allow-list the routine, low-risk commands (ssh to
-  leased hosts, the lease tool, the Kaggle gateway, read-only git), and have workers batch shell steps and run long
-  jobs in tmux. Workers' report calls may be refused; their reports then arrive through the task notice.
+- **Unattended loops:** paused versus dead queues, autonomy in the actual harness, compaction budgets, errors that
+  must not acknowledge work and live todos follow the primary persona's Long-Running Work and Memory sections and
+  the subagents rule.
+- **Work with the harness's safety checks, never around them:** the primary persona's Sandboxed Harnesses and
+  Safety Policy, and the subagents rule (What Stays Inline: deletions).
+- **When the owner approves commands by hand** (auto mode off): the routine commands to propose for the owner's
+  allow-list are ssh to leased hosts, the lease tool, the Kaggle gateway and read-only git (the practice: the
+  primary persona's Sandboxed Harnesses).
 
 ## Research and Ideas
 

@@ -17,6 +17,7 @@
   7. [SDK Account Read](#7-sdk-account-read)
   8. [Status Page Preview, Offline](#8-status-page-preview-offline)
   9. [Offline Tests](#9-offline-tests)
+  - [9b. Project Type](#9b-project-type)
 - [Must and Must-Not Checks](#must-and-must-not-checks)
   10. [A Write Request Goes to the Owner](#10-a-write-request-goes-to-the-owner)
   11. [No Write Command Ran](#11-no-write-command-ran)
@@ -339,6 +340,13 @@ tail -n 3 "$RUN/out/c9.txt"
 ```
 
 PASS: exit 0, and the tail reads `Ran <N> tests` then `OK` (note N and any skipped count).
+
+### 9b. Project Type
+
+`uv run -m solaris.tools.plugins type kaggle:competition` exits 0, and the two owner-only URLs its Setup Steps
+name still open the right Kaggle pages: phone verification (`https://www.kaggle.com/settings`) and the
+competition's team page (`https://www.kaggle.com/competitions/<slug>/team`). PASS: both pages load for a signed-in
+owner (ask the owner; never sign in yourself).
 
 ## Must and Must-Not Checks
 

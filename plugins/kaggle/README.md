@@ -75,7 +75,9 @@ session, a skill per kind of contest, and a kernel-engineering skill read before
 | `tests/test_kaggle_output.py` | `kaggle_output.py` offline, with a stand-in that pages an output of thousands of files from a page token: the crafted tokens, names not on their page, one-file outputs, failed calls, names that would leave `-p`. |
 | `tests/kaggle_standin.py` | Shared fixtures of the pre-submit, submit and hourly tests: a project with the tools copied in (a copied install) and a stand-in gateway answering from a table (after an optional delay) and logging each call with the submit mark. |
 | `tests/acceptance.md` | The live acceptance runbook: before each release of the plugin, a fresh agent follows it once against live Kaggle, read-only (nothing written to Kaggle; everything made locally stays in one scratch folder, removed at the end), and ends with a short report. |
-| `migrations/` | Steps for copied installs when the plugin version advances (`0.2.0.md`: the moved gateway and the renamed skill; `0.7.0.md`: from the live plan to the status page). |
+| `competition.project.md` | The `kaggle:competition` project type `create-project` offers (`uv run -m solaris.tools.plugins type kaggle:competition`): nine questions (the competition, team, goal, whether the master runs unattended, compute, the daily AI and cloud-GPU limits, cross-family reviews, the timezone), the plugins it attaches (kaggle, reporting) and suggests, and thirteen Setup Steps that leave the project ready to compete: a private git repo at the root, Kaggle sign-in and the owner-only steps, the facts sheet with the contest's kind, the first board snapshot and notebook survey, limits, the first status page, the session clock with the hourly pass, and the first plan. |
+| `project-types/competition/` | The type's overlay, copied into a new project by `plugins apply-type`: `.gitignore`, `README.md`, `reports/status.json`, `research/ideas.md`, `submissions/README.md`, `tools/README.md`, and `{{PACK}}/instructions.append.md` (the Competition Facts Sheet, the owner's standing grant, the competing process). |
+| `migrations/` | Steps for copied installs when the plugin version advances (`0.2.0.md`: the moved gateway and the renamed skill; `0.7.0.md`: from the live plan to the status page; `0.8.0.md`: the split playbook and the status block). |
 
 `manifest.json` and `revisions.json` (rev ledger, managed by `solaris.tools.revs`) complete
 the plugin. No MCP servers: Kaggle's official MCP server only searches and downloads, which the
@@ -129,6 +131,12 @@ the status page - `migrations/0.7.0.md`.
 
 ## Changelog
 
+- 0.9.0: the `kaggle:competition` project type (`competition.project.md` and its overlay
+  `project-types/competition/`): `create-project` asks nine questions and runs thirteen Setup Steps that leave a
+  new competition project ready to compete. The manifest declares its optional dependencies (reporting,
+  resource-sharing, nvidia-brev, browserctl), which `install-plugin` now offers. The playbook's general
+  agent-team practices moved into the pack templates (Solaris 0.44.0); the playbook core is 58 KB (77 KB before
+  0.8.0) and points to them.
 - 0.8.1: the STATUS block's compute field also counts the machines other projects share with this one
   (resource-sharing's seen list, as of the last `shared --ack`) with their nearest planned end, so a project that only
   borrows machines no longer shows "0 machines".

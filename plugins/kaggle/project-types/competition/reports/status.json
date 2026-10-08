@@ -1,0 +1,23 @@
+{
+  "rev": 0,
+  "competition": "{{ANSWER_COMPETITION}}",
+  "team": "{{ANSWER_TEAM}}",
+  "timezone": "{{ANSWER_TIMEZONE}}",
+  "start": "{{DATE}}",
+  "phase": "Phase 0: the whole path in one day (an own baseline, a faithful fork, one-change probes); then {{ANSWER_GOAL}}",
+  "summary": "Created {{DATE}}. Day-0 setup: the Kaggle sign-in, the competition facts sheet and its kind, the first board snapshot and public-notebook survey, the session clock, then the first plan.",
+  "owner_actions": [
+    "Accept the competition rules (needed before the data download and any submission): https://www.kaggle.com/competitions/{{ANSWER_COMPETITION}}/rules",
+    "Verify your phone number (needed for GPU and internet notebooks): https://www.kaggle.com/settings",
+    "Join or form the team and check its name: https://www.kaggle.com/competitions/{{ANSWER_COMPETITION}}/team"
+  ],
+  "plan": [
+    {"when": "{{DATE}}", "what": "Day-0 setup: sign-in, facts sheet and kind, forum, board snapshot, notebook survey, status page, session clock", "status": "in progress"},
+    {"when": "{{DATE}}", "what": "First plan: Phase 0's slots in submissions/PLAN.md, the ideas backlog, the first research jobs", "status": "pending"}
+  ],
+  "resources": [
+    {"name": "Kaggle account", "kind": "account", "what": "The competition through the kaggle plugin's CLI gateway; sessions and weekly GPU hours shared with the owner's other Kaggle projects by lease", "cost": "free", "status": "sign-in to check"}
+  ],
+  "questions": [],
+  "suggestions": []
+}
