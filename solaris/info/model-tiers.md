@@ -31,12 +31,12 @@ As of **2026-09-30** (re-verify per "Keeping This Current"):
 | cheap | `haiku` (Haiku 4.5) | Composer 2.5 standard (`composer-2.5[fast=false]`; Fast costs 6x) | `gpt-6-luna` |
 | mid | `sonnet` (Sonnet 5.5) | Sonnet 5.5 / Grok 4.7 | `grok-4.7` |
 | high | `opus` (Opus 5.5) | Opus 5.5 | `gpt-6.1-sol` |
-| frontier | `opus` (Opus 5.5) at effort `max`; not Fable 5.x (see below) | Opus 5.5 at `max` (not Fable 5.1) | `gpt-6-astra` |
+| frontier | `opus` (Opus 5.5); not Fable 5.x (see below) | Opus 5.5 (not Fable 5.1) | `gpt-6-astra` |
 
 **Avoid Fable 5.x** (owner direction 2026-09-30, standing): Fable 5 and 5.1 are not used unless the owner explicitly
 asks. The owner rates them less capable than Opus 5.5, and they cost more ($10/$50 vs $4/$20 per million tokens).
-Frontier-tier work runs on Opus 5.5 at `xhigh` or `max` effort; in Claude Code pass `model: opus` on each
-launch and run the session at that effort (Solaris keeps roles in harness-agnostic briefs, no agent definitions).
+Frontier-tier work runs on Opus 5.5 at the effort the owner chose; in Claude Code pass `model: opus` on each
+launch (the session's effort applies; Solaris keeps roles in harness-agnostic briefs, no agent definitions).
 
 Notes: Anthropic's own guidance (overridden here by the owner: see Avoid Fable 5.x) is to start with Opus 5.5 for
 most work and step up to Fable 5.1 for
@@ -55,12 +55,13 @@ OpenCode, or Codex for the GPT models); Cursor does not list the GPT-6 models ye
 
 ## Effort + Thinking
 
-Where the harness takes a reasoning effort per delegated call (Cursor: a model-ID suffix,
-`<model-id>[effort=high]`), match it to the tier: cheap -> `low`, mid -> the model's default, high ->
-`high`, frontier -> `xhigh`/`max` (model-dependent; Haiku 4.5 has no effort setting). Claude Code has
+The effort level is the owner's choice (owner, 2026-10-08): no rule, tool or file fixes one. Where the harness
+takes a reasoning effort per delegated call (Cursor: a model-ID suffix, `<model-id>[effort=high]`), pass the
+effort the owner chose; when he chose none, leave it out and the model's default applies (Haiku 4.5 has no
+effort setting). Claude Code has
 no per-call knob: subagents run at the session's effort (set with `/effort`, `--effort` or the
 `effortLevel` setting; Solaris uses no agent definitions to pin it); sessions on Opus 5.5 and Sonnet 5.5 default to `medium`
-(Fable 5.1: `high`), so raise it for judgment-heavy work. Leave extended thinking ON wherever it is
+(Fable 5.1: `high`); the owner picks the level. Leave extended thinking ON wherever it is
 available - never worth toggling off per task.
 
 ## Keeping This Current
