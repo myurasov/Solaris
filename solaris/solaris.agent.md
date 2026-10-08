@@ -29,7 +29,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.43.0.md`](spec/spec-v0.43.0.md).
+[`spec/spec-v0.44.0.md`](spec/spec-v0.44.0.md).
 
 ## Persona Model
 
@@ -146,6 +146,10 @@ There is one running agent. It adopts a persona by reading the active context:
 
 Three independent mechanisms:
 
+- `uv run -m solaris.tools.plugins deps <plugin>...|check --dir PATH|types|type <name>|apply-type <plugin:type>
+  --dir PATH --answers FILE [--dry-run]` (plugin dependencies: required ones attach first, optional ones are
+  offered; project types from core and plugins, validated and applied by `create-project`; exit 3 on a
+  missing dependency, an invalid type or a refused overlay).
 - **Per-file revisions** (`solaris.tools.revs`): every materialized framework/plugin file carries a rev
   integer + a rev-excluded content hash. ai-packs record a baseline in `<pack>/manifest.json` -> `revisions`.
   On `update-project` / plugin update, compare per file: identical -> in sync; user untouched and master

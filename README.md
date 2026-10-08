@@ -240,11 +240,12 @@ versions, and tasks.
 Stdlib-only tools back the skills and run as modules (`uv run -m solaris.tools.<name>`): `version`,
 `revs`, `mcp_sync`, `agents`, `toc`, `ai_spend` (estimated AI spend per project and day),
 `session_clock` (a wake clock for scheduled agent work), `housekeeping` (a project's folder sizes against its
-data budget, tidying of its private folder, pruning by rule), plus `uv run pytest` for the test suite. `read_first`, `skill_loader`,
+data budget, tidying of its private folder, pruning by rule), `plugins` (plugin dependencies and the project
+types plugins provide, such as `kaggle:competition`), plus `uv run pytest` for the test suite. `read_first`, `skill_loader`,
 and `log_interaction` are hooks - never run by hand.
 
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.43.0.md`](solaris/spec/spec-v0.43.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.44.0.md`](solaris/spec/spec-v0.44.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.

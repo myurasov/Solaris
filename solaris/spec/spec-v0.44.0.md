@@ -312,8 +312,18 @@ never hand-filled; the seeded-only files (`<pack>/manifest.json`, written first 
 folder the pack, `instructions.md`, `spec.md`, `defaults.json`, `.memory/*` - the directions log and
 `improvements.md` included) are copied once with their
 placeholders filled and keep their literal `<pack>/` text. Project types
-come from core (`solaris/templates/projects/*.md`) plus plugin-provided `plugins/<name>/<type>.project.md`;
-choosing a plugin-provided type auto-attaches that plugin.
+come from core (`solaris/templates/projects/*.md`) plus plugin-provided `plugins/<name>/<type>.project.md`,
+offered as `<plugin>:<type>` (`uv run -m solaris.tools.plugins types`). A plugin type's frontmatter is `key: value`
+lines (a value that parses as JSON is JSON and may continue on lines indented by two or more spaces): `type`, `title`,
+`summary` (required), `defaults` (mode, primary, roles, workspaces, pack), `plugins` (`required`, `optional`; the
+providing plugin always attaches), `template` (an overlay folder under the plugin's `project-types/`) and `questions`
+(`key`, `ask`, `required`, `default`, `choices`); its body has `## Structure`, `## Setup Steps` and `## Hand-Off`.
+`create-project` asks the questions in its first batch, uses the defaults, applies the overlay with
+`plugins apply-type` (paths and contents get the create-project placeholders plus `{{ANSWER_<KEY>}}`; a skipped
+optional answer renders its default or nothing; `*.append.md` appends to the same path without `.append`; nothing
+is ever overwritten, no managed file is written, and no target may resolve outside the project), attaches the
+type's plugins with their required dependencies, runs the Setup Steps under the attached plugins' rules, and ends
+with the Hand-Off text. `project.type` records `<plugin>:<type>`.
 
 ## Project modes
 
@@ -340,9 +350,11 @@ files. The layout is flat (only `migrations/` is a subfolder, plus vendored upst
 
 ```
 plugins/<name>/
-  manifest.json                 # name, version (semver), description, applies_to, optional setup (install prompts/notes)
+  manifest.json                 # name, version (semver), description, applies_to, optional setup (install prompts/notes),
+                                # optional dependencies {required, optional}: names or {name, why}
   mcps.json                     # MCP servers merged into a project's runtime MCP on install
-  <type>.project.md             # optional project-type(s) this plugin contributes
+  <type>.project.md             # optional project-type(s) this plugin contributes, offered as <plugin>:<type>
+  project-types/<type>/         # optional overlay for that type (copied by create-project, never on attach)
   shared/                       # the ONLY files attached to a project: copied to <pack>/plugins/<name>/, or linked (each rev-marked)
     *.skill.md  *.rule.md
     <vendored>/UPSTREAM.md      # optional vendored upstream tree (see below)
@@ -631,6 +643,13 @@ Stdlib only; run as modules (`uv run -m solaris.tools.<name>`):
   thread's models and efforts, each worker transcript's model, effort and spend, and the hook runs with their
   failures; the kaggle plugin's hourly pass reads it.
 - `housekeeping` - folder sizes, data budgets and folder layout for one project (`--dir PATH [report|tidy|prune] [--apply] [--json]`): `report` (default, read-only) lists the sizes of the project's top-level entries and big data folders against the budgets in `<pack>/housekeeping.json`, the untidy items and the prune candidates; `tidy` moves files that are not on the `<pack>/.memory/` root allowlist into `.memory/archive/<YYYY-MM>/` (the newest handover note stays) and job scratch from `<pack>/.memory/jobs/` into `__out/jobs/`; `prune` deletes only what a config rule or a `.disposable` marker names, never a `.keep` folder, a recently changed tree, a symlink or anything outside `__data/`, `__out/` and the archive. Both act only with `--apply` and log each action to `<pack>/.memory/housekeeping.jsonl`. Exit 3 when something needs attention.
+- `plugins` - plugin dependencies and project types (`deps <plugin>...|check --dir PATH|types|type <name>|apply-type <plugin:type> --dir PATH --answers FILE [--dry-run]`, `--json`): `deps` lists the required
+  dependencies transitively in attach order with the chain that reached each, and the optional ones present
+  under `plugins/`; `check` compares a project's attached plugins with their dependencies (exit 3 names a
+  missing required one; optional ones are suggestions); `types` and `type` list and validate project types;
+  `apply-type` renders a plugin type's overlay into a project. A cycle or a required dependency missing from
+  `plugins/` is an error that names the chain. Exit 0 fine, 3 a dependency problem, an invalid type or a
+  refused overlay (nothing written), 1 not found or unreadable, 2 bad usage.
 - `session_clock` - a one-shot wake clock (`--dir PATH|--schedule FILE [--after TIME] [--cap MINUTES]`),
   started as a background command, since a finished background command always wakes the session while
   session crons may not fire in some hosted harnesses: it sleeps toward the next event in
@@ -721,14 +740,14 @@ tracked plugin: its manifest names its folder with a semver version, its skills 
   minutes returns "launched", and the delegator resumes when its done marker appears. Abstract tiers
   (cheap/mid/high/frontier) map to concrete models in
   `solaris/info/model-tiers.md` (pack: `<pack>/info/model-tiers.md`, hard-required - never substituted from
-  memory); mechanical floor sweeps run on the cheapest tier at low effort unless a project or plugin rule
-  raises it. Roles are harness-agnostic briefs whose frontmatter may declare `tier` and `effort`
-  (low|medium|high|xhigh|max): the delegator passes the tier's model on every launch, never the default,
-  and the effort where the harness takes it per launch (Cursor: an `[effort=...]` model suffix); where
-  effort is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), the session
-  runs at least at the highest effort its briefs declare, and the owner is told when it is lower.
-  Confirmations stay inline: a destructive, remote-mutating or outward step is delegated only when the brief names
-  it and the owner's approval or standing grant covers it. Also always-on: a subagent
+  memory); mechanical floor sweeps run on the cheapest tier unless a project or plugin rule chooses
+  another. Roles are harness-agnostic briefs whose frontmatter may declare `tier` (an `effort` value is only a
+  hint): the delegator passes the tier's model on every launch, never the default. The effort is the owner's
+  choice: it is passed where the harness takes it per launch (Cursor: an `[effort=...]` model suffix); where it
+  is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), the session runs at it, and
+  nobody asks the owner for another level. Confirmations stay inline: a destructive, remote-mutating or outward
+  step is delegated only when the brief names it and the owner's approval or standing grant covers it; a worker
+  deletes only what the delegator pre-approved or approves, within what the delegator may delete itself. Also always-on: a subagent
   that ends without its deliverable (an API error, a safety-filter stop, a crash, a timeout) is unfinished
   work - salvage what it wrote or left running, finish the rest inline or resume or re-run it, reword the
   brief before a retry (at most two retries per task), and track every stopped subagent until it is
