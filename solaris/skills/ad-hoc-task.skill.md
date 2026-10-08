@@ -1,6 +1,6 @@
 ---
 name: ad-hoc-task
-triggers: ["new task", "start a task", "work on tasks/<slug>", "resume task", "open tasks/<slug>", "research X", "set up <host/thing>", "ad-hoc: X", "add plugin <name> to this task", "use plugin <name> in this task", "task with plugin <name>"]
+triggers: ["new task", "start a task", "work on tasks/<slug>", "resume task", "open tasks/<slug>", "research X", "do a research", "do a X research", "set up <host/thing>", "ad-hoc: X", "ad-hoc task", "ad hoc task", "add plugin <name> to this task", "use plugin <name> in this task", "task with plugin <name>"]
 summary: Start/resume an ad-hoc engineering/system-setup/research task under tasks/<date>-<slug>/.
 ---
 

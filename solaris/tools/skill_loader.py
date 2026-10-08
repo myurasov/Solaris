@@ -18,12 +18,26 @@ It mirrors ``read_first``'s full-load-once + remind shape, but per *skill* and g
 Session de-dup uses the harness ``session_id`` from the stdin payload and a small JSON marker file under the
 OS temp dir; a missing/unwritable marker just means the full body may load more than once (harmless).
 
-Trigger matching is data-driven (no per-skill code). Each trigger string becomes a regex: ``<...>`` spans and
-bare ``X`` placeholders match one argument word (``\\S+``); literal words match on word boundaries. So
-``"work on <project>"`` matches "work on auth", and ``"new task"`` matches "start a new task". Broad triggers
-match broadly - tighten the phrase in the skill's frontmatter if a skill over-fires. Synthetic turns (task
-notifications, command transcripts, system reminders) are skipped entirely: they quote skill names without
-requesting them, and the harness fires this hook on them too.
+Trigger matching is data-driven (no per-skill code). Each trigger string becomes a regex; literal words match
+on word boundaries, so ``"new task"`` matches "start a new task". Placeholders:
+
+- ``<project>`` names a real project: its slug or ``<group>/<slug>`` (folders ``projects/<group>/<slug>/``
+  holding an ai-pack, or ``projects/<slug>/`` in the older flat layout), also written as a path that ends at
+  the project (``projects/<slug>``, ``projects/my/<slug>/``), the nouns "project" / "repo" ("this project",
+  "the shop repo"), or "pack" / "ai-pack" after an optional article ("update the pack", but never "the battery
+  pack"). So ``"work on <project>"`` matches "work on web-shop" when that project exists, but not "work on
+  those improvements"; a skill's ``antitriggers`` veto the contexts where the nouns mislead.
+- ``<path>`` takes a path-like word (``~/code/app``, ``./app``, ``src/app``) and ``<host:path>`` a word with a
+  colon (``box:/srv/app``, a URL), so "adopt a pdf style" adopts no codebase.
+- Any other ``<...>`` span and a bare ``X`` stand for one argument word (``\\S+``) that is not a function
+  word, after an optional article ("set up the box"): "research and experiments" names nothing to research.
+
+Broad triggers still match broadly - tighten the phrase in the skill's frontmatter if a skill over-fires.
+Turns the owner did not type are skipped entirely: harness wrappers (task notifications, system reminders,
+command transcripts, subagent and peer-session messages), compaction summaries, interrupt markers, and a
+subagent's report handed back as a plain turn. They quote skill names and projects without requesting them,
+and the harness fires this hook on them too. An IDE's context block ahead of the owner's words (the file open
+in the editor) is skipped, and the words after it are matched.
 
 The hook also injects **project overlay indexes**: when the prompt (or session cwd) targets a project
 under ``projects/``, it emits a one-line-per-file index of that project's always-on overlay files
@@ -45,6 +59,7 @@ a hand-called CLI (any args, or an interactive tty with no piped payload) instea
 
 from __future__ import annotations
 
+import functools
 import json
 import os
 import re
@@ -57,7 +72,11 @@ from solaris.tools import pack as P
 REPO_ROOT = Path(__file__).resolve().parents[2]
 SKILLS_DIR = REPO_ROOT / "solaris" / "skills"
 
-_PH = "\x00"  # sentinel standing in for a matched ``<...>`` span while tokenizing a trigger
+# Sentinels standing in for ``<...>`` spans while tokenizing a trigger: a generic argument, ``<project>``,
+# ``<path>`` and ``<host:path>``.
+_PH, _PPH, _PATH_PH, _HOST_PH = "\x00", "\x01", "\x02", "\x03"
+_SENTINELS = (_PH, _PPH, _PATH_PH, _HOST_PH)
+_KIND = {"project": _PPH, "path": _PATH_PH, "host:path": _HOST_PH}
 
 
 def read_payload(stream) -> dict:
@@ -141,70 +160,217 @@ def discover_skills(skills_dir: Path = SKILLS_DIR) -> list:
     return out
 
 
-def trigger_to_regex(trigger: str) -> str:
+# Function words never stand for a placeholder's argument: "research and experiments", "set up and
+# utilized" and "update it" name nothing to research, set up or update.
+_FUNCTION_WORDS = frozenset((
+    "a an the this that these those my our your his her its their some any each every all no both either "
+    "neither such i me we us you he him she it they them myself yourself itself ourselves themselves and or "
+    "but nor so yet to of in on at for from with by about as into onto over under after before during "
+    "through via per without within between against toward towards across around upon is are was were be "
+    "been being am do does did have has had can could will would shall should may might must not there here "
+    "same"
+).split())
+# Words a placeholder may follow ("set up the box" sets up the box).
+_ARTICLES = ("the", "a", "an", "this", "that", "these", "those", "my", "our", "your", "some")
+_PROJECT_ARTICLES = ("the", "this", "that", "my", "our", "your")
+# The nouns a <project> placeholder takes besides a real project's name ("publish this project", "the shop
+# repo"), and the pack nouns, which take no name word before them ("update the pack", "the ai-pack"), so "the
+# battery pack" names no project.
+_PROJECT_NOUNS = ("project", "repo")
+_PACK_NOUN = r"(?:ai[- ]?)?pack"
+
+
+def _alt(words) -> str:
+    """A non-capturing alternation of literal words, longest first."""
+    return "(?:" + "|".join(re.escape(w) for w in sorted(words, key=len, reverse=True)) + ")"
+
+
+_NOT_FUNCTION_WORD = r"(?!" + _alt(_FUNCTION_WORDS) + r"(?![\w'’-]))"
+_ARG = r"(?:" + _alt(_ARTICLES) + r"\s+)?" + _NOT_FUNCTION_WORD + r"\S+"
+# <path> takes a word that looks like a path (~, ./, /, C:\ or a slash inside), <host:path> one with a colon
+# (host:/dir, user@host:dir, a URL): "adopt a pdf style" adopts no codebase.
+_OPENERS = r"[`'\"(\[]*"
+_PATH_ARG = _OPENERS + r"(?:~|\.{1,2}/|/|[A-Za-z]:[\\/]|[\w.@-]+/)\S*"
+_HOST_PATH_ARG = _OPENERS + r"[\w.@-]+:\S+"
+
+
+def _holds_pack(folder: Path) -> bool:
+    """True when ``folder`` holds an ai-pack, directly or inside one repo folder (embedded mode)."""
+    if _pack_of(folder):
+        return True
+    try:
+        return any(sub.is_dir() and not sub.name.startswith(".") and _pack_of(sub) for sub in folder.iterdir())
+    except OSError:
+        return False
+
+
+@functools.lru_cache(maxsize=4)
+def _discover_project_names(root: str) -> frozenset:
+    base = Path(root) / "projects"
+    names = set()
+    try:
+        tops = sorted(d for d in base.iterdir() if d.is_dir() and not d.name.startswith("."))
+    except OSError:
+        return frozenset()
+    for top in tops:
+        if _pack_of(top):  # the older flat layout: projects/<slug>/ holds the pack itself
+            names.add(top.name)
+            continue
+        try:
+            subs = sorted(d for d in top.iterdir() if d.is_dir() and not d.name.startswith("."))
+        except OSError:
+            continue
+        for sub in subs:
+            if _holds_pack(sub):
+                names.update((sub.name, top.name + "/" + sub.name))
+    return frozenset(n.lower() for n in names)
+
+
+def project_names(repo_root: "Path | None" = None) -> frozenset:
+    """Lowercased names a prompt can give a real project: each slug and its ``<group>/<slug>`` path.
+
+    A project is ``projects/<group>/<slug>/`` holding an ai-pack (directly, or inside its repo folder in
+    embedded mode), or ``projects/<slug>/`` holding one in the older flat layout. Discovered once per process.
+    """
+    return _discover_project_names(str(repo_root or REPO_ROOT))
+
+
+def _clean_names(names) -> frozenset:
+    out = set()
+    for n in names or ():
+        n = str(n).strip().strip("/").lower()
+        if n:
+            out.add(n)
+    return frozenset(out)
+
+
+def _project_regex(names) -> str:
+    """Regex source for a ``<project>`` placeholder: an optional article, then a real project's name (alone,
+    or as a path that ends at the project, maybe quoted), the noun "project" / "repo" (maybe after one name
+    word: "the shop repo"), or "pack" / "ai-pack" / "ai pack" / "aipack"."""
+    noun_end = r"(?![^\s.,;:!?)\]\"`])"  # the noun itself: not "projects", "repo's" or "pack/"
+    alts = []
+    if names:
+        alts.append(_OPENERS + r"(?:(?:[^\s`'\"]*/)?projects/)?" + _alt(names) + r"/?[`'\")\].,;:!?]*(?!\S)")
+    alts.append(r"(?:" + _NOT_FUNCTION_WORD + r"[\w.-]+(?:['’]s)?\s+)?" + _alt(_PROJECT_NOUNS) + noun_end)
+    alts.append(_PACK_NOUN + noun_end)
+    return r"(?:" + _alt(_PROJECT_ARTICLES) + r"\s+)?(?:" + "|".join(alts) + ")"
+
+
+def trigger_to_regex(trigger: str, projects=None) -> str:
     """Compile a trigger phrase into a regex source.
 
-    ``<...>`` spans (even with internal spaces) and a bare ``X`` placeholder become ``\\S+`` (one argument
-    word); every other word is matched literally. Word boundaries are added at the ends that are literal so
-    e.g. ``"status"`` does not match "statuses".
+    A ``<project>`` span becomes a real project's name or a noun: "project", "repo", "pack" (module docstring);
+    ``projects`` is the set of names it accepts, discovered under ``projects/`` when None. ``<path>`` takes a
+    path-like word and ``<host:path>`` a word with a colon. Any other ``<...>`` span (even with internal
+    spaces) and a bare ``X`` become one argument word that is not a function word, after an optional
+    article. Inside a longer token (``tasks/<slug>``) a span is any ``\\S+``. Every other word is matched
+    literally. Word boundaries are added at the ends that are literal so e.g. ``"status"`` does not match
+    "statuses".
     """
-    protected = re.sub(r"<[^>]*>", _PH, trigger.strip())
+    protected = re.sub(r"<([^>]*)>", lambda m: _KIND.get(m.group(1).strip().lower(), _PH), trigger.strip())
     tokens = protected.split()
     if not tokens:
         return ""
     parts = []
     for tok in tokens:
-        if tok == _PH or re.fullmatch(r"[A-Z]", tok):
-            parts.append(r"\S+")
+        if tok == _PPH:
+            parts.append(_project_regex(project_names() if projects is None else _clean_names(projects)))
+        elif tok == _PATH_PH:
+            parts.append(_PATH_ARG)
+        elif tok == _HOST_PH:
+            parts.append(_HOST_PATH_ARG)
+        elif tok == _PH or re.fullmatch(r"[A-Z]", tok):
+            parts.append(_ARG)
         else:
-            parts.append("".join(r"\S+" if ch == _PH else re.escape(ch) for ch in tok))
+            parts.append("".join(r"\S+" if ch in _SENTINELS else re.escape(ch) for ch in tok))
     pattern = r"\s+".join(parts)
     if re.match(r"\w", tokens[0][0]):
         pattern = r"\b" + pattern
-    if tokens[-1] != _PH and not re.fullmatch(r"[A-Z]", tokens[-1]) and re.search(r"\w$", tokens[-1]):
+    last = tokens[-1]
+    if last not in _SENTINELS and not re.fullmatch(r"[A-Z]", last) and re.search(r"\w$", last):
         pattern = pattern + r"\b"
     return pattern
 
 
-def _any_match(phrases: list, prompt: str) -> bool:
+def _any_match(phrases: list, prompt: str, projects=None) -> bool:
     for ph in phrases:
-        pat = trigger_to_regex(ph)
-        if not pat:
-            continue
         try:
-            if re.search(pat, prompt, re.IGNORECASE):
+            pat = trigger_to_regex(ph, projects)
+            if pat and re.search(pat, prompt, re.IGNORECASE):
                 return True
         except re.error:
             continue
     return False
 
 
-# Markers that identify a synthetic (harness-generated) turn rather than a human prompt: task
-# notifications, command transcripts, and system reminders. Such turns freely quote skill names (an agent
-# report saying "health-check" is not a request to run it), so matching them over-fires; skip them whole.
-_SYNTHETIC_MARKERS = (
-    "[SYSTEM NOTIFICATION",
-    "<task-notification>",
-    "<system-reminder>",
-    "<command-name>",
-    "<local-command-stdout>",
+# Turns the harness makes, not the owner, open with one of these wrapper tags (background-task
+# notifications, system reminders, command transcripts, shell-mode input and output, subagent and
+# peer-session messages) or plain markers (a notification header, a compaction summary, an interrupt note,
+# a local-command caveat); a subagent hand-back names itself near its start. They quote skill names and
+# project paths without requesting them (an agent report saying "health-check" is not a request to run it),
+# so matching them over-fires; skip them whole.
+_HARNESS_TAGS = (
+    "task-notification", "system-reminder", "command-name", "command-message", "command-args",
+    "local-command-stdout", "local-command-stderr", "local-command-caveat", "bash-input", "bash-stdout",
+    "bash-stderr", "agent-message", "cross-session-message",
 )
+_HARNESS_TAG_RE = re.compile(r"<(?:" + "|".join(map(re.escape, _HARNESS_TAGS)) + r")(?=[\s>/])", re.I)
+_HARNESS_PREFIXES = (
+    "[SYSTEM NOTIFICATION",
+    "This session is being continued from a previous conversation",
+    "[Request interrupted",
+    "Caveat: The messages below were generated by the user while running local commands",
+)
+_HANDBACK_MARK = "[Subagent hand-back]"
+# A subagent's final report delivered as a plain turn: a long text whose first line is a heading about a
+# report or a result. Owner prompts rarely open that way, and rarely run this long.
+_REPORT_HEADING_RE = re.compile(
+    r"(?:#{1,6}[ \t]+|\*\*)[^\n]*?\b(?:report|summary|results?|findings|hand-?back|outcome|done|completed?|"
+    r"finished)\b", re.IGNORECASE)
+_REPORT_MIN_CHARS = 1000
+# Context blocks an IDE puts ahead of the owner's words (the file open in the editor, a selection).
+_IDE_BLOCK_RE = re.compile(r"<(ide_[a-z_]+)\b[^>]*>.*?</\1>\s*", re.IGNORECASE | re.DOTALL)
+
+
+def _after_ide_blocks(prompt: str) -> str:
+    text = prompt.lstrip("\ufeff \t\r\n")
+    m = _IDE_BLOCK_RE.match(text)
+    while m:
+        text = text[m.end():]
+        m = _IDE_BLOCK_RE.match(text)
+    return text
 
 
 def is_synthetic_prompt(prompt: str) -> bool:
-    """True when the payload is a harness-generated turn, not something the user typed."""
-    return any(m in prompt for m in _SYNTHETIC_MARKERS)
+    """True when the turn was not typed by the owner: it opens with a harness wrapper tag or marker, names a
+    subagent hand-back near its start, or is a long text whose first line is a report heading."""
+    if not isinstance(prompt, str):
+        return False
+    text = _after_ide_blocks(prompt)
+    return bool(_HARNESS_TAG_RE.match(text) or text.startswith(_HARNESS_PREFIXES)
+                or _HANDBACK_MARK in text[:300]
+                or (len(text) >= _REPORT_MIN_CHARS and _REPORT_HEADING_RE.match(text)))
 
 
-def match_skills(prompt: str, skills: list) -> list:
-    """Skills whose any trigger matches ``prompt`` and no antitrigger matches (order preserved, de-duped)."""
-    if not prompt or is_synthetic_prompt(prompt):
+def owner_text(prompt: str) -> str:
+    """The owner's words in ``prompt`` (after any IDE context block), or "" when the turn is not the owner's."""
+    if not isinstance(prompt, str) or is_synthetic_prompt(prompt):
+        return ""
+    return _after_ide_blocks(prompt).strip()
+
+
+def match_skills(prompt: str, skills: list, projects=None) -> list:
+    """Skills whose any trigger matches the owner's words in ``prompt`` and no antitrigger matches (order
+    preserved). ``projects``: the names a ``<project>`` placeholder accepts (default: the real projects)."""
+    text = owner_text(prompt)
+    if not text:
         return []
     matched = []
     for skill in skills:
-        if not _any_match(skill.get("triggers", []), prompt):
+        if not _any_match(skill.get("triggers", []), text, projects):
             continue
-        if _any_match(skill.get("antitriggers", []), prompt):
+        if _any_match(skill.get("antitriggers", []), text, projects):
             continue  # suppressed: an exclude phrase matched (e.g. develop-project vs a tasks/ path)
         matched.append(skill)
     return matched

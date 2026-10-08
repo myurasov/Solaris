@@ -1,6 +1,7 @@
 ---
 name: publish-project
-triggers: ["publish project", "share project", "publish <project>", "share <project>", "make <project> shareable", "prepare <project> for handoff", "hand off <project>", "de-personalize <project>", "publish-safety audit"]
+triggers: ["publish project", "share project", "publish <project>", "share <project>", "make <project> shareable", "prepare <project> for handoff", "prepare <project> for publishing", "prepare for publishing", "hand off <project>", "de-personalize <project>", "publish-safety audit"]
+antitriggers: ["as private", "as a private", "private repo", "private repository"]
 summary: Prepare a project for external eyes - scrub identities/internals, add license/disclaimer, verify the detached ai-pack stands alone.
 ---
 

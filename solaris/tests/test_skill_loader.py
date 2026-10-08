@@ -52,12 +52,16 @@ def test_trigger_to_regex_handles_placeholders():
     assert not re.search(S.trigger_to_regex("research X"), "research", re.I)
     # <...> span with internal spaces collapses to one placeholder
     assert re.search(S.trigger_to_regex("set up <host/thing>"), "set up the box", re.I)
-    assert re.search(S.trigger_to_regex("work on <project>"), "work on tasks/foo", re.I)
+    # <project> takes a real project or the nouns project / repo, never any word
+    assert re.search(S.trigger_to_regex("work on <project>", {"foo"}), "work on foo", re.I)
+    assert re.search(S.trigger_to_regex("work on <project>", set()), "work on this project", re.I)
+    assert not re.search(S.trigger_to_regex("work on <project>", {"foo"}), "work on tasks/foo", re.I)
+    assert not re.search(S.trigger_to_regex("work on <project>", {"foo"}), "work on those", re.I)
 
 
 def test_match_skills_returns_matching_only():
     skills = [
-        {"name": "ad-hoc-task", "triggers": ["work on <project>", "new task"], "body": "B1"},
+        {"name": "ad-hoc-task", "triggers": ["work on tasks/<slug>", "new task"], "body": "B1"},
         {"name": "release", "triggers": ["do a release"], "body": "B2"},
     ]
     m = S.match_skills("lets work on tasks/2026-06-20-foo", skills)
@@ -93,7 +97,7 @@ def test_antitriggers_suppress_match():
     names = [s["name"] for s in S.match_skills("lets work on tasks/2026-06-20-foo", skills)]
     assert names == ["ad-hoc-task"]
     # a real project: develop-project matches (antitrigger does not fire)
-    names = [s["name"] for s in S.match_skills("work on auth-service", skills)]
+    names = [s["name"] for s in S.match_skills("work on auth-service", skills, projects={"auth-service"})]
     assert names == ["develop-project"]
 
 
