@@ -3,7 +3,7 @@ name: browserctl
 triggers: ["launch a browser", "open the browser", "browser profile", "new browser profile", "ephemeral browser", "browserctl", "drive the web", "browser automation", "take a page snapshot", "screenshot the page", "bot check", "cloudflare challenge", "verify you are human", "headless is blocked"]
 summary: Drive Chromium through the browserctl CLI (this plugin's browserctl.py) - per-project persistent profiles on stable CDP ports, clean on first use, ephemeral on demand; replaces the Playwright MCP.
 ---
-_Rev. 13_
+_Rev. 14_
 
 # Skill: browserctl - Browser Lifecycle and Driving Pages <!-- omit in toc -->
 
@@ -234,3 +234,27 @@ identity on 18, headed on 20.
    with their own squircle background, so the tinted Chrome artwork renders fully in the
    default icon style. The generated glyph fallback uses a transparent background, which works
    across all styles.
+10. **Ubuntu with AppArmor (arm64): match Chromium's real path.** Ubuntu restricts unprivileged
+    user namespaces through AppArmor (`kernel.apparmor_restrict_unprivileged_userns = 1`, the
+    default since 23.10), so Chromium's sandbox needs a profile that allows them for its binary.
+    Current Playwright installs the arm64 build under `chrome-linux-arm64/`; a local profile
+    written for `chrome-linux/` no longer matches, and `launch` fails with "No usable sandbox"
+    (exit -5). One glob covers every build and architecture; the profile has the shape of
+    Ubuntu's own `/etc/apparmor.d/chrome` (installing it needs sudo: a system change, so ask the
+    owner first; on a shared host, its owner):
+
+    ```
+    # /etc/apparmor.d/playwright-chromium
+    abi <abi/4.0>,
+    include <tunables/global>
+
+    profile playwright-chromium /home/*/.cache/ms-playwright/chromium-*/chrome-linux*/chrome flags=(unconfined) {
+      userns,
+    }
+    ```
+
+    Load it with `sudo apparmor_parser -r /etc/apparmor.d/playwright-chromium` (adjust the path
+    if `PLAYWRIGHT_BROWSERS_PATH` moves the browsers). browserctl runs on the newest `playwright`
+    (its script sets only a minimum version), so a Playwright release brings a new
+    `chromium-<build>/` folder, downloaded (about 115 MB) before the first launch: keep the build
+    number out of the profile's path.

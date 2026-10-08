@@ -9,7 +9,7 @@ summary: Full autonomous lifecycle for running project workloads on Brev cloud G
   the rest), and append the mandatory cost-ledger row. Assumes an authenticated CLI
   (else run brev-setup first). Deep CLI reference: the plugin's brev-cli/ upstream mirror.
 ---
-_Rev. 20_
+_Rev. 21_
 
 # Skill: brev-run - autonomous cloud runs <!-- omit in toc -->
 
@@ -65,9 +65,11 @@ rate, actual cost (billed while the instance exists, incl. setup/idle).
 ```
 
 Keep the **TOTAL** row as the last line: update its hours/cost/count when appending an
-instance row, and note still-running and stopped instances (rate + start time; for a
-stopped one also when it stopped and the reuse it waits for) in its outcome cell until
-their rows land at deletion.
+instance row, and note each still-running or stopped instance in its outcome cell as one
+clause (clauses separated by `;`): its name, its rate as `$<rate>/h`, its start time in ISO
+UTC and, for a stopped one, `stopped <ISO UTC time>` and the reuse it waits for, until its row
+lands at deletion (then drop the clause). The kaggle plugin's hourly pass reads these clauses
+to count today's spend of running instances.
 
 ## 2. Ship the payload
 
@@ -132,7 +134,8 @@ their rows land at deletion.
      next run is planned and due by then, and the provider supports stop. Its root disk
      survives (venv, payload, caches; ephemeral NVMe data does not), so the restart
      (about 12 minutes back to SHELL READY) skips setup and staging, and billing drops to
-     its storage. Note the stop and the planned reuse in the ledger's TOTAL row; when
+     its storage. A restart needs free capacity of the type, which may be gone (Field
+     Gotchas). Note the stop and the planned reuse in the ledger's TOTAL row; when
      that reuse has not started by its time, delete the instance.
    - **Delete** (`brev delete <name>`) every other instance: the default, and always
      when the next use is unplanned or more than about a day away.
@@ -181,6 +184,23 @@ their rows land at deletion.
   EBS can also throttle to a crawl once burst credits drain, which makes late migration
   painfully slow). Ephemeral = wiped on stop/restart; keep only regenerable data there and
   pull results off before teardown.
+- **A bigger root disk can be chosen only at creation, and only in the web console.** The CLI
+  has no size option (`--min-disk` only filters, above: an 8x H100 type created with
+  `--min-disk 1536` still came with a 115 GB root), and Brev documents that a disk cannot be
+  resized later. Some types show a disk range in `brev search` (for example "50GB-3TB", priced
+  per GB-month): that size is set in the console's disk-size choice at creation, or in a
+  launchable made there with its disk storage set. The console needs a fresh owner login in a
+  headed browser for each such task (its login did not survive a browser restart), so
+  unattended work fits the job to the stock disk instead: the local NVMe store (above), or a
+  RAM tmpfs on a type with RAM to spare (an 8x H100 type with about 1.5 TB of RAM and a 115 GB
+  root ran Docker's data on a 600 GB tmpfs; a tmpfs is lost on stop or reboot).
+- **Docker 29 keeps images in containerd's store.** With the containerd image store (the
+  default on new Docker 29 installs; `docker info` then shows `driver-type:
+  io.containerd.snapshotter.v1`), images and their layers live under `/var/lib/containerd`, so
+  moving only Docker's `data-root` to the NVMe store or a tmpfs still fills the root disk. Move
+  both (Docker's `data-root` in `/etc/docker/daemon.json`, containerd's `root` in
+  `/etc/containerd/config.toml`), restart containerd and Docker, and check `df -h /` after the
+  first pull.
 - Fresh Ubuntu images lack `python3.X-venv` (ensurepip) - `sudo apt-get install -y
   python3.$(minor)-venv` first; sudo is passwordless on the default user.
 - `brev exec` holds the session even for `nohup ... &` children - detach long jobs with
@@ -214,11 +234,17 @@ their rows land at deletion.
   and an advertised $/h may appear in the usage feed split into components at fractional
   rates (sum matches). A STOPPED instance still accrues storage charges until it is
   deleted - stopped is not free: stop only an instance you will reuse within about a day
-  (step 5), and delete the rest.
+  (step 5), and delete the rest: recreating one costs a couple of hours, cheap next to days
+  of idle storage charges.
 - Stop/start (verified on gcp): the disk persists (venv/payload intact) but the **public IP
   changes** - re-run `brev refresh` and re-resolve the direct endpoint after every restart,
   and re-authorize nothing (keys ride the disk). Restart back to SHELL READY took ~12 min;
   multi-GPU DDP (`torch.distributed.run --nproc_per_node=N`) works stock on the brev images.
+- **A stopped instance holds no capacity.** A stopped 8-GPU instance could not start again
+  (Oct 4, 2026): two `brev start --detached` calls left it STOPPED (a blocking start hung for
+  120 s), its type had dropped out of `brev search`, and it billed its disk for two more days
+  until deleted. A restart is never guaranteed, so time-critical work keeps a free fallback (a
+  leased or shared host) instead of counting on a stopped instance.
 - Long-lived watchers must survive endpoint changes: `brev refresh` (run for any reason
   mid-run) can re-point `~/.brev/ssh_config` (host/port), after which a watcher's ssh fails
   every poll. Treat the FIRST unreadable-state warning as a page - re-run `brev refresh` and
@@ -248,5 +274,13 @@ their rows land at deletion.
 - Never leave an instance running unattended, or stopped, without an owner + teardown plan
   (for a stopped one: the reuse it waits for, else its delete); if the session ends
   mid-run, the teardown check is the FIRST thing the next session does.
-- Confirm with the user before creating instances above ~$15/h or beyond 8 GPUs.
+- Confirm with the user before creating instances above ~$15/h or beyond 8 GPUs, unless the
+  project's recorded standing permission covers that size.
 - All costs come out of the org's budget - always state $/h at creation time.
+- In a project that runs unattended, lifecycle decisions (create, stop, restart, delete) are
+  the agent's under the owner's standing permission recorded in the project; without one,
+  ask. Copy results off before any stop or delete (step 5).
+- Prefer shared or leased hardware whenever it fits the job; launch paid capacity only when
+  none does, and within the owner's daily cap.
+- Review every instance, running or stopped, at each hourly audit (or the project's regular
+  check) so none is forgotten.
