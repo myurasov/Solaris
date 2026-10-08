@@ -21,8 +21,8 @@ tokens of raw results (roughly: more than 3 full files, a multi-file sweep, a wh
 dump) and the session continues afterward, run it in a subagent - read-only agent type for
 sweeps, read-write only when it must write - returning the synthesized answer (named facts,
 quotes, file:line pointers), never raw dumps. At economy level `full` the threshold tightens to
-~10k. Floor tiering, regardless of posture: mechanical sweeps run on the cheapest tier at low
-effort (a project or plugin rule may raise it; names: `solaris/info/model-tiers.md`); keep the
+~10k. Floor tiering, regardless of posture: mechanical sweeps run on the cheapest tier (a project or
+plugin rule may choose another; names: `solaris/info/model-tiers.md`); keep the
 session model for judgment-heavy synthesis. Independent sweeps launch in one parallel batch (the
 batching floor in `token-economy.rule.md`).
 
@@ -108,11 +108,10 @@ In doubt at `cost`, take the cheaper tier; in doubt at `quality`, the stronger o
 
 Roles are harness-agnostic briefs (`<pack>/<role>.agent.md`); never create harness-specific agent or
 rule files (`.claude/agents/`, `.cursor/rules/`, `.opencode/agents/`), but a harness's mechanisms
-(hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`
-and `effort` (low|medium|high|xhigh|max): pass the tier's model on every launch, never the default,
-and the effort where the harness takes it per launch (Cursor: an `[effort=...]` model suffix). Where
-effort is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), run the
-session at least at the highest effort its briefs declare, and tell the owner when it is lower.
+(hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`:
+pass its model on every launch, never the default. Effort is the owner's choice: pass it where the
+harness takes it per launch (Cursor: an `[effort=...]` suffix); session-wide (Claude Code: `--effort`,
+`/effort` or `effortLevel`), the session runs at it; never ask for another.
 
 ## Stopped or Failed Subagents (Always-On)
 

@@ -95,13 +95,9 @@
       ]
     },
     "solaris/templates/ai-pack/ai/engineer.agent.md": {
-      "rev": 49,
-      "hash": "056ae45f6d0b98c989f5a9363bd9cdbb9a7f6a64a908403f7c088c4f42102e1c",
+      "rev": 50,
+      "hash": "441dfcc4938b80576a0282c281346ae0ec3a8e0815dfcbe848e76712bfa474ce",
       "history": [
-        {
-          "rev": 40,
-          "hash": "9c99233339e394823b31b5ef374c5730e2602619659b784074fd39515df771b1"
-        },
         {
           "rev": 41,
           "hash": "2acc70734f0c620372b3d0b72234c5bfad825b5d80abc4427b02b23b26dc0001"
@@ -137,6 +133,10 @@
         {
           "rev": 48,
           "hash": "056ae45f6d0b98c989f5a9363bd9cdbb9a7f6a64a908403f7c088c4f42102e1c"
+        },
+        {
+          "rev": 50,
+          "hash": "441dfcc4938b80576a0282c281346ae0ec3a8e0815dfcbe848e76712bfa474ce"
         }
       ]
     },
@@ -163,8 +163,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/rules/subagents.rule.md": {
-      "rev": 8,
-      "hash": "16f5caa458b2ef5aa9fa274131af1f14f4b25a382bca1f0e19d565201267c930",
+      "rev": 9,
+      "hash": "a9836e43730635f85388aec41d0aa912a194bbc0637fab2b654f7c8af4c4ea9a",
       "history": [
         {
           "rev": 1,
@@ -201,12 +201,16 @@
         {
           "rev": 8,
           "hash": "16f5caa458b2ef5aa9fa274131af1f14f4b25a382bca1f0e19d565201267c930"
+        },
+        {
+          "rev": 9,
+          "hash": "a9836e43730635f85388aec41d0aa912a194bbc0637fab2b654f7c8af4c4ea9a"
         }
       ]
     },
     "solaris/templates/ai-pack/ai/rules/token-economy.rule.md": {
-      "rev": 5,
-      "hash": "cb04744dd96cd59ea2e43a43e22509a66a2515db29a479997a704d3f809a1f67",
+      "rev": 6,
+      "hash": "d4788c2e52971a5092d38bd1bac482a4e55b4f88855a46327ac63356c5c2b8c9",
       "history": [
         {
           "rev": 1,
@@ -231,6 +235,10 @@
         {
           "rev": 5,
           "hash": "cb04744dd96cd59ea2e43a43e22509a66a2515db29a479997a704d3f809a1f67"
+        },
+        {
+          "rev": 6,
+          "hash": "d4788c2e52971a5092d38bd1bac482a4e55b4f88855a46327ac63356c5c2b8c9"
         }
       ]
     },
@@ -249,8 +257,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/skills/handover.skill.md": {
-      "rev": 5,
-      "hash": "822a2c6c175a4d7b3bedfe70e4e091e1a6052ab14a4b63a9c2e6ae65abd1b4ed",
+      "rev": 6,
+      "hash": "a64dd3ab25fa6cea6af5c491ec8b1e74a3f52af473be7e54d90e31742f5ae2e3",
       "history": [
         {
           "rev": 1,
@@ -271,6 +279,10 @@
         {
           "rev": 5,
           "hash": "822a2c6c175a4d7b3bedfe70e4e091e1a6052ab14a4b63a9c2e6ae65abd1b4ed"
+        },
+        {
+          "rev": 6,
+          "hash": "a64dd3ab25fa6cea6af5c491ec8b1e74a3f52af473be7e54d90e31742f5ae2e3"
         }
       ]
     },
@@ -347,8 +359,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/info/harnesses.md": {
-      "rev": 5,
-      "hash": "ffe4b7d9a1c4ee8eb8f8f8f6278c309c9424541bc7aec4858a6a4045433740ab",
+      "rev": 6,
+      "hash": "a0bc9691a78783bd9484ad31765e6fc19d224b0221236fc4febebe5ec613ca6d",
       "history": [
         {
           "rev": 1,
@@ -369,6 +381,10 @@
         {
           "rev": 5,
           "hash": "ffe4b7d9a1c4ee8eb8f8f8f6278c309c9424541bc7aec4858a6a4045433740ab"
+        },
+        {
+          "rev": 6,
+          "hash": "a0bc9691a78783bd9484ad31765e6fc19d224b0221236fc4febebe5ec613ca6d"
         }
       ]
     },

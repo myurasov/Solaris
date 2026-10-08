@@ -1,7 +1,6 @@
 ---
 description: Executes one written job brief end to end - build, run, evaluate, set up, sync, condense outside material, debug a failure - and returns a short report, so the delegating session's own context stays clean.
 tier: mid
-effort: medium
 access: full
 ---
 

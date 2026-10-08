@@ -3,7 +3,7 @@ name: handover
 triggers: ["handover", "stop for handover", "pause for handover", "resume after handover"]
 summary: Pause {{NAME}} or hand it to another session or machine without losing work - save context, write a dated handover note, commit, leave remote jobs running - and resume from that note after re-checking hosts, leases and jobs.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: handover - Pause, Hand Over, Resume <!-- omit in toc -->
 
@@ -38,8 +38,10 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
    owner; the next actions, in order.
 4. **Write a dated handover note**, `{{PACK}}/.memory/handover-<YYYY-MM-DD-HHMM>.md` (time read from a clock):
    when and why the session stopped, who resumes it (this harness later, or another harness or machine), what
-   still runs where, what the next session must recreate (subagents, schedules, clocks, periodic checks), and
-   a short resume prompt the owner can paste. It names hosts, so it stays in the private `.memory/` and never
+   still runs where (jobs and live connections), the pending deadlines, what the next session must recreate
+   (subagents, schedules, clocks, periodic checks), and
+   a short resume prompt the owner can paste; the newest note is the pause marker until Resume adds its
+   "resumed at" line. It names hosts, so it stays in the private `.memory/` and never
    goes into git. Under a Solaris checkout, the note also lists every managed file that `uv run --directory
    <solaris root> -m solaris.tools.revs classify --dir <project>` reports as not in sync, with why it was
    edited.
@@ -55,7 +57,7 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
    those you will reuse within about a day, per the owner's rule, and add them to the handover note; list
    the rest, with what they cost, and ask the owner what to do with them.
 9. **Report** in one line: paused at what time, what is still running, and the phrase that resumes. Log the
-   turn in this machine's file in `{{PACK}}/.memory/interactions/` (see `engineer.agent.md`, Memory), so a
+   turn in this machine's file in `{{PACK}}/.memory/interactions/` (see `{{PRIMARY}}.agent.md`, Memory), so a
    session on another machine can tell when this one stopped.
 
 ## 3. Resume
@@ -68,6 +70,11 @@ Only on the owner's explicit word.
 2. **Confirm sole control:** the old session has stopped, as its note says. On another machine, work from
    that machine's own clone, brought up to date with what was pushed, and copy across what git does not
    carry (at least the private `{{PACK}}/.memory/`).
+   Verify before acting: no agent turn is still live in the old harness, and the handed-over files' hashes match
+   on both machines. Where the working tree is synced between machines, `git fetch`, then check it against the
+   remote branch through a temporary index (with `GIT_INDEX_FILE=<tmp>` exported for all three commands:
+   `git read-tree origin/<branch>`, `git diff --stat`, `git ls-files --others --exclude-standard`); when they
+   show no difference, `git reset origin/<branch>` (index only) changes no file. The clocks restart in step 4.
 3. **Re-verify external state** before acting on the note: each host reachable; leases and paid instances
    still there, with their end times; each listed job's done marker, log and tmux session; `git status`.
    Note what changed during the pause.

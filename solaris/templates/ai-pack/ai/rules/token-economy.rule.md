@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # Rule: Token Economy <!-- omit in toc -->
 
@@ -104,7 +104,12 @@ Keep round-trips/min <= budget / current context tokens. Budget: `"economy.token
 that is <=10/min at 100k context, <=5/min at 200k. When over, re-batch the remaining work into
 fewer, larger calls or pause briefly - a pause beats a rate-limit retry loop. Never poll
 long-running work on short intervals - use background monitors with filtered output and space out
-checks; every check re-sends the whole context. In remote-code mode every ssh call is a
+checks; every check re-sends the whole context. Script each periodic check as one read-only pass that prints
+a few lines of flags, and act on the flags: it saves most of an autonomous loop's tokens. Script routine
+run-watching and result collection the same way: long-lived agents that polled hosts and fed an evaluation
+queue were among a day's most expensive jobs, ahead of the analysis and build work, because every turn re-reads
+the agent's growing context, so its cost grows with how long it lives, not with what it decides. Wake an agent
+only to decide. In remote-code mode every ssh call is a
 round-trip too - merge remote steps into compound commands. Pacing is level-independent, and a
 pacing rule, not a hard cap: correctness and data integrity win over speed - when in doubt, slow
 down rather than drop steps. **Per-request override:** `asap` anywhere in the message - burst for
@@ -113,7 +118,7 @@ that request only.
 **Daily spend:** an optional approximate daily AI spending limit, `"ai.daily_budget_usd"` (same
 config files as the level); under a Solaris checkout, check it at each periodic pass with
 `uv run -m solaris.tools.ai_spend --dir <project> --today` (exit 3 = over), and when over,
-economize and tell the owner.
+economize or pause new work, and tell the owner.
 
 ## Hard Floors (Never Trimmed)
 

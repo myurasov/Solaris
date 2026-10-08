@@ -1,4 +1,4 @@
-_Rev. 8_
+_Rev. 9_
 
 # Rule: Subagents (Bulk-Read Floor + Leveled Delegation) <!-- omit in toc -->
 
@@ -24,8 +24,8 @@ tokens of raw results (roughly: more than 3 full files, a multi-file sweep, a wh
 dump) and the session continues afterward, run it in a subagent - read-only agent type for
 sweeps, read-write only when it must write - returning the synthesized answer (named facts,
 quotes, file:line pointers), never raw dumps. At economy level `full` the threshold tightens to
-~10k. Floor tiering, regardless of posture: mechanical sweeps run on the cheapest tier at low
-effort (a project or plugin rule may raise it; names: `{{PACK}}/info/model-tiers.md`); keep the
+~10k. Floor tiering, regardless of posture: mechanical sweeps run on the cheapest tier (a project or
+plugin rule may choose another; names: `{{PACK}}/info/model-tiers.md`); keep the
 session model for judgment-heavy synthesis. Independent sweeps launch in one parallel batch (the
 batching floor in `{{PACK}}/rules/token-economy.rule.md`).
 
@@ -92,7 +92,8 @@ A delegated task must be executable by a weaker model. Every subagent prompt car
    (from `{{PACK}}/instructions.md`) spelled out, not rediscovered.
 3. **Exact return shape** - named facts, file:line pointers, a verdict, a table; never raw dumps.
 4. **Boundaries** - read-only vs write, what not to touch, any confidentiality rules in scope. A
-   subagent writes only in its own scratch subfolder plus the files its brief names, and calls the
+   subagent writes only in its own scratch subfolder (a shared one lets one worker's cleanup delete another's
+   files) plus the files its brief names, and calls the
    existing `/tmp` wrappers but never creates one (only the main session does).
 5. **Active modes restated** - subagents do not see this pack's always-on rules; restate any
    active mode that shapes the deliverable (the economy level, YAGNI, requested word counts,
@@ -103,8 +104,12 @@ If a task cannot be phrased this way, split it until it can - or keep it inline 
 is genuinely inseparable from the reading.
 
 **Long work** (durable delegation): a brief file per job, written before launch, pointing to a shared
-rules file; a status file updated at milestones; a hard return time. A run over about 30 minutes
-returns "launched"; the delegator resumes when its done marker appears.
+rules file; a status file updated at milestones (progress notes on the host, for a remote job); a hard
+return time. A run over about 30 minutes
+returns "launched"; the delegator resumes when its done marker appears. Keep the delegating session responsive
+with short coordinator turns: delegate preparation, validation and reporting, persist early milestones, and
+return on completion events instead of holding a long turn open to wait. Require early saved milestones of each
+worker too, so a long model step does not leave all progress transient.
 
 ## Model Tiering
 
@@ -125,11 +130,11 @@ In doubt at `cost`, take the cheaper tier; in doubt at `quality`, the stronger o
 
 Roles are harness-agnostic briefs (`{{PACK}}/<role>.agent.md`); never create harness-specific agent or
 rule files (`.claude/agents/`, `.cursor/rules/`, `.opencode/agents/`), but a harness's mechanisms
-(hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`
-and `effort` (low|medium|high|xhigh|max): pass the tier's model on every launch, never the default,
-and the effort where the harness takes it per launch (Cursor: an `[effort=...]` model suffix). Where
-effort is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), run the
-session at least at the highest effort its briefs declare, and tell the owner when it is lower.
+(hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`:
+pass the tier's model on every launch, never the default. The effort is the owner's choice: where the
+harness takes it per launch (Cursor: an `[effort=...]` model suffix), pass the effort the owner chose; where
+it is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), the session runs at the
+effort the owner chose; never ask for another. Verify model and effort on the worker's recorded messages.
 
 ## Stopped or Failed Subagents (Always-On)
 
@@ -152,10 +157,21 @@ Avoiding the false positives: a subagent that analyzes model traces reads them t
 aggregates (counts, labels, ids). It never pulls raw model thinking or reasoning text, raw requests or whole
 trajectories into its context, and it describes them in neutral terms.
 
+**Errors must not acknowledge work:** a job counts as done only on a successful final reply and a verified
+artifact (the primary persona's "started is not done"), not merely an assistant message or tool call. Back off
+after provider failures, and re-check external side effects before replaying a partially completed batch. An
+outage and a failed quality gate are different findings.
+
 ## What Stays Inline
 
 - Single reads of known-small files, or one sliced/grepped read - spin-up costs more than it saves.
 - Steps whose output the very next decision depends on, completing in one round-trip.
 - Confirmations (safety policy) - delegate a confirm-first action only when the brief names it and
   the owner's approval or standing grant covers it.
+- Deletions: a worker deletes what its brief names or what the delegating session approves on request (an
+  approval given on request counts as part of the brief), with explicit, checked paths, so routine clean-up
+  stays off the delegator. That approval covers only what the delegating session may delete itself: files
+  its team created, what the project's prune rules or `.disposable` markers name, and what the owner's
+  approval or standing grant covers. Anything else the worker lists as candidates (a worker told to delete
+  "what nothing needs" was blocked by the harness's safety check).
 - Work where the deliverable IS the reading (the user asked to see the file).

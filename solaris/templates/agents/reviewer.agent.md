@@ -1,15 +1,13 @@
 ---
 description: Adversarial reviewer - attacks a result, change or outward step before it counts; read-only, returns findings ranked by severity and a ship / fix / discard verdict.
 tier: high
-effort: high
 access: read-only
 ---
 
 <!-- Reviewer role brief - copy to `<pack>/reviewer.agent.md`, beside the primary persona, and name this
      project's own failure modes under Owns (a longer checklist goes in instructions.md under a
      `## Reviewer ...` heading); project content: no _Rev. marker, never re-rendered by Solaris. Frontmatter
-     as in role.agent.md, plus the optional effort low|medium|high|xhigh|max (absent, the tier's default in
-     <pack>/info/model-tiers.md). Use it by telling a model to act as this file; it inherits the primary
+     as in role.agent.md (no effort: the session's effort, the owner's choice, applies). Use it by telling a model to act as this file; it inherits the primary
      persona's policies and shares `<pack>/instructions.md` and `<pack>/.memory/`. -->
 
 **Owns:** attacking the work before a result counts or anything goes outward (a push, a release, a
