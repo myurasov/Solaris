@@ -1,6 +1,6 @@
 ---
 name: update-project
-triggers: ["update <project>", "sync <project>", "migrate <project>", "update-project <slug>"]
+triggers: ["update <project>", "sync <project>", "migrate <project>", "update-project", "pack update"]
 antitriggers: ["update solaris", "sync solaris", "refresh solaris"]
 summary: Sync an ai-pack with framework/plugin master copies by per-file revision; run minor/major migrations.
 ---
@@ -65,6 +65,23 @@ revs and versions supersede an earlier one's Validate checks. After the last ste
 On failure, stop at the last good step and surface its Revert. Migrations written before 0.39.0 say `ai/`; read that as the project's
 `<pack>/`.
 
+**Moved paths.** A migration that moves a file or changes where something is written (a log, a state file, a
+folder) lists each old and new path in its Moved Paths section (older migrations say "moved to" in
+`touches`). The pack's own text may still name the old path, so after applying the migration grep the whole
+pack for each old path, by its distinctive tail (the file name, such as `interactions.jsonl`: the pack may
+write the path from the pack, the project root or `.memory/`), leaving out the history that stays as written:
+`grep -rnF --exclude-dir=archive --exclude-dir=interactions --exclude=interactions.jsonl '<tail>' <pack>/`.
+Act on every hit:
+
+- the pack's own rules and records - `<pack>/instructions.md`, `<pack>/spec.md`, a filled-in
+  `init`/`refresh` stub, `.memory/directions.md`, `.memory/context.md`, `.memory/handover-*.md`, job briefs:
+  point the hit at the new path, or mark the line superseded where it records an old decision. When the
+  migration hands the pack's content to the project's own session, pass it the list of hits instead;
+- a managed copy (the files `revs ff` syncs): the fast-forward replaces it; one still naming the old path
+  after the ff is a framework or plugin bug, so report it.
+
+List every old path with its hits and what was done in the summary (section 5), "no hits" included.
+
 ## 3. Update Plugins
 
 Step 1's revisions sync already reconciled each `<pack>/plugins/<plugin>/`. Additionally, for any plugin with a
@@ -102,7 +119,7 @@ whitespace, `*`, `?` or `[`, and not starting with `.`, `#` or `!`).
 
 ## 5. Summary + Revert
 
-Report what synced, what merged, and any versions set. Run
+Report what synced, what merged, any versions set, and the moved-path hits (section 2). Run
 `uv run -m solaris.tools.agents --check --dir projects/<slug>` too (personas and the shared
 `<pack>/instructions.md`; it flags pre-0.37 layout leftovers). `revs ff` is idempotent; migrations
 revert via their Revert section. Log the turn with

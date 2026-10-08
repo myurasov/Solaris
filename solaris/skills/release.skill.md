@@ -25,6 +25,14 @@ The user says **"do a release"**, **"cut a release"**, **"publish a release"**, 
 2. **Decide the version bump.** See [Choosing the version bump](#choosing-the-version-bump). Edit `pyproject.toml` `[project].version` **and** `solaris/__init__.py` `__version__` (they must match - `test_framework_version_reads_real_pyproject` asserts it; the 0.14-0.18 releases missed the `__init__.py` half for five versions straight).
 
 3. **Author the migration.** Every **MINOR / MAJOR** bump needs a migration at `solaris/migrations/<to_version>.md` (copy `solaris/migrations/template.md`). Fill all frontmatter fields (`to_version`, `from_version`, `title`, `breaking`, `touches`). A **marker migration** (no file edits, just records the version step) is valid when only framework internals changed. **PATCH** bumps get **no** migration.
+   - **Moved paths.** When the release moves a file or changes where something is written (a log, a state
+     file, a folder), in the framework or in a bundled plugin, the migration gets a **Moved Paths** section
+     listing each old and new path, one per line (`<pack>/.memory/interactions.jsonl` ->
+     `<pack>/.memory/interactions/<machine>.jsonl`), and its Migrate steps say what replaces a rule that
+     named the old path. `update-project` greps every pack for these old paths: the list is how a project's
+     own instructions, rules and skills learn of the move. Before writing it, grep the diff since the last
+     tag for renamed or re-pointed paths (`git diff --stat -M <prev-tag>..HEAD`, plus path strings changed in
+     tools and templates). A release that moves nothing writes "None." there; a moved path is never a PATCH.
 
 4. **Update docs to reflect the changes.** Always:
    - **Spec file** — add a "What changed in vX.Y.Z" sentence to the opening paragraph of the current spec (e.g. `solaris/spec/spec-v0.8.0.md`). For a **MINOR** bump, also create a new spec snapshot `solaris/spec/spec-v<version>.md` as a copy of the updated current spec, then update every spec link across the repo (`AGENTS.md`, `README.md`, `solaris/solaris.agent.md`) to point to the new file. Keep the old spec file in place (it is referenced by git history and migration notes).

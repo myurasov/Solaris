@@ -10,6 +10,7 @@ touches:
 ---
 
 - [Summary](#summary)
+- [Moved Paths](#moved-paths)
 - [Pre-flight checks](#pre-flight-checks)
 - [Migrate](#migrate)
 - [Validate](#validate)
@@ -21,6 +22,8 @@ Author guide:
   immediately preceding version. Mark breaking: true for a MAJOR bump or a behaviorally breaking change.
 - Mark revertible: false ONLY for genuinely irreversible changes (data loss).
 - List every ai-pack path the migration writes/creates/deletes in `touches`.
+- List in Moved Paths every file, log or folder the release moves or writes elsewhere (framework or bundled
+  plugin), old -> new, one per line: update-project greps each pack for the old paths. "None." when nothing moved.
 - Helper scripts (optional) live under solaris/migrations/<to_version>/ and run via `uv run`.
 - Migrations modify projects/<slug>/ai/ plus any project-root metadata files they declare in touches
   (e.g. .version, AGENTS.md) - never the project's source/ code. Plugin overlay contents
@@ -32,6 +35,14 @@ Author guide:
 
 Why this migration exists, what it changes, and what risk it carries. 2-4 sentences - the user sees this
 before consenting.
+
+## Moved Paths
+
+Each file, log or folder this release moves or writes elsewhere, one per line as old -> new (`<pack>/` paths
+for the pack, repo paths for the framework); `update-project` greps every pack for each old path and points the
+pack's own rules, instructions and records at the new one.
+
+- `<pack>/old/path` -> `<pack>/new/path` (or "None.")
 
 ## Pre-flight checks
 
