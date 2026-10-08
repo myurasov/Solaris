@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """hostdash: a live view of the jobs and load on the hosts in the resource-sharing inventory.
 
@@ -7,7 +7,7 @@
     python3 hostdash.py --once       one snapshot, printed (for agents and logs)
 
 Per host: CPU load against its cores, memory, disk, and each GPU's use and memory; under it the host's jobs: the
-claims in its claims folder (project/job, class, GPUs, cores, age, and `no process` once the process a claim is
+claims in its claims folder (project/job, class, GPUs, cores, age, and `no process` once every process a claim is
 tied to has gone), its tmux sessions, and its three busiest processes (the login's own with their command line,
 any other login's by program name only: a command line can carry secrets). Read-only. Each host keeps one ssh
 connection open between refreshes (ControlMaster, closed two minutes after its last use), so a refresh every few
@@ -63,7 +63,9 @@ for p in sorted(glob.glob(os.path.join(os.path.expanduser(sys.argv[1]), "claims"
         with open(p) as f:
             c = json.load(f)
         r = c.get("resources") or {}
-        pids = [x for x in (c.get("pid"), (c.get("launcher") or {}).get("pid")) if x]
+        # the job, its watcher and any process attached with claim --pid or renew --pid
+        pids = [x for x in [c.get("pid"), (c.get("launcher") or {}).get("pid")]
+                + [p.get("pid") for p in c.get("pids") or [] if isinstance(p, dict)] if x]
         print("claim=" + json.dumps({"agent": c.get("agent"), "job": c.get("job"), "class": c.get("class"),
                                      "gpus": [[g.get("index"), g.get("share")] for g in r.get("gpus") or []],
                                      "cores": len(r.get("cores") or []), "created": c.get("created"),

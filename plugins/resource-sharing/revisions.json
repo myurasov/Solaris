@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/resource-sharing.rule.md": {
-      "rev": 4,
-      "hash": "a6590d347543058598b50bf81bf3361482c953c76deeea768bb45cd18d45d407",
+      "rev": 5,
+      "hash": "2ad72c9f3361b1661ba21711246a4e2d81d68e2aa38398c7999ce5ca12435213",
       "history": [
         {
           "rev": 1,
@@ -21,12 +21,16 @@
         {
           "rev": 4,
           "hash": "a6590d347543058598b50bf81bf3361482c953c76deeea768bb45cd18d45d407"
+        },
+        {
+          "rev": 4,
+          "hash": "2ad72c9f3361b1661ba21711246a4e2d81d68e2aa38398c7999ce5ca12435213"
         }
       ]
     },
     "shared/resource-sharing.skill.md": {
-      "rev": 7,
-      "hash": "d6d20bbda7709b18ab6a71443a2567f020da2bfea728896663ba7a65c4e87f53",
+      "rev": 8,
+      "hash": "003ec74fcf703865d759d89ac51fd7b9548ad897db2f82fba94bf93e05778d92",
       "history": [
         {
           "rev": 1,
@@ -51,12 +55,16 @@
         {
           "rev": 7,
           "hash": "d6d20bbda7709b18ab6a71443a2567f020da2bfea728896663ba7a65c4e87f53"
+        },
+        {
+          "rev": 7,
+          "hash": "003ec74fcf703865d759d89ac51fd7b9548ad897db2f82fba94bf93e05778d92"
         }
       ]
     },
     "shared/tools/hostclaims.py": {
-      "rev": 4,
-      "hash": "d098699756d1ede9f20747cb54dbc790c378b9766fa8f0fef07a61dae1fff805",
+      "rev": 5,
+      "hash": "867f0f3b5f2d171eee7ee01978db74ca2bcc6d9a83d8084aa2c4be07d2dcc07f",
       "history": [
         {
           "rev": 1,
@@ -73,26 +81,38 @@
         {
           "rev": 4,
           "hash": "d098699756d1ede9f20747cb54dbc790c378b9766fa8f0fef07a61dae1fff805"
+        },
+        {
+          "rev": 4,
+          "hash": "867f0f3b5f2d171eee7ee01978db74ca2bcc6d9a83d8084aa2c4be07d2dcc07f"
         }
       ]
     },
     "shared/tools/hostdash.py": {
-      "rev": 1,
-      "hash": "3fde1231af6d1682727c4bd336bb5f2f4ba607146316d932d33b0b0b4d13ec5d",
+      "rev": 2,
+      "hash": "007b94b972cc615990cc479801453edf8c44636f3276c5b1642c054cee835b2a",
       "history": [
         {
           "rev": 1,
           "hash": "3fde1231af6d1682727c4bd336bb5f2f4ba607146316d932d33b0b0b4d13ec5d"
+        },
+        {
+          "rev": 1,
+          "hash": "007b94b972cc615990cc479801453edf8c44636f3276c5b1642c054cee835b2a"
         }
       ]
     },
     "shared/tools/hosthealth.py": {
-      "rev": 1,
-      "hash": "5952285ca20d58fd8789d864ee98883da23bd5f03148afa87548e2333671e36c",
+      "rev": 2,
+      "hash": "aef97276ba6426bb8b08d0f3aad6f8f277a17e4d8eb625b35c35966908e1aa73",
       "history": [
         {
           "rev": 1,
           "hash": "5952285ca20d58fd8789d864ee98883da23bd5f03148afa87548e2333671e36c"
+        },
+        {
+          "rev": 1,
+          "hash": "aef97276ba6426bb8b08d0f3aad6f8f277a17e4d8eb625b35c35966908e1aa73"
         }
       ]
     }

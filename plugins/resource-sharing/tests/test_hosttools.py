@@ -578,7 +578,115 @@ class TestHealthEndToEnd(Machine):
         self.assertEqual(set(self.governors().values()), {"performance"})
 
 
+class TestPowerMax(Machine):
+    def run_script(self, scope, power):
+        r = subprocess.run(["sh", "-s"], input=hh.host_script(scope, power=power).encode(), stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=60)
+        return r.stdout.decode()
+
+    def test_owner_raises_to_the_maximum_and_a_guest_only_to_the_default(self):
+        # cards whose 450 W default is below their 600 W maximum
+        self.set_gpus([gpu(i, persistence="Enabled", limit=lim, default="450.00")
+                       for i, lim in enumerate(("400.00", "450.00", "600.00"))])
+        out = self.run_script({"scope": "host"}, "max")
+        self.assertEqual([ln[2:] for ln in out.splitlines() if ln.startswith("F|GPU")],
+                         ["GPU 0 power limit 400.00 -> 600.00 W", "GPU 1 power limit 450.00 -> 600.00 W"])
+        self.assertEqual([g["power.limit"] for _, g in sorted(self.gpus().items())], ["600.00"] * 3)
+        rec = hh.assess(out, 3, "max")
+        self.assertEqual(([p for p in rec["problems"] if "power" in p], [g["power_max_w"] for g in rec["gpus"]]),
+                         ([], [600.0] * 3))
+        # the maximum is the owner's call: a guest's scope stops at the default
+        self.set_gpus([gpu(i, persistence="Enabled", limit="400.00", default="450.00") for i in range(2)])
+        out = self.run_script({"scope": "claims", "gpus": [1], "cores": []}, "max")
+        self.assertEqual([ln[2:] for ln in out.splitlines() if ln.startswith("F|GPU")],
+                         ["GPU 1 power limit 400.00 -> 450.00 W"])
+        self.assertIn("POWER=default\n", hh.host_script({"scope": "claims", "gpus": [1], "cores": []}, power="max"))
+
+    def test_the_check_holds_the_limit_against_its_target(self):
+        self.set_gpus([gpu(0, persistence="Enabled", limit="450.00", default="450.00", maximum="600.00")])
+        out = self.run_script(None, "default")
+        self.assertIn("PMAX|0, 600.00", out)
+        self.assertEqual([p for p in hh.assess(out, 1)["problems"] if "power" in p], [])
+        self.assertEqual([p for p in hh.assess(out, 1, "max")["problems"] if "power" in p],
+                         ["GPU 0 power limit 450 W below its 600 W maximum"])
+        self.assertIn("450/450W (max 600W)", hh.gpu_text(hh.assess(out, 1)["gpus"][0]))
+        # a driver that reports no maximum: the check holds the limit against the default
+        self.assertEqual(hh.assess(HEALTHY, 2, "max")["problems"], [])
+        self.assertEqual([p for p in hh.assess(SICK, 2, "max")["problems"] if "power" in p],
+                         ["GPU 0 power limit 500 W below its 600 W default"])
+
+    def test_the_maximum_is_judged_only_on_hosts_the_project_owns(self):
+        # a clean host: empty kernel log, performance governors, GPUs at their 450 W default below a 600 W maximum
+        write(os.path.join(self.bin, "dmesg"), "#!/bin/sh\n", 0o755)
+        for n in os.listdir(self.cpu):
+            write(os.path.join(self.cpu, n, "cpufreq", "scaling_governor"), "performance\n")
+        self.set_gpus([gpu(i, persistence="Enabled", limit="450.00", default="450.00") for i in range(2)])
+        mine = {"name": "mine", "target": "local", "owner": "proj", "gpus": "2x H200 NVL"}
+        theirs = {"name": "theirs", "target": "local", "owner": "peer", "gpus": "2x H200 NVL"}
+        rc, out = self.run_tool(hh, "--hosts", self.inventory([mine, theirs]), "--agent", "proj", "--power", "max",
+                                "--json", code=hh.PROBLEMS)
+        recs = json.loads(out)["hosts"]
+        self.assertEqual(recs["mine"]["problems"], ["GPU 0 power limit 450 W below its 600 W maximum",
+                                                    "GPU 1 power limit 450 W below its 600 W maximum"])
+        self.assertEqual((recs["theirs"]["problems"], recs["mine"]["power"], recs["theirs"]["power"]),
+                         ([], "max", "default"))
+        # a project that asks for the maximum gets no lasting problem on a host it only uses
+        self.run_tool(hh, "--hosts", self.inventory([theirs]), "--agent", "proj", "--power", "max", code=hh.OK)
+        self.run_tool(hh, "--hosts", self.inventory([theirs]), "--agent", "peer", "--power", "max", code=hh.PROBLEMS)
+        self.assertFalse([c for c in self.calls() if " -pl " in " %s " % c])
+
+    def test_power_option_and_the_policy_end_to_end(self):
+        proj = os.path.join(self.tmp, "proj")
+        write(os.path.join(proj, "ai", "manifest.json"), json.dumps({"framework_version": "0.40.0",
+                                                                     "project": {"name": "proj"}}))
+        conf = os.path.join(proj, "ai", ".memory", "resource-sharing.json")
+        write(conf, json.dumps({"project": "proj", "share_with": ["guest"]}))
+        inv = self.inventory([{"name": "box", "target": "local", "root": self.claims_root(), "owner": "proj",
+                               "gpus": "3x H200"}])
+        base = ["--project", proj, "--hosts", inv]
+        self.run_tool(hc, *base + ["install", "--launcher", "setsid", "--reserve-cores", "0", "--reserve-ram", "0"],
+                      code=0)
+        self.set_gpus([gpu(i, persistence="Enabled", limit="450.00", default="450.00") for i in range(3)])
+        # read-only: the maximum is the target the check holds the limit to
+        rc, out = self.run_tool(hh, *base + ["--power", "max"], code=hh.PROBLEMS)
+        self.assertIn("GPU 0 power limit 450 W below its 600 W maximum", out)
+        self.assertFalse([c for c in self.calls() if " -pl " in " %s " % c])
+        # the default stays the default limit
+        # (the stand-in kernel log always holds an Xid, so every run here finds problems)
+        self.run_tool(hh, *base + ["--fix"], code=hh.PROBLEMS)
+        self.assertEqual(set(g["power.limit"] for g in self.gpus().values()), {"450.00"})
+        # the owner's policy asks for the maximum
+        write(conf, json.dumps({"project": "proj", "share_with": ["guest"], "policy": {"health": {"power": "max"}}}))
+        rc, out = self.run_tool(hh, *base + ["--fix"], code=hh.PROBLEMS)
+        self.assertIn("GPU 0 power limit 450.00 -> 600.00 W", out)
+        self.assertEqual(set(g["power.limit"] for g in self.gpus().values()), {"600.00"})
+        # a guest asking for the maximum is told it is the owner's call, and gets the default
+        self.set_gpus([gpu(i, persistence="Enabled", limit="400.00", default="450.00") for i in range(3)])
+        self.run_tool(hc, *["--hosts", inv, "--agent", "guest", "claim", "--job", "j", "--cores", "1", "--ram", "1G",
+                            "--gpu", "1"], code=0)
+        rc, out = self.run_tool(hh, *["--hosts", inv, "--agent", "guest", "--as-owner", "--fix", "--power", "max"])
+        self.assertIn("fixed: GPU 1 power limit 400.00 -> 450.00 W", out)
+        self.assertIn("power max is the owner's call", out)
+        # and its check holds the limits to the default there, as its fix does
+        self.assertNotIn("maximum", out)
+        write(conf, json.dumps({"project": "proj", "policy": {"health": {"power": "most"}}}))
+        self.run_tool(hh, *base, code=hh.USAGE)
+
+
 class TestDashboard(Machine):
+    def test_a_claim_with_an_attached_process_still_has_one(self):
+        root = os.path.join(self.tmp, "claims")
+        dead = subprocess.Popen(["true"])
+        dead.wait()
+        write(os.path.join(root, "claims", "c--more.json"), json.dumps({
+            "id": "c--more", "agent": "c", "job": "more", "class": "P1", "pid": dead.pid,
+            "pids": [{"pid": os.getpid(), "pid_start": "x"}], "created": "2026-01-01T00:00:00Z",
+            "resources": {"cores": [0], "gpus": []}}))
+        inv = self.inventory([{"name": "gpu-box", "target": "user@gpu-box", "root": root}])
+        rc, out = self.run_tool(hd, "--once", "--hosts", inv, "--ssh", self.ssh, code=0)
+        self.assertIn("c/more P1 1 cores", out)
+        self.assertNotIn("(no process)", out)
+
     def test_ssh_reuses_one_connection(self):
         ctx = types.SimpleNamespace(ssh=["/tmp/hss"])
         cmd = hd.ssh_cmd(ctx, {"name": "a", "target": "user@a", "opts": ["-o", "ControlPath=/mine"]})

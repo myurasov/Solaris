@@ -1,10 +1,10 @@
-# rev. 1
+# rev. 2
 
 """hosthealth: GPU host health checks over the resource-sharing host inventory.
 
 Runs on the controller and checks each host over ssh (a shell script on stdin to `sh -s`), read-only unless --fix:
 
-    python3 hosthealth.py [--host H ...] [--fix] [--json]
+    python3 hosthealth.py [--host H ...] [--fix] [--power default|max] [--json]
 
 Per host: kernel, load, free memory and disk, the CPU frequency governor, NVIDIA Xid codes in the kernel log since
 boot (the application-class codes 13, 31, 43 and 45 are left out), GPUs that failed to start, and per GPU its
@@ -15,7 +15,11 @@ the bus or failing to start is missing from the driver's list.
 
 --fix first applies the settings that are safe under running jobs and that a reboot resets (a periodic check
 re-applies them): persistence mode on, each GPU's power limit back up to its default (never above it: a maximum
-over the default can overload a power supply the GPUs share), and the `performance` CPU governor. It acts as the
+over the default can overload a power supply the GPUs share), and the `performance` CPU governor. --power max (or
+"health": {"power": "max"} in the policy block of the project's resource-sharing.json) makes the most the GPU
+allows the limit the check expects and --fix sets, on a host the project owns only (the host's own record, read
+for --fix, else its inventory entry): going over the default is the owner's call, so on any other host the check
+and a guest's --fix hold the limit to the default as before. It acts as the
 calling project, and only as far as the sharing rules allow: on a host the project owns on record (the host's own
 record, else an owner its inventory entry names; a host listed with no owner is nobody's here), on every GPU and
 core (and it enables the persistence daemon); on a host where it only holds live claims, on the cores of those
@@ -78,6 +82,8 @@ if command -v nvidia-smi >/dev/null 2>&1; then
   esac
   [ "$rc" = 124 ] && out="nvidia-smi did not answer within 60 s (a GPU may be hung)"
   printf '%s\n' "$out" | sed 's/^/G|/'
+  # the most each GPU's power limit may be set to, asked apart so a driver without the field changes nothing above
+  [ "$rc" = 0 ] && $T nvidia-smi --query-gpu=index,power.max_limit --format=csv,noheader,nounits 2>/dev/null | sed 's/^/PMAX|/'
 else
   echo "NOSMI|"
 fi
@@ -92,8 +98,10 @@ if command -v nvidia-smi >/dev/null 2>&1 && idx=$($T nvidia-smi --query-gpu=inde
     if [ "$($T nvidia-smi -i "$i" --query-gpu=persistence_mode --format=csv,noheader 2>/dev/null)" = Disabled ]; then
       if $T $SUDO nvidia-smi -i "$i" -pm 1 >/dev/null 2>&1; then echo "F|GPU $i persistence mode on"; else echo "F|GPU $i persistence mode: not permitted"; fi
     fi
-    # back up to the default limit, never above: a maximum over the default can overload a shared power supply
-    pl=$($T nvidia-smi -i "$i" --query-gpu=power.limit,power.default_limit --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
+    # back up to the default limit, never above (a maximum over the default can overload a shared power supply),
+    # unless the owner asks for the most the GPU allows (POWER=max)
+    q=power.limit,power.default_limit; [ "$POWER" = max ] && q=power.limit,power.max_limit
+    pl=$($T nvidia-smi -i "$i" --query-gpu=$q --format=csv,noheader,nounits 2>/dev/null | tr -d ' ')
     cur=${pl%%,*}; dflt=${pl#*,}
     case "$cur,$dflt" in *[!0-9.,]*|,*|*,) continue;; esac
     if [ "${cur%.*}" -lt "${dflt%.*}" ]; then
@@ -143,18 +151,19 @@ def load_tool(name):
 hc = load_tool("hostclaims")
 
 
-def host_script(scope=None, sudo=True, cpu=CPU_SYS):
+def host_script(scope=None, sudo=True, cpu=CPU_SYS, power="default"):
     # what one ssh call runs: the fixes the scope allows (none without one), then the probe. SUDO runs the
     # privileged steps and reads the kernel log for a login other than root, and only in the owner's scope: on
     # another's host a sudo attempt lands in the owner's security log. T bounds nvidia-smi, which can hang on a GPU
-    # off the bus.
+    # off the bus. POWER max raises power limits to the most each GPU allows, in the owner's scope only.
     whole = bool(scope) and scope.get("scope") == "host"
     s = ("export LC_ALL=C\nSUDO=\n" + ('[ "$(id -u)" = 0 ] || SUDO="sudo -n"\n' if sudo and whole else "")
          + 'T=\ncommand -v timeout >/dev/null 2>&1 && T="timeout 60"\nCPU=%s\n' % shlex.quote(cpu))
     if scope and scope.get("scope"):
         gpus = "all" if whole else " ".join(str(int(i)) for i in scope.get("gpus") or [])
         cores = "all" if whole else " ".join(str(int(c)) for c in scope.get("cores") or [])
-        s += "GPUS=%s\nCORES=%s\nDAEMON=%d\n%s" % (shlex.quote(gpus), shlex.quote(cores), 1 if whole else 0, FIX)
+        s += "GPUS=%s\nCORES=%s\nDAEMON=%d\nPOWER=%s\n%s" % (shlex.quote(gpus), shlex.quote(cores), 1 if whole else 0,
+                                                            "max" if whole and power == "max" else "default", FIX)
     return s + PROBE.replace("@FIELDS@", ",".join(FIELDS))
 
 
@@ -228,7 +237,7 @@ def parse_gpu(line):
             "ecc_uncorrected": ecc, "compute_mode": cm}
 
 
-def gpu_problems(g):
+def gpu_problems(g, power="default"):
     i, out = g["index"], []
     if g["persistence"] == "Disabled":
         out.append("GPU %d persistence mode off" % i)
@@ -236,9 +245,13 @@ def gpu_problems(g):
         out.append("GPU %d MIG mode %s" % (i, g["mig"]))
     if g["compute_mode"] not in NA and g["compute_mode"] != "Default":
         out.append("GPU %d compute mode %s (jobs sharing a GPU need Default)" % (i, g["compute_mode"]))
-    # only a limit below the default: one above it was raised on purpose, and the maximum is no target
-    pl, pdef = g["power_limit_w"], g["power_default_w"]
-    if pl is not None and pdef is not None and pl < pdef - 1:
+    # only a limit below the target: by default the GPU's default limit (one above it was raised on purpose); with
+    # power max the most the GPU allows, where the driver reports it
+    pl, pdef, pmax = g["power_limit_w"], g["power_default_w"], g.get("power_max_w")
+    if power == "max" and pl is not None and pmax is not None:
+        if pl < pmax - 1:
+            out.append("GPU %d power limit %.0f W below its %.0f W maximum" % (i, pl, pmax))
+    elif pl is not None and pdef is not None and pl < pdef - 1:
         out.append("GPU %d power limit %.0f W below its %.0f W default" % (i, pl, pdef))
     try:
         bits = int(g["reasons"], 16)
@@ -252,11 +265,12 @@ def gpu_problems(g):
     return out
 
 
-def assess(out, want):
-    # the probe's lines -> facts, problems (what needs a repair) and notes
+def assess(out, want, power="default"):
+    # the probe's lines -> facts, problems (what needs a repair) and notes; power is the limit the check expects
     rec = {"kernel": None, "cpus": None, "load": None, "mem_free_gb": None, "disk_free_gb": None, "governors": {},
            "xids": None, "gpu_start_failures": 0, "gpus": [], "gpus_expected": want, "nvidia_smi": True,
-           "smi_errors": [], "fixed": [], "problems": [], "notes": []}
+           "smi_errors": [], "fixed": [], "problems": [], "notes": [], "power": power}
+    pmax = {}
     for line in out.splitlines():
         key, sep, val = line.partition("|")
         if not sep:
@@ -288,6 +302,12 @@ def assess(out, want):
             rec["nvidia_smi"] = False
         elif key == "F":
             rec["fixed"].append(val)
+        elif key == "PMAX":
+            f = [x.strip() for x in val.split(",")]
+            if len(f) == 2 and f[0].isdigit() and num(f[1]) is not None:
+                pmax[int(f[0])] = num(f[1])
+    for g in rec["gpus"]:
+        g["power_max_w"] = pmax.get(g["index"])
     probs, notes, seen = rec["problems"], rec["notes"], len(rec["gpus"])
     if not rec["nvidia_smi"]:
         if want:
@@ -311,7 +331,7 @@ def assess(out, want):
             probs.append("Xid %s since boot (hardware or driver class: see NVIDIA's Xid catalog)"
                          % ", ".join("%d x%d" % x for x in hw))
     for g in rec["gpus"]:
-        probs.extend(gpu_problems(g))
+        probs.extend(gpu_problems(g, power))
     slow = sorted((name, n) for name, n in rec["governors"].items() if name != "performance")
     if slow:
         probs.append("CPU governor " + ", ".join("%s on %d cores" % x for x in slow))
@@ -351,7 +371,7 @@ def fix_scope(me, h, st):
                    % ("owned by %s" % owner if owner else "no owner on record", me)}
 
 
-def check_host(ctx, h, me, fix, timeout):
+def check_host(ctx, h, me, fix, timeout, power="default"):
     rec = {"host": h["name"], "project": h.get("project"), "owner": h.get("owner"), "fix": None}
     if fix:
         # the host's own record of its owner wins; failing that, only an owner the inventory names outright counts
@@ -361,12 +381,20 @@ def check_host(ctx, h, me, fix, timeout):
             rec["fix"] = fix_scope(me, h, st)
         else:
             rec["fix"] = {"scope": None, "why": "its owner and claims could not be read: %s" % st.get("error")}
-    out, err, code = run_script(ctx, h, host_script(rec["fix"]), timeout)
+    # the maximum is the owner's call: judged and set only on a host this project owns (the host's own record, read
+    # for --fix, else its inventory entry); on a host it only uses, the limit is held to the default as without it
+    owned = (rec["fix"] or {}).get("scope") == "host" if fix else (me is not None and h.get("owner") == me)
+    judged = power if owned else "default"
+    rec["power"] = judged
+    out, err, code = run_script(ctx, h, host_script(rec["fix"], power=judged), timeout)
     if err:
         rec.update(code=code, error=err, problems=[("unreachable: " if code == UNREACHABLE else "") + err], notes=[],
                    fixed=[ln[2:] for ln in out.splitlines() if ln.startswith("F|")])
         return rec
-    rec.update(assess(out, want_gpus(h.get("gpus"))))
+    rec.update(assess(out, want_gpus(h.get("gpus")), judged))
+    if fix and power == "max" and not owned:
+        rec["notes"].append("power max is the owner's call (over the default a shared power supply may overload): on a "
+                            "host this project does not own the limit is held to, and raised to, the default only")
     rec.update(code=OK, error=None)
     return rec
 
@@ -377,9 +405,13 @@ def fmt(x, unit=""):
 
 def gpu_text(g):
     mem = "%s/%s" % (fmt(g["mem_used_gb"]), fmt(g["mem_total_gb"], "G")) if g["mem_total_gb"] is not None else "shared mem"
-    return "%d %s%% %s %s %s/%s %s/%s" % (g["index"], fmt(g["util_pct"]), mem, fmt(g["temp_c"], "C"), fmt(g["sm_mhz"]),
-                                          fmt(g["sm_max_mhz"], "MHz"), fmt(g["power_limit_w"]),
-                                          fmt(g["power_default_w"], "W"))
+    # limit/default W, and the most it may be set to where that differs from the default
+    pmax = g.get("power_max_w")
+    top = " (max %s)" % fmt(pmax, "W") if pmax is not None and g["power_default_w"] is not None \
+        and abs(pmax - g["power_default_w"]) >= 1 else ""
+    return "%d %s%% %s %s %s/%s %s/%s%s" % (g["index"], fmt(g["util_pct"]), mem, fmt(g["temp_c"], "C"), fmt(g["sm_mhz"]),
+                                            fmt(g["sm_max_mhz"], "MHz"), fmt(g["power_limit_w"]),
+                                            fmt(g["power_default_w"], "W"), top)
 
 
 def host_lines(h, rec):
@@ -426,6 +458,9 @@ def build_parser():
     ap.add_argument("--host", action="append", help="inventory host (repeat; default: every host)")
     ap.add_argument("--fix", action="store_true", help="also set persistence mode, the default GPU power limit and "
                     "the performance CPU governor: on hosts this project owns, or on what only its live claims use")
+    ap.add_argument("--power", choices=("default", "max"), help="the GPU power limit the check expects and --fix sets: "
+                    "default (each GPU's default limit; the default) or max (the most each GPU allows, on hosts this "
+                    "project owns; others keep the default); default from the policy's health.power")
     ap.add_argument("--json", action="store_true", help="print JSON")
     ap.add_argument("--hosts", help="use exactly this inventory JSON [{name, target, opts}] (or HOSTCLAIMS_HOSTS)")
     ap.add_argument("--project", help="project folder to act for (default: found from here)")
@@ -443,12 +478,15 @@ def main(argv=None):
         if a.timeout is not None and a.timeout <= 0:
             raise hc.Fail("--timeout must be positive", USAGE)
         ctx = hc.Ctx(a)
+        power = a.power or (ctx.policy.get("health") or {}).get("power") or "default"
+        if power not in ("default", "max"):
+            raise hc.Fail("the policy's health.power must be default or max, not %r" % (power,), USAGE)
         hosts = ctx.hosts(a.host)
         # --fix changes hosts, so it acts as the calling project, like hostclaims' owner actions
         me = ctx.need_owner_identity() if a.fix else ctx.agent
         timeout = a.timeout or 120.0
         with ThreadPoolExecutor(max_workers=max(1, min(16, len(hosts)))) as ex:
-            recs = list(ex.map(lambda h: check_host(ctx, h, me, a.fix, timeout), hosts))
+            recs = list(ex.map(lambda h: check_host(ctx, h, me, a.fix, timeout, power), hosts))
     except hc.Fail as e:
         if a.json:
             print(json.dumps({"ok": False, "code": e.code, "error": str(e)}, indent=1, sort_keys=True))

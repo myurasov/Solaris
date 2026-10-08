@@ -1,4 +1,4 @@
-_Rev. 4_
+_Rev. 5_
 
 # Rule: Resource Sharing (Always-On) <!-- omit in toc -->
 
@@ -11,7 +11,9 @@ hosts. The how-to is in `resource-sharing.skill.md`.
   not even with requests to a server that serves other jobs' runs (one heavy request can kill it): run
   diagnostics and experiments on a server under your own claim.
 - **Keep claims alive.** A `claim` without `--pid` lapses 15 minutes after its last renewal (it prints the
-  time): tie it to your process with `--pid`, or re-run the same `claim` before then. `run` needs neither.
+  time): tie it to your job's own long-lived process with `--pid` (a repeat `claim --pid` or `renew --pid`
+  attaches more), or renew it (`renew --job J`, or re-run the same `claim`) before then. `run` needs neither.
+  Change a live claim's end, preemptibility or partners with `renew`, never by releasing and claiming again.
 - **Never touch another project's claim.** Do not release, edit, stop or delete another project's claim,
   hold or files. `reap` moves stale claims to `stale/` (never deleting them) and keeps orphans; run by the
   owner it also prunes finished run folders older than 14 days, `$HOSTCLAIMS_RUN_DIR` included, so keep
@@ -22,7 +24,8 @@ hosts. The how-to is in `resource-sharing.skill.md`.
   owner; nothing is approved for a human owner without their yes. Guests keep everything they write on a
   host, caches included, inside their own folder there (point the cache homes at it before the first job),
   and report problems they find to the owner with a maintenance `request` instead of fixing them; the one
-  exception is `hosthealth.py --fix`, which changes only what their own live claims hold alone, without sudo.
+  exception is `hosthealth.py --fix`, which changes only what their own live claims hold alone, without sudo,
+  and never sets a GPU power limit above its default (`--power max` is the owner's call).
 - **Pick up sharing changes.** Guests run `shared` at every audit and at least hourly: bring NEW hosts into use
   through claims, stop using GONE ones (release your claims there), then `shared --ack`. Owners run `install --all`
   right after adding machines or changing `share_with`, and tell the projects they share with.
@@ -35,7 +38,9 @@ hosts. The how-to is in `resource-sharing.skill.md`.
   or launch new. Owners run `audit` at least every two hours (hourly is better), answer open requests there,
   and never leave a paid instance idle without a decision.
 - **Honour yield requests.** Long preemptible jobs checkpoint and exit on `SIGTERM` or when
-  `$HOSTCLAIMS_YIELD_FILE` appears.
+  `$HOSTCLAIMS_YIELD_FILE` appears; a job run with `--yield-signal none` gets no `TERM` and must end itself within
+  the grace, after which `KILL` still comes. Claims that only work together are paired (`--yield-with`) so they
+  yield in order.
 - **Watch jobs by done markers.** Poll `done.json`, never `pgrep -f` over ssh; put `;` rather than `&&`
   before background steps in hand-written launch lines. After exit code 4 (unreachable), run `status` on
   that host before retrying elsewhere: the claim or launch may have happened.

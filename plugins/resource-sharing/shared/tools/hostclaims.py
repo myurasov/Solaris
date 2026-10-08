@@ -1,4 +1,4 @@
-# rev. 4
+# rev. 5
 
 """hostclaims: share hosts between agents through claim files kept on each host.
 
@@ -10,9 +10,9 @@ the jobs started with `run` and their watchers (in tmux) run on a host.
 
     python3 hostclaims.py [--hosts FILE] [--ssh PROG] [--agent NAME] <command> ...
 
-Commands: install, uninstall, status, shared, claim, run, release, reap, yield,
-usage, pool, lease, extend, request, approve, decline, fit, audit (`<command> -h`
-lists options). Host footprint: ~/.solaris/claims/ (host.json, status.json,
+Commands: install, uninstall, status, shared, claim, run, renew, release, reap,
+yield, usage, pool, lease, extend, request, approve, decline, fit, audit
+(`<command> -h` lists options). Host footprint: ~/.solaris/claims/ (host.json, status.json,
 history.jsonl, .lock, claims/, stale/, run/<claim-id>/, requests/, pools/).
 Stdlib only; Python 3.8 or newer on the controller and on every host.
 Exit codes: 0 ok, 1 error, 2 bad usage, 3 does not fit, 4 host unreachable
@@ -101,6 +101,13 @@ ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]{0,200}$")
 POOL_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 EPS = 1e-6
 GIB = float(1 << 30)
+# processes smaller than this count by their RSS (a PSS read walks the page tables; small ones change nothing)
+PSS_MIN_GB = 1.0 / 64
+# a process pinned to some cores holds them only from this size up (helpers and kernel threads are smaller)
+PINNED_MIN_GB = 1.0 / 16
+# paired claims: the next claim's yield follows this long after its partner's grace ran out
+DELIVER_MARGIN_S = 30.0
+NONE_WORDS = ("none", "-", "")
 
 
 class Fail(Exception):
@@ -525,6 +532,52 @@ def environ_claim(pid, ids):
     return None
 
 
+def read_pss(pid):
+    # proportional set size in GiB: a page shared by several processes counts once across them, so forked workers
+    # that share their parent's memory are not counted many times; None when it cannot be read (another login's
+    # process, a kernel older than 4.14, a process gone)
+    try:
+        with open("/proc/%d/smaps_rollup" % int(pid)) as f:
+            for line in f:
+                if line.startswith("Pss:"):
+                    return int(line.split()[1]) / 1048576.0
+    except (OSError, ValueError, IndexError):
+        return None
+    return None
+
+
+def prog_name(pid):
+    # a process's program name (never its arguments), or None
+    try:
+        with open("/proc/%d/comm" % int(pid)) as f:
+            return f.read().strip() or None
+    except (OSError, ValueError):
+        pass
+    rc, out, _ = run_quiet(["ps", "-o", "comm=", "-p", str(int(pid))], 10)
+    name = out.strip()
+    return os.path.basename(name) if rc == 0 and name else None
+
+
+def pinned_procs(procs, cpus):
+    # processes pinned to fewer than half of the online cores (a policy over one node of a two-node host is no pin),
+    # leaving out kernel threads and small helpers: [{pid, cores, rss_gb}]; Linux only
+    if procs is None or not hasattr(os, "sched_getaffinity"):
+        return []
+    online = set(cpus)
+    out = []
+    for pid, info in procs.items():
+        if pid <= 2 or info[0] == 2 or info[3] < PINNED_MIN_GB or pid == os.getpid():
+            continue
+        try:
+            s = set(os.sched_getaffinity(pid)) & online
+        except (OSError, OverflowError, ValueError):
+            # gone, not ours, or not a real pid
+            continue
+        if s and len(s) * 2 < len(online):
+            out.append({"pid": pid, "cores": sorted(s), "rss_gb": round(info[3], 2)})
+    return out
+
+
 def cpu_times():
     out = {}
     try:
@@ -676,6 +729,8 @@ def take_probe(root, cfg, sim, sample=True):
         warnings.append(err)
     pr["gpus"], pr["gpu_procs"], pr["gpu_error"] = gpus, procs, err
     pr["procs"] = None if sim else proc_table()
+    # processes pinned to some cores: simulated rows are taken as given
+    pr["pinned"] = [dict(p) for p in sim.get("pinned") or []] if sim else pinned_procs(pr["procs"], pr["cpus"])
     pr["claim_rss_gb"] = dict(sim.get("claim_rss_gb") or {})
     pr["unclaimed_procs"] = list(sim.get("unclaimed_procs") or [])
     return pr
@@ -684,7 +739,7 @@ def take_probe(root, cfg, sim, sample=True):
 def load_state(root, req, cfg, sim, sample=True):
     return {"root": root, "cfg": cfg, "sim": sim, "now": now_of(req, sim),
             "probe": take_probe(root, cfg, sim, sample), "lease": effective_lease(cfg, req.get("inv_lease")),
-            "gpu_rows": [], "rss": {}, "big": []}
+            "gpu_rows": [], "mem": {}, "mem_src": {}, "big": [], "pinned": []}
 
 
 # claims on disk
@@ -716,13 +771,41 @@ def started_ts(c):
     return parse_iso(c.get("started") or c["created"])
 
 
+def claim_procs(c):
+    # the processes tied to a claim, [(pid, start)]: its job (pid; older tool versions read only this one) and the
+    # ones attached with claim --pid or renew --pid (pids)
+    out, seen = [], set()
+    for p in [{"pid": c.get("pid"), "pid_start": c.get("pid_start")}] + list(c.get("pids") or []):
+        try:
+            pid = int((p or {}).get("pid") or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if pid > 0 and pid not in seen:
+            seen.add(pid)
+            out.append((pid, p.get("pid_start")))
+    return out
+
+
+def live_procs(c):
+    return [(p, s) for p, s in claim_procs(c) if pid_alive(p, s)]
+
+
+def last_alive(c):
+    # when the claim was last known to be in use: its heartbeat, or a later sighting of a tied process
+    t = parse_iso(c.get("heartbeat") or c["created"])
+    try:
+        return max(t, parse_iso(c["seen"])) if c.get("seen") else t
+    except ValueError:
+        return t
+
+
 def classify(c, st):
     # live, orphan (launcher gone, job running) or stale (reboot, or old heartbeat and no job)
     rules = st["cfg"]["rules"]
     if c.get("boot_id") and c["boot_id"] != st["probe"]["boot_id"]:
         return "stale", "host rebooted (boot id changed)"
     hb_age = st["now"] - parse_iso(c.get("heartbeat") or c["created"])
-    job = pid_alive(c.get("pid"), c.get("pid_start"))
+    job = bool(live_procs(c))
     la = c.get("launcher") or {}
     if la.get("pid"):
         if pid_alive(la.get("pid"), la.get("pid_start")):
@@ -733,7 +816,10 @@ def classify(c, st):
         return "live", ""
     if hb_age <= rules["stale_min"] * 60:
         return "live", ""
-    return "stale", "heartbeat %d min old and no live job" % int(hb_age // 60)
+    why = "heartbeat %d min old and no live job" % int(hb_age // 60)
+    if c.get("seen") and not la.get("pid"):
+        why += "; its process was last seen alive %s" % c["seen"]
+    return "stale", why
 
 
 def classify_all(claims, st):
@@ -762,8 +848,33 @@ def move_stale(root, st, c):
     write_json(path, doc, 0o600)
     os.makedirs(root.p("stale"), exist_ok=True)
     os.rename(path, root.p("stale", c["id"] + ".json"))
-    end = parse_iso(c.get("heartbeat") or c["created"])
-    append_jsonl(root.p("history.jsonl"), usage_event("stale", c, end, st["now"], reason=c.get("why")))
+    append_jsonl(root.p("history.jsonl"), usage_event("stale", c, last_alive(c), st["now"], reason=c.get("why")))
+
+
+def track_procs(root, st, c):
+    # under the lock, for a claim without a watcher: note when a tied process was last seen alive (the usage ledger's
+    # end if it later lapses), and keep pid on a live process for older tool versions, which read only that one
+    if (c.get("launcher") or {}).get("pid"):
+        return
+    live = live_procs(c)
+    if not live:
+        return
+    changed = False
+    if not pid_alive(c.get("pid"), c.get("pid_start")):
+        pid, start = live[0]
+        rest = [p for p in c.get("pids") or [] if isinstance(p, dict) and p.get("pid") != pid
+                and (p.get("pid"), p.get("pid_start")) in live]
+        c.update({"pid": pid, "pid_start": start, "pids": rest})
+        changed = True
+    try:
+        fresh = c.get("seen") and st["now"] - parse_iso(c["seen"]) < 60
+    except ValueError:
+        fresh = False
+    if not fresh:
+        c["seen"] = iso(st["now"])
+        changed = True
+    if changed:
+        save_claim(root, c)
 
 
 def reap_locked(root, st, claims):
@@ -774,7 +885,14 @@ def reap_locked(root, st, claims):
             move_stale(root, st, c)
             moved.append(c)
         else:
+            track_procs(root, st, c)
             keep.append(c)
+    # paired yields whose turn came; the callers' copies take the delivered request, so a later save keeps it
+    for cid in deliver_due(root, st):
+        cur = read_json(claim_path(root, cid)) or {}
+        for c in keep:
+            if c["id"] == cid:
+                c["yield"] = cur.get("yield", c.get("yield"))
     return keep, moved
 
 
@@ -790,7 +908,7 @@ def claim_view(c, t, viewer=None, stale_min=None):
     try:
         v["age_s"] = int(t - parse_iso(c["created"]))
         v["heartbeat_age_s"] = int(t - parse_iso(c.get("heartbeat") or c["created"]))
-        if stale_min is not None and not c.get("pid") and not (c.get("launcher") or {}).get("pid"):
+        if stale_min is not None and not claim_procs(c) and not (c.get("launcher") or {}).get("pid"):
             # nothing watches this claim: it lapses unless renewed
             v["lapses_at"] = iso(parse_iso(c.get("heartbeat") or c["created"]) + stale_min * 60)
     except (KeyError, ValueError):
@@ -803,15 +921,17 @@ def claim_view(c, t, viewer=None, stale_min=None):
 
 # capacity: host totals minus live claims minus unclaimed use
 
-def attribute(pr, claims, min_gb=1.0):
-    # GPU processes and RSS per claim, plus large processes that belong to no claim
+def claim_owner(pr, claims):
+    # (owner, leaders, watchers): owner(pid) is the claim a process belongs to, by its tied processes and their trees
+    # (by parent, or by session when a tied process leads one); watchers maps each claim's watcher to it
     procs = pr.get("procs")
-    ids = set(c["id"] for c in claims)
     leaders = {}
     for c in claims:
-        pid = c.get("pid")
-        if pid and (procs is None or (pid in procs and procs[pid][2] == c.get("pid_start"))):
-            leaders[pid] = c["id"]
+        for pid, start in claim_procs(c):
+            if procs is None or (pid in procs and procs[pid][2] == start):
+                leaders[pid] = c["id"]
+    watchers = dict(((c.get("launcher") or {}).get("pid"), c["id"]) for c in claims
+                    if (c.get("launcher") or {}).get("pid"))
 
     def owner(pid):
         if pid in leaders:
@@ -829,6 +949,26 @@ def attribute(pr, claims, min_gb=1.0):
             p, hops = procs[p][0], hops + 1
         return None
 
+    return owner, leaders, watchers
+
+
+def proc_mem(pid, rss_gb, mem_of):
+    # (GiB, how): PSS where mem_of reads it, else RSS; small processes count by RSS without a read
+    if mem_of is None:
+        return rss_gb, "rss"
+    if rss_gb < PSS_MIN_GB:
+        return rss_gb, None
+    gb = mem_of(pid)
+    return (gb, "pss") if gb is not None else (rss_gb, "rss")
+
+
+def attribute(pr, claims, min_gb=1.0, mem_of=None, src=None):
+    # GPU processes and memory per claim, plus large processes that belong to no claim. Memory is PSS where mem_of
+    # reads it (a page shared by forked workers counts once), else summed RSS; src, when given, gets per claim how
+    # its memory was measured ("pss", "rss", "pss+rss" or "sim")
+    procs = pr.get("procs")
+    ids = set(c["id"] for c in claims)
+    owner, leaders, watchers = claim_owner(pr, claims)
     rows = []
     for gp in pr.get("gpu_procs") or []:
         pid = int(gp.get("pid") or 0)
@@ -836,51 +976,129 @@ def attribute(pr, claims, min_gb=1.0):
         if cid is None and procs is not None and pid:
             cid = environ_claim(pid, ids)
         rows.append({"pid": pid, "gpu": gp.get("gpu"), "mem_gb": float(gp.get("mem_gb") or 0.0), "claim": cid})
-    rss, big = {}, []
+    mem, how, big = {}, {}, []
     if procs is not None:
-        watchers = set((c.get("launcher") or {}).get("pid") for c in claims)
         for pid, info in procs.items():
             cid = owner(pid) if leaders else None
             if cid is None and info[3] >= min_gb and pid not in watchers and pid != os.getpid():
                 cid = environ_claim(pid, ids)
                 if cid is None:
-                    big.append({"pid": pid, "rss_gb": round(info[3], 2)})
+                    gb, _ = proc_mem(pid, info[3], mem_of)
+                    if gb >= min_gb:
+                        big.append({"pid": pid, "rss_gb": round(info[3], 2), "mem_gb": round(gb, 2)})
+                    continue
             if cid:
-                rss[cid] = rss.get(cid, 0.0) + info[3]
+                gb, h = proc_mem(pid, info[3], mem_of)
+                mem[cid] = mem.get(cid, 0.0) + gb
+                if h:
+                    how.setdefault(cid, set()).add(h)
     else:
-        big = [{"pid": b.get("pid"), "rss_gb": float(b.get("rss_gb") or 0.0)} for b in pr.get("unclaimed_procs") or []
-               if float(b.get("rss_gb") or 0.0) >= min_gb]
+        for b in pr.get("unclaimed_procs") or []:
+            rss = float(b.get("rss_gb") or 0.0)
+            gb = float(b["mem_gb"]) if b.get("mem_gb") is not None else rss
+            if gb >= min_gb:
+                big.append({"pid": b.get("pid"), "rss_gb": rss, "mem_gb": gb})
     for cid, gb in (pr.get("claim_rss_gb") or {}).items():
-        rss[cid] = float(gb)
-    return rows, rss, big
+        mem[cid] = float(gb)
+        how[cid] = set(["sim"])
+    if src is not None:
+        src.update((cid, "+".join(sorted(h))) for cid, h in how.items())
+    return rows, mem, big
+
+
+def pinned_rows(pr, claims):
+    # the pinned processes with their claim and the cores they run on outside it; a process tied to no claim counts
+    # only on cores no claim holds (on a claim's cores it is most likely that claim's untied job)
+    owner, _, watchers = claim_owner(pr, claims)
+    held = dict((c["id"], set((c.get("resources") or {}).get("cores") or [])) for c in claims)
+    every = set(x for cores in held.values() for x in cores)
+    out = []
+    for p in pr.get("pinned") or []:
+        try:
+            pid = int(p.get("pid"))
+            cores = sorted(set(int(x) for x in p.get("cores") or []))
+        except (TypeError, ValueError):
+            continue
+        cid = p.get("claim") if p.get("claim") in held else (watchers.get(pid) or owner(pid))
+        if cid is None and pr.get("procs") is not None:
+            cid = environ_claim(pid, set(held))
+        mine = held[cid] if cid is not None else every
+        row = {"pid": pid, "cores": cores, "claim": cid, "rss_gb": p.get("rss_gb"),
+               "outside": [x for x in cores if x not in mine]}
+        if cid is None and p.get("claim"):
+            # a simulated row naming a claim that is not live (one that lapsed, say)
+            row["named"] = p["claim"]
+        out.append(row)
+    return out
+
+
+def own_pinned(st, prev, pids, starts):
+    # the pinned rows, outside every live claim, of the job a new claim is for: the processes of the claim of the same
+    # job that lapsed (its tied processes and their trees, those naming it in HOSTCLAIMS_CLAIM_ID, and any pinned only
+    # within its cores, as a job started by hand under it is), and the processes given with --pid and their trees
+    pr = st["probe"]
+    rows = [p for p in st.get("pinned") or [] if p.get("claim") is None]
+    if not rows or not (prev or pids):
+        return []
+    tied = []
+    if prev:
+        tied.append({"id": prev["id"], "pid": prev.get("pid"), "pid_start": prev.get("pid_start"),
+                     "pids": prev.get("pids") or []})
+    if pids:
+        tied.append({"id": "--pid", "pid": pids[0], "pid_start": starts[pids[0]],
+                     "pids": [{"pid": x, "pid_start": starts[x]} for x in pids[1:]]})
+    owner = claim_owner(pr, tied)[0]
+    cores = set(((prev or {}).get("resources") or {}).get("cores") or [])
+    out = []
+    for p in rows:
+        mine = owner(p["pid"]) is not None
+        if not mine and prev:
+            mine = (p.get("named") == prev["id"] or (cores and set(p["cores"]) <= cores)
+                    or (pr.get("procs") is not None and environ_claim(p["pid"], set([prev["id"]])) is not None))
+        if mine:
+            out.append(p)
+    return out
 
 
 def attach_claims(st, claims):
-    st["gpu_rows"], st["rss"], st["big"] = attribute(st["probe"], claims, st["cfg"]["rules"]["outside_proc_min_gb"])
+    st["mem_src"] = {}
+    # PSS from the machine's own readings only; simulated hosts give per-claim numbers
+    mem_of = None if st.get("sim") else read_pss
+    st["gpu_rows"], st["mem"], st["big"] = attribute(st["probe"], claims, st["cfg"]["rules"]["outside_proc_min_gb"],
+                                                     mem_of, st["mem_src"])
+    st["pinned"] = pinned_rows(st["probe"], claims)
 
 
 def capacity(st, claims, exclude=()):
     pr, rules, res = st["probe"], st["cfg"]["rules"], st["cfg"]["reserve"]
     active = [c for c in claims if c["id"] not in exclude]
-    rows, rss = st["gpu_rows"], st["rss"]
+    rows, mem = st["gpu_rows"], st.get("mem") or {}
     claimed, held = set(), set()
     for c in claims:
         cores = (c.get("resources") or {}).get("cores") or []
         held.update(cores)
         if c["id"] not in exclude:
             claimed.update(cores)
-    free_set = [c for c in pr["cpus"] if c not in claimed]
+    # cores a pinned process runs on outside its claim (or outside every claim) are in use: never granted; a what-if
+    # that drops a claim drops its processes too
+    pinned = set(x for p in st.get("pinned") or [] if p.get("claim") is None or p["claim"] not in exclude
+                 for x in p.get("outside") or [])
+    free_set = [c for c in pr["cpus"] if c not in claimed and c not in pinned]
     # load on cores a claim holds is that claim's, even when a what-if drops the claim
     unclaimed_cpu = sum(pr["busy"].get(c, 0.0) for c in pr["cpus"] if c not in held)
-    # the reserve absorbs the first cores of unclaimed load
-    hidden = max(int(res["cores"]), int(math.ceil(unclaimed_cpu - 0.25)) if unclaimed_cpu > 0.25 else 0)
+    # the reserve absorbs the first cores of unclaimed load; load on pinned cores already took those cores out, and
+    # load on the cores a claim's own job runs on (own_cores, while that claim is planned) is that job's
+    own = set(st.get("own_cores") or [])
+    loose = sum(pr["busy"].get(c, 0.0) for c in pr["cpus"] if c not in held and c not in pinned and c not in own)
+    hidden = max(int(res["cores"]), int(math.ceil(loose - 0.25)) if loose > 0.25 else 0)
     total, avail = pr["ram_total_gb"], pr["ram_avail_gb"]
-    all_rss = sum(rss.get(c["id"], 0.0) for c in claims)
+    # a claim's memory in use is the PSS of its processes (summed RSS where PSS cannot be read)
+    all_mem = sum(mem.get(c["id"], 0.0) for c in claims)
     ram_free = unclaimed_ram = None
     if total is not None:
-        used = (total - avail) if avail is not None else all_rss
-        unclaimed_ram = max(0.0, used - all_rss)
-        committed = sum(max(float((c.get("resources") or {}).get("ram_gb") or 0.0), rss.get(c["id"], 0.0))
+        used = (total - avail) if avail is not None else all_mem
+        unclaimed_ram = max(0.0, used - all_mem)
+        committed = sum(max(float((c.get("resources") or {}).get("ram_gb") or 0.0), mem.get(c["id"], 0.0))
                         for c in active)
         ram_free = total - float(res["ram_gb"]) - committed - unclaimed_ram
     dt, df = pr["disk_total_gb"], pr["disk_free_gb"]
@@ -917,7 +1135,8 @@ def capacity(st, claims, exclude=()):
                      "unclaimed_pids": [r["pid"] for r in stray]})
     return {"cores_free_set": free_set, "cores_free": max(0, len(free_set) - hidden),
             "unclaimed_cpu": unclaimed_cpu, "ram_free_gb": ram_free, "unclaimed_ram_gb": unclaimed_ram,
-            "disk_free_gb": disk_free, "below_floor": below, "gpus": gpus, "outside_procs": list(st.get("big") or [])}
+            "disk_free_gb": disk_free, "below_floor": below, "gpus": gpus, "outside_procs": list(st.get("big") or []),
+            "pinned_cores": sorted(pinned)}
 
 
 def free_summary(cap):
@@ -925,18 +1144,19 @@ def free_summary(cap):
     return {"cores": cap["cores_free"], "ram_gb": r(cap["ram_free_gb"]), "disk_gb": r(cap["disk_free_gb"]),
             "below_floor": cap["below_floor"], "unclaimed_cpu": round(cap["unclaimed_cpu"], 2),
             "unclaimed_ram_gb": r(cap["unclaimed_ram_gb"]), "outside_procs": cap.get("outside_procs") or [],
+            "pinned_cores": cap.get("pinned_cores") or [],
             "gpus": [{"index": g["index"], "name": g["name"], "free_share": g["free_share"],
                       "free_mem_gb": g["free_mem_gb"], "claims": g["claims"], "unclaimed": g["unclaimed"]}
                      for g in cap["gpus"]]}
 
 
 def outside_use(st, cap):
-    # work outside any claim: a GPU in use, a core or more of load, or large unclaimed processes;
-    # the OS's own memory, caches and /dev/shm are not work
+    # work outside any claim: a GPU in use, a core or more of load, or large unclaimed processes (by PSS where it
+    # can be read); the OS's own memory, caches and /dev/shm are not work
     gpus = [g["index"] for g in cap["gpus"] if g["unclaimed"]]
     cpu = cap["unclaimed_cpu"] if cap["unclaimed_cpu"] >= 1.0 else 0.0
     big = cap.get("outside_procs") or []
-    ram = sum(b["rss_gb"] for b in big)
+    ram = sum(b["mem_gb"] if b.get("mem_gb") is not None else b["rss_gb"] for b in big)
     return {"gpus": gpus, "cpu_cores": round(cpu, 2), "ram_gb": round(ram, 1), "pids": [b["pid"] for b in big][:20],
             "any": bool(gpus or cpu or ram)}
 
@@ -1027,8 +1247,9 @@ def gpu_matches(g, want):
     return True
 
 
-def admission(cfg, agent, borrowed, preemptible):
-    # sharing list, draining and dedicated modes: who may use this host at all
+def admission(cfg, agent, borrowed, preemptible, new=True):
+    # sharing list, draining and dedicated modes: who may use this host at all, and with which flags (new=False: a
+    # change to a live claim, which a draining host still allows)
     out = []
     # a host is private to its owner until the owner lists who else may use it (a missing list shares with nobody)
     sw, owner = cfg.get("share_with") or [], cfg.get("owner")
@@ -1037,7 +1258,8 @@ def admission(cfg, agent, borrowed, preemptible):
                     % (agent, owner, ", ".join(sw) or "nobody")))
     mode = cfg["mode"]
     if mode == "draining":
-        out.append(("mode", "host is draining: no new claims"))
+        if new:
+            out.append(("mode", "host is draining: no new claims"))
     elif mode.startswith("dedicated:"):
         dedicated = mode.split(":", 1)[1]
         if agent != dedicated and not (borrowed and preemptible):
@@ -1046,16 +1268,20 @@ def admission(cfg, agent, borrowed, preemptible):
     return out
 
 
-def plan(st, claims, want, exclude=(), lease_check=True):
+def plan(st, claims, want, exclude=(), lease_check=True, prefer=None):
+    # prefer, taken first while free: "first", the cores the claim's own job runs pinned to; then "cores" and "gpus",
+    # what a lapsed claim of the same job held
     pr, cfg = st["probe"], st["cfg"]
     cap = capacity(st, claims, exclude)
     reasons, warnings = admission(cfg, want["agent"], want["borrowed"], want["preemptible"]), []
+    pf, pc = set((prefer or {}).get("first") or []), set((prefer or {}).get("cores") or [])
+    pg = set((prefer or {}).get("gpus") or [])
     cores = []
     if want["cores"] > cap["cores_free"]:
         reasons.append(("cores", "cores: want %d, %d free" % (want["cores"], cap["cores_free"])))
     else:
         busy = pr["busy"]
-        order = sorted(cap["cores_free_set"], key=lambda c: (busy.get(c, 0.0) >= 0.5, c))
+        order = sorted(cap["cores_free_set"], key=lambda c: (c not in pf, c not in pc, busy.get(c, 0.0) >= 0.5, c))
         cores = sorted(order[:want["cores"]])
     if cap["ram_free_gb"] is not None and want["ram_gb"] > cap["ram_free_gb"] + EPS:
         reasons.append(("ram", "ram: want %s, %s free" % (fmt_gb(want["ram_gb"]), fmt_gb(max(0.0, cap["ram_free_gb"])))))
@@ -1080,7 +1306,7 @@ def plan(st, claims, want, exclude=(), lease_check=True):
                     cands = [g] if gpu_matches(g, want) else []
                 else:
                     cands = sorted((g for g in pool.values() if g["index"] not in taken and gpu_matches(g, want)),
-                                   key=lambda g: (g["share_used"], g["index"]))
+                                   key=lambda g: (g["index"] not in pg, g["share_used"], g["index"]))
                 pick = None
                 for g in cands:
                     if g["free_share"] + EPS < share:
@@ -1150,6 +1376,62 @@ def may_yield(req_cls, req_borrowed, req_agent, c, cfg):
     return False
 
 
+def yield_group(c, claims):
+    # the claims that yield together with c: its agent's claims linked to it by yield_with, either way
+    mine = [x for x in claims if x["agent"] == c["agent"]]
+    by_job = dict((x["job"], x) for x in mine)
+    group, todo = {c["id"]: c}, [c]
+    while todo:
+        x = todo.pop()
+        links = [by_job.get(j) for j in x.get("yield_with") or []]
+        links += [y for y in mine if x["job"] in (y.get("yield_with") or [])]
+        for y in links:
+            if y is not None and y["id"] not in group:
+                group[y["id"]] = y
+                todo.append(y)
+    return list(group.values())
+
+
+def yield_due(c, by_id, t):
+    # a deferred yield is due once each partner it waits for has ended, or has had its own grace and a margin
+    for pid_ in (c.get("yield") or {}).get("after") or []:
+        p = by_id.get(pid_)
+        y = (p or {}).get("yield") or {}
+        if p is None or not y:
+            continue
+        if y.get("deferred"):
+            return False
+        try:
+            start = parse_iso(y.get("delivered") or y.get("requested"))
+        except (TypeError, ValueError):
+            continue
+        if t < start + float(y.get("grace_min") or 0.0) * 60 + DELIVER_MARGIN_S:
+            return False
+    return True
+
+
+def deliver_due(root, t_or_st):
+    # under the lock: write the yield files of paired claims whose partners have ended or had their grace
+    t = t_or_st["now"] if isinstance(t_or_st, dict) else float(t_or_st)
+    claims = read_claims(root)
+    waiting = [c for c in claims if (c.get("yield") or {}).get("deferred")]
+    by_id = dict((c["id"], c) for c in claims)
+    out = []
+    for c in sorted(waiting, key=lambda x: x["id"]):
+        if not yield_due(c, by_id, t):
+            continue
+        y = dict(c["yield"], deferred=False, delivered=iso(t))
+        try:
+            write_yield(root, c, y)
+            append_jsonl(root.p("history.jsonl"), {"event": "yield-deliver", "ts": iso(t), "id": c["id"],
+                                                   "agent": c["agent"], "job": c["job"], "after": y.get("after")})
+        except OSError:
+            # a full disk, say: the next call on the host tries again
+            continue
+        out.append(c["id"])
+    return out
+
+
 def yield_candidates(st, claims, want):
     # (claims to ask, claims already asked): the smallest new set that, with the pending yields, makes it fit
     t = st["now"]
@@ -1161,16 +1443,22 @@ def yield_candidates(st, claims, want):
              and t - started_ts(c) >= min_age and may_yield(want["class"], want["borrowed"], want["agent"], c, st["cfg"])]
     rank = CLASSES.index
     cands.sort(key=lambda c: (-rank(c.get("class") or "P1"), not c.get("borrowed"), -started_ts(c)))
+    # asking a paired claim frees its partners too: they yield with it
+    group = dict((c["id"], set(m["id"] for m in yield_group(c, claims))) for c in cands)
+
+    def freed(ids):
+        return set(x for i in ids for x in group[i]) | set(pending)
+
     chosen = []
     for c in cands:
         chosen.append(c["id"])
-        if plan(st, claims, want, exclude=set(chosen + pending), lease_check=False)["ok"]:
+        if plan(st, claims, want, exclude=freed(chosen), lease_check=False)["ok"]:
             break
     else:
         return [], pending
     for cid in list(reversed(chosen)):
-        trial = set(chosen) - set([cid])
-        if trial and plan(st, claims, want, exclude=trial | set(pending), lease_check=False)["ok"]:
+        trial = [x for x in chosen if x != cid]
+        if trial and plan(st, claims, want, exclude=freed(trial), lease_check=False)["ok"]:
             chosen.remove(cid)
     return chosen, pending
 
@@ -1378,6 +1666,36 @@ def op_uninstall(req, src):
     return {"removed": True, "root": root.path}
 
 
+def core_overlaps(claims):
+    # pairs of claims that hold a core in common: never granted by this tool, but a hand edit or another version can
+    out = []
+    for i, a in enumerate(claims):
+        ca = set((a.get("resources") or {}).get("cores") or [])
+        for b in claims[i + 1:]:
+            both = ca & set((b.get("resources") or {}).get("cores") or [])
+            if both:
+                out.append({"claims": sorted([a["id"], b["id"]]), "cores": sorted(both)})
+    return out
+
+
+def gpu_last_ends(hist):
+    # per GPU index, the latest end among the claims that held it (a resize is no end)
+    out = {}
+    for e in hist:
+        if e.get("event") not in ("end", "stale") or e.get("reason") == "resized":
+            continue
+        try:
+            end = parse_iso(e["end"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        for g in e.get("gpus") or []:
+            i = (g or {}).get("index")
+            if i is not None and (i not in out or end >= out[i][0]):
+                out[i] = (end, e)
+    return dict((i, {"end": iso(end), "claim": e.get("id"), "agent": e.get("agent"), "job": e.get("job"),
+                     "reason": e.get("reason")}) for i, (end, e) in out.items())
+
+
 def op_status(req, src):
     root = Root(req.get("root"))
     if not root.installed():
@@ -1387,13 +1705,19 @@ def op_status(req, src):
     st = load_state(root, req, cfg, load_sim(root))
     t = st["now"]
     claims = read_claims(root)
+    by_id = dict((c["id"], c) for c in claims)
+    if any((c.get("yield") or {}).get("deferred") and yield_due(c, by_id, t) for c in claims):
+        # a paired claim's turn to yield has come: deliver it now rather than at the next claim on this host
+        with root.lock(cfg):
+            deliver_due(root, t)
+        claims = read_claims(root)
     active = classify_all(claims, st)
     attach_claims(st, active)
     cap = capacity(st, active)
     tag = write_status(root, st, active, cap)
     since = t - cfg["rules"]["recent_hours"] * 3600
-    recent = [e for e in read_jsonl(root.p("history.jsonl"))
-              if e.get("event") in ("end", "stale") and e.get("ts") and parse_iso(e["ts"]) >= since]
+    hist = read_jsonl(root.p("history.jsonl"))
+    recent = [e for e in hist if e.get("event") in ("end", "stale") and e.get("ts") and parse_iso(e["ts"]) >= since]
     stale = []
     d = root.p("stale")
     for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
@@ -1402,10 +1726,28 @@ def op_status(req, src):
             stale.append({"id": s["id"], "agent": s["agent"], "job": s["job"], "stale": s.get("stale")})
     reqs = [r for r in list_requests(root, t)
             if r["state"] == "pending" or parse_iso(r.get("decided") or r["created"]) >= since]
+    views = []
+    for c in claims:
+        v = claim_view(c, t, req.get("agent") or "", cfg["rules"]["stale_min"])
+        # memory in use (PSS, or summed RSS where PSS cannot be read) against the claim's declaration
+        if c["id"] in st["mem"]:
+            v["mem_gb"] = round(st["mem"][c["id"]], 2)
+            v["mem_source"] = st["mem_src"].get(c["id"])
+        if claim_procs(c):
+            v["procs"] = procs_view(c)
+        views.append(v)
+    free = free_summary(cap)
+    # each GPU's latest claim end, so a watcher tells a GPU between short runs from an idle one
+    last = gpu_last_ends(hist)
+    for g in free["gpus"]:
+        e = last.get(g["index"])
+        g["last_claim_end"] = e["end"] if e else None
+        g["last_claim"] = e
+    pinned = [dict(p, prog=prog_name(p["pid"])) for p in st["pinned"] if p["outside"]]
     return {"installed": True, "root": root.path, "now": t, "tag": tag, "mode": cfg["mode"], "lease": st["lease"],
             "owner": host_owner(cfg, req), "share_with": cfg.get("share_with"), "keep_until": cfg.get("keep_until"),
-            "boot_id": st["probe"]["boot_id"], "free": free_summary(cap), "outside": outside_use(st, cap),
-            "claims": [claim_view(c, t, req.get("agent") or "", cfg["rules"]["stale_min"]) for c in claims],
+            "boot_id": st["probe"]["boot_id"], "free": free, "outside": outside_use(st, cap),
+            "claims": views, "overlaps": core_overlaps(active), "pinned": pinned,
             "unclaimed_gpu_procs": [r for r in st["gpu_rows"] if not any(
                 r["claim"] == c["id"] and any(x.get("index") == r["gpu"] for x in (c.get("resources") or {}).get("gpus") or [])
                 for c in active)],
@@ -1424,20 +1766,26 @@ def recent_run_end(root, agent, job, since):
     return last
 
 
-def new_claim(want, p, st, req, pid, pid_start):
+def new_claim(want, p, st, req, pids, starts, partners=None):
+    # the first process given is the job (older tool versions read only that one); more go to pids
     t = st["now"]
     cid = "%s--%s--%s-%s" % (want["agent"], want["job"], time.strftime("%Y%m%dT%H%M%SZ", time.gmtime(t)),
                             secrets.token_hex(2))
     hours = want["hours"]
-    return {"schema": SCHEMA, "id": cid, "agent": want["agent"], "job": want["job"], "class": want["class"],
-            "preemptible": want["preemptible"], "borrowed": want["borrowed"],
-            "resources": {"cores": p["cores"], "ram_gb": want["ram_gb"], "disk_gb": want["disk_gb"],
-                          "gpus": [dict((k, v) for k, v in g.items() if k != "contention") for g in p["gpus"]]},
-            "created": iso(t), "heartbeat": iso(t), "hours": hours,
-            "eta": iso(t + hours * 3600) if hours else None, "boot_id": st["probe"]["boot_id"],
-            "pid": int(pid) if pid else None, "pid_start": pid_start, "launcher": None,
-            "controller": req.get("controller"), "brief": req.get("brief"), "note": req.get("note"),
-            "yield": None, "warnings": p["warnings"]}
+    c = {"schema": SCHEMA, "id": cid, "agent": want["agent"], "job": want["job"], "class": want["class"],
+         "preemptible": want["preemptible"], "borrowed": want["borrowed"],
+         "resources": {"cores": p["cores"], "ram_gb": want["ram_gb"], "disk_gb": want["disk_gb"],
+                       "gpus": [dict((k, v) for k, v in g.items() if k != "contention") for g in p["gpus"]]},
+         "created": iso(t), "heartbeat": iso(t), "hours": hours,
+         "eta": iso(t + hours * 3600) if hours else None, "boot_id": st["probe"]["boot_id"],
+         "pid": pids[0] if pids else None, "pid_start": starts.get(pids[0]) if pids else None, "launcher": None,
+         "controller": req.get("controller"), "brief": req.get("brief"), "note": req.get("note"),
+         "yield": None, "warnings": p["warnings"]}
+    if len(pids) > 1:
+        c["pids"] = [{"pid": x, "pid_start": starts[x], "since": iso(t)} for x in pids[1:]]
+    if partners:
+        c["yield_with"] = list(partners)
+    return c
 
 
 def refit_claim(c, want, p, st):
@@ -1452,13 +1800,14 @@ def refit_claim(c, want, p, st):
 
 
 def pid_holder(pid, claims, procs):
-    # the claim a process already belongs to: its job or watcher, or on Linux a member of its job's tree
+    # the claim a process already belongs to: one of its tied processes or its watcher, or on Linux a member of the
+    # tree of one of its tied processes
     for c in claims:
-        if pid in (c.get("pid"), (c.get("launcher") or {}).get("pid")):
+        if pid in [x for x, _ in claim_procs(c)] or pid == (c.get("launcher") or {}).get("pid"):
             return c
     if procs is None or pid not in procs:
         return None
-    leaders = dict((c.get("pid"), c) for c in claims if c.get("pid"))
+    leaders = dict((x, c) for c in claims for x, _ in claim_procs(c))
     if procs[pid][1] in leaders:
         return leaders[procs[pid][1]]
     p, hops = procs[pid][0], 0
@@ -1469,6 +1818,135 @@ def pid_holder(pid, claims, procs):
             return None
         p, hops = procs[p][0], hops + 1
     return None
+
+
+def pid_list(v):
+    # --pid given once (an older controller sends one number) or repeated
+    vals = v if isinstance(v, (list, tuple)) else ([v] if v not in (None, "", 0) else [])
+    out = []
+    for x in vals:
+        try:
+            pid = int(x)
+        except (TypeError, ValueError):
+            raise Fail("bad pid %r" % (x,), USAGE)
+        if pid <= 0:
+            raise Fail("bad pid %r" % (x,), USAGE)
+        if pid not in out:
+            out.append(pid)
+    return out
+
+
+def proc_starts(pids):
+    # pid -> start time for each running process; a pid that is not running is refused before anything changes
+    out = {}
+    for pid in pids:
+        s = proc_start(pid)
+        if s is None:
+            raise Fail("no running process %s" % pid)
+        out[pid] = s
+    return out
+
+
+def attach_procs(root, st, c, others, pids, starts):
+    # tie more processes to the caller's own claim, so their memory counts toward it and the claim lives while any
+    # runs: the first becomes the job (pid) of a claim without a watcher and without a live job, the others go to
+    # pids; a process another live claim holds is refused. Returns what was attached.
+    out = []
+    have = dict(claim_procs(c))
+    la = c.get("launcher") or {}
+    if la.get("pid"):
+        # the claim's own watcher belongs to it already
+        have[la["pid"]] = la.get("pid_start")
+    for pid in pids:
+        if have.get(pid) == starts[pid]:
+            out.append({"pid": pid, "prog": prog_name(pid), "new": False})
+            continue
+        holder = pid_holder(pid, others, st["probe"].get("procs"))
+        if holder is not None:
+            raise Fail("pid %s belongs to claim %s of %s: tie a claim only to your own process"
+                       % (pid, holder["id"], holder["agent"]), DENIED)
+    t = iso(st["now"])
+    for pid in pids:
+        if have.get(pid) == starts[pid]:
+            continue
+        if not c.get("launcher") and not pid_alive(c.get("pid"), c.get("pid_start")):
+            c["pid"], c["pid_start"] = pid, starts[pid]
+        else:
+            c["pids"] = [x for x in c.get("pids") or [] if isinstance(x, dict) and x.get("pid") != pid] + [
+                {"pid": pid, "pid_start": starts[pid], "since": t}]
+        have[pid] = starts[pid]
+        prog = prog_name(pid)
+        out.append({"pid": pid, "prog": prog, "new": True})
+        append_jsonl(root.p("history.jsonl"), {"event": "tie", "ts": t, "id": c["id"], "agent": c["agent"],
+                                               "job": c["job"], "pid": pid, "prog": prog})
+    return out
+
+
+def procs_view(c):
+    # the tied processes as status shows them: pid, program name, alive
+    return [{"pid": pid, "prog": prog_name(pid), "alive": pid_alive(pid, start)} for pid, start in claim_procs(c)]
+
+
+def lapsed_claim(root, reaped, want, t, window_s):
+    # the newest claim of this agent and job that lapsed (moved to stale/) within window_s, or None: a re-claim takes
+    # its cores and GPUs again while they are free, since its job may still run there
+    best = None
+    for c in reaped:
+        if c["agent"] == want["agent"] and c["job"] == want["job"]:
+            best = dict(c, stale={"at": iso(t), "reason": c.get("why")})
+    if best is None:
+        prefix = "%s--%s--" % (want["agent"], want["job"])
+        d = root.p("stale")
+        for n in sorted(os.listdir(d)) if os.path.isdir(d) else []:
+            if not n.startswith(prefix) or not n.endswith(".json"):
+                continue
+            s = read_json(os.path.join(d, n))
+            try:
+                at = parse_iso((s.get("stale") or {}).get("at"))
+            except (AttributeError, TypeError, ValueError):
+                continue
+            if isinstance(s, dict) and s.get("agent") == want["agent"] and s.get("job") == want["job"] \
+                    and t - at <= window_s and (best is None or at >= parse_iso(best["stale"]["at"])):
+                best = s
+    return best
+
+
+def partner_list(v, job):
+    # --yield-with: the jobs this claim yields after (None when not given; "none" clears the list)
+    if v is None:
+        return None
+    vals = [x.strip() for item in (v if isinstance(v, (list, tuple)) else [v]) for x in str(item).split(",")]
+    out = []
+    for x in vals:
+        if x.lower() in NONE_WORDS:
+            continue
+        valid_name(x, "--yield-with job")
+        if x == job:
+            raise Fail("a claim cannot yield after itself", USAGE)
+        if x not in out:
+            out.append(x)
+    return out
+
+
+def check_partners(live, agent, job, partners):
+    # the yield order may not loop: a claim yields after the jobs it names, and they after theirs
+    names = dict((c["job"], list(c.get("yield_with") or [])) for c in live if c["agent"] == agent)
+    names[job] = list(partners)
+    path, done = [], set()
+
+    def walk(j):
+        if j in path:
+            raise Fail("the yield order loops (%s): name each pair once, on the claim that yields last"
+                       % " after ".join(path[path.index(j):] + [j]), USAGE)
+        if j in done:
+            return
+        path.append(j)
+        for k in names.get(j) or []:
+            walk(k)
+        path.pop()
+        done.add(j)
+
+    walk(job)
 
 
 def launch_job(root, cfg, c, src, req):
@@ -1521,49 +1999,62 @@ def op_claim(req, src, launch=False):
     valid_name(want["job"], "job")
     if launch and not req.get("cmd"):
         raise Fail("run needs the job's command after --", USAGE)
-    pid, pid_start = req.get("pid"), None
-    if pid:
-        if launch:
-            raise Fail("--pid is for claim only", USAGE)
-        pid_start = proc_start(pid)
-        if pid_start is None:
-            raise Fail("no running process %s" % pid)
+    partners = partner_list(req.get("yield_with"), want["job"])
+    pids = pid_list(req.get("pid"))
+    if pids and launch:
+        raise Fail("--pid is for claim and renew (run watches the job it starts)", USAGE)
+    starts = proc_starts(pids)
     st = load_state(root, req, cfg, load_sim(root))
     created = False
     with root.lock(cfg):
         live, reaped = reap_locked(root, st, read_claims(root))
         mine = [c for c in live if c["agent"] == want["agent"] and c["job"] == want["job"]]
         c = mine[0] if mine else None
-        if c is not None and not (launch and not c.get("launcher") and not c.get("pid")):
+        if partners is not None:
+            check_partners(live, want["agent"], want["job"], partners)
+        if c is not None and not (launch and not c.get("launcher") and not claim_procs(c)):
+            # a repeat returns the claim: it renews a bare claim, --pid attaches processes (to a run's claim too),
+            # and --yield-with sets the yield order
+            attached = attach_procs(root, st, c, [x for x in live if x["id"] != c["id"]], pids, starts)
+            changed = any(a["new"] for a in attached)
+            if partners is not None and partners != list(c.get("yield_with") or []):
+                c["yield_with"], changed = partners, True
             if not c.get("launcher"):
-                if pid and int(pid) != c.get("pid"):
-                    # a repeat claim with --pid ties the existing claim to that process
-                    if c.get("pid") and pid_alive(c["pid"], c.get("pid_start")):
-                        raise Fail("claim %s is already tied to running pid %s" % (c["id"], c["pid"]), DENIED)
-                    holder = pid_holder(int(pid), [x for x in live if x["id"] != c["id"]], st["probe"].get("procs"))
-                    if holder is not None:
-                        raise Fail("pid %s belongs to claim %s of %s: tie a claim only to your own process"
-                                   % (pid, holder["id"], holder["agent"]), DENIED)
-                    c["pid"], c["pid_start"] = int(pid), pid_start
-                    append_jsonl(root.p("history.jsonl"), {"event": "tie", "ts": iso(st["now"]), "id": c["id"],
-                                                           "pid": int(pid)})
-                c["heartbeat"] = iso(st["now"])
+                c["heartbeat"], changed = iso(st["now"]), True
+            if changed:
                 save_claim(root, c)
-            return {"existing": True, "claim": claim_view(c, st["now"], stale_min=cfg["rules"]["stale_min"]),
-                    "reaped": [x["id"] for x in reaped]}
+            v = claim_view(c, st["now"], stale_min=cfg["rules"]["stale_min"])
+            v["procs"] = procs_view(c)
+            return {"existing": True, "claim": v, "attached": attached, "reaped": [x["id"] for x in reaped]}
         if c is None and launch and not req.get("rerun"):
             fin = recent_run_end(root, want["agent"], want["job"], st["now"] - cfg["rules"]["rerun_guard_min"] * 60)
             if fin:
                 return {"existing": True, "finished": fin,
                         "note": "this job ended at %s; pass --rerun to start it again" % fin["end"]}
-        if pid:
-            holder = pid_holder(int(pid), live, st["probe"].get("procs"))
+        for pid in pids:
+            holder = pid_holder(pid, live, st["probe"].get("procs"))
             if holder is not None:
                 raise Fail("pid %s belongs to claim %s of %s: tie a claim only to your own process"
                            % (pid, holder["id"], holder["agent"]), DENIED)
         attach_claims(st, live)
+        # a claim of this job that lapsed a moment ago: take its cores and GPUs again while they are free
+        prev = None
+        if c is None:
+            prev = lapsed_claim(root, reaped, want, st["now"], 4 * cfg["rules"]["stale_min"] * 60)
+        # this job's own processes pinned outside every claim (the lapsed claim's job still running, or a process given
+        # with --pid): their cores, and the load on them, are this claim's to take, never another's
+        own = own_pinned(st, prev, pids, starts) if c is None else []
+        job_cores = sorted(set(x for q in own for x in q["cores"]))
+        if own:
+            st["pinned"] = [q for q in st["pinned"] if not any(q is o for o in own)]
+            st["own_cores"] = job_cores
+        prefer = None
+        if prev or own:
+            res = (prev or {}).get("resources") or {}
+            prefer = {"first": job_cores, "cores": res.get("cores") or [],
+                      "gpus": [g.get("index") for g in res.get("gpus") or []]}
         # a run over an earlier bare claim re-fits that claim to the run's request
-        p = plan(st, live, want, exclude=set([c["id"]]) if c is not None else ())
+        p = plan(st, live, want, exclude=set([c["id"]]) if c is not None else (), prefer=prefer)
         if not p["ok"]:
             kinds = set(k for k, _ in p["reasons"])
             cands, pending = [], []
@@ -1574,14 +2065,26 @@ def op_claim(req, src, launch=False):
                                                                           "its earlier size)" % c["id"]), NOFIT,
                        reasons=[m for _, m in p["reasons"]], yield_candidates=cands, yields_pending=pending,
                        free=free_summary(p["cap"]), reaped=[x["id"] for x in reaped])
+        # never grant a core a live claim holds, whatever the planning above concluded
+        taken = dict((x, o["id"]) for o in live if c is None or o["id"] != c["id"]
+                     for x in (o.get("resources") or {}).get("cores") or [])
+        clash = sorted(x for x in p["cores"] if x in taken)
+        if clash:
+            raise Fail("refused: cores %s are held by claim %s; nothing was claimed" % (
+                fmt_cores(clash), ", ".join(sorted(set(taken[x] for x in clash)))), ERROR)
         warnings = p["warnings"]
         before = c
         if c is None:
-            c = new_claim(want, p, st, req, pid, pid_start)
+            c = new_claim(want, p, st, req, pids, starts, partners)
             created = True
+            for pid in pids:
+                append_jsonl(root.p("history.jsonl"), {"event": "tie", "ts": iso(st["now"]), "id": c["id"],
+                                                       "agent": c["agent"], "job": c["job"], "pid": pid})
         else:
             append_jsonl(root.p("history.jsonl"), usage_event("end", c, st["now"], st["now"], reason="resized"))
             c = refit_claim(c, want, p, st)
+            if partners is not None:
+                c["yield_with"] = partners
         save_claim(root, c)
         append_jsonl(root.p("history.jsonl"), {"event": "claim", "ts": iso(st["now"]), "id": c["id"],
                                                "agent": c["agent"], "job": c["job"], "class": c["class"],
@@ -1604,11 +2107,23 @@ def op_claim(req, src, launch=False):
                                                            "class": back.get("class"), "resources": back["resources"],
                                                            "hours": back.get("hours"), "reason": "restored"})
                 raise
+        st["own_cores"] = []
         others = [x for x in live if x["id"] != c["id"]] + [c]
         attach_claims(st, others)
         write_status(root, st, others, capacity(st, others))
     out = {"existing": False, "claim": claim_view(c, st["now"], stale_min=cfg["rules"]["stale_min"]), "warnings": warnings,
            "reaped": [x["id"] for x in reaped]}
+    if pids:
+        out["claim"]["procs"] = procs_view(c)
+    granted = set(c["resources"]["cores"])
+    if prev:
+        before_cores = sorted((prev.get("resources") or {}).get("cores") or [])
+        # kept: the job still runs on cores of this claim (where it runs pinned, else where its claim was)
+        out["lapsed"] = {"id": prev["id"], "at": (prev.get("stale") or {}).get("at"), "cores_before": before_cores,
+                         "job_cores": job_cores, "cores": c["resources"]["cores"],
+                         "kept": set(job_cores or before_cores) <= granted}
+    elif job_cores:
+        out["pinned_job"] = {"cores": job_cores, "kept": set(job_cores) <= granted}
     if launch:
         deadline = time.time() + 8.0
         while time.time() < deadline:
@@ -1625,6 +2140,108 @@ def op_claim(req, src, launch=False):
 
 def op_run(req, src):
     return op_claim(req, src, launch=True)
+
+
+def op_renew(req, src):
+    # the caller's own live claims, changed in place without a release: a new end (eta), preemptible or borrowed,
+    # more processes, the yield order; a bare claim's heartbeat is refreshed too
+    root = open_root(req)
+    cfg = host_cfg(root)
+    check_machine(root, cfg)
+    agent = req.get("agent")
+    if not agent:
+        raise Fail("--agent (or HOSTCLAIMS_AGENT) is required", USAGE)
+    valid_name(agent, "agent")
+    every = bool(req.get("all"))
+    if every == bool(req.get("job")):
+        raise Fail("pass --job, or --all for every claim of yours on the host", USAGE)
+    if not every:
+        valid_name(req.get("job"), "job")
+    if req.get("hours") is not None and req.get("until"):
+        raise Fail("pass --hours or --until, not both", USAGE)
+    pids = pid_list(req.get("pid"))
+    if every and (pids or req.get("yield_with") is not None):
+        raise Fail("--pid and --yield-with change one claim: pass --job", USAGE)
+    starts = proc_starts(pids)
+    st = load_state(root, req, cfg, load_sim(root), sample=False)
+    t = st["now"]
+    end = None
+    if req.get("until"):
+        end = parse_when(req["until"], t)
+    elif req.get("hours") is not None:
+        end = t + float(req["hours"]) * 3600
+    if end is not None and end <= t:
+        raise Fail("the new end must be in the future", USAGE)
+    warnings = []
+    lease = st["lease"]
+    if end is not None and lease.get("kind") in ("paid", "free") and lease.get("planned_end"):
+        planned = parse_iso(lease["planned_end"])
+        if lease["kind"] == "paid" and end > planned + 1:
+            raise Fail("does not fit: the new end is past the host's planned end", NOFIT,
+                       reasons=["lease: would run past the planned end %s; ask its owner with `extend`"
+                                % lease["planned_end"]])
+        if lease["kind"] == "free" and end > planned:
+            warnings.append("the lease ends %s, before this claim's new end; its owner must renew it (ask with "
+                            "extend)" % lease["planned_end"])
+    with root.lock(cfg):
+        live, reaped = reap_locked(root, st, read_claims(root))
+        mine = [c for c in live if c["agent"] == agent and (every or c["job"] == req.get("job"))]
+        if not mine:
+            gone = [c["id"] for c in reaped if c["agent"] == agent and (every or c["job"] == req.get("job"))]
+            raise Fail("no live claim of %s%s on this host%s" % (
+                agent, "" if every else " for job %s" % req.get("job"),
+                ("; it lapsed just now and was moved to stale/ (%s): claim it again" % ", ".join(gone)) if gone else ""))
+        # every change is checked before any claim is written
+        plans = []
+        for c in mine:
+            ch = {}
+            if end is not None and c.get("eta") != iso(end):
+                ch["eta"] = [c.get("eta"), iso(end)]
+            cls = c.get("class") or "P1"
+            pre = req.get("preemptible")
+            if pre is not None and bool(pre) != bool(c.get("preemptible")):
+                if cls == "P0" and pre:
+                    raise Fail("claim %s is P0, and P0 claims are never preemptible" % c["id"], USAGE)
+                if cls == "P3" and not pre:
+                    raise Fail("claim %s is P3, and P3 claims are always preemptible" % c["id"], USAGE)
+                ch["preemptible"] = [bool(c.get("preemptible")), bool(pre)]
+            bor = req.get("borrowed")
+            if bor is not None and bool(bor) != bool(c.get("borrowed")):
+                ch["borrowed"] = [bool(c.get("borrowed")), bool(bor)]
+            if any(ch[k][0] and not ch[k][1] for k in ("preemptible", "borrowed") if k in ch):
+                # dropping a flag is a fresh admission: on a host dedicated to another project a claim stays
+                # preemptible and borrowed, so its owner may still ask it to yield
+                refused = admission(cfg, agent, ch.get("borrowed", [0, bool(c.get("borrowed"))])[1],
+                                    ch.get("preemptible", [0, bool(c.get("preemptible"))])[1], new=False)
+                if refused:
+                    raise Fail("refused for claim %s: %s" % (c["id"], "; ".join(m for _, m in refused)), DENIED)
+            partners = partner_list(req.get("yield_with"), c["job"])
+            if partners is not None and partners != list(c.get("yield_with") or []):
+                check_partners(live, agent, c["job"], partners)
+                ch["yield_with"] = [list(c.get("yield_with") or []), partners]
+            plans.append((c, ch))
+        out = []
+        for c, ch in plans:
+            if "eta" in ch:
+                c["eta"] = ch["eta"][1]
+                c["hours"] = round((end - parse_iso(c["created"])) / 3600.0, 4)
+            for k in ("preemptible", "borrowed", "yield_with"):
+                if k in ch:
+                    c[k] = ch[k][1]
+            attached = attach_procs(root, st, c, [x for x in live if x["id"] != c["id"]], pids, starts) if pids else []
+            if any(a["new"] for a in attached):
+                ch["pids"] = [a["pid"] for a in attached if a["new"]]
+            if not c.get("launcher"):
+                c["heartbeat"] = iso(t)
+            c["renewed"] = iso(t)
+            save_claim(root, c)
+            append_jsonl(root.p("history.jsonl"), {"event": "renew", "ts": iso(t), "id": c["id"], "agent": agent,
+                                                   "job": c["job"], "changes": ch})
+            v = claim_view(c, t, stale_min=cfg["rules"]["stale_min"])
+            v["procs"] = procs_view(c)
+            out.append({"claim": v, "changes": ch, "attached": attached})
+        deliver_due(root, t)
+    return {"renewed": out, "warnings": warnings, "reaped": [x["id"] for x in reaped]}
 
 
 def write_yield(root, c, y):
@@ -1660,32 +2277,39 @@ def op_release(req, src):
                        % (c["id"], c["agent"]), DENIED)
         la = c.get("launcher") or {}
         launcher = pid_alive(la.get("pid"), la.get("pid_start"))
-        job = pid_alive(c.get("pid"), c.get("pid_start"))
+        running = live_procs(c)
+        job = bool(running)
         grace = float(c.get("grace_min") or cfg["rules"]["yield_grace_min"])
-        if launcher and c.get("pid") and not job:
+        if launcher and c.get("pid") and not pid_alive(c.get("pid"), c.get("pid_start")):
             return {"ending": True, "claim": claim_view(c, st["now"]),
                     "note": "the job has ended; its launcher releases the claim in a moment"}
         if job or launcher:
             if not req.get("stop"):
                 how = ("TERM, then KILL after %g min" % grace) if launcher else "TERM to its process group"
                 raise Fail("the job is still running (pid %s); pass --stop to stop it (%s) or wait for it to end"
-                           % (c.get("pid"), how), DENIED)
+                           % (", ".join(str(p) for p, _ in running) or c.get("pid"), how), DENIED)
             if launcher:
                 write_yield(root, c, {"kind": "stop", "by_agent": agent, "by_job": c["job"], "class": c.get("class"),
                                       "reason": req.get("reason") or "stopped by its agent",
                                       "requested": iso(st["now"]), "acked": None, "grace_min": grace})
                 return {"stopping": True, "claim": claim_view(c, st["now"]),
                         "note": "its launcher stops the job and releases the claim"}
-            # no watcher (an orphan, or a claim tied with --pid): signal the group, release once it is gone
-            signal_group(int(c["pid"]), signal.SIGTERM)
+            # no watcher (an orphan, or a claim tied with --pid): signal each tied process's group, release once
+            # they are gone
+            for pid, _ in running:
+                signal_group(int(pid), signal.SIGTERM)
             deadline = time.time() + 10.0
-            while time.time() < deadline and pid_alive(c.get("pid"), c.get("pid_start")):
+            while time.time() < deadline and live_procs(c):
                 time.sleep(0.2)
-            if pid_alive(c.get("pid"), c.get("pid_start")):
+            left = live_procs(c)
+            if left:
                 return {"stopping": True, "claim": claim_view(c, st["now"]),
                         "note": "TERM sent to pid %s and its group; the claim stays until it exits (release again, "
-                                "or it goes stale %g min after)" % (c["pid"], cfg["rules"]["stale_min"])}
-        remove_claim(root, st, c, "stopped" if job else ("yielded" if c.get("yield") else "released"))
+                                "or it goes stale %g min after)" % (", ".join(str(p) for p, _ in left),
+                                                                    cfg["rules"]["stale_min"])}
+        remove_claim(root, st, c, "stopped" if job else ("yielded" if (c.get("yield") or {}).get("kind") == "yield"
+                                                         and not (c.get("yield") or {}).get("deferred") else "released"))
+        deliver_due(root, st)
         live = classify_all(read_claims(root), st)
         attach_claims(st, live)
         write_status(root, st, live, capacity(st, live))
@@ -1731,7 +2355,8 @@ def op_yield(req, src):
     target = valid_id(req.get("claim"), "claim id")
     st = load_state(root, req, cfg, load_sim(root), sample=False)
     with root.lock(cfg):
-        c = find_claim(read_claims(root), {"claim": target})
+        claims = read_claims(root)
+        c = find_claim(claims, {"claim": target})
         if c is None:
             raise Fail("no live claim %s" % target)
         state, why = classify(c, st)
@@ -1759,16 +2384,38 @@ def op_yield(req, src):
         y = {"kind": "yield", "by_agent": agent, "by_job": req.get("job"), "class": cls,
              "borrowed": bool(req.get("borrowed")), "reason": req.get("reason") or "", "requested": iso(st["now"]),
              "acked": None, "grace_min": float(c.get("grace_min") or cfg["rules"]["yield_grace_min"])}
-        write_yield(root, c, y)
-        append_jsonl(root.p("history.jsonl"), {"event": "yield-request", "ts": iso(st["now"]), "id": c["id"],
-                                               "agent": c["agent"], "job": c["job"], "by_agent": agent,
-                                               "by_job": req.get("job"), "class": cls, "reason": y["reason"]})
+        # paired claims (yield_with) yield together: a claim gets the request once the partners it names have ended
+        # or had their grace, so a server outlives the queue that calls it
+        live = [x for x in claims if x["id"] == c["id"] or classify(x, st)[0] != "stale"]
+        group = yield_group(c, live)
+        sent = []
+        for m in sorted(group, key=lambda x: (x["id"] != c["id"], x["id"])):
+            if m.get("yield"):
+                continue
+            ym = dict(y) if m is c else dict(y, via=c["id"],
+                                              grace_min=float(m.get("grace_min") or cfg["rules"]["yield_grace_min"]))
+            after = [x["id"] for x in group if x["id"] != m["id"] and x["job"] in (m.get("yield_with") or [])]
+            if after:
+                ym.update(after=after, deferred=True)
+                m["yield"] = ym
+                save_claim(root, m)
+            else:
+                write_yield(root, m, ym)
+            ev = {"event": "yield-request", "ts": iso(st["now"]), "id": m["id"], "agent": m["agent"], "job": m["job"],
+                  "by_agent": agent, "by_job": req.get("job"), "class": cls, "reason": y["reason"]}
+            if m is not c:
+                ev["via"] = c["id"]
+            if after:
+                ev["after"] = after
+            append_jsonl(root.p("history.jsonl"), ev)
+            sent.append({"id": m["id"], "job": m["job"], "deferred": bool(after), "after": after})
+        y = c["yield"]
     note = None
     if state == "orphan":
         note = "its launcher is gone, so nothing sends a signal: the job must watch its yield file"
     elif not c.get("launcher"):
         note = "a claim without a launcher: its agent sees the request in status and stops the job itself"
-    return {"yield": y, "claim": claim_view(c, st["now"], agent), "note": note}
+    return {"yield": y, "claim": claim_view(c, st["now"], agent), "note": note, "group": sent}
 
 
 def usage_from(root, t, window):
@@ -2254,7 +2901,7 @@ def op_pool(req, src):
 
 
 HOST_OPS = {"install": op_install, "uninstall": op_uninstall, "status": op_status, "claim": op_claim,
-            "run": op_run, "release": op_release, "reap": op_reap, "yield": op_yield, "usage": op_usage,
+            "run": op_run, "renew": op_renew, "release": op_release, "reap": op_reap, "yield": op_yield, "usage": op_usage,
             "lease": op_lease, "extend": op_extend, "request": op_request, "withdraw": op_withdraw, "decide": op_decide, "probe": op_probe,
             "audit": op_audit, "pool": op_pool}
 
@@ -2423,16 +3070,26 @@ def watch(root, rd, cid, logf):
                 elif len(got) > 1 and kill_at is not None:
                     log("second signal: killing the job now")
                     kill_at = t
+                if kind == "yield" and os.path.exists(yfile) and (read_json(yfile) or {}).get("kind") == "stop":
+                    # a stop by the claim's own project after a yield (one the job handles itself, say): TERM now,
+                    # and KILL no later than the stop's grace
+                    kind = "stop"
+                    grace = float(c.get("grace_min") or rules["yield_grace_min"]) * 60
+                    log("stop requested after the yield: TERM to the job, KILL within %d s" % grace)
+                    signal_group(proc.pid, signal.SIGTERM)
+                    kill_at = t + grace if kill_at is None else min(kill_at, t + grace)
                 if kind is None and os.path.exists(yfile):
                     y = read_json(yfile) or {}
                     kind = y.get("kind") or "yield"
-                    # a stop by the claim's own project is always TERM; yields use the claim's signal
+                    # a stop by the claim's own project is always TERM; yields use the claim's signal (none: no signal,
+                    # the job reads its yield file and stops itself; the KILL at the end of the grace still comes)
                     sig = "TERM" if kind == "stop" else (c.get("yield_signal") or "TERM")
                     if sig != "none":
                         signal_group(proc.pid, getattr(signal, "SIG" + sig))
                     grace = float(y.get("grace_min") or c.get("grace_min") or rules["yield_grace_min"]) * 60
                     kill_at = t + grace
-                    log("%s requested by %s: sent %s, KILL after %d s" % (kind, y.get("by_agent"), sig, grace))
+                    log("%s requested by %s: %s, KILL after %d s" % (kind, y.get("by_agent"), (
+                        "sent " + sig) if sig != "none" else "no signal (the job stops itself)", grace))
                     with locked():
                         cur = read_json(path)
                         if cur:
@@ -2452,12 +3109,18 @@ def watch(root, rd, cid, logf):
                             if not (cur.get("launcher") or {}).get("pid"):
                                 cur["launcher"] = dict(cur.get("launcher") or {}, **me)
                             save_claim(root, cur)
+                            # this claim's paired yield, once the partners it waits for are done
+                            if (cur.get("yield") or {}).get("deferred"):
+                                deliver_due(root, t)
                         else:
                             log("the claim file is gone; the job keeps running")
                     next_hb = t + hb_s
             except Exception as e:
                 log("watch error: %s" % e)
             time.sleep(min(1.0, hb_s / 2.0))
+        if kind is None and os.path.exists(yfile):
+            # the job read its yield file and ended before the watcher looked: it yielded
+            kind = (read_json(yfile) or {}).get("kind") or "yield"
     t = clk()
     if rc is None:
         code, signame = 127, None
@@ -2495,6 +3158,11 @@ def watch(root, rd, cid, logf):
                                                                           exit_code=code))
                         ended = True
                     os.unlink(path)
+                # paired claims waiting for this one to end get their yield now
+                try:
+                    deliver_due(root, t)
+                except Exception as e:
+                    log("paired yields not delivered: %s" % e)
             break
         except Exception as e:
             log("release retry: %s" % e)
@@ -2762,8 +3430,9 @@ def load_inventory(ctx):
 
 
 def load_policy(path, project):
+    # health: hosthealth.py's settings (power: default or max)
     pol = {"weights": {}, "classes": copy.deepcopy(DEFAULT_CLASSES), "fit": copy.deepcopy(FIT_DEFAULTS),
-           "audit": dict(AUDIT_DEFAULTS)}
+           "audit": dict(AUDIT_DEFAULTS), "health": {}}
     user = None
     if path:
         user = read_json(os.path.expanduser(path))
@@ -2784,6 +3453,7 @@ def load_policy(path, project):
         else:
             pol["fit"][k] = v
     pol["audit"].update(user.get("audit") or {})
+    pol["health"].update(user.get("health") or {})
     return pol, path
 
 
@@ -3026,12 +3696,24 @@ def claim_line(c):
     y = ""
     if c.get("yield"):
         yy = c["yield"]
-        y = "; %s asked by %s%s" % (yy.get("kind"), yy.get("by_agent"), " (acked)" if yy.get("acked") else "")
+        if yy.get("deferred"):
+            y = "; %s asked by %s, follows when its partner is done" % (yy.get("kind"), yy.get("by_agent"))
+        else:
+            y = "; %s asked by %s%s" % (yy.get("kind"), yy.get("by_agent"), " (acked)" if yy.get("acked") else "")
     eta = (", eta " + local_time(parse_iso(c["eta"]))) if c.get("eta") else ""
-    return "  %-7s %s/%s %s: cores %s, %s RAM%s; hb %s ago, age %s%s%s  [%s]" % (
+    mem = ""
+    if c.get("mem_gb") is not None:
+        over = float(c["mem_gb"]) - float(res.get("ram_gb") or 0.0)
+        mem = " (%s in use%s)" % (fmt_gb(c["mem_gb"]), (", %s over" % fmt_gb(over)) if over >= 0.05 else "")
+    procs = ""
+    if c.get("procs"):
+        procs = "; pid " + ", ".join("%s%s%s" % (p.get("pid"), (" " + p["prog"]) if p.get("prog") else "",
+                                                 "" if p.get("alive") else " (gone)") for p in c["procs"])
+    pair = ("; yields after " + ", ".join(c["yield_with"])) if c.get("yield_with") else ""
+    return "  %-7s %s/%s %s: cores %s, %s RAM%s%s%s; hb %s ago, age %s%s%s%s  [%s]" % (
         c.get("state") or "", c.get("agent"), c.get("job"), flags, c.get("cores_text") or "-",
-        fmt_gb(res.get("ram_gb")), (", GPU " + g) if g else "", fmt_age(c.get("heartbeat_age_s")),
-        fmt_age(c.get("age_s")), eta, y, c.get("id"))
+        fmt_gb(res.get("ram_gb")), mem, (", GPU " + g) if g else "", procs, fmt_age(c.get("heartbeat_age_s")),
+        fmt_age(c.get("age_s")), eta, pair, y, c.get("id"))
 
 
 def request_text(r, host):
@@ -3099,13 +3781,32 @@ def status_lines(h, r):
     sw = r.get("share_with")
     lines = ["%s  %s  mode %s  lease %s%s" % (host_label(h, r), r["tag"], r["mode"], lease_text(r.get("lease"), t),
                                              "" if sw is None else "  shared with: %s" % (", ".join(sw) or "nobody"))]
-    gp = " | ".join("GPU %d %s: %.2f free, %s%s" % (g["index"], g["name"], g["free_share"], fmt_gb(g["free_mem_gb"]),
-                                                     ", unclaimed use" if g["unclaimed"] else "") for g in f["gpus"])
+    def last_end(g):
+        if g.get("claims") or not g.get("last_claim_end"):
+            return ""
+        try:
+            return ", last claim ended %s ago" % fmt_age(t - parse_iso(g["last_claim_end"]))
+        except ValueError:
+            return ""
+
+    gp = " | ".join("GPU %d %s: %.2f free, %s%s%s" % (g["index"], g["name"], g["free_share"], fmt_gb(g["free_mem_gb"]),
+                                                       ", unclaimed use" if g["unclaimed"] else "", last_end(g))
+                    for g in f["gpus"])
     lines.append("  free: %d cores, %s RAM, %s disk%s%s" % (
         f["cores"], fmt_gb(f["ram_gb"]), fmt_gb(f["disk_gb"]), " (below the floor)" if f["below_floor"] else "",
         ("; " + gp) if gp else ""))
     for c in r.get("claims") or []:
         lines.append(claim_line(c))
+    for o in r.get("overlaps") or []:
+        lines.append("  warning: claims %s share cores %s" % (" and ".join(o["claims"]), fmt_cores(o["cores"])))
+    for p in r.get("pinned") or []:
+        who = "pid %s%s" % (p["pid"], (" (%s)" % p["prog"]) if p.get("prog") else "")
+        if p.get("claim"):
+            lines.append("  warning: %s of claim %s runs on cores %s outside its claim: no claim gets them while it "
+                         "runs there" % (who, p["claim"], fmt_cores(p["outside"])))
+        else:
+            lines.append("  pinned outside claims: %s on cores %s: no claim gets them while it runs (a job whose claim "
+                         "lapsed? its project claims or stops it)" % (who, fmt_cores(p["outside"])))
     for g in r.get("unclaimed_gpu_procs") or []:
         lines.append("  unclaimed GPU process: GPU %s pid %s (%s)" % (g.get("gpu"), g.get("pid"), fmt_gb(g.get("mem_gb"))))
     out = r.get("outside") or {}
@@ -3550,10 +4251,23 @@ def cmd_audit(ctx, a):
     return exit_code(results)
 
 
+def attached_lines(name, c, attached):
+    # what --pid did: the processes tied now, with their program names, so a launcher that exits at once shows
+    out = []
+    for x in attached or []:
+        out.append("  %s pid %s%s to claim %s" % ("attached" if x.get("new") else "already tied:", x["pid"],
+                                                 (" (%s)" % x["prog"]) if x.get("prog") else "", c["id"]))
+    if attached:
+        out.append("  the claim lives while any of its processes runs (pid %s): tie the job's own long-lived process, "
+                   "not a launcher that exits at once" % ", ".join(str(p["pid"]) for p in c.get("procs") or []))
+    return out
+
+
 def cmd_claim(ctx, a, launch=False):
     ctx.need_agent()
     h = ctx.host(a.host)
-    req = dict(want_req(ctx, a), op="run" if launch else "claim", pid=getattr(a, "pid", None), brief=a.brief, note=a.note)
+    req = dict(want_req(ctx, a), op="run" if launch else "claim", pid=getattr(a, "pid", None), brief=a.brief, note=a.note,
+               yield_with=a.yield_with)
     if launch:
         req.update(cmd=a.cmd, cwd=a.cwd, done_file=a.done_file, yield_signal=a.yield_signal, grace_min=a.grace_min,
                    rerun=a.rerun)
@@ -3573,9 +4287,30 @@ def cmd_claim(ctx, a, launch=False):
         c = r["claim"]
         lines.append("%s: %s %s" % (h["name"], "already claimed:" if r.get("existing") else "claimed", c["id"]))
         lines.append(claim_line(c))
+        lines += attached_lines(h["name"], c, r.get("attached") or ([dict(p, new=True) for p in c.get("procs") or []]
+                                                                    if not r.get("existing") else []))
+        lp = r.get("lapsed")
+        if lp:
+            now = fmt_cores(lp["cores"]) or "-"
+            if lp.get("kept"):
+                how = ": this one keeps its cores %s" % (fmt_cores(lp.get("job_cores") or lp["cores_before"]) or "-")
+            elif lp.get("job_cores"):
+                how = (": its job runs pinned to cores %s, this one's are %s: move it (taskset -acp %s <pid>)"
+                       % (fmt_cores(lp["job_cores"]), now, now))
+            else:
+                how = (": its cores were %s, this one's are %s: move a job still running there (taskset -acp %s <pid>)"
+                       % (fmt_cores(lp["cores_before"]) or "-", now, now))
+            lines.append("  your earlier claim of this job lapsed%s (stale/%s.json)%s" % (
+                (" at " + local_time(parse_iso(lp["at"]))) if lp.get("at") else "", lp["id"], how))
+        pj = r.get("pinned_job")
+        if pj and not pj.get("kept"):
+            now = fmt_cores(c["resources"]["cores"]) or "-"
+            lines.append("  the process you tied runs pinned to cores %s, beyond this claim's %s: re-pin it (taskset "
+                         "-acp %s <pid>) or claim more cores" % (fmt_cores(pj["cores"]), now, now))
         if c.get("lapses_at"):
-            lines.append("  nothing watches this claim: it lapses at %s unless you re-run this claim (which renews "
-                         "it) or tie it to your process with --pid" % local_time(parse_iso(c["lapses_at"])))
+            lines.append("  nothing watches this claim: it lapses at %s unless you renew it (renew --job %s, or re-run "
+                         "this claim) or tie it to your process with --pid" % (local_time(parse_iso(c["lapses_at"])),
+                                                                              c.get("job")))
         if launch and not r.get("existing"):
             lines.append("  %s; pid %s; run dir %s (job.log, done.json)" % (
                 "tmux session %s" % c["launcher"]["session"] if (c.get("launcher") or {}).get("session")
@@ -3636,8 +4371,48 @@ def cmd_yield(ctx, a):
     else:
         lines = ["%s: %s yield request for %s (grace %g min)" % (
             h["name"], "existing" if r.get("existing") else "sent", a.claim, r["yield"].get("grace_min") or 0)]
+        group = r.get("group") or []
+        if len(group) > 1:
+            first = [g["job"] for g in group if not g["deferred"]]
+            later = [g["job"] for g in group if g["deferred"]]
+            lines.append("  paired claims yield together: %s now%s" % (
+                ", ".join(first) or "none", ("; then %s, each once the partners it names have ended or had their grace"
+                                             % ", ".join(later)) if later else ""))
         if r.get("note"):
             lines.append("  note: " + r["note"])
+    emit(ctx, dict(r, host=h["name"]), lines)
+    return r.get("code", OK)
+
+
+def cmd_renew(ctx, a):
+    ctx.need_agent()
+    if bool(a.job) == bool(a.all):
+        raise Fail("pass --job J, or --all for every claim of yours on the host", USAGE)
+    h = ctx.host(a.host)
+    req = {"op": "renew", "job": a.job, "all": a.all, "hours": parse_hours(a.hours) if a.hours else None,
+           "until": a.until, "preemptible": a.preemptible, "borrowed": a.borrowed, "pid": a.pid,
+           "yield_with": a.yield_with}
+    r = ctx.call(h, req)
+    if not r.get("ok"):
+        lines = fail_lines(h["name"], r)
+    else:
+        lines = []
+        for x in r.get("renewed") or []:
+            c, ch = x["claim"], x.get("changes") or {}
+            what = []
+            if "eta" in ch:
+                what.append("end %s" % local_time(parse_iso(ch["eta"][1])))
+            for k in ("preemptible", "borrowed"):
+                if k in ch:
+                    what.append(k if ch[k][1] else "not " + k)
+            if "yield_with" in ch:
+                what.append("yields after %s" % (", ".join(ch["yield_with"][1]) or "nothing"))
+            lines.append("%s: renewed %s/%s%s  [%s]" % (h["name"], c["agent"], c["job"],
+                                                        (": " + "; ".join(what)) if what else "", c["id"]))
+            lines.append(claim_line(c))
+            lines += attached_lines(h["name"], c, x.get("attached"))
+        for w in r.get("warnings") or []:
+            lines.append("  warning: " + w)
     emit(ctx, dict(r, host=h["name"]), lines)
     return r.get("code", OK)
 
@@ -4043,21 +4818,46 @@ def build_parser():
     sp.add_argument("--probe", action="store_true", help="also read each host's tag, free capacity and GPUs, and "
                     "whether it admits this project (ssh)")
     sp.add_argument("--seen", help="the seen list (default <pack>/.memory/%s; required with --hosts)" % SEEN_NAME)
-    for name, text in (("claim", "reserve capacity for a job you start yourself (idempotent per agent and job)"),
+    yield_with_help = ("yield after this job of yours on the same host: a yield request on either claim goes to both, "
+                       "the named job first (repeat for more; 'none' clears)")
+    for name, text in (("claim", "reserve capacity for a job you start yourself (idempotent per agent and job; a repeat "
+                                 "renews it, and --pid attaches processes)"),
                        ("run", "claim, then start the job in tmux, pinned and watched (put the command after --)")):
         sp = cmd(name, text)
         sp.add_argument("--host")
         add_want(sp, True)
         sp.add_argument("--brief", help="where the job's brief lives")
         sp.add_argument("--note")
+        sp.add_argument("--yield-with", action="append", metavar="JOB", help=yield_with_help)
         if name == "claim":
-            sp.add_argument("--pid", type=int, help="tie the claim to this running process")
+            sp.add_argument("--pid", type=int, action="append", help="tie the claim to this running process (repeat "
+                            "for more; on an existing claim of yours, run's included, it attaches the process)")
         else:
             sp.add_argument("--cwd", help="working folder on the host (default home)")
             sp.add_argument("--done-file", help="also write the done marker here")
-            sp.add_argument("--yield-signal", choices=SIGNALS, help="signal sent on a yield request (default TERM)")
+            sp.add_argument("--yield-signal", choices=SIGNALS, help="signal sent on a yield request (default TERM; "
+                            "none: no signal - the job reads $HOSTCLAIMS_YIELD_FILE and stops itself within the grace, "
+                            "after which KILL still comes)")
             sp.add_argument("--grace-min", type=float, help="minutes from a yield request to KILL (default 10)")
             sp.add_argument("--rerun", action="store_true", help="start again although this job ended moments ago")
+    sp = cmd("renew", "change your live claim without releasing it: its end, preemptible or borrowed, more processes, "
+             "its yield order; refreshes a bare claim's heartbeat")
+    sp.add_argument("--host")
+    sp.add_argument("--job", help="the claim's job")
+    sp.add_argument("--all", action="store_true", help="every claim of yours on the host (not with --pid or "
+                    "--yield-with)")
+    sp.add_argument("--hours", help="new end this long from now, e.g. 90m or 6h")
+    sp.add_argument("--until", help="new end at this time (ISO time or +3h); past a paid lease's planned end it is "
+                    "refused (ask with extend)")
+    sp.add_argument("--preemptible", dest="preemptible", action="store_const", const=True, default=None,
+                    help="may now be asked to yield (P0 never)")
+    sp.add_argument("--no-preemptible", dest="preemptible", action="store_const", const=False,
+                    help="may no longer be asked to yield (P3 always may)")
+    sp.add_argument("--borrowed", dest="borrowed", action="store_const", const=True, default=None,
+                    help="runs beyond this agent's fair share")
+    sp.add_argument("--no-borrowed", dest="borrowed", action="store_const", const=False)
+    sp.add_argument("--pid", type=int, action="append", help="attach this running process (repeat for more)")
+    sp.add_argument("--yield-with", action="append", metavar="JOB", help=yield_with_help)
     sp = cmd("release", "release your claim (--stop to stop a running job first)")
     sp.add_argument("--host")
     sp.add_argument("--job")
@@ -4134,7 +4934,8 @@ def build_parser():
 
 
 COMMANDS = {"install": cmd_install, "uninstall": cmd_uninstall, "status": cmd_status, "claim": cmd_claim,
-            "run": lambda ctx, a: cmd_claim(ctx, a, launch=True), "release": cmd_release, "reap": cmd_reap,
+            "run": lambda ctx, a: cmd_claim(ctx, a, launch=True), "renew": cmd_renew, "release": cmd_release,
+            "reap": cmd_reap,
             "yield": cmd_yield, "usage": cmd_usage, "pool": cmd_pool, "lease": cmd_lease, "extend": cmd_extend,
             "fit": cmd_fit, "request": cmd_request, "audit": cmd_audit, "shared": cmd_shared,
             "approve": lambda ctx, a: cmd_decide(ctx, a, "approve"),

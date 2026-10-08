@@ -1283,7 +1283,7 @@ class TestSafeguards(Base):
         self.assertEqual([r["claim"] for r in rows], ["c1", None])
         self.assertAlmostEqual(rss["c1"], 3.1)
         # the 2 GiB process belongs to the claim; only the unclaimed 1 GiB one is outside work
-        self.assertEqual(big, [{"pid": 400, "rss_gb": 1.0}])
+        self.assertEqual(big, [{"pid": 400, "rss_gb": 1.0, "mem_gb": 1.0}])
 
     def test_simulated_readings_need_the_test_switch(self):
         os.environ.pop("HOSTCLAIMS_SIMULATE")
@@ -1682,7 +1682,11 @@ class TestRealReadings(RealBase):
         self.assertNotIn("lapses_at", tied)
         self.set_claim(first["id"], heartbeat=hc.iso(time.time() - 30 * 60))
         self.assertEqual(self.cli("reap")["hosts"]["local"]["reaped"], [])
-        self.claim("a", "bare", "--pid", str(self.sleeper().pid), code=hc.DENIED)
+        # a second process attaches to the claim beside the first
+        more = self.sleeper()
+        again = self.claim("a", "bare", "--pid", str(more.pid))
+        self.assertEqual([(x["pid"], x["new"]) for x in again["attached"]], [(more.pid, True)])
+        self.assertEqual(sorted(x["pid"] for x in again["claim"]["procs"]), sorted([p.pid, more.pid]))
         other = self.sleeper()
         self.claim("b", "real", "--pid", str(other.pid))
         self.claim("a", "bare2")

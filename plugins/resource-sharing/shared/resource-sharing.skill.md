@@ -1,9 +1,9 @@
 ---
 name: resource-sharing
 triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance", "host health", "gpu health", "host dashboard", "hosts dashboard"]
-summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield, moves stale claims aside, reports usage, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit; hosthealth.py checks GPU hosts (and applies the safe performance settings where the sharing rules allow) and hostdash.py shows their jobs and load live.
+summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock (memory counted as PSS, cores a running job is pinned to never granted twice), ties claims to their jobs' processes, renews claims in place, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield (paired claims in a set order), moves stale claims aside, reports usage and each GPU's last claim, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit; hosthealth.py checks GPU hosts (and applies the safe performance settings where the sharing rules allow) and hostdash.py shows their jobs and load live.
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: resource-sharing - Hosts Shared by Many Agents <!-- omit in toc -->
 
@@ -80,9 +80,10 @@ run or session.
    any remote footprint.
 5. **Policy (optional)**, in the `policy` block of the sharing file or `--policy FILE`: `weights` per
    project (for `usage`), `classes` (default GPU share and preemptibility per class), `fit` (new-instance
-   wait, prices per GPU type, extension thresholds) and `audit` (idle limits). Host rules live in the host's
-   `host.json` so every agent there applies the same numbers: `stale_min` 15, `yield_min_age_min` 20,
-   `yield_grace_min` 10, `heartbeat_s` 60, `request_timeout_min` 120, `run_keep_days` 14.
+   wait, prices per GPU type, extension thresholds), `audit` (idle limits) and `health` (`{"power": "max"}`
+   makes `hosthealth.py` hold GPU power limits to their maximum; see Host Health and Live View). Host rules
+   live in the host's `host.json` so every agent there applies the same numbers: `stale_min` 15,
+   `yield_min_age_min` 20, `yield_grace_min` 10, `heartbeat_s` 60, `request_timeout_min` 120, `run_keep_days` 14.
 
 `<tool>` below is `<pack>/plugins/resource-sharing/tools/hostclaims.py` in a project (copy mode), or
 `plugins/resource-sharing/shared/tools/hostclaims.py` in the Solaris tree. Run it from the project root.
@@ -91,13 +92,14 @@ run or session.
 
 | Command | Does |
 |---|---|
-| `status [--host H]` | Per host: tag, owner, lease, free cores/RAM/disk and per-GPU free share and memory, claims (live, orphan, stale), unclaimed GPU processes, requests, recent ends, stale files. All hosts by default. Other projects' commands show only their program name. |
+| `status [--host H]` | Per host: tag, owner, lease, free cores/RAM/disk and per-GPU free share and memory with its last claim's end (`last_claim_end` in `--json`), claims (live, orphan, stale) with the memory they use and their processes, unclaimed GPU processes, cores two claims share and processes pinned outside their claim, requests, recent ends, stale files. All hosts by default. Other projects' commands show only their program name. |
 | `shared [--probe] [--ack] [--seen FILE]` | Guest: the hosts other projects share with this one against the seen list: `NEW`, `GONE` and `CHANGED` hosts; exits 6 until `--ack` records the current set. No ssh unless `--probe`. `--seen FILE` names the seen list (required with `--hosts`). See Picking Up Shared Hosts. |
-| `claim --host H --job J --cores N --ram SIZE [--gpu SPEC] [--class P1] [--hours H]` | Reserve capacity for a job you start yourself. Idempotent per project and job: a repeat returns the same claim and renews it, and a repeat with `--pid P` ties it to your job's process. Untied, the claim lapses 15 minutes after its last renewal; the answer prints that time. A process another claim holds is refused. |
-| `run ... -- CMD ARGS` | Claim, then start the job in tmux (see Launching Jobs). A repeat returns the running claim; a job that ended in the last 15 min needs `--rerun`. Over an earlier bare claim of the same job it re-fits that claim to the run's size. |
-| `release --host H --job J` | Release your claim; `--stop` first stops a running job (through its watcher: TERM, then KILL after the grace; a claim tied with `--pid` gets TERM to its process group and is released once the process is gone). |
+| `claim --host H --job J --cores N --ram SIZE [--gpu SPEC] [--class P1] [--hours H] [--pid P] [--yield-with JOB]` | Reserve capacity for a job you start yourself. Idempotent per project and job: a repeat returns the same claim and renews it, and a repeat with `--pid P` attaches that process to it (repeat `--pid` for more; a `run` claim takes them too); the answer names each attached program. Untied, the claim lapses 15 minutes after its last renewal; the answer prints that time. A process another claim holds is refused. A new claim takes first the cores its own job already runs pinned to: those of a process given with `--pid`, and, for a job whose claim lapsed in the last hour, those its still-running job is pinned to, then the lapsed claim's cores and GPUs while they are free (no other project gets those while the job runs). The answer says when the job runs outside the new claim (move it with `taskset -acp`). |
+| `run ... [--yield-signal SIG] [--grace-min M] [--yield-with JOB] -- CMD ARGS` | Claim, then start the job in tmux (see Launching Jobs). A repeat returns the running claim; a job that ended in the last 15 min needs `--rerun`. Over an earlier bare claim of the same job it re-fits that claim to the run's size. |
+| `renew --host H --job J [--hours H \| --until T] [--preemptible \| --no-preemptible] [--borrowed \| --no-borrowed] [--pid P] [--yield-with JOB]` | Change your live claim without releasing it: a new end (`--hours` from now, or `--until`; past a paid lease's planned end it is refused, as for `claim`), preemptible or borrowed (P0 is never preemptible, P3 always), more processes, its yield order (`--yield-with none` clears it). It also renews a bare claim. Dropping `--preemptible` or `--borrowed` passes the same admission as a claim: on a host dedicated to another project a guest's claim keeps both, so the owner can still ask it to yield. `--all` instead of `--job` changes every claim of yours on the host (not with `--pid` or `--yield-with`). The ledger records each change. |
+| `release --host H --job J` | Release your claim; `--stop` first stops a running job (through its watcher: TERM, then KILL after the grace; a claim tied with `--pid` gets TERM to the group of each tied process and is released once they are gone). |
 | `reap [--host H]` | Move stale claims to `stale/` (never deleted); orphans stay. Run by the owner, it also prunes finished run folders older than `run_keep_days` (14), with their logs and done markers. `claim` and `run` reap first anyway. |
-| `yield --host H --claim ID --class P0 --job J --reason ...` | Ask a preemptible lower-priority claim to checkpoint and stop. |
+| `yield --host H --claim ID --class P0 --job J --reason ...` | Ask a preemptible lower-priority claim to checkpoint and stop; claims paired with it yield too, in their order. |
 | `usage [--window 24h]` | GPU-hours (share x hours, by GPU type) and CPU-hours per project, with the policy weights. |
 | `fit --hours H [--gpus N --gpu-type T --gpu-mem SIZE] --cores N --ram SIZE [--can-wait]` | Rank hosts for a job against a new paid instance, and recommend. |
 | `extend`, `request`, `approve`, `decline` | Guest requests (and `request --withdraw ID`) and owner decisions (below). |
@@ -113,7 +115,14 @@ codes: 0 ok, 1 error, 2 bad usage, 3 does not fit (try another host, or ask to y
 
 Capacity is the host's totals minus live claims minus what runs outside claims: an unclaimed GPU process (or
 at least 1 GiB of unexplained GPU memory) takes its whole GPU, unclaimed RAM use and CPU load count as used,
-and the host keeps a reserve (1 core, 4 GiB RAM, 10% disk free by default). GPU memory is claimed too
+and the host keeps a reserve (1 core, 4 GiB RAM, 10% disk free by default). A claim's RAM counts as the larger
+of what it declared and what its processes use, measured as PSS (proportional set size: a page that several
+processes share counts once across them, so forked workers sharing their parent's memory are not counted once
+each), or as summed RSS where PSS cannot be read (another login's processes, kernels older than 4.14); `status`
+shows each claim's use and how it was measured. Cores a running process is pinned to (`taskset` or the like, on
+fewer than half of the host's cores, 64 MiB or more) are never granted when they lie outside the process's own
+claim, or, for a process tied to no claim, outside every claim: a job whose claim lapsed keeps its cores until it
+ends (only a new claim of that same job takes them back), and `status` names such processes. GPU memory is claimed too
 (default: the share times the GPU's memory, or what is free when that is less, down to half of it); GPUs
 with unified memory report none, so only their shares are checked, and `--gpu-mem` matches them by share.
 A GPU share only caps how many jobs pile on one GPU; it is not a speed guarantee. Work outside claims (for
@@ -129,15 +138,22 @@ each; the system's own memory, caches and `/dev/shm` are not work.
   GPUs (empty for CPU-only claims, so they see no GPU), `CUDA_DEVICE_ORDER=PCI_BUS_ID`, `OMP_NUM_THREADS` and
   its siblings set to the core count, `HOSTCLAIMS_CLAIM_ID`, `HOSTCLAIMS_YIELD_FILE` and `HOSTCLAIMS_RUN_DIR`;
 - refreshes the claim's heartbeat every minute while the job's process lives;
-- on a yield request sends the job's process group `TERM` (`--yield-signal` to change or `none`), and on a
-  stop always `TERM`; then `KILL` after the grace period (`--grace-min`, default 10);
+- on a yield request sends the job's process group `TERM` (`--yield-signal` to change it), and on a stop always
+  `TERM`; then `KILL` after the grace period (`--grace-min`, default 10). `--yield-signal none` is for a job
+  that must not be signalled when a yield comes, one that stops itself in a set order (a server behind a guard,
+  say): it gets no signal, reads `$HOSTCLAIMS_YIELD_FILE` and ends itself within the grace. The `KILL` at the end
+  of the grace still comes, so a yield stays binding: give such a job a `--grace-min` long enough for its own
+  stop, and keep anything that must outlive it out of its process group. A stop by the claim's own project
+  (`release --stop`) after a yield sends `TERM` at once;
 - on exit writes `run/<claim-id>/done.json` (exit code, signal, reason `finished`, `failed`, `yielded` or
-  `stopped`, times), a copy at `--done-file PATH` if given, a ledger line in `history.jsonl`, and releases
-  the claim.
+  `stopped`, times; `yielded` also when the job ended itself after reading its yield file), a copy at
+  `--done-file PATH` if given, a ledger line in `history.jsonl`, and releases the claim.
 
 The thread variables suit one multi-threaded process. A job that starts many single-threaded worker processes (a
 process pool, parallel runners) hands the count to each, so N workers on an N-core claim start N threads apiece and
 oversubscribe it: set one thread per process (the variables at 1 in each worker, or the runner's own thread option).
+A job started outside `run` sets the same caps itself (`OMP_NUM_THREADS` and its siblings at its claimed core
+count): uncapped jobs on a shared host starve each other, and one stalled job ran several times faster once capped.
 
 Output goes to `run/<claim-id>/job.log` (follow it with `tail -f`); watcher events go to `wrapper.log`. Claim
 files and run folders are readable by the host's login only. The owner's `reap` removes finished run folders
@@ -146,12 +162,17 @@ activate environments inside the command. Poll `done.json`, never `pgrep -f` ove
 the ssh command line itself), and in any hand-written launch line put `;` rather than `&&` before a
 background step.
 
-A process counts toward a claim when it descends from the claimed job (or carries `HOSTCLAIMS_CLAIM_ID`
-where the tool can read its environment, which a different login cannot). Container processes descend from
-the container runtime, not from `docker run`, so do not wrap containers in `run`: claim the capacity first,
-start the container, then repeat the same `claim` with
+A process counts toward a claim when it descends from one of the claim's processes (or carries
+`HOSTCLAIMS_CLAIM_ID` where the tool can read its environment, which a different login cannot). Container
+processes descend from the container runtime, not from `docker run`, so do not wrap containers in `run`:
+claim the capacity first, start the container, then repeat the same `claim` with
 `--pid $(docker inspect -f '{{.State.Pid}}' <container>)` to tie it to the container's main process within
-15 minutes. Otherwise its GPU use counts as work outside claims.
+15 minutes (or `renew --job J --pid ...`). Otherwise its GPU use counts as work outside claims. The same
+attaches other processes a job starts outside its tree, to a `run` claim too: their memory then counts toward
+the claim, and a claim without a watcher lives while any of its processes runs (tie the job's own long-lived
+process, not a launcher that exits at once: the answer names each attached program, and `status` marks one
+that has ended `(gone)`). A claim whose processes all ended goes stale 15 minutes after its last renewal; its
+ledger end is the last time a call on the host saw one of them alive.
 
 ## Priorities and Yield
 
@@ -171,6 +192,16 @@ yields already requested free enough); ask only after no other host fits (`statu
 own watcher delivers the request; the job saves a checkpoint and exits (trap `SIGTERM`, or poll
 `$HOSTCLAIMS_YIELD_FILE`); its done marker says `yielded` and its project queues it again. A claim without
 a watcher sees the request in `status`.
+
+**Paired claims.** Claims that only work together, such as a server and the queue that sends it work, yield
+together and in a set order. Start the one that must stop last with `--yield-with <the other's job>` (on
+`claim`, `run` or `renew`; repeat it for more partners): a yield request on either claim then goes to both,
+the named partner first, and the claim that names it gets its request only once that partner's claim has
+ended, or its grace and half a minute have passed (a call on the host or the claim's own watcher delivers it,
+and `status` shows it as waiting until then). So the queue stops before the server it calls. The order may not
+loop. The partners must be your own claims on the same host; a pairing makes them yield together whatever
+their own preemptibility, so pair only claims that are useless apart. When `claim` or `run` lists the claims
+to ask, asking one of a pair frees the other too.
 
 ## Owners, Guests and Requests
 
@@ -200,6 +231,12 @@ A guest onboarding that worked: the owner installs its hosts with the sharing li
 the guest the hosts, their lease ends and its terms; the guest files each setup need (a container runtime, a GPU
 reset) as `request --type maintenance`; the owner, with its human's yes (standing or per request), does the work,
 checks it, and only then approves the request, so an approval also tells the guest the work is done.
+
+A guest's bring-up on a shared host takes what is free when it runs: write bring-up steps that accept a subset of
+the GPUs (or parallel workers) they plan for and add the rest as those free up, since the owner may claim one in
+the middle of a bring-up. A guest claim that runs beyond the guest's fair share is marked `--borrowed` (`renew
+--borrowed` marks a live one): the owner's default-class (P1) jobs may ask only lower classes, or same-class
+borrowed claims, to yield.
 
 A guest leaves a host as it found it, apart from its own folder there (for example `~/.solaris/<project>/`,
 listed in its `resources.md`). Before its first job on the host it points every cache and config home into
@@ -235,6 +272,10 @@ and whether it admits you (a host its owner has not synced yet does not).
   installs the new hosts and syncs the sharing list on the others. Then they tell the projects they share with
   (whose next `shared` finds the change anyway). `audit` flags owned hosts that are not installed, or whose
   sharing list differs from `resource-sharing.json`, each with the exact command to fix it.
+- **Lease ends** (guests): owners extend leases far more often than they shorten them, and keep adding hosts. Read
+  each host's planned end at every audit (`status` lists it) and plan as if it will be extended; collect finished
+  results hourly, so an ending lease costs at most the run in flight; stop work on a host only when its end is under
+  two hours away and its owner confirms no extension.
 
 ## Paid Hosts and Fit
 
@@ -311,8 +352,14 @@ same inventory (the project's `hosts.json` plus the hosts shared with it; `--hos
   plus load, free memory and disk, and the CPU governor. Exit codes: 0 healthy, 3 problems found, 4 a host did
   not answer.
 - `--fix` first applies three settings that are safe under running jobs: persistence mode on, each GPU's power
-  limit back up to its default (never above it: a maximum over the default can overload a power supply the
-  GPUs share), and the `performance` CPU governor. A reboot resets them (persistence mode survives only where
+  limit back up to its default (never above it by default: a maximum over the default can overload a power
+  supply the GPUs share), and the `performance` CPU governor. An owner who wants the most performance passes
+  `--power max` (or sets `"health": {"power": "max"}` in the policy block of `resource-sharing.json`): the check
+  then holds each GPU's limit to the most the GPU allows (`power.max_limit`) and `--fix` raises it there, on
+  hosts the project owns only (the host's own record when `--fix` reads it, else the inventory's owner). On any
+  other host the check and the fix keep the default as before, so a guest that sets the policy gets no lasting
+  problem there (with `--fix` the output says why). The two are
+  equal on many GPUs. A reboot resets these settings (persistence mode survives only where
   the persistence daemon runs), so owners run `hosthealth.py --fix` with their hourly checks. It acts as the
   calling project and follows ownership: on a host the project owns on record (the host's `host.json` from
   `install`, else an `owner` its inventory entry names; a host listed without one is nobody's here), every GPU
@@ -352,20 +399,31 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
 
 - Check `status` before heavy work; start every host job with `run` (or `claim` it first) and stay inside
   the claim: its cores, GPUs, RAM, disk and hours.
+- Before heavy jobs, also see who else is on the host beyond what `status` counts: logged-in users, containers and
+  recent logins (`who`, `docker ps`, `last`). When another project moves in, move your work elsewhere and leave your
+  files in place unless the owner says otherwise. Pick x86 hosts for x86-only stacks (some libraries ship no ARM
+  CUDA builds).
 - A server that serves other jobs' runs (an inference engine behind an evaluation queue, say) is part of
   their claim: send it no diagnostic or experimental requests. Start your own under your own claim, or use it
   only while its runs are held between batches: one memory-heavy request can kill it and every run it serves
   (asking vLLM for prompt log-probabilities over a 5k-token prompt allocated about 5 GiB of logits, and its
   engine died).
-- Give every `claim` a `--pid`, or re-run it within 15 minutes, or it lapses and its capacity goes to
-  others.
+- Give every `claim` a `--pid` (the job's own long-lived process; more attach with a repeat `claim --pid` or
+  `renew --pid`), or renew it (`renew --job J`, or re-run the same `claim`) within 15 minutes, or it lapses and
+  its capacity goes to others. When a job outlives its planned end, or becomes preemptible, `renew` the claim
+  instead of releasing and claiming again.
+- Copy bulk data between hosts in a few parallel flows (for example three `rsync` processes, each over its own
+  part of the tree), under a claim on each end: one flow seldom fills the link, and three copied about 1.7 times
+  as fast as one (58 GB in about 12 minutes).
 - Never release, edit or delete another project's claim or hold; `reap` moves stale claims to `stale/`
   without deleting them and is safe for anyone to run; only the owner's `reap` also prunes run folders
   older than 14 days.
 - After a restart, rebuild your running list from `status` on every host, then read the done markers and
   `stale/`: resume from checkpoints or close.
 - Put the claim id, tmux session and done marker in your notes and job ledger.
-- Honour yield requests: checkpoint on `SIGTERM` in long jobs.
+- Honour yield requests: checkpoint on `SIGTERM` in long jobs (a job run with `--yield-signal none` watches
+  `$HOSTCLAIMS_YIELD_FILE` instead and ends itself within the grace, before the `KILL`). Pair claims that only
+  work together with `--yield-with`, so they stop in order.
 - Owners audit their hosts and answer requests promptly; guests relay requests to the owner and wait.
 - Guests run `shared` at least hourly and act on `NEW` and `GONE` hosts before `shared --ack`; owners run
   `install --all` after adding machines or changing `share_with`, and tell the projects they share with.
@@ -391,7 +449,19 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
 - **`orphan`**: the watcher died but the job lives; the claim is kept. When the job ends, the claim goes
   stale after 15 minutes with no done marker; read `job.log`.
 - **`stale/`**: the host rebooted (boot id changed), the job died unwatched, or a claim without `--pid` was
-  not renewed; the file keeps the claim and the reason.
+  not renewed; the file keeps the claim and the reason (for a claim tied to processes, when one was last seen
+  alive). Claim the job again within the hour and the new claim takes back the cores its still-running job is
+  pinned to, then the old claim's cores while they are free.
+- **`pinned outside claims`** or **`runs on cores ... outside its claim`** in `status`: a process is pinned to
+  cores no claim of its own holds (a job whose claim lapsed, or one pinned by hand); no other claim gets those
+  cores while it runs. Its project claims the job again (the same job's new claim, or one with `--pid` for it,
+  takes those cores back), re-pins it (`taskset -acp <cores> <pid>`), or stops it.
+- **`claims ... share cores`** in `status`: two claim files name the same core (a hand edit, or a tool version
+  that did not check); the tool never grants such a core again, and one of the two projects releases its claim
+  and claims again.
+- **A yield asked, the job still running**: a job run with `--yield-signal none` got no signal and is stopping
+  itself; the watcher sends `KILL` when its grace (`--grace-min`) runs out. A claim without a watcher sees the
+  request only in `status`: its project stops the job.
 - **Lock busy**: another call held the lock for 60 seconds; retry. Locks work on the host's own disk, not
   on network or synced folders.
 - **"belongs to another machine"** or **"network filesystem"**: the home folder is shared between hosts;
