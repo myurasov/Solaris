@@ -76,7 +76,8 @@ skill never writes into `projects/<slug>/`.
 A task can attach plugins **directly - no project link required** (at creation, e.g. "new task with plugin
 `<name>`", or later, e.g. "add plugin `<name>` to this task"). The plugin must already exist in
 `plugins/<name>/`; if it does not, acquire and validate it first via `install-plugin` (steps 2-3,
-plugins-only scope). Record the attachment as the `Plugins:` line in `notes.md`'s header (comma-separated
+plugins-only scope). Attach its required dependencies with it (`uv run -m solaris.tools.plugins deps <name>`
+lists them, dependencies first) and offer the optional ones once. Record the attachment as the `Plugins:` line in `notes.md`'s header (comma-separated
 for several); on resume, read that line to re-load. To detach, remove the name from the line (and remove
 the MCP servers its merge recorded - see below - once no other `Plugins:` line still names them).
 

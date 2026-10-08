@@ -45,8 +45,11 @@ external `__ai/`-style setup):
    vendored upstream trees (third-party files kept identical to upstream, marked by an `UPSTREAM.md`
    with source, ref, and refresh procedure - inside `shared/` when projects need them, where rev
    markers are their only local change; the TOC tool leaves them alone):
-   - `manifest.json` - `name`, `version` (semver), `description`, `applies_to.markers`, and an optional
-     `setup` (notes + resource prompts that `install-plugin` runs on attach). No per-plugin install skill -
+   - `manifest.json` - `name`, `version` (semver), `description`, `applies_to.markers`, an optional
+     `setup` (notes + resource prompts that `install-plugin` runs on attach), and optional `dependencies`
+     (`required`/`optional` plugin names or `{name, why}`; check with `uv run -m solaris.tools.plugins deps <name>`).
+   - `<type>.project.md` (optional) - a project type `create-project` offers as `<plugin>:<type>`, with its
+     overlay in `project-types/<type>/`; validate it with `uv run -m solaris.tools.plugins type <plugin>:<type>`. No per-plugin install skill -
      the framework `install-plugin` drives the whole lifecycle.
    - `mcps.json` - any MCP servers the workflow needs (merged into a project on install).
    - `shared/*.skill.md` (procedures) and `shared/*.rule.md` (always-on conventions, domain knowledge

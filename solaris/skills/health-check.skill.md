@@ -53,6 +53,8 @@ Everything above, plus:
 - **Docs** - `uv run -m solaris.tools.toc --check --all` (every Markdown file has a current TOC).
 - **Per project** - `revs classify --dir projects/<slug>` (sync/merge drift); `mcp_sync --check --dir
   projects/<slug>`; `version check-plugins --dir projects/<slug>` (recorded vs source plugin semver);
+  `uv run -m solaris.tools.plugins check --dir projects/<slug>` (every attached plugin's required dependencies
+  attached; optional ones listed as suggestions);
   `version project --dir projects/<slug>` (root `.version` present + valid semver; missing = a pre-0.29
   pack - flag it, the 0.29.0 migration seeds it);
   `uv run -m solaris.tools.agents --check --dir projects/<slug>` (the primary persona file exists; every

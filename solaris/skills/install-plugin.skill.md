@@ -1,7 +1,7 @@
 ---
 name: install-plugin
 triggers: ["install plugin <git url|folder|zip>", "install the <name> plugin", "repair plugin <name>", "add plugin <X> to <project>", "add plugin <X> to this task", "update plugin <X> in <project>", "link plugin <X> to <project>", "link the <name> plugin", "unlink plugin <X>", "detach plugin <X> from <project>"]
-summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/folder/zip into plugins/, validate/repair it, and install (copy or link mode)/update/migrate/repair it in a project (an ad-hoc task attaches per the ad-hoc-task skill).
+summary: The plugin lifecycle skill - acquire a plugin (its own repo) from git/folder/zip into plugins/, validate/repair it, and install (copy or link mode, required dependencies first, optional ones offered)/update/migrate/repair it in a project (an ad-hoc task attaches per the ad-hoc-task skill).
 ---
 
 # install-plugin <!-- omit in toc -->
@@ -22,7 +22,8 @@ project - installs / updates / migrates / repairs it. Installs come in two modes
 step 5); `<pack>/` is the project's ai-pack folder (default `aipack/`, `ai/` in projects made before
 0.39.0, any name). There is **no per-plugin install skill**; this
 generic skill drives every plugin, reading plugin-specific setup from the plugin's `manifest.json`
-(`setup`). Distinct from `import-plugin`, which *authors* a new plugin or folds project edits back.
+(`setup`, and `dependencies` for the plugins it relies on). Distinct from `import-plugin`, which *authors* a
+new plugin or folds project edits back.
 
 ## 1. Inputs
 
@@ -62,15 +63,33 @@ If `plugins/<name>/` **already exists**, do not clobber it: go to step 3, and fo
 A plugin repo's layout (flat; only `migrations/` is a subfolder, plus any vendored upstream tree - a
 folder of third-party files kept identical to upstream, marked by an `UPSTREAM.md` that names its source,
 ref, and refresh procedure; inside `shared/` its rev markers are the only local change): `manifest.json` (valid JSON, `name` +
-`version`, optional `setup`), optional `mcps.json`, `shared/` with `*.skill.md` / `*.rule.md`, optional
-`<type>.project.md`, optional `migrations/`. Then **repair** anything off (this is also the standalone
+`version`, optional `setup`, optional `dependencies`), optional `mcps.json`, `shared/` with `*.skill.md` / `*.rule.md`, optional
+`<type>.project.md` (a project type `create-project` offers as `<plugin>:<type>`) with its optional overlay
+folder `project-types/<type>/`, optional `migrations/`.
+
+The manifest's `dependencies` names the plugins this one relies on, each entry a plugin name or an object
+with `name` and an optional `why` (what the dependency adds):
+`"dependencies": {"required": ["<plugin>"], "optional": [{"name": "<plugin>", "why": "<what it adds>"}]}`.
+Required dependencies are attached with the plugin, transitively and first (step 4); optional ones are
+offered then, only those present under `plugins/`. Declare only what the plugin's own docs or tools rely on;
+a cycle, or a required dependency missing from `plugins/`, is an error.
+
+Then **repair** anything off (this is also the standalone
 "repair a plugin already in `plugins/` but not referenced correctly" path):
 
 - Every `shared/*` file carries a rev marker - else `uv run -m solaris.tools.revs bump <file>`.
 - Refresh ledgers: `uv run -m solaris.tools.revs ledger --plugin <name>` rewrites only the plugin's **own** `plugins/<name>/revisions.json` (plain `revs ledger` rewrites every ledger, the framework's included; the framework `solaris/revisions.json` never tracks plugins).
 - Fix missing `manifest.json` fields (ask for `name`/`version` if unknown).
-- Ensure every `*.md` has a TOC: `uv run -m solaris.tools.toc --write plugins/<name>/**/*.md` (the tool
-  leaves vendored trees untouched).
+- Dependencies: `uv run -m solaris.tools.plugins deps <name>` - every required dependency, transitively, must
+  be under `plugins/`. Exit 3 names each missing one with its chain (or a cycle, a bug to report to the
+  plugin's author): tell the owner which are missing and offer to acquire them the same way (steps 2-3).
+  Optional ones not under `plugins/` are only mentioned.
+- Project types: each `<type>.project.md` passes `uv run -m solaris.tools.plugins type <name>:<type>` (exit
+  3 lists the problems: unknown keys, a missing section, a required plugin or an overlay folder that does
+  not exist).
+- Ensure every `*.md` has a TOC, apart from the type overlays (project files, copied as they are):
+  `find -H plugins/<name> -name '*.md' -not -path '*/project-types/*' -exec uv run -m solaris.tools.toc --write {} +`
+  (`-H` follows a symlinked private plugin; the tool leaves vendored trees untouched).
 
 ## 4. Scope: Plugins-Only, or Attach to a Project
 
@@ -79,28 +98,39 @@ ref, and refresh procedure; inside `shared/` its rev markers are the only local 
 - **Ad-hoc task named instead of a project** ("add plugin `<X>` to this task"): acquire/validate here
   (steps 2-3), then attach per the `ad-hoc-task` skill's "Use Plugins" section - a `Plugins:` line in the
   task's `notes.md`, shared files loaded live from `plugins/<name>/shared/` (nothing copied, no manifest,
-  no revs; MCP merge and `setup` adapt as defined there). Steps 5-6 below are project-only.
+  no revs; MCP merge and `setup` adapt as defined there), its required dependencies on the same line
+  (`plugins deps <name>`). Steps 5-6 below are project-only.
 - **Project named, plugin already present in `plugins/`:** do **not** re-acquire. Run **`health-check`** to
   validate (`revs status`; for the project `revs classify --dir projects/<slug>`, `version check-plugins`,
   `mcp_sync --check`). Report problems + the fix. If valid but not yet attached, attach it (below).
 - **Project named, plugin absent / not yet attached -> install:**
-  1. Copy `shared/*` into `projects/<slug>/<pack>/plugins/<name>/`, creating `<pack>/plugins/` on the project's
+  1. **Dependencies first:** `uv run -m solaris.tools.plugins deps <name>` lists the plugins `<name>`
+     requires, transitively and dependencies first, and the optional ones of `<name>` and of those (exit 3: a
+     cycle, or a required one missing from `plugins/` - acquire it first, steps 2-3, on the owner's yes, or
+     stop). Attach each required one not yet in `<pack>/manifest.json` -> `plugins`, in that order, through
+     sub-steps 2-5 (copy mode unless the owner says otherwise), and tell the owner which were added and what
+     required them (the chain, such as `<name> > <dependency>`). Then offer the optional ones present under
+     `plugins/` and not attached in one multi-select question, each with its `why`, and attach each one
+     picked with its own required dependencies (`plugins deps <picked>`) the same way, asking nothing more.
+     When `create-project` drives the install, its plan has settled both already: ask nothing here.
+  2. Copy `shared/*` into `projects/<slug>/<pack>/plugins/<name>/`, creating `<pack>/plugins/` on the project's
      first plugin attach (**link mode:** write `<pack>/plugins/<name>.link.md` instead - step 5 - and skip
      the copy).
-  2. Merge the plugin's `mcps.json` `mcpServers` into the project runtime MCP (`.mcp.json` +
+  3. Merge the plugin's `mcps.json` `mcpServers` into the project runtime MCP (`.mcp.json` +
      `.cursor/mcp.json`), replacing every `<pack>` in the merged entries (e.g. a command path
      `<pack>/plugins/<name>/...`) with the project's actual pack folder name and keeping any project path
      prefix the entry already uses; verify `mcp_sync --check`. Every later re-merge does the same.
-  3. Run the plugin's **`setup`** (from `manifest.json`): surface each `setup.notes` line; for each
+  4. Run the plugin's **`setup`** (from `manifest.json`): surface each `setup.notes` line; for each
      `setup.resources` entry, prompt (`prompt`, with `default`) and write the answer into
      `<pack>/.memory/resources.md` (or `credentials.md` if `secret: true`).
-  4. Record `{name, version}` in `<pack>/manifest.json` -> `plugins` (link mode: `{name, "mode": "link"}` -
+  5. Record `{name, version}` in `<pack>/manifest.json` -> `plugins` (link mode: `{name, "mode": "link"}` -
      **no** `version`: a linked plugin always runs the live source, so a recorded version would only go
      stale). Then `uv run -m solaris.tools.revs ff --dir projects/<slug>` - it re-renders
      `<pack>/README.md`'s attached-plugins list from the manifest (run it after ANY change to the
      `plugins` array: attach, detach, link/copy conversion) - and
      `uv run -m solaris.tools.revs baseline --dir projects/<slug>` (both safe in both modes - the
-     revs tools skip linked plugins).
+     revs tools skip linked plugins). Last, `uv run -m solaris.tools.plugins check --dir projects/<slug>`
+     must pass (exit 0: every attached plugin's required dependencies are attached).
 
 ## 5. Link Mode (Development Installs)
 
@@ -162,7 +192,9 @@ are unless noted):
 - **unlink / detach** ("unlink plugin <name>", "detach plugin <name> from <project>"): fully remove the
   attachment - delete `<pack>/plugins/<name>.link.md`, remove the plugin's entry from `<pack>/manifest.json` -> `plugins`,
   and remove its `mcps.json` servers from the project runtime MCP (unless another attached plugin also
-  provides them); keep any `setup` answers already in `<pack>/.memory/`. Confirm first (destructive). If the
+  provides them); keep any `setup` answers already in `<pack>/.memory/`. Confirm first (destructive), and
+  say so when another attached plugin requires it (`plugins check --dir projects/<slug>` would then fail,
+  naming it). If the
   user instead wants the plugin kept but copied, that is **link -> copy** above - ask when ambiguous.
 
 ## 6. Update, Migrate, Repair an Attached Plugin
@@ -181,8 +213,14 @@ For a plugin already attached to a project (driven here or by `update-project`).
 - **repair** (attached but broken): `revs ff` restores missing files, re-merge `mcps.json`, then
   `revs baseline`.
 
+After any of these, and for linked plugins too (a new version may declare new dependencies),
+`uv run -m solaris.tools.plugins check --dir projects/<slug>` must pass: attach each required dependency it
+names (step 4), and offer only the optional ones the new version added (compare with the old manifest's
+`dependencies`), never again those the owner declined.
+
 ## 7. Report
 
-Summarize: source, name + version, what was repaired, and (if a project was named) the install mode
-(copy / link) and the install / update / health-check result. Log the turn with
+Summarize: source, name + version, what was repaired, any required dependency missing from `plugins/`,
+and (if a project was named) the install mode (copy / link), the dependencies attached with it and the
+optional ones offered, and the install / update / health-check result. Log the turn with
 `uv run -m solaris.tools.interactions add` (plus `--dir projects/<slug>` when a project was named).
