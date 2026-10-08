@@ -232,6 +232,70 @@ def test_set_rev_places_marker_after_frontmatter():
     assert R.set_rev("# T\n\nbody\n", ".md", 1).startswith("_Rev. 1_\n")
 
 
+def test_bump_keeps_the_final_newline(tmp_path, capsys):
+    # a Markdown file with frontmatter lost its final newline on every bump
+    skill = tmp_path / "x.skill.md"
+    skill.write_text('---\nname: x\ntriggers: ["y"]\n---\n_Rev. 4_\n\n# T\n\nbody\n', encoding="utf-8")
+    assert R.main(["bump", str(skill)]) == 0 and "rev 5" in capsys.readouterr().out
+    assert skill.read_text(encoding="utf-8") == '---\nname: x\ntriggers: ["y"]\n---\n_Rev. 5_\n\n# T\n\nbody\n'
+    assert R.bump_file(skill) == 6 and R.bump_file(skill) == 7
+    assert skill.read_text(encoding="utf-8").endswith("\n\nbody\n")
+    # every other form ends with exactly one newline too, with or without one before the bump
+    cases = {"fm-only.md": "---\nname: x\n---\n", "fm-nonl.md": "---\nname: x\n---\n\nbody", "plain.md": "# T\n\nb",
+             "tool.py": "x = 1\n", "run.sh": "#!/bin/sh\necho hi", "app.js": "const x = 1;\n", "s.css": "a { }"}
+    for name, text in cases.items():
+        path = tmp_path / name
+        path.write_text(text, encoding="utf-8")
+        before = R.content_hash(text, path.suffix)
+        R.bump_file(path)
+        after = path.read_text(encoding="utf-8")
+        assert after.endswith("\n") and not after.endswith("\n\n"), name
+        assert R.read_rev(after, path.suffix) == 1 and R.content_hash(after, path.suffix) == before, name
+
+
+def test_ledger_plugin_rebuilds_only_that_plugins_ledger(tmp_path, monkeypatch, capsys):
+    # the whole tree is temporary: REPO_ROOT and the framework ledger path point into tmp_path
+    monkeypatch.setattr(R, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(R, "LEDGER_PATH", tmp_path / "solaris" / "revisions.json")
+    template = tmp_path / "solaris" / "templates" / "ai-pack" / "AGENTS.md"
+    rules = {name: tmp_path / "plugins" / name / "shared" / "a.rule.md" for name in ("alpha", "beta", "gamma")}
+    _wmd(template, "# ag\n\nx\n", 1)
+    for name, path in rules.items():
+        _wmd(path, f"# {name}\n\nrule\n", 1)
+    R.rebuild_all(tmp_path)
+    ledgers = {"fw": tmp_path / "solaris" / "revisions.json",
+               **{name: tmp_path / "plugins" / name / "revisions.json" for name in rules}}
+
+    def snapshot():
+        return {key: path.read_text(encoding="utf-8") for key, path in ledgers.items()}
+
+    def rev(key, rel):
+        return json.loads(ledgers[key].read_text(encoding="utf-8"))["files"][rel]["rev"]
+
+    # edits everywhere, each with its rev bump; only the named plugin's ledger may move
+    _wmd(template, "# ag\n\nedited\n", 2)
+    for name, path in rules.items():
+        _wmd(path, f"# {name}\n\nedited\n", 2)
+    before = snapshot()
+    assert R.main(["ledger", "--plugin", "alpha"]) == 0
+    assert "plugins/alpha/revisions.json rebuilt for 1 file(s)" in capsys.readouterr().out
+    after = snapshot()
+    assert rev("alpha", "shared/a.rule.md") == 2
+    assert {k: v for k, v in after.items() if k != "alpha"} == {k: v for k, v in before.items() if k != "alpha"}
+    # several at once; a plugins/ prefix and a trailing slash are fine
+    assert R.main(["ledger", "--plugin", "plugins/beta/", "--plugin", "beta"]) == 0
+    assert rev("beta", "shared/a.rule.md") == 2 and rev("gamma", "shared/a.rule.md") == 1
+    assert rev("fw", "solaris/templates/ai-pack/AGENTS.md") == 1
+    # an unknown name fails before any ledger is written
+    before = snapshot()
+    assert R.main(["ledger", "--plugin", "gamma", "--plugin", "nope"]) == 1
+    out = capsys.readouterr().out
+    assert "no plugin 'nope'" in out and "alpha, beta, gamma" in out and snapshot() == before
+    # without --plugin, every ledger is rebuilt, the framework's included
+    assert R.main(["ledger"]) == 0
+    assert rev("gamma", "shared/a.rule.md") == 2 and rev("fw", "solaris/templates/ai-pack/AGENTS.md") == 2
+
+
 def test_materialized_map_covers_pack_rules_and_skills(tmp_path):
     # The pack's always-on rules and skill stubs sync per file like the engineer agent.
     _pack(tmp_path)

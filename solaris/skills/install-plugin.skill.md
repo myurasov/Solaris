@@ -67,7 +67,7 @@ ref, and refresh procedure; inside `shared/` its rev markers are the only local 
 "repair a plugin already in `plugins/` but not referenced correctly" path):
 
 - Every `shared/*` file carries a rev marker - else `uv run -m solaris.tools.revs bump <file>`.
-- Refresh ledgers: `uv run -m solaris.tools.revs ledger` writes the plugin's **own** `plugins/<name>/revisions.json` (the framework `solaris/revisions.json` never tracks plugins).
+- Refresh ledgers: `uv run -m solaris.tools.revs ledger --plugin <name>` rewrites only the plugin's **own** `plugins/<name>/revisions.json` (plain `revs ledger` rewrites every ledger, the framework's included; the framework `solaris/revisions.json` never tracks plugins).
 - Fix missing `manifest.json` fields (ask for `name`/`version` if unknown).
 - Ensure every `*.md` has a TOC: `uv run -m solaris.tools.toc --write plugins/<name>/**/*.md` (the tool
   leaves vendored trees untouched).

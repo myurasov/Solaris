@@ -51,7 +51,7 @@ each, name the target file and the `.memory/instructions.md` entry it would reti
 
 For approved framework changes: make the edit, show the diff, and follow `rules/commits.rule.md`. Keep
 changes minimal and consistent with surrounding style. After editing a revisioned framework/plugin file,
-`revs bump` it and rebuild the ledger (`revs ledger`). Do not touch a project's `source/` or another user's
+`revs bump` it and rebuild the ledger (`revs ledger`, or `revs ledger --plugin <name>` for a plugin file). Do not touch a project's `source/` or another user's
 data. If a change alters the ai-pack schema or templates in a breaking way, that is a **minor/major**
 release: author a migration under `solaris/migrations/` (see `migrations/template.md`) and bump the semver
 in `pyproject.toml`. Routine content edits need only a rev bump, not a version bump. When an applied change

@@ -25,7 +25,7 @@ The user edited the materialized copy `projects/<slug>/<pack>/plugins/<name>/`. 
 2. Show the changes; confirm with the user.
 3. Apply them into `plugins/<name>/shared/` and `revs bump` each changed shared file (the rev tracks the
    change; the plugin `version` semver is bumped only at release/publish, not per edit). Mirror any
-   rename/removal in `shared/`, then `revs ledger`.
+   rename/removal in `shared/`, then `revs ledger --plugin <name>`.
 4. Re-record the project's revisions baseline: `uv run -m solaris.tools.revs baseline --dir projects/<slug>`.
 
 This is the mechanism behind the **pre-overwrite check**: `install-plugin` (update) calls Mode A before it
@@ -51,7 +51,7 @@ external `__ai/`-style setup):
    - `mcps.json` - any MCP servers the workflow needs (merged into a project on install).
    - `shared/*.skill.md` (procedures) and `shared/*.rule.md` (always-on conventions, domain knowledge
      folded in). `shared/` is the only part copied into a project. Give every new `shared/*` file a rev
-     marker (`revs bump`), then rebuild the ledger (`revs ledger`).
+     marker (`revs bump`), then rebuild its ledger (`revs ledger --plugin <name>`).
    - `<type>.project.md` (optional) - project-type descriptions this plugin contributes to `create-project`.
    - `migrations/` (created when the plugin first needs one).
 4. Offer to attach it to the current project via `install-plugin` (install).

@@ -31,6 +31,7 @@ Run::
     uv run -m solaris.tools.revs hash <file>
     uv run -m solaris.tools.revs status               # framework files edited without a rev bump
     uv run -m solaris.tools.revs ledger                # rebuild solaris/revisions.json + each plugin's ledger
+    uv run -m solaris.tools.revs ledger --plugin <name>    # rebuild only plugins/<name>/revisions.json
     uv run -m solaris.tools.revs classify --dir <project>   # per materialized file: verdict
 """
 
@@ -155,9 +156,10 @@ def set_rev(text: str, ext: str, rev: int) -> str:
         if m:
             # The marker line sits snug under the closing --- (no surrounding
             # blank-line changes), so the canonical content hash is identical
-            # to the marker-on-line-1 form.
+            # to the marker-on-line-1 form. body lost its final newline to the
+            # strip above; the file ends with one, like every other form.
             fm, rest = body[:m.end()].rstrip("\n"), body[m.end():]
-            return f"{fm}\n{marker}\n{rest}" if rest else f"{fm}\n{marker}\n"
+            return f"{fm}\n{marker}\n{rest}\n" if rest else f"{fm}\n{marker}\n"
     return f"{marker}\n\n{body}\n"
 
 
@@ -254,10 +256,22 @@ def rebuild_plugin_ledger(plugin_dir: Path) -> dict:
 
 def rebuild_all(repo_root: Path = REPO_ROOT) -> dict:
     """Rebuild the framework ledger and every plugin's own ledger."""
-    led = rebuild_ledger(repo_root)
+    led = rebuild_ledger(repo_root, Path(repo_root) / "solaris" / "revisions.json")
     for pd in plugin_dirs(repo_root):
         rebuild_plugin_ledger(pd)
     return led
+
+
+def find_plugin(name: str, repo_root: Path = REPO_ROOT) -> Path:
+    """The plugin folder plugins/<name>/ (a ``plugins/`` prefix and a trailing slash are fine); ValueError,
+    naming the known plugins, when there is none."""
+    clean = name.strip().rstrip("/")
+    clean = clean[len("plugins/"):] if clean.startswith("plugins/") else clean
+    dirs = {pd.name: pd for pd in plugin_dirs(repo_root)}
+    if clean not in dirs:
+        known = ", ".join(sorted(dirs)) or "none"
+        raise ValueError(f"no plugin {name!r} (a plugins/<name>/ folder with shared/; known: {known})")
+    return dirs[clean]
 
 
 def _stale_against(items: "list[tuple[str, Path]]", led_files: dict, repo_root: Path) -> list[str]:
@@ -664,8 +678,17 @@ def _cmd_status(args):
 
 
 def _cmd_ledger(args):
-    led = rebuild_all()
-    plugs = plugin_dirs()
+    root = REPO_ROOT  # read at call time, so tests can point it at a temporary tree
+    if args.plugin:
+        # Resolve every name first: an unknown one fails before any ledger is written.
+        dirs = [find_plugin(name, root) for name in args.plugin]
+        for pd in dict.fromkeys(dirs):
+            led = rebuild_plugin_ledger(pd)
+            print(f"revs: plugins/{pd.name}/revisions.json rebuilt for {len(led['files'])} file(s); "
+                  "no other ledger touched")
+        return 0
+    led = rebuild_all(root)
+    plugs = plugin_dirs(root)
     print(f"revs: framework ledger rebuilt for {len(led['files'])} file(s); "
           f"{len(plugs)} plugin ledger(s) -> plugins/<name>/revisions.json")
     return 0
@@ -712,7 +735,10 @@ def main(argv=None) -> int:
     sp.set_defaults(func=_cmd_hash)
 
     sub.add_parser("status", help="framework files changed without a rev bump").set_defaults(func=_cmd_status)
-    sub.add_parser("ledger", help="rebuild solaris/revisions.json").set_defaults(func=_cmd_ledger)
+    sp = sub.add_parser("ledger", help="rebuild solaris/revisions.json and every plugin's revisions.json")
+    sp.add_argument("--plugin", action="append", metavar="NAME",
+                    help="rebuild only plugins/NAME/revisions.json (repeatable); no other ledger is touched")
+    sp.set_defaults(func=_cmd_ledger)
 
     sp = sub.add_parser("classify", help="per materialized file verdict for a project")
     sp.add_argument("--dir", required=True)
