@@ -3,13 +3,9 @@
   "schema_version": 1,
   "files": {
     "shared/how-to-kaggle.skill.md": {
-      "rev": 27,
-      "hash": "7848349f6c53bb5fad6c3bd85fb93a37a34a81d6cdafddb6cb36c3faca12867c",
+      "rev": 28,
+      "hash": "fc20a324d5144f0609d23250832ecfac4470098863730f81b2e405beca847be1",
       "history": [
-        {
-          "rev": 18,
-          "hash": "ab806f9aff13d0185d052745c7f42a3a4bf0b1c1d10721c0f495178c3a2442c9"
-        },
         {
           "rev": 19,
           "hash": "6d66ef9dcedb68f525ad939a5da1fe1ac2265478ab3404c33f9f83c3c302b11e"
@@ -45,6 +41,10 @@
         {
           "rev": 27,
           "hash": "7848349f6c53bb5fad6c3bd85fb93a37a34a81d6cdafddb6cb36c3faca12867c"
+        },
+        {
+          "rev": 28,
+          "hash": "fc20a324d5144f0609d23250832ecfac4470098863730f81b2e405beca847be1"
         }
       ]
     },
@@ -305,12 +305,16 @@
       ]
     },
     "shared/kaggle-kind-llm-agents.skill.md": {
-      "rev": 1,
-      "hash": "cb65e99c6b49c3128bf98c1286da59032f08a5dad4fb1e5ee24461857498ae8b",
+      "rev": 2,
+      "hash": "91262c09101defa2fec95a851e9925de176cf8956d005fbfd3e95e45e0c0d98a",
       "history": [
         {
           "rev": 1,
           "hash": "cb65e99c6b49c3128bf98c1286da59032f08a5dad4fb1e5ee24461857498ae8b"
+        },
+        {
+          "rev": 2,
+          "hash": "91262c09101defa2fec95a851e9925de176cf8956d005fbfd3e95e45e0c0d98a"
         }
       ]
     },

@@ -131,6 +131,12 @@ the status page - `migrations/0.7.0.md`.
 
 ## Changelog
 
+- 0.9.1: a second pass over the playbook core makes it shorter without dropping a rule (50 KB, from 58.6;
+  77 KB before 0.8.0): six sections rewritten tighter, repeats of the always-on rule replaced by pointers, the
+  two facts-sheet lists merged, and two lessons moved where they apply (GPU numerics to the agent and LLM kind
+  skill; checking a repair with real GPU work to the resource-sharing plugin, with the rule kept in the core);
+  Pitfalls entries and repeated lines that Validation or Daily Submission Discipline already carry became pointers,
+  and the Quick Start notes that the `kaggle:competition` project type runs much of the first hour.
 - 0.9.0: the `kaggle:competition` project type (`competition.project.md` and its overlay
   `project-types/competition/`): `create-project` asks nine questions and runs thirteen Setup Steps that leave a
   new competition project ready to compete. The manifest declares its optional dependencies (reporting,

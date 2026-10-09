@@ -1,9 +1,9 @@
 ---
 name: kaggle-kind-llm-agents
 triggers: ["agent competition", "llm competition", "llm-judged competition", "llm judge", "sampled scorer"]
-summary: Kind notes for Kaggle competitions whose scorer runs a model or an agent - score bands, agent families, repeats, new evaluation hosts, local judges, per-run time limits, structural fixes. Read once the facts sheet records this kind.
+summary: Kind notes for Kaggle competitions whose scorer runs a model or an agent - score bands, agent families, repeats, new evaluation hosts and GPU types, local judges, per-run time limits, structural fixes. Read once the facts sheet records this kind.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-kind-llm-agents - Agent and LLM Scorers <!-- omit in toc -->
 
@@ -41,6 +41,14 @@ practice for the kind, without evidence of our own yet.
   the next four pairs, with every input (model files, server command line, environment, GPU health) identical. Before
   blaming a host, compare what it does on identical work: the verdicts on the same outputs, the results of the same
   calls.
+- **Check a new GPU type's numerics on realistic inputs** before evaluating a model on a type the scorer does not
+  use: compare its outputs with a reference GPU's on realistic prompts (the model's chat format with its
+  beginning-of-sequence token, typical lengths); it passes when drift stays within the reference's own spread
+  (loaded against idle) and greedy replies match. Raw text without that token is no fidelity test (it amplifies
+  any change in reduction order: even two GPUs of one type disagree on it). Cold starts (empty inference and
+  compile caches) reproduce each other exactly; a warm restart can differ as much as another GPU type. Such drift
+  is far below sampling noise at a nonzero temperature: it matters for exact reproduction (start cold, like a fresh
+  scoring session), not for comparisons on one host.
 - *General practice:* where a model judges, build a local judge from the hosts' published rubric, prompt and judge
   model, and fit it to public notebooks' board scores. Judges tend to favour longer answers and their own style:
   know whether a gain is quality or bias.
