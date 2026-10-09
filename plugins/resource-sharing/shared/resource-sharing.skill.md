@@ -3,7 +3,7 @@ name: resource-sharing
 triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance", "host health", "gpu health", "host dashboard", "hosts dashboard"]
 summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock (memory counted as PSS, cores a running job is pinned to never granted twice), ties claims to their jobs' processes, renews claims in place, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield (paired claims in a set order), moves stale claims aside, reports usage and each GPU's last claim, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit; hosthealth.py checks GPU hosts (and applies the safe performance settings where the sharing rules allow) and hostdash.py shows their jobs and load live.
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: resource-sharing - Hosts Shared by Many Agents <!-- omit in toc -->
 
@@ -371,6 +371,9 @@ same inventory (the project's `hosts.json` plus the hosts shared with it; `--hos
   gets through passwordless `sudo`, used only by `--fix` on a host the project owns (on another's host a sudo
   attempt lands in the owner's security log): guests and runs without `--fix` read and change only what the
   login may, and the output says what it could not do or read.
+- Verify each repair with real GPU work: a host can list its GPU in `nvidia-smi` and still fail CUDA
+  initialization or kernels. After a repair, run a tiny allocation, matrix multiply, synchronization and result
+  check in the environment its jobs use before the host takes jobs again.
 - `python3 <tools>/hostdash.py` is a live full-screen view, refreshed every 5 seconds (`-n` to change; `q`
   quits), of each host's load, memory, disk and GPU use, its claims (project/job, class, GPUs, cores, age; `no
   process` once the process a claim is tied to has gone), tmux sessions and busiest processes (another login's

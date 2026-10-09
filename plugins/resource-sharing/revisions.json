@@ -29,8 +29,8 @@
       ]
     },
     "shared/resource-sharing.skill.md": {
-      "rev": 8,
-      "hash": "003ec74fcf703865d759d89ac51fd7b9548ad897db2f82fba94bf93e05778d92",
+      "rev": 9,
+      "hash": "5d7f79c27a6e89bc494bca1f7726c52ed859056b7208abe22ba39b56c43bfc80",
       "history": [
         {
           "rev": 1,
@@ -59,6 +59,10 @@
         {
           "rev": 7,
           "hash": "003ec74fcf703865d759d89ac51fd7b9548ad897db2f82fba94bf93e05778d92"
+        },
+        {
+          "rev": 9,
+          "hash": "5d7f79c27a6e89bc494bca1f7726c52ed859056b7208abe22ba39b56c43bfc80"
         }
       ]
     },
