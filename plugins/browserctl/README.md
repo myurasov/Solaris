@@ -42,7 +42,6 @@ browser outlives any single agent turn.
 |---|---|
 | `shared/browserctl.py` | The tool (PEP 723 inline deps; run via `uv run`). |
 | `shared/browserctl.skill.md` | Trigger-invoked procedure + command reference. |
-| `shared/slack-web.skill.md` | Use case: operating the Slack web client (capture, threads, attachments, react/post) through browserctl. |
 | `shared/browserctl.rule.md` | Always-on conventions (only launch path, profile discipline, hygiene). |
 | `manifest.json` | Plugin manifest (`setup` drives install-time steps). |
 
@@ -50,7 +49,7 @@ No `mcps.json` - shipping zero MCP servers is the point.
 
 ## Extension Plugins
 
-Site-specific browser knowledge beyond the bundled examples ships in separate plugins as
+Site-specific browser knowledge ships in separate plugins as
 **browser-control extension skills** - the standard format (owner directive, 2026-08-30):
 `shared/browserctl.<site>.skill.md` (one skill or a set per website; frontmatter `name`
 matches the file stem), living either in a dedicated `browserctl-<site>` plugin or in a
@@ -58,7 +57,7 @@ domain plugin that bundles them with related non-browser skills. Extension skill
 tooling - the base browserctl plugin is a prerequisite in the same project; generic
 browserctl technique stays here, only site material lives in the extension. Reference
 instance: `plugins/apple-asc` (bundles `browserctl.asc.skill.md` with ASC API and
-upload skills). (`slack-web.skill.md` predates the format and stays bundled here for now.)
+upload skills).
 
 ## Install
 

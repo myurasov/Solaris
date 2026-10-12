@@ -176,8 +176,8 @@ servers, optional project types - so any project can opt into it.
 - **Author one:** *"make a plugin from `<project>`"* factors that project's ways of working into a
   reusable plugin; the same skill folds later owner-approved changes back into the plugin source.
 - **Bundled plugins:** `browserctl` (CLI browser automation on per-project Chromium profiles -
-  the standard browser layer, replacing the Playwright MCP; includes a `slack-web` skill and
-  defines the `browserctl.<site>` extension-skill format for site-specific browser knowledge),
+  the standard browser layer, replacing the Playwright MCP; defines the `browserctl.<site>`
+  extension-skill format for site-specific browser knowledge),
   `apple-asc` (App Store Connect from the developer's perspective: ASC REST API skill,
   browser skill for the flows the API cannot reach, build archive + upload skill, always-on
   rule), `gmail` (Gmail through `gws`, the Google Workspace CLI: install + sign-in skill for
