@@ -1,6 +1,6 @@
-// rev. 6
+// rev. 7
 
-// Render a report HTML to PDF in the Co-SA document style - ZERO npm deps.
+// Render a report HTML to PDF in the house document style - ZERO npm deps.
 // Drives the installed Google Chrome over the DevTools protocol using Node's
 // built-in WebSocket/fetch (node >= 22), and merges the two passes with
 // poppler's pdfunite (brew install poppler).

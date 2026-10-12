@@ -4,13 +4,13 @@ triggers:
   - "create report" / "new report" / "findings report"
   - "render report" / "regenerate report pdf" / "report pdf"
 summary: Author and render a project findings report - HTML source in
-  reports/html/ (gitignored) in the Co-SA-derived document style, tracked PDF in
+  reports/html/ (gitignored) in the house document style, tracked PDF in
   reports/ rendered zero-dependency (Chrome over the DevTools protocol, two passes
   merged with poppler pdfunite), followed by an automatic layout check (half-empty
   pages, runts). Styling/rendering tooling is this plugin's assets/; theme and page
   furniture are project-owned config (reports/theme.css + reports/report.json).
 ---
-_Rev. 11_
+_Rev. 12_
 
 # Skill: report - findings reports (HTML + PDF) <!-- omit in toc -->
 
