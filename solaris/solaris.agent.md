@@ -29,7 +29,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.44.0.md`](spec/spec-v0.44.0.md).
+[`spec/spec-v0.45.0.md`](spec/spec-v0.45.0.md).
 
 ## Persona Model
 
@@ -125,22 +125,34 @@ There is one running agent. It adopts a persona by reading the active context:
   validate the `<pack>/*.agent.md` briefs and the shared `<pack>/instructions.md`; rename the primary
   persona; rename the pack folder - see Know the projects)
 - `uv run -m solaris.tools.log_interaction` (the prompt-submit hook; not called by hand)
-- `uv run -m solaris.tools.read_first [--remind|--part 2|--part 3|--part 4|--check]` (the read-first loader
-  hook; loads in four session-start parts - core set, subagents rule, token economy, interaction + YAGNI
-  rules - because the Claude Code inline threshold of 10k chars applies per hook call; not called by hand
-  except `--check`)
+- `uv run -m solaris.tools.read_first [--remind|--part 2..8|--check [--session <id>|--pack <path>]]` (the
+  read-first loader hook; loads in four session-start parts - core set, subagents rule, token economy,
+  interaction + YAGNI rules - because the Claude Code inline threshold of 10k chars applies per hook call; in
+  a project session, one `session_clock --dir` registered in the last 14 days, the parts carry that project's
+  set instead - the commit and safety rules, `<pack>/card.md`, a block naming the project, its clock command
+  and must-read files, then the pack and plugin rules, in up to eight parts - never this file or
+  `.memory/instructions.md`; parts 5-8 are empty otherwise; not called by hand except `--check`)
 - `uv run -m solaris.tools.skill_loader` (the prompt-submit skill auto-loader hook; matches the prompt against each skill's `triggers` minus `antitriggers` and injects matching skill bodies; not called by hand)
 - `uv run -m solaris.tools.toc [--check|--write] <file>... | --all` (maintain Markdown tables of contents)
 - `uv run -m solaris.tools.ai_spend [--dir PATH] [--today|--since ISO] [--json]` (estimated AI spend per project
   and day from this machine's Claude Code transcripts, usage fields only; exit 3 when today is over the
   project's `ai.daily_budget_usd`)
-- `uv run -m solaris.tools.session_clock --dir PATH|--schedule FILE [--after TIME] [--cap MINUTES]` (run as a
-  background command; prints the due event from `<pack>/.memory/schedule.json`, or `re-arm` at the cap)
+- `uv run -m solaris.tools.session_clock --dir PATH|--schedule FILE [--after TIME] [--cap MINUTES, 0 none]
+  [--check|--status|--stop]` (run as the harness's own background command, alone in its call; prints the due
+  event from `<pack>/.memory/schedule.json`, or `re-arm` at the cap, and ends with `next: <exact command>`;
+  writes `<pack>/.memory/clock.json` and, in Claude Code, the session registry the hooks read; one clock per
+  project: a new start stops the older one)
+- `uv run -m solaris.tools.session_guard` (the Stop and StopFailure hook; not called by hand: a registered project
+  session that ends a turn with no clock armed and no fresh handover note is sent back with the start command, at
+  most twice a turn; unarmed turn ends, safety-classifier stops and lasting API errors go to
+  `<pack>/.memory/alerts.jsonl`)
 - `uv run -m solaris.tools.housekeeping --dir PATH [report|tidy|prune] [--apply] [--json]` (a project's size
   budget and folder order: `report` (read-only) lists sizes, budgets, untidy items, prune candidates and layout
   notes; `tidy` moves `<pack>/.memory/` leftovers to `.memory/archive/` and job scratch to `__out/jobs/`;
-  `prune` deletes only by the rules in `<pack>/housekeeping.json` and `.disposable` markers; both print their plan
-  unless `--apply`; exit 3 when something needs attention)
+  `prune` deletes only by the rules in `<pack>/housekeeping.json` and `.disposable` or `.recreatable` markers -
+  re-creatable data (`"recreatable": true` with a one-line `"how"`) without asking, logged with its how - never
+  submissions, raw traces, the pack or `.git`, and raw data and run logs only when the project's `protect_names`
+  allows; `tidy` and `prune` hold what live jobs' scripts or running processes still use; both print their plan unless `--apply`; exit 3 when something needs attention)
 
 ## Versioning and Sync
 
@@ -187,8 +199,8 @@ Three independent mechanisms:
   the level in `.memory/config.json` (`"subagents.level"` off/auto/quality/cost, absent = `auto` -
   follows the resolved economy level; `quality`/`cost` pick the model tier, both delegate);
   tier-match models per [`info/model-tiers.md`](info/model-tiers.md); `subagents: <posture>` in a
-  prompt is a per-request override; roles are harness-agnostic briefs whose `tier` and `effort` the
-  delegator passes on every launch.
+  prompt is a per-request override; roles are harness-agnostic briefs whose `tier` the delegator passes
+  on every launch (the effort is the owner's choice).
 - Token economy: [`rules/token-economy.rule.md`](rules/token-economy.rule.md) - always-on floor (read
   budget, unbounded-file discipline, batching, prefix stability) plus graded frugality measures and
   pacing (`"economy.level"` off/med/full/auto, absent = `med`; `auto` scales with context - `full`
@@ -197,6 +209,8 @@ Three independent mechanisms:
   `.memory/config.json`, absent = off): deliver exactly what was asked, smallest coherent form, with
   hard guardrails (trust-boundary validation, data-loss handling, safety rules never trimmed);
   `yagni: on|off` in a prompt is a per-request override.
+- Commands: give every command an explicit maximum time (the tool's timeout on every shell call, sized to
+  the command, plus `curl --max-time` / `ssh -o ConnectTimeout=` on network calls); never rely on defaults.
 - Markdown docs (framework and project alike): headings in **Title Case**; reader-facing docs
   (READMEs, specs, guides) carry a TOC listing **h2 and deeper only** - the h1 title stays out
   (`solaris.tools.toc` does both: it marks the h1 `omit in toc` and maintains the list).
