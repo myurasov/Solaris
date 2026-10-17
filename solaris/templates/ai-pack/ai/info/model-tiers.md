@@ -1,4 +1,4 @@
-_Rev. 10_
+_Rev. 11_
 
 # Info: Model Tiers <!-- omit in toc -->
 
@@ -52,6 +52,9 @@ otherwise run on the session model (`Explore` capped at Opus). Cursor's subagent
 model per launch (see `{{PACK}}/info/harnesses.md`), so its column picks subagent models as well as the
 session model. The OpenAI / xAI column gives API model ids for harnesses that take those APIs directly
 (for example OpenCode, or Codex for the GPT models); Cursor does not list the GPT-6 models yet.
+
+Environment pins such as `ANTHROPIC_DEFAULT_SONNET_MODEL` override what an alias like `sonnet` runs, so a
+brief's tier can change silently: check the model that actually ran.
 
 ## Effort + Thinking
 

@@ -90,7 +90,8 @@ is genuinely inseparable from the reading.
 
 **Long work** (durable delegation): a brief file per job, written before launch, pointing to a shared
 rules file; a status file updated at milestones; a hard return time. A run over about 30 minutes
-returns "launched"; the delegator resumes when its done marker appears.
+returns "launched"; the delegator resumes when its done marker appears. A worker waits at most ~270 s
+per call (its cache lasts 5 min); longer waits go to a background script.
 
 ## Model Tiering
 

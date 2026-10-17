@@ -1,4 +1,4 @@
-_Rev. 50_
+_Rev. 51_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -35,7 +35,8 @@ this file in `{{PACK}}/.memory/improvements.md`; standalone, edit it directly.
 2. `{{PACK}}/spec.md` - the current spec (the contract). `{{PACK}}/.memory/spec-v0.md`, if the project keeps one, is
    the preserved initial spec. `{{PACK}}/.memory/directions.md`, if present, is the owner's dated directions log; its
    entries override this pack's and its plugins' defaults.
-3. `{{PACK}}/instructions.md` - the one shared instructions store every persona reads and maintains:
+3. `{{PACK}}/card.md`, if present - the hard-rules card: the few rules a session must hold after every compaction
+   (see Memory). Then `{{PACK}}/instructions.md` - the one shared instructions store every persona reads and maintains:
    build/run/test commands, conventions, gotchas, lessons (sits in `{{PACK}}/` beside this file; portable, no
    host/secret/internal-URL specifics).
 4. Every `{{PACK}}/rules/*.rule.md` - always-on pack rules (token economy, subagents delegation, YAGNI
@@ -114,6 +115,9 @@ interpreter, or scripts that execute on a remote host (the environment must live
 - **Remote footprint:** everything you install on a remote host (services, tools, config, model/data caches)
   lives under **`~/.solaris/<component>/`** so it is discoverable and removable in one place; ship/use an
   uninstaller alongside every installer and record the install (host + path) in `{{PACK}}/.memory/resources.md`.
+- **Give every command an explicit maximum time:** set the tool's timeout on every shell call, sized to the
+  command, plus a command-level limit on network calls (`curl --max-time`, `ssh -o ConnectTimeout=`); never rely
+  on defaults.
 
 ## Long-Running Work
 
@@ -142,10 +146,31 @@ the work resumes from what is on disk:
   `{{PACK}}/info/harnesses.md`, Notes). Keep a durable pause/stop marker (the newest handover note, until its "resumed at" line) and a
   single active controller, run the scheduled checks missed during downtime, and detect idle workers whose last
   turn never finished.
+- **Keep a wake-up armed** whenever the project runs unattended: nothing else wakes a session. Under a Solaris
+  checkout that is `uv run -m solaris.tools.session_clock --dir <project>`, started as the harness's own background
+  command, alone in its call (never with `&`, `nohup`, `disown` or a `timeout` wrapper); one clock per pack (a new
+  start stops the old one; `--status`, `--stop`). Where background commands have no time limit (Claude Code
+  interactive sessions) start it with `--cap 55`, so a turn still comes at least every 55 minutes and the prompt
+  cache stays warm; elsewhere keep the default cap. In Claude Code the Stop hook sends a turn that ends with no
+  clock armed back once, unless a fresh handover note says the project is paused, and logs the problem to
+  `{{PACK}}/.memory/alerts.jsonl`; after a compaction the session-start hook reloads `{{PACK}}/card.md` and the
+  pack's rules (`{{PACK}}/info/harnesses.md`, Notes).
+- **Keep model text out of the main session:** never print agent prompts, model outputs, trajectories or long
+  third-party text into it; workers and counting scripts read them and return counts and neutral summaries. A
+  safety classifier can stop the main session in a category with no fallback model, and then every wake-up is
+  refused again until the owner clears it (`{{PACK}}/info/harnesses.md`: switch to the fallback model, compact,
+  switch back, "resume"). After a stretch on a fallback model, recheck that stretch's decisions once the usual
+  model returns.
 - Keep the project's folders within their size budget. Under a Solaris checkout, run `uv run --directory
   <solaris root> -m solaris.tools.housekeeping --dir <project> report` daily; its `prune --apply` deletes only
-  what the project's `{{PACK}}/housekeeping.json` rules and `.disposable` markers name. Deleting anything else
-  needs the owner's yes. <!-- OD42 -->
+  what the project's `{{PACK}}/housekeeping.json` rules and `.disposable` or `.recreatable` markers name, never
+  submissions, raw traces, the pack or `.git`; raw data and run logs are protected by default (`protect_names` in
+  `{{PACK}}/housekeeping.json`, which the project may change), and it holds anything a live job's scripts or a
+  running process still use. Deleting anything else needs the owner's yes. <!-- OD42 -->
+- Delete re-creatable data that is unlikely to be needed as you go, without asking: name it with a housekeeping
+  rule carrying `"recreatable": true` and a one-line `"how"` (how to get it back), or a `.recreatable` marker
+  whose first line is the how, and run `prune --apply` at each housekeeping pass; every deletion is logged with
+  its how. <!-- OD51 -->
 
 ## Sandboxed Harnesses
 
@@ -236,6 +261,12 @@ When the user teaches a durable preference about this project, or any persona le
 update `{{PACK}}/instructions.md` (rewrite to keep the best version; keep it shareable - relocate any
 host/secret/internal-URL specifics into `{{PACK}}/.memory/`, never drop them). One store for every persona:
 a lesson written once is never relearned or duplicated by another role.
+
+**The hard-rules card**, `{{PACK}}/card.md` (at most about 3 KB, project-owned): only the rules a session must
+hold after every compaction - the ones whose loss costs the most (for example what never enters the main
+session, the wake-up, the confirm list); everything else stays in `instructions.md`. Under Claude Code at a
+Solaris checkout the session-start hook re-injects it with the pack's always-on rules after each compaction of a
+session the clock registered. Update it in the same turn a hard rule changes.
 
 **Route procedures to project-local skills, not instructions.** When the durable knowledge is a
 **multi-step procedure invoked on a recognizable trigger and run occasionally** - onboarding, data

@@ -82,6 +82,11 @@ outputs) - add others as needed. **Durable conclusions get folded into this file
   file. Over ssh, `pgrep -f <pattern>` matches the polling command's own command line, so it never reports
   the job finished, and `pkill -f <pattern>` kills its own shell; an END line in an appended log may be an
   earlier run's.
+- **Remote launches:** an ssh that starts a long run stays open until the run ends, even with `setsid nohup ...
+  < /dev/null &`: start it as a background call, never wait on it, and watch progress from a separate call that
+  reads the remote log or done marker. Put the stdout redirect first (`>> log 2>&1`; a later `> /dev/null` sends
+  stdout there instead). Keep a pattern off its own command line by bracket-escaping (`pkill -f "jo[b].py"`) or
+  anchoring (`pgrep -f "^bash .*/job.sh$"`), or wait on a PID (`tail --pid=<pid> -f /dev/null`).
 - **Shell traps:** `a && nohup b &` puts `a` in the background too, with empty stdin (a `cat > file` there
   writes an empty file) - write `a; nohup b > log 2>&1 &`, or run `a` in a call of its own. An ssh inside a
   loop or a heredoc script needs `-n`, or it swallows the rest of the input. Quote heredocs that write

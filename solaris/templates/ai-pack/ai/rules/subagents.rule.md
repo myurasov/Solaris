@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 # Rule: Subagents (Bulk-Read Floor + Leveled Delegation) <!-- omit in toc -->
 
@@ -103,13 +103,14 @@ A delegated task must be executable by a weaker model. Every subagent prompt car
 If a task cannot be phrased this way, split it until it can - or keep it inline only when judgment
 is genuinely inseparable from the reading.
 
-**Long work** (durable delegation): a brief file per job, written before launch, pointing to a shared
-rules file; a status file updated at milestones (progress notes on the host, for a remote job); a hard
-return time. A run over about 30 minutes
-returns "launched"; the delegator resumes when its done marker appears. Keep the delegating session responsive
-with short coordinator turns: delegate preparation, validation and reporting, persist early milestones, and
-return on completion events instead of holding a long turn open to wait. Require early saved milestones of each
-worker too, so a long model step does not leave all progress transient.
+**Long work** (durable delegation): a brief file per job, written before launch, pointing to a shared rules file; a
+status file updated at milestones (progress notes on the host, for a remote job); a hard return time. A run over
+about 30 minutes returns "launched"; the delegator resumes when its done marker appears. Keep the delegating
+session responsive with short coordinator turns: delegate preparation, validation and reporting, persist early
+milestones, and return on completion events instead of holding a long turn open to wait. A worker waits at most
+about 270 seconds per call (its prompt cache lasts five minutes, and a longer idle re-writes its whole context),
+hands longer waits to a background script, and never starts a command with `sleep`. Require early saved milestones
+of each worker too, so a long model step does not leave all progress transient.
 
 ## Model Tiering
 

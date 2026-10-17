@@ -11,6 +11,8 @@ How to talk to and write for the owner - chat, docs, reports. Applies always, in
   never bury it in a progress update. If the honest answer is "I don't know yet", say that first.
 - Honor requested word counts ("gimme a 50-ish word reply").
 - During autonomous work a question is a question - answer and continue; it is not a resume signal.
+- Put the answer after the turn's last tool call: some harness views (Claude Code in the Cursor or VS Code
+  extension) do not show text written before a tool call.
 
 ## Writing Style
 

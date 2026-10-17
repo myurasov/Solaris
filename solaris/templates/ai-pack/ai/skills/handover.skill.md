@@ -3,7 +3,7 @@ name: handover
 triggers: ["handover", "stop for handover", "pause for handover", "resume after handover"]
 summary: Pause {{NAME}} or hand it to another session or machine without losing work - save context, write a dated handover note, commit, leave remote jobs running - and resume from that note after re-checking hosts, leases and jobs.
 ---
-_Rev. 6_
+_Rev. 7_
 
 # Skill: handover - Pause, Hand Over, Resume <!-- omit in toc -->
 
@@ -27,7 +27,8 @@ keep running. Project specifics (which hosts, leases and schedules to check) liv
 ## 2. Before Stopping
 
 1. **Stop starting.** Launch nothing new; stop schedules and periodic checks first, so nothing wakes the
-   session mid-pause. Let running steps reach a safe point, or note exactly where each one stopped.
+   session mid-pause (under a Solaris checkout, `uv run -m solaris.tools.session_clock --dir <project> --stop`
+   once the note of step 4 is written: a fresh note tells the Stop hook the pause is on purpose). Let running steps reach a safe point, or note exactly where each one stopped.
 2. **Close the browsers** this session started, headed or headless, unless the owner asked to keep one open:
    with the browserctl plugin, `browserctl.py status` lists them and `stop --profile <name>` closes one (a
    persistent profile keeps its login); with the reporting plugin, `render.sh --reap` closes a Chrome an
@@ -79,6 +80,10 @@ Only on the owner's explicit word.
    still there, with their end times; each listed job's done marker, log and tmux session; `git status`.
    Note what changed during the pause.
 4. **Relaunch** each unfinished subagent from its brief, saying what is already done; restart the clocks
-   and periodic checks the note lists, and start each instance it lists as stopped when its work resumes.
-5. **Record:** add a "resumed at <time>" line to the handover note, refresh `context.md`, tell the owner in
+   and periodic checks the note lists (the session clock with the `--after` its last run printed), and start
+   each instance it lists as stopped when its work resumes.
+5. **After a stuck session:** when the old session was stopped by a safety classifier or ran on a fallback model
+   (`{{PACK}}/.memory/alerts.jsonl`, `{{PACK}}/info/harnesses.md`), find what it missed (schedule events, slots,
+   queues that ran dry) and recheck the decisions it made on the fallback model.
+6. **Record:** add a "resumed at <time>" line to the handover note, refresh `context.md`, tell the owner in
    one line what resumed and what changed, and log the turn.
