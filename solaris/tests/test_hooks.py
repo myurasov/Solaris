@@ -30,6 +30,8 @@ RUNNABLE = {
     ("solaris.tools.read_first", ("--part", "2")),
     ("solaris.tools.read_first", ("--part", "3")),
     ("solaris.tools.skill_loader", ()),
+    # no registry for this test session, so the guard reads one missing file and prints nothing
+    ("solaris.tools.session_guard", ()),
 }
 
 
@@ -81,7 +83,10 @@ def test_hook_runs_from_a_nested_folder(command, tmp_path):
     if (REPO_ROOT / "memory").is_dir() and not (REPO_ROOT / ".memory").exists():
         pytest.skip("this checkout still has a legacy memory/ folder")
     # TMPDIR keeps any skill_loader session marker in tmp_path.
-    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(REPO_ROOT), TMPDIR=str(tmp_path))
+    # XDG_CACHE_HOME and no session id keep every hook out of a real project session (orchestrator mode)
+    env = dict(os.environ, CLAUDE_PROJECT_DIR=str(REPO_ROOT), TMPDIR=str(tmp_path),
+               XDG_CACHE_HOME=str(tmp_path / "cache"))
+    env.pop("CLAUDE_CODE_SESSION_ID", None)
     proc = subprocess.run(command, shell=True, cwd=REPO_ROOT / "solaris" / "tests", env=env,
                           input='{"session_id": "solaris-test-hooks"}', capture_output=True, text=True,
                           timeout=60)

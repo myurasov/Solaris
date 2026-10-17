@@ -32,6 +32,26 @@
             "type": "command",
             "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 4",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 5",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 6",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 7",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.read_first --part 8",
+            "timeout": 10
           }
         ]
       }
@@ -53,6 +73,28 @@
             "type": "command",
             "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.skill_loader",
             "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.session_guard",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "uv run --directory \"${CLAUDE_PROJECT_DIR:-.}\" -m solaris.tools.session_guard",
+            "timeout": 10
           }
         ]
       }
