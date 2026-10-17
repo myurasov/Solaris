@@ -25,6 +25,12 @@ def mtime_only(monkeypatch):
     monkeypatch.setattr(H, "_changed", lambda st: st.st_mtime)
 
 
+@pytest.fixture(autouse=True)
+def no_processes(monkeypatch):
+    # the machine's own processes stay out of the tests; a test that needs some sets its own
+    monkeypatch.setattr(H, "_processes", lambda: [])
+
+
 def _write(path, text="x"):
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text, encoding="utf-8")
@@ -248,23 +254,23 @@ def test_prune_by_rule_and_age(proj, capsys):
         _write(out / name / "f.bin", "x" * 100)
         _age(out / name, days)
     _write(out / "fresh" / "f.bin")
-    _age(_write(out / "old.log", "y" * 10), 20)
+    _age(_write(out / "old.npy", "y" * 10), 20)
     _config(proj, prune=[{"glob": "__out/*", "older_than_days": 7, "note": "run outputs"}])
     code, res = _json(proj, capsys, "prune")
     rule = "__out/* older than 7 days"
     assert code == 3
-    assert [(c["path"], c["rule"], c["bytes"], c["dir"]) for c in res["prune"]] == [
-        ("__out/old", rule, 100, True), ("__out/old.log", rule, 10, False)]
+    assert [(c["path"], c["rule"], c["bytes"], c["dir"], c["how"]) for c in res["prune"]] == [
+        ("__out/old", rule, 100, True, None), ("__out/old.npy", rule, 10, False, None)]
     assert res["prune"][0]["age_days"] >= 9.9
     assert _held(res) == {"__out/mid": "newer than 7 days", "__out/fresh": "recent"}
     code, text = _main(proj, capsys, "prune", "--apply")
     assert code == 0, text
-    assert not (out / "old").exists() and not (out / "old.log").exists()
+    assert not (out / "old").exists() and not (out / "old.npy").exists()
     assert (out / "mid").exists() and (out / "fresh").exists()
     log = _log(proj)
     assert [(e["action"], e["path"], e["bytes"], e["rule"]) for e in log] == [
-        ("delete", "__out/old", 100, rule), ("delete", "__out/old.log", 10, rule)]
-    assert all(e["ts"].endswith("Z") and "error" not in e for e in log)
+        ("delete", "__out/old", 100, rule), ("delete", "__out/old.npy", 10, rule)]
+    assert all(e["ts"].endswith("Z") and "error" not in e and "how" not in e for e in log)
     assert _main(proj, capsys, "prune")[0] == 0
 
 
@@ -457,8 +463,9 @@ def test_json_shape(proj, capsys):
     code, res = _json(proj, capsys)
     assert code == res["exit"] == 0
     assert set(res) == {"project", "pack", "command", "apply", "config", "elapsed_s", "sizes", "budgets", "untidy",
-                        "untidy_held", "prune", "prune_held", "layout", "unreadable", "applied", "failed", "exit",
-                        "reason"}
+                        "untidy_held", "prune", "prune_held", "layout", "live", "unreadable", "applied", "failed",
+                        "exit", "reason"}
+    assert res["live"] == {"jobs": [], "scripts": 0, "processes": 0, "complete": True, "note": ""}
     assert (res["command"], res["pack"], res["apply"]) == ("report", "aipack", False)
     assert res["config"] == {"file": None, "keep_recent_hours": 24}
     assert res["project"] == os.path.realpath(proj)
@@ -519,6 +526,8 @@ def test_layout_notes(proj, capsys):
     ('{"prune": [{"glob": "/tmp/*", "older_than_days": 1}]}', "must stay inside the project"),
     ('{"prune": [{"glob": "./", "older_than_days": 1}]}', "names the project root itself"),
     ('{"protect": "__data"}', "protect must be a list"),
+    ('{"protect_names": ["__data/raw"]}', "must be a name, not a path"),
+    ('{"protect_names": "raw"}', "protect_names must be a list"),
 ])
 def test_bad_config_is_an_error(proj, capsys, text, message):
     _write(proj / "aipack" / H.CONFIG, text)
@@ -620,3 +629,314 @@ def test_budget_keys_must_be_paths_and_missing_paths_need_attention(proj, capsys
     code, res = _json(proj, capsys, "report")
     assert code == H.ATTENTION
     assert res["budgets"][0]["measured"] is False and "missing" in res["budgets"][0]["note"]
+
+
+def test_recreatable_rule_prunes_without_asking_and_logs_how(proj, capsys):
+    data = proj / "__data" / "downloads"
+    for name in ("set-a", "set-b"):
+        _write(data / name / "part.bin", "x" * 20)
+        _age(data / name, 5)
+    _age(data, 5)
+    how = "tools/fetch/fetch.sh <name> downloads it again"
+    _config(proj, prune=[{"glob": "__data/downloads/*", "older_than_days": 2, "recreatable": True, "how": how}])
+    code, out = _main(proj, capsys, "prune")
+    rule = "__data/downloads/* older than 2 days, re-creatable"
+    assert code == 3 and f"__data/downloads/set-a/  [{rule}]  how: {how}" in out
+    code, res = _json(proj, capsys, "prune")
+    assert {c["path"]: (c["rule"], c["how"]) for c in res["prune"]} == {
+        "__data/downloads/set-a": (rule, how), "__data/downloads/set-b": (rule, how)}
+    assert _held(res) == {}
+    code, out = _main(proj, capsys, "prune", "--apply")
+    assert code == 0 and f"__data/downloads/set-a  (how: {how})" in out
+    assert not (data / "set-a").exists() and not (data / "set-b").exists()
+    assert [(e["action"], e["path"], e["rule"], e["how"], e["bytes"]) for e in _log(proj)] == [
+        ("delete", "__data/downloads/set-a", rule, how, 20), ("delete", "__data/downloads/set-b", rule, how, 20)]
+
+
+def test_recreatable_marker_needs_a_how_line(proj, capsys):
+    out = proj / "__out"
+    _write(out / "feats" / ".recreatable", "python tools/feats/build.py rebuilds it (20 min)\nmore notes\n")
+    _write(out / "feats" / "f.npy", "x" * 30)
+    _age(out / "feats", 3)
+    _write(out / "blank" / ".recreatable", "\n")
+    _age(out / "blank", 3)
+    _write(out / "both" / ".recreatable", "rebuild with make both")
+    _write(out / "both" / ".disposable")
+    _age(out / "both", 3)
+    _write(out / "new" / ".recreatable", "rebuild")
+    _write(proj / "research" / "x" / ".recreatable", "rebuild")
+    _age(proj / "research" / "x", 30)
+    code, res = _json(proj, capsys, "prune")
+    assert {c["path"]: (c["rule"], c["how"]) for c in res["prune"]} == {
+        "__out/feats": (".recreatable", "python tools/feats/build.py rebuilds it (20 min)"),
+        "__out/both": (".recreatable", "rebuild with make both")}
+    held = _held(res)
+    assert held["__out/blank"].startswith("no how") and held["__out/new"] == "recent"
+    assert _main(proj, capsys, "prune", "--apply")[0] == 0
+    assert not (out / "feats").exists() and (out / "blank").exists() and (proj / "research" / "x").exists()
+    assert {e["path"]: e["how"] for e in _log(proj)}["__out/feats"].startswith("python tools/feats/build.py")
+
+
+def test_recreatable_data_keeps_every_guard(proj, capsys):
+    data = proj / "__data" / "cache"
+    for name in ("young", "kept", "guarded", "old"):
+        _write(data / name / "f")
+    _write(data / "kept" / ".keep")
+    _age(data, 30)
+    _age(data / "young", 3)
+    _write(proj / "__data" / "busy" / "old" / "f")
+    _age(proj / "__data" / "busy", 30)
+    _write(proj / "__data" / "busy" / "new" / "f")   # the folder around a match is still being written
+    _config(proj, protect=["__data/cache/guarded"],
+            prune=[{"glob": "__data/cache/*", "older_than_days": 7, "recreatable": True, "how": "rebuild"},
+                   {"glob": "__data/busy/*", "older_than_days": 7, "recreatable": True, "how": "rebuild"}])
+    code, res = _json(proj, capsys, "prune")
+    assert [c["path"] for c in res["prune"]] == ["__data/cache/old"]
+    assert _held(res) == {"__data/cache/young": "newer than 7 days", "__data/cache/kept": ".keep",
+                          "__data/cache/guarded": "protected", "__data/busy/old": "inside a recent folder",
+                          "__data/busy/new": "recent"}
+
+
+def test_never_delete_list_wins_over_rules_and_markers(proj, capsys):
+    out = proj / "__out"
+    _write(out / "Submissions" / "s1.csv")
+    _write(out / "run-a" / "Submission.csv")
+    _write(out / "run-b" / "shard0" / "traces" / "t.jsonl")
+    _write(out / "run-c" / "train.log")
+    _write(out / "run-d" / "logs" / "x.txt")
+    _write(out / "run-e" / "out.npy")
+    _write(out / "run-f" / "x.TRACE")
+    _write(out / "scratch" / ".disposable")
+    _write(out / "scratch" / "job.log.1")
+    _age(out, 30)
+    rules = [{"glob": "__out/*", "older_than_days": 1, "recreatable": True, "how": "rerun"},
+             {"glob": "__out/Submissions/*", "older_than_days": 1}]
+    _config(proj, prune=rules)
+    code, res = _json(proj, capsys, "prune")
+    assert [c["path"] for c in res["prune"]] == ["__out/run-e"]
+    held = {h["path"]: (h["held"], h.get("entry")) for h in res["prune_held"]}
+    never = {
+        "__out/Submissions": ("never deleted: submission", "__out/Submissions"),
+        "__out/Submissions/s1.csv": ("never deleted: submission", "__out/Submissions"),
+        "__out/run-a": ("never deleted: submission", "__out/run-a/Submission.csv"),
+        "__out/run-b": ("never deleted: raw trace", "__out/run-b/shard0/traces"),
+        "__out/run-f": ("never deleted: raw trace", "__out/run-f/x.TRACE")}
+    assert held == {**never, "__out/run-c": ("protected name", "__out/run-c/train.log"),
+                    "__out/run-d": ("protected name", "__out/run-d/logs"),
+                    "__out/scratch": ("protected name", "__out/scratch/job.log.1")}
+    assert _main(proj, capsys, "prune", "--apply")[0] == 0
+    assert not (out / "run-e").exists()
+    assert all((out / n).exists() for n in ("Submissions", "run-a", "run-b", "run-c", "run-d", "run-f", "scratch"))
+    # a project that drops the default protect_names prunes run logs by its rules; the never list stays
+    _config(proj, prune=rules, protect_names=[])
+    code, res = _json(proj, capsys, "prune")
+    assert sorted(c["path"] for c in res["prune"]) == ["__out/run-c", "__out/run-d", "__out/scratch"]
+    assert {h["path"]: (h["held"], h.get("entry")) for h in res["prune_held"]} == never
+
+
+def test_protect_names_default_holds_raw_data_until_the_project_changes_it(proj, capsys):
+    data = proj / "__data"
+    _write(data / "raw" / "comp.zip")
+    _write(data / "feats" / "raw_cols.npy")
+    _age(data, 30)
+    rule = {"glob": "__data/*", "older_than_days": 7, "recreatable": True, "how": "download the data again"}
+    _config(proj, prune=[rule])
+    code, res = _json(proj, capsys, "prune")
+    assert res["prune"] == []
+    assert {h["path"]: (h["held"], h.get("entry")) for h in res["prune_held"]} == {
+        "__data/raw": ("protected name", "__data/raw"), "__data/feats": ("protected name", "__data/feats/raw_cols.npy")}
+    _config(proj, prune=[rule], protect_names=["raw_*"])
+    code, res = _json(proj, capsys, "prune")
+    assert [c["path"] for c in res["prune"]] == ["__data/raw"] and _held(res) == {"__data/feats": "protected name"}
+    assert _main(proj, capsys, "prune", "--apply")[0] == 0
+    assert not (data / "raw").exists() and (data / "feats" / "raw_cols.npy").exists()
+    assert _log(proj)[0]["how"] == "download the data again"
+
+
+def test_recreatable_rules_never_reach_the_pack(proj, capsys):
+    mem = proj / "aipack" / ".memory"
+    _write(mem / "archive" / "2026-01" / "a.md")
+    _age(mem / "archive" / "2026-01", 90)
+    _config(proj, prune=[{"glob": "{pack}/.memory/archive/*", "older_than_days": 30, "recreatable": True,
+                          "how": "none"}])
+    code, res = _json(proj, capsys, "prune")
+    assert not res["prune"]
+    assert _held(res) == {"aipack/.memory/archive/2026-01": "in the pack: re-creatable rules never reach it"}
+
+
+@pytest.mark.parametrize("rule, message", [
+    ({"recreatable": True}, "a recreatable rule needs how"),
+    ({"recreatable": True, "how": "  "}, "a recreatable rule needs how"),
+    ({"recreatable": True, "how": "line one\nline two"}, "how must be one line"),
+    ({"recreatable": True, "how": "x" * 301}, "how must be one line of at most 300"),
+    ({"how": "rebuild"}, 'how goes with "recreatable": true'),
+    ({"recreatable": "yes", "how": "rebuild"}, "recreatable must be true or false"),
+    ({"recreatable": True, "how": "x", "why": "y"}, "optional recreatable, how and note"),
+])
+def test_bad_recreatable_rules(proj, capsys, rule, message):
+    _config(proj, prune=[{"glob": "__out/*", "older_than_days": 1, **rule}])
+    code, out = _main(proj, capsys, "prune", "--apply")
+    assert code == 1 and message in out
+
+
+def _kit(root, rel, text, days=10):
+    """A job kit: one script at ``rel`` (inside the project) with ``text``, its folder aged ``days``."""
+    path = _write(root / rel, text)
+    _age(path.parent, days)
+    return path
+
+
+def test_tidy_holds_a_job_folder_a_live_kit_still_calls(proj, capsys):
+    mem = proj / "aipack" / ".memory"
+    _kit(proj, "aipack/.memory/jobs/engine-reads/rx.sh", "#!/bin/sh\nssh host run\n")
+    _kit(proj, "aipack/.memory/jobs/poller/poll.sh",
+         "#!/bin/sh\nwhile true; do bash aipack/.memory/jobs/engine-reads/rx.sh; sleep 60; done\n")
+    _kit(proj, "aipack/.memory/jobs/finished/run.sh", "echo done\n")
+    _age(_write(mem / "context.md", "Running: poller (checks the host every minute)."), 30)
+    code, out = _main(proj, capsys, "tidy")
+    assert code == 3
+    assert ("  held  aipack/.memory/jobs/engine-reads/  used by a live job: aipack/.memory/jobs/poller/poll.sh"
+            in out)
+    assert "Live jobs: 2 (2 scripts read, 0 processes)" in out
+    assert "  aipack/.memory/jobs/poller  (named in context or handover)" in out
+    assert "  aipack/.memory/jobs/engine-reads  (used by a live job)" in out
+    code, res = _json(proj, capsys, "tidy")
+    assert [m["path"] for m in res["untidy"]] == ["aipack/.memory/jobs/finished"]
+    held = {h["path"]: (h["held"], h.get("by")) for h in res["untidy_held"]}
+    assert held == {"aipack/.memory/jobs/engine-reads": ("used by a live job", "aipack/.memory/jobs/poller/poll.sh"),
+                    "aipack/.memory/jobs/poller": ("named in context or handover", "aipack/.memory/context.md")}
+    assert _main(proj, capsys, "tidy", "--apply")[0] == 0
+    assert (mem / "jobs" / "engine-reads" / "rx.sh").exists() and not (mem / "jobs" / "finished").exists()
+
+
+def test_live_jobs_chain_and_hold_prune_candidates(proj, capsys):
+    # a recent job calls a kit by a variable path; the kit, live in turn, reads a data folder
+    _write(proj / "__out" / "jobs" / "fresh" / "go.py", 'KIT = f"{JOBS}/kit-a/run.sh"\n')
+    _kit(proj, "aipack/.memory/jobs/kit-a/run.sh", "python x.py --data __data/model-x/weights.bin\n")
+    _kit(proj, "aipack/.memory/jobs/kit-a/sub/conf.yaml", "data: __data/model-y\n")
+    _kit(proj, "aipack/.memory/jobs/kit-a/sub/deeper/conf.yaml", "data: __data/model-z\n")
+    _write(proj / "__out" / "jobs" / "fresh" / "secrets.env", "DATA=__data/model-w\n")   # never read
+    _age(proj / "aipack" / ".memory" / "jobs" / "kit-a", 10)
+    for name in ("model-w", "model-x", "model-y", "model-z", "other"):
+        _write(proj / "__data" / name / "weights.bin")
+        _age(proj / "__data" / name, 30)
+    _config(proj, prune=[{"glob": "__data/*", "older_than_days": 7, "recreatable": True, "how": "download"}])
+    code, res = _json(proj, capsys, "prune")
+    assert {j["path"]: j["why"] for j in res["live"]["jobs"]} == {"__out/jobs/fresh": "recent",
+                                                                 "aipack/.memory/jobs/kit-a": "used by a live job"}
+    assert sorted(c["path"] for c in res["prune"]) == ["__data/model-w", "__data/model-z", "__data/other"]
+    held = {h["path"]: (h["held"], h.get("by")) for h in res["prune_held"]}
+    assert held == {"__data/model-x": ("used by a live job", "aipack/.memory/jobs/kit-a/run.sh"),
+                    "__data/model-y": ("used by a live job", "aipack/.memory/jobs/kit-a/sub/conf.yaml")}
+
+
+def test_running_processes_hold_what_they_name(proj, capsys, monkeypatch):
+    root = os.path.realpath(proj)
+    _kit(proj, "__out/jobs/runner/go.py", "open('__data/set-b/x')\n")
+    for name in ("set-a", "set-b", "set-c"):
+        _write(proj / "__data" / name / "x")
+        _age(proj / "__data" / name, 30)
+    cmd = f"python {root}/__out/jobs/runner/go.py --in __data/set-a"
+    monkeypatch.setattr(H, "_processes", lambda: [(4242, cmd), (77, "uv run x --dir /elsewhere/__data/set-c")])
+    _config(proj, prune=[{"glob": "__data/*", "older_than_days": 7, "recreatable": True, "how": "download"}])
+    code, res = _json(proj, capsys, "prune")
+    assert res["live"]["processes"] == 2
+    assert res["live"]["jobs"] == [{"path": "__out/jobs/runner", "why": "used by a process"}]
+    held = {h["path"]: (h["held"], h.get("by")) for h in res["prune_held"]}
+    assert held == {"__data/set-a": ("used by a process", "process 4242 (python): __data/set-a"),
+                    "__data/set-b": ("used by a live job", "__out/jobs/runner/go.py"),
+                    "__data/set-c": ("used by a process", "process 77 (uv): __data/set-c")}
+    assert res["prune"] == []
+
+
+def test_process_command_lines_are_never_printed(proj, capsys, monkeypatch):
+    secret = "hunter2-secret"
+    _kit(proj, "__out/jobs/fetch/run.sh", "echo\n")
+    _write(proj / "__data" / "set" / "x")
+    _age(proj / "__data" / "set", 30)
+    monkeypatch.setattr(H, "_processes", lambda: [
+        (11, f"/usr/local/bin/fetcher --token {secret} --out __data/set/x"),
+        (12, f"/opt/x/run-$(id) -p{secret} __out/jobs/fetch/run.sh")])
+    _config(proj, prune=[{"glob": "__data/*", "older_than_days": 7, "recreatable": True, "how": "download"}])
+    for args in (("prune",), ("prune", "--json"), ("tidy",), ("tidy", "--json"), ("report", "--json")):
+        code, out = _main(proj, capsys, *args)
+        assert secret not in out and "--token" not in out, args
+    code, res = _json(proj, capsys, "prune")
+    assert [(h["held"], h["by"]) for h in res["prune_held"]] == [
+        ("used by a process", "process 11 (fetcher): __data/set")]
+    assert res["live"]["jobs"] == [{"path": "__out/jobs/fetch", "why": "used by a process"}]
+    assert H._exe_name("/opt/x/run-$(id) -p1") == "run-id" and H._exe_name("") == "?"
+
+
+def test_prune_holds_what_context_names_and_what_live_jobs_hold(proj, capsys):
+    mem = proj / "aipack" / ".memory"
+    for rel in ("__out/cache/feat-1", "__out/cache/feat-2", "__out/jobs/live-a/ckpt", "__out/jobs/done-b/ckpt"):
+        _write(proj / rel / "part.npy")
+    _age(proj / "__out", 30)
+    _age(_write(mem / "context.md", "Next: read __out/cache/feat-1/part.npy; live-a is still running."), 30)
+    _age(_write(mem / "handover-1.md", "old note naming __out/cache/feat-2"), 40)
+    _age(_write(mem / "handover-2.md", "newest note"), 20)
+    _config(proj, prune=[{"glob": "__out/cache/*", "older_than_days": 7, "recreatable": True, "how": "rebuild"},
+                         {"glob": "__out/jobs/*/ckpt", "older_than_days": 7, "recreatable": True, "how": "rerun"}])
+    code, res = _json(proj, capsys, "prune")
+    assert sorted(c["path"] for c in res["prune"]) == ["__out/cache/feat-2", "__out/jobs/done-b/ckpt"]
+    held = {h["path"]: (h["held"], h.get("by")) for h in res["prune_held"]}
+    assert held == {"__out/cache/feat-1": ("named in context or handover", "aipack/.memory/context.md"),
+                    "__out/jobs/live-a/ckpt": ("live job", "__out/jobs/live-a (named in context or handover)")}
+    code, out = _main(proj, capsys, "prune")
+    assert "  held  __out/cache/feat-1/  named in context or handover: aipack/.memory/context.md" in out
+
+
+def test_an_incomplete_script_scan_holds_everything(proj, capsys, monkeypatch):
+    monkeypatch.setattr(H, "SCAN_FILES", 1)
+    _write(proj / "__out" / "jobs" / "fresh" / "a.sh", "echo a\n")
+    _write(proj / "__out" / "jobs" / "fresh" / "b.sh", "echo b\n")
+    _write(proj / "__data" / "old" / "x")
+    _age(proj / "__data" / "old", 30)
+    _age(_write(proj / "aipack" / ".memory" / "stray.md"), 30)
+    _config(proj, prune=[{"glob": "__data/*", "older_than_days": 7, "recreatable": True, "how": "download"}])
+    code, res = _json(proj, capsys, "prune")
+    assert res["prune"] == [] and _held(res) == {"__data/old": "references not fully read"}
+    assert res["live"]["complete"] is False and "every move and deletion held" in res["live"]["note"]
+    code, res = _json(proj, capsys, "tidy")
+    assert res["untidy"] == [] and _held(res, "untidy_held") == {"aipack/.memory/stray.md": "references not fully read"}
+    code, out = _main(proj, capsys, "tidy")
+    assert "every move and deletion held" in out.splitlines()[1]
+
+
+def test_a_failed_process_list_holds_every_move_and_deletion(proj, capsys, monkeypatch):
+    def fail():
+        raise OSError("ps exit 1")
+    monkeypatch.setattr(H, "_processes", fail)
+    _write(proj / "__data" / "old" / "x")
+    _age(proj / "__data" / "old", 30)
+    _age(_write(proj / "aipack" / ".memory" / "stray.md"), 30)
+    _config(proj, prune=[{"glob": "__data/*", "older_than_days": 7, "recreatable": True, "how": "download"}])
+    note = "processes not read (ps exit 1): every move and deletion held"
+    code, res = _json(proj, capsys, "prune")
+    assert code == 0 and res["prune"] == [] and _held(res) == {"__data/old": "references not fully read"}
+    assert res["live"]["processes"] is None and res["live"]["complete"] is False and res["live"]["note"] == note
+    code, out = _main(proj, capsys, "prune", "--apply")
+    assert code == 0 and f"Live jobs: 0 (0 scripts read, no process list); {note}" in out
+    assert (proj / "__data" / "old" / "x").exists()
+    code, out = _main(proj, capsys, "tidy", "--apply")
+    assert code == 0 and (proj / "aipack" / ".memory" / "stray.md").exists()
+    assert not (proj / "aipack" / ".memory" / H.LOG).exists()
+
+
+@pytest.mark.skipif(shutil.which("ps") is None, reason="no ps")
+def test_the_process_list_leaves_out_this_process(monkeypatch):
+    monkeypatch.undo()
+    procs = H._processes()
+    assert procs and all(isinstance(pid, int) and cmd for pid, cmd in procs)
+    assert os.getpid() not in {pid for pid, _ in procs} and os.getppid() not in {pid for pid, _ in procs}
+
+
+def test_help_describes_recreatable_data_and_holds(capsys):
+    with pytest.raises(SystemExit) as exc:
+        H.main(["--help"])
+    out = capsys.readouterr().out
+    assert exc.value.code == 0
+    for text in ('"recreatable": true', ".recreatable marker", "never deleted", "submission*", "held while in use",
+                 "protect_names", '"raw", "raw-*"'):
+        assert text in out, text
