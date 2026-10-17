@@ -3,7 +3,7 @@ name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
 summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -20,7 +20,8 @@ _Rev. 5_
 While a competition runs, check its discussions at least hourly: the hosts post rulings, data fixes and rule
 clarifications there, and other teams post measurements and traps. Check them too whenever a question may
 already be answered there. Kaggle access and sign-in belong to the `kaggle-cli` skill; this tool calls the same
-gateway, read-only. Posting, replying and voting are web-only steps for the owner.
+gateway, read-only. No API route writes to the forum: posting, replying and voting are the owner's, by hand on
+the web.
 
 ## Hourly Routine
 
@@ -28,7 +29,11 @@ gateway, read-only. Posting, replying and voting are web-only steps for the owne
    read, and fetches the new and changed topics: about one call per 20 topics, plus one per topic fetched.
 2. **`show <slug> --new`** prints what is new: new topics whole, and for changed topics only the comments
    posted since the last read, each with the comment it replies to, then the topics that went missing.
-   `show <slug>` prints changed topics whole. Either way it records what it printed.
+   `show <slug>` prints changed topics whole. Either way it records what it printed. Without ids, `show` also
+   says when its pending topics may miss newer posts: the listing is over 10 minutes old (`listing N min old: run
+   check ...`), a newer listing is not diffed yet, or there is none. Only `check` sees posts made since. `[host]`
+   marks an author the forum badges as a host. In a master session, leave long or code-heavy posts (agent prompts,
+   model output) to a worker that returns a short neutral summary (the kaggle rule).
 3. **Log what matters** (below) with topic ids and actions. Act at once on rule, eligibility or data-bug
    findings.
 4. **`commit <slug>`** records as read exactly what `show` printed since the last commit: each topic up to the

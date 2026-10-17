@@ -1,4 +1,4 @@
-# rev. 5
+# rev. 6
 
 """kaggle_forum: watch a Kaggle competition's discussions.
 
@@ -23,9 +23,15 @@ this file); such a listing is complete only when --pages N gives the forum's
 page count and the files hold pages 1 to N. `diff` finds new, changed and
 missing topics; `fetch` reads each once through the gateway, read-only:
 `kaggle.py --sdk topic <id>` gives the opening post and every comment in
-full, replies nested. `show` records what it printed, and `commit` records
-exactly that as read, so a check that runs in between cannot count unseen
-topics or comments as read. Everything lives in
+full, replies nested, and marks an author the forum badges as a competition
+host (the read's host flag) with [host]. `show` records what it printed, and
+`commit` records exactly that as read, so a check that runs in between cannot
+count unseen topics or comments as read. Without topic ids, `show` prints the
+topics the last diff left pending, so it also says when they may miss newer
+posts: the listing they come from is more than 10 minutes old ("listing N min
+old: run check ..."), a newer listing is not diffed yet, or there is no
+listing at all; only a check, which lists the forum again, sees posts made
+since (show itself makes no Kaggle call). Everything lives in
 <context>/__data/kaggle/<slug>/forum/ (or <base>/<slug>/ with --dir <base> or
 KAGGLE_FORUM_DIR=<base>): state.json (each topic as last read), pending.json
 (what the last diff found), shown.json (what show printed since the last
@@ -62,6 +68,8 @@ ISO = "%Y-%m-%dT%H:%M:%SZ"
 SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 MAX_PAGES = 50
 PAUSE = 1.0
+# show names the age of the listing its pending topics come from once it is older than this
+STALE_MINUTES = 10
 STATE, PENDING, SHOWN = "state.json", "pending.json", "shown.json"
 # "Next Page Token = 2" follows a topic list page when more pages exist
 TOKEN_RE = re.compile(r"^\s*next page token\s*[=:]\s*(\S+)\s*$", re.I | re.M)
@@ -590,6 +598,11 @@ def _indent(text, pad):
     return "\n".join(pad + line if line else "" for line in text.splitlines())
 
 
+def badge(message):
+    # the forum's host badge, as the SDK read keeps it (host: true); no mark when false or unknown
+    return " [host]" if message.get("host") is True else ""
+
+
 def render_topic(d, tid, slug, entry=None, new_only=False):
     """A topic as text: header, opening post, and the comments in thread order (new ones marked)."""
     return _render(d, tid, slug, entry, new_only)[0]
@@ -613,7 +626,7 @@ def _render(d, tid, slug, entry=None, new_only=False):
     else:
         since = f"{len(fresh)} new since the last read"
     out = [f"==== {tid}  {' '.join(str(topic.get('title') or '').split())}",
-           f"by {topic.get('authorName') or '?'}, posted {day_key(topic.get('postDate'))[:16]} UTC, "
+           f"by {topic.get('authorName') or '?'}{badge(topic)}, posted {day_key(topic.get('postDate'))[:16]} UTC, "
            f"{topic.get('votes', '?')} votes, {topic.get('commentCount', len(rows))} comments; {since}",
            f"https://www.kaggle.com/competitions/{slug}/discussion/{tid}"]
     only_new = new_only and entry is not None
@@ -628,8 +641,8 @@ def _render(d, tid, slug, entry=None, new_only=False):
         pad = "    " * depth
         mark = "NEW " if id(c) in fresh else ""
         reply = f" (reply to {parent.get('authorName') or '[deleted]'})" if new_only and parent is not None else ""
-        out.append(f"{pad}* {mark}{c.get('authorName') or '[deleted]'} ({day_key(c.get('postDate'))[:16]}) "
-                   f"[{c.get('votes', 0)}]{reply}")
+        out.append(f"{pad}* {mark}{c.get('authorName') or '[deleted]'}{badge(c)} "
+                   f"({day_key(c.get('postDate'))[:16]}) [{c.get('votes', 0)}]{reply}")
         body = strip_html(c.get("content"))
         if body:
             out.append(_indent(body, pad + "  "))
@@ -779,9 +792,48 @@ def cmd_fetch(a, d, ids=None):
     return 1 if failed else 0
 
 
+def listing_age(d, now=None):
+    """(minutes since the newest saved listing was read, its file name), or (None, None) with no listing."""
+    try:
+        path = latest_listing(d)
+    except ForumError:
+        return None, None
+    listing = read_json(path, None)
+    try:
+        at = when(listing.get("fetched_at"))
+    except (AttributeError, TypeError, ValueError):
+        return None, path.name
+    now = when(now) if now else datetime.now(timezone.utc)
+    return max(0.0, (now - at).total_seconds() / 60), path.name
+
+
+def staleness(d, slug, now=None):
+    """Why the pending topics may miss newer posts, as one line, or None: no listing yet, a listing newer than the
+    last diff, or a listing older than STALE_MINUTES (only a check, which lists again, sees posts made since)."""
+    age, name = listing_age(d, now)
+    check = f"python3 {_tool()} check {slug}"
+    if name is None:
+        return f"no listing yet: run check ({check})"
+    pending = read_json(Path(d) / PENDING, None)
+    diffed = pending.get("listing") if isinstance(pending, dict) else None
+    if diffed and Path(diffed).name != name:
+        return f"the newest listing ({name}) is not diffed yet: run diff (no Kaggle call) or check ({check})"
+    if age is None or age > STALE_MINUTES:
+        old = "of unknown age" if age is None else f"{age:.0f} min old"
+        return f"listing {old}: run check ({check}) for posts made since"
+    return None
+
+
 def cmd_show(a, d):
     text = show_topics(d, a.slug, a.ids, a.new)
-    print(text if text is not None else "nothing pending: pass topic ids to show")
+    # the pending topics come from the last listing: say when that may miss newer posts
+    note = None if a.ids else staleness(d, a.slug)
+    if text is None:
+        print(f"{note}; nothing pending before that" if note else "nothing pending: pass topic ids to show")
+        return 0
+    print(text)
+    if note:
+        print(f"\n-- {note} --")
     return 0
 
 

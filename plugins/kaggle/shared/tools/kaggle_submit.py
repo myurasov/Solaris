@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_submit: one gated competition submission, from a submission record.
 
@@ -25,7 +25,8 @@ relative to the record's folder. It refuses (exit 3) unless:
   kernel a version;
 - no earlier attempt in the record landed or may have landed: after an unclear
   one, read `competitions submissions <slug>` and `competitions
-  submission-limits <slug>` first, and pass --checked only when it is not listed;
+  submission-limits <slug>` first, and pass --checked only when it is not listed
+  (an attempt Kaggle refused did not land, so it blocks nothing);
 - the pre-submit check (kaggle_presubmit.py) ran at most --fresh minutes ago
   (default 30) and a review recorded whatever it found (--ack after its last
   change);
@@ -36,10 +37,19 @@ relative to the record's folder. It refuses (exit 3) unless:
 
 --go then appends the attempt to the record's "attempts" (result
 "submitting"), runs the gateway's `competitions submit` exactly once, and
-records the result: "submitted" when the CLI reports success, else "unclear"
-(exit 4). It never retries: after an unclear result read `competitions
-submissions` and `competitions submission-limits` before anything else. The
-gateway refuses a `competitions submit` unless the call carries
+records the result: "submitted" when the CLI reports success; "refused" (exit
+5) when the CLI failed and the gateway names Kaggle's refusal (HTTP 400, 401,
+403, 404 or 429, statuses where nothing was created, with an error message in
+the body, "Your team already has 1 pending submissions", say: the gateway
+reads the body's message, never a header), with that reason in the attempt's
+"reason", printed as REFUSED BY KAGGLE; else "unclear" (exit 4), for any
+outcome that may have landed (a timeout, a 5xx, a failed upload, any other
+4xx such as 408, 409 or 499, or one of those five without Kaggle's message).
+It never retries: after
+an unclear result read `competitions submissions` and `competitions
+submission-limits` before anything else; after a refusal nothing landed, so a
+later --go may follow once its reason is gone (a pending submission scored,
+say). The gateway refuses a `competitions submit` unless the call carries
 KAGGLE_SUBMIT_GATED=1, which this tool sets on its own submit call only.
 
 One run at a time per record: a run takes a non-blocking flock on
@@ -50,7 +60,9 @@ stays beside the record.
 
 Run it from the project root or task folder; the gateway is --gateway, default
 the kaggle.py beside this file. Exit codes: 0 submitted (without --go: every
-check passed), 1 error, 2 bad usage, 3 refused, 4 unclear result. Stdlib only.
+check passed), 1 error, 2 bad usage, 3 refused by the checks (nothing sent), 4
+unclear result (may have landed), 5 refused by Kaggle (nothing landed; the
+reason is printed and recorded). Stdlib only.
 """
 
 import argparse
@@ -72,8 +84,14 @@ REF_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._-]*")
 # what the CLI prints after a submit that went through; "Could not submit" when the upload failed, with exit 0
 SUCCESS_RE = re.compile(r"successfully submitted|submissions? remaining today", re.I)
 FAILED_RE = re.compile(r"could not submit", re.I)
+# the line the gateway adds when Kaggle answers a submit call with a status where nothing was created and an error
+# message in the body (kaggle.py REFUSED_LINE, REFUSED_STATUSES): the status, the kind (FAILED_PRECONDITION, say) and
+# Kaggle's message; any other status (408, 409, 499, ...) may have landed, so it never reads as refused
+REFUSED_STATUSES = (400, 401, 403, 404, 429)
+REFUSED_RE = re.compile(r"^kaggle gateway: Kaggle refused the submit \((%s)(?: ([^)]*))?\): (.+?)\s*$"
+                        % "|".join(map(str, REFUSED_STATUSES)), re.M)
 STATUS_RE = re.compile(r'has status "(?:KernelWorkerStatus\.)?(\w+)"')
-EXIT_REFUSED, EXIT_UNCLEAR = 3, 4
+EXIT_REFUSED, EXIT_UNCLEAR, EXIT_KAGGLE_REFUSED = 3, 4, 5
 REVIEW_MAX = 500
 TOOLS = Path(__file__).resolve().parent
 # the gateway passes a `competitions submit` only with this mark, which this tool sets on its own submit call
@@ -208,7 +226,8 @@ def attempt_problem(rec, slug, checked):
     done = [x for x in attempts if x.get("result") == "submitted"]
     if done:
         return f"already submitted at {done[-1].get('at')}: a new submission needs its own record"
-    if attempts and not checked:
+    # an attempt Kaggle refused did not land: only one that may have landed needs --checked
+    if attempts and not checked and attempts[-1].get("result") != "refused":
         last = attempts[-1]
         return (f"the attempt at {last.get('at')} ended {last.get('result')!r}, so it may have landed: read "
                 f"`competitions submissions {slug}` and `competitions submission-limits {slug}` first, and pass "
@@ -227,6 +246,16 @@ def review_problem(review, go):
     if len(review.strip()) > REVIEW_MAX:
         return f"--review is {len(review.strip())} characters (at most {REVIEW_MAX})"
     return None
+
+
+def refusal(code, out):
+    """Kaggle's reason, "<status> <kind>: <message>", when the submit failed and the gateway names Kaggle's refusal
+    (the last such line); else None, for an outcome that may have landed."""
+    found = REFUSED_RE.findall(out or "") if code != 0 else []
+    if not found:
+        return None
+    status, kind, message = found[-1]
+    return f"{status}{' ' + kind if kind else ''}: {message}"
 
 
 def kernel_status(ref, gateway, root, run):
@@ -356,7 +385,11 @@ def run_locked(a, presubmit, root, gw, path, now):
     code, out = _run([sys.executable, str(gw), *cmd], root, submit=True, timeout=1800)
     print((out or "").strip())
     ok = code == 0 and bool(SUCCESS_RE.search(out or "")) and not FAILED_RE.search(out or "")
-    attempt.update(result="submitted" if ok else "unclear", exit=code, output=tail(out, 1000), ended=iso(utc_now()))
+    refused = refusal(code, out) if not ok else None
+    attempt.update(result="submitted" if ok else "refused" if refused else "unclear", exit=code,
+                   output=tail(out, 1000), ended=iso(utc_now()))
+    if refused:
+        attempt["reason"] = refused
     try:
         write_record(path, rec)
     except OSError as e:
@@ -365,6 +398,10 @@ def run_locked(a, presubmit, root, gw, path, now):
     if ok:
         print(f"SUBMITTED: recorded in {_shown(path, root)}")
         return 0
+    if refused:
+        print(f"REFUSED BY KAGGLE: {refused}\nNothing landed; recorded in {_shown(path, root)}. A later --go may "
+              "follow once that reason is gone (a pending submission scored, say)")
+        return EXIT_KAGGLE_REFUSED
     gw_shown = shlex.quote(_shown(gw, root))
     print(f"UNCLEAR (exit {code}): the submission may or may not have landed. Do not submit again: first read "
           f"`python3 {gw_shown} competitions submissions {slug}` and `python3 {gw_shown} competitions "

@@ -12,6 +12,7 @@ import sys
 import tempfile
 import textwrap
 import unittest
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
@@ -379,6 +380,21 @@ class FetchShowTests(Tmp):
         self.assertEqual(F.commit(self.d)[0], [202, 101])
         self.assertEqual(F.load_pending(self.d)["new"], [])
 
+    def test_show_marks_the_authors_the_forum_badges_as_hosts(self):
+        ruling = dict(comment(21, "Hana", "2026-09-20T01:00:00.100000", "<p>Allowed.</p>"), host=True)
+        thanks = dict(comment(22, "Pat", "2026-09-21T01:00:00.100000", "<p>Thanks.</p>"), host=False)
+        unknown = comment(23, "Cy", "2026-09-22T01:00:00.100000", "<p>Same.</p>")
+        doc = json.loads(sdk_topic(9, "Ruling", [ruling, thanks, unknown]))
+        doc["topic"].update(authorName="Hana", host=True)
+        (self.d / "topics").mkdir(parents=True)
+        (self.d / "topics" / "9.json").write_text(json.dumps(doc))
+        text = F.render_topic(self.d, 9, SLUG)
+        self.assertIn("\nby Hana [host], posted 2026-09-19 06:13 UTC", text)
+        for line in ("* Hana [host] (2026-09-20 01:00) [0]", "* Pat (2026-09-21 01:00) [0]",
+                     "* Cy (2026-09-22 01:00) [0]"):
+            self.assertIn(f"\n{line}\n", text + "\n")
+        self.assertEqual(text.count("[host]"), 2)
+
     def test_commit_of_given_ids_uses_the_shown_read_else_the_fetched_one(self):
         F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
         F.show_topics(self.d, SLUG, [8])
@@ -464,6 +480,40 @@ class CommandTests(Tmp):
             F.find_root(odd / "plugin")
         (odd / "two" / "manifest.json").unlink()
         self.assertEqual(F.pack_of(odd), odd / "one")
+
+    def saved_listing(self, rows, minutes_ago):
+        fetched = (datetime.now(timezone.utc) - timedelta(minutes=minutes_ago)).strftime(F.ISO)
+        listing = F.build_listing(SLUG, [[F.normalize(r) for r in rows]], source="cli", complete=True,
+                                  fetched_at=fetched)
+        with F.locked(self.d):
+            return F.save_listing(self.d, listing)
+
+    def test_show_says_when_the_listing_may_miss_newer_posts(self):
+        check = rf"run check \(python3 \S*kaggle_forum\.py check {SLUG}\)"
+        code, out, _ = self.run_main("show", SLUG, "--new")
+        self.assertEqual(code, 0)
+        self.assertRegex(out, rf"^no listing yet: {check}; nothing pending before that\n$")
+        # an hour old, nothing pending in it: posts made since are unknown until a check lists the forum again
+        self.state({"1": {"title": "Topic 1", "comments": 0}})
+        F.run_diff(self.d, self.saved_listing([row(1, "Topic 1", 0)], 60))
+        self.assertRegex(self.run_main("show", SLUG, "--new")[1],
+                         rf"^listing 60 min old: {check} for posts made since; nothing pending before that\n$")
+        # a listing saved after the last diff: the diff alone, with no Kaggle call, would pick it up
+        recent = self.saved_listing([row(1, "Topic 1", 0)], 1)
+        self.assertRegex(self.run_main("show", SLUG)[1], rf"^the newest listing \({recent.name}\) is not diffed yet: "
+                                                         rf"run diff \(no Kaggle call\) or check \(python3 ")
+        # nothing pending in a listing read a minute ago: as before
+        F.run_diff(self.d, recent)
+        self.assertEqual(self.run_main("show", SLUG, "--new")[1], "nothing pending: pass topic ids to show\n")
+        # pending topics are shown, then the listing's age once it is old; topics asked for by id carry no such line
+        F.run_diff(self.d, self.saved_listing([row(1, "Topic 1", 0), row(2, "Topic 2", 0)], 0))
+        (self.d / "topics").mkdir(parents=True)
+        (self.d / "topics" / "2.json").write_text(sdk_topic(2, "Topic 2", []))
+        with mock.patch.object(F, "STALE_MINUTES", -1):
+            out = self.run_main("show", SLUG, "--new")[1]
+            self.assertIn("==== 2  Topic 2", out)
+            self.assertRegex(out, rf"\n\n-- listing 0 min old: {check} for posts made since --\n$")
+            self.assertNotIn("listing", self.run_main("show", SLUG, "2")[1])
 
     def test_list_failure_exit_code_and_message(self):
         self.gateway.write_text(textwrap.dedent("""\

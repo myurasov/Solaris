@@ -4,7 +4,8 @@
 
 The pass runs for real: kaggle_presubmit.py's reads (kaggle_forum.py, kaggle_lb.py) and kaggle_share.py status, all
 through the stand-in gateway (kaggle_standin). The browsers check reads a made-up process table
-(KAGGLE_HOURLY_PS_FILE), never the machine's.
+(KAGGLE_HOURLY_PS_FILE), never the machine's. The tree tests move the project into a made-up Solaris tree
+(<tmp>/S/projects/my/proj) beside the projects it shares machines with.
 """
 
 import json
@@ -16,12 +17,12 @@ import sys
 import tempfile
 import time
 import unittest
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from kaggle_standin import NOW, SLUG, TOOLS, Project, kaggle_time, load, utc  # noqa: E402
+from kaggle_standin import NOW, PACK_MANIFEST, SLUG, TOOLS, Project, kaggle_time, load, utc  # noqa: E402
 
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 # solaris.tools.ai_spend as the tests stand it in, in a checkout above the project: logs its arguments and prints
@@ -83,13 +84,22 @@ class Hourly(Project):
         # rows: (pid, parent pid, elapsed time as ps prints it, command), as `ps -o pid=,ppid=,etime=,command=` does
         self.ps_file.write_text("".join(f"{pid:>7} {ppid:>7} {up:>11} {cmd}\n" for pid, ppid, up, cmd in rows))
 
-    def subs(self, rows, code=0):
-        # rows: (ref, description, status, public score)
-        out = json.dumps([{"ref": ref, "date": "2026-10-01 01:00:00", "description": what,
-                           "status": f"SubmissionStatus.{status}", "publicScore": score}
-                          for ref, what, status, score in rows])
-        self.answer(f"competitions submissions {SLUG} --format json", out if rows else "No submissions found\n",
-                    code=code)
+    def subs(self, rows, code=0, old=False):
+        # rows: (ref, description, status, public score[, Kaggle's error text]), as the gateway's `--sdk submissions
+        # --json` prints them; old: as the CLI's `competitions submissions --format json` does (no error text)
+        if old:
+            out = json.dumps([{"ref": ref, "date": "2026-10-01 01:00:00", "description": what,
+                               "status": f"SubmissionStatus.{status}", "publicScore": score}
+                              for ref, what, status, score, *_ in rows])
+            self.answer(f"competitions submissions {SLUG} --format json", out if rows else "No submissions found\n",
+                        code=code)
+            return
+        doc = {"competition": SLUG, "fetched_at": iso(utc()), "submissions": [
+            {"ref": ref, "date": "2026-10-01T01:00:00Z", "description": what, "status": status,
+             "publicScore": score or None, "errorDescription": (error or [None])[0]}
+            for ref, what, status, score, *error in rows]}
+        self.answer(f"--sdk submissions {SLUG} --json", json.dumps(doc, indent=2) if not code else "",
+                    err="kaggle_sdk: 500 Internal Server Error: boom\n" if code else "", code=code)
 
     def account(self, kernels, code=0):
         # kernels: (ref, status, hours since its run started); what `kaggle.py --sdk account` prints
@@ -151,14 +161,23 @@ class PassTests(Hourly):
         self.assertEqual(self.line(out, "subs"), "subs       1 scoring now (S1: base); no earlier pass to compare")
         self.assertRegex(self.line(out, "kernels"), r"2 queued or running on the account; this project's: alice/k1 "
                                                     r"RUNNING 6\d min;")
-        self.subs([(56, "S2: next", "ERROR", ""), (55, "S1: base", "COMPLETE", "0.912")])
+        self.subs([(56, "S2: next", "ERROR", "", "Your notebook hit an unhandled error\n while rerunning:\tsee "
+                                                 "the log " + "for details " * 20),
+                   (55, "S1: base", "COMPLETE", "0.912")])
         self.account([("alice/k1", "COMPLETE", 1)])
         code, out, _ = self.hourly()
         self.assertEqual(code, 10)
         self.assertEqual(self.line(out, "subs"), "subs       FLAG 0 scoring now; since the last pass: S1: base scored "
                                                  "0.912; S2: next ERROR")
         self.assertIn("ended since the last pass: alice/k1", self.line(out, "kernels"))
-        self.assertIn("  - subs: a score landed or a submission errored: update the records and the plan", out)
+        # Kaggle's error text on one line, cut at a word's end within 120 characters
+        flag = next(x for x in out.splitlines() if x.startswith("  - subs: "))
+        error = flag[len("  - subs: S2: next ERROR: "):flag.index("; 1 score landed")]
+        self.assertTrue(error.startswith("Your notebook hit an unhandled error while rerunning: see the log for "
+                                         "details for details"), flag)
+        self.assertTrue(error.endswith("...") and len(error) <= 120, error)
+        self.assertIn(error[:-3].split()[-1], ("for", "details"))
+        self.assertTrue(flag.endswith("; 1 score landed: update the records and the plan"), flag)
         self.assertIn("  - kernels: a run ended: check its result, fetch its output, release its lease", out)
         # the page cannot show the new score yet
         self.assertIn("  - status: the page was built before the newest score landed (S1: base 0.912): rebuild it "
@@ -180,11 +199,38 @@ class PassTests(Hourly):
         self.assertEqual(self.line(out, "subs"), "subs       FLAG not read")
         self.assertEqual(self.line(out, "board"), "board      FLAG not read")
         self.assertIn("  - board: the read failed: kaggle_lb.py snapshot failed (exit 1)", out)
+        # a failed SDK read is not an older gateway: the CLI's read is not tried
+        self.assertIn("  - subs: the read failed: --sdk submissions failed (exit 1): kaggle_sdk: 500 Internal Server "
+                      "Error: boom", out)
+        self.assertFalse([c for c in self.calls() if c["args"][:2] == ["competitions", "submissions"]])
         last = json.loads(self.store("hourly", "last.json").read_text())
         self.assertEqual(last["submissions"], {"55": {"status": "PENDING", "score": ""}})
         self.board([("Alpha", 0.9)])
         self.subs([(55, "S1: base", "COMPLETE", "0.9")])
         self.assertIn("S1: base scored 0.9", self.line(self.hourly()[1], "subs"))
+
+    def test_a_gateway_without_the_sdk_submissions_read_gets_the_clis(self):
+        # an older pack copy: kaggle_sdk.py refuses the read as bad usage
+        self.answer(f"--sdk submissions {SLUG} --json", "", code=2,
+                    err="usage: kaggle_sdk.py [-h] {topic,notebooks,account} ...\nkaggle_sdk.py: error: argument "
+                        "read: invalid choice: 'submissions' (choose from 'topic', 'notebooks', 'account')\n")
+        self.subs([(55, "S1: base", "PENDING", "")], old=True)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.line(out, "subs"), "subs       1 scoring now (S1: base); no earlier pass to compare")
+        # the same submission keys either way: nothing counts as new
+        self.subs([(55, "S1: base", "PENDING", "")])
+        self.assertEqual(self.line(self.hourly()[1], "subs"), "subs       1 scoring now (S1: base); nothing landed "
+                                                              "since the last pass")
+        self.answer(f"--sdk submissions {SLUG} --json", "", code=2,
+                    err="usage: kaggle_sdk.py ...\nkaggle_sdk.py: error: argument read: invalid choice: "
+                        "'submissions'\n")
+        self.subs([(55, "S1: base", "ERROR", "")], old=True)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn("  - subs: S1: base ERROR: no error text from Kaggle: update the records and the plan", out)
+        args = [c["args"][:2] for c in self.calls()]
+        self.assertEqual((args.count(["--sdk", "submissions"]), args.count(["competitions", "submissions"])), (3, 2))
 
     def test_an_incomplete_account_read_is_a_flag(self):
         self.account([], code=1)
@@ -252,7 +298,10 @@ class SourceTests(Hourly):
         stale = time.time() - 3 * 3600
         os.utime(status, (stale - 60, stale - 60))
         os.utime(page, (stale, stale))
-        self.assertIn("  - status: the page is 3.0 h old: rebuild it (kaggle_status.py --keep-rev)", self.hourly()[1])
+        out = self.hourly()[1]
+        # the age is in the line, so the flag's text stays the same while the page stays old
+        self.assertEqual(self.line(out, "status"), "status     FLAG reports/html/status.html built 3.0 h ago, rev 3")
+        self.assertIn("  - status: the page is over 2 hours old: rebuild it (kaggle_status.py --keep-rev)", out)
         # with the reporting plugin attached the PDF is the page the owner reads
         assets = self.root / "aipack" / "plugins" / "reporting" / "assets"
         assets.mkdir(parents=True)
@@ -405,11 +454,11 @@ class BlockTests(Hourly):
     def test_the_status_block_from_the_reads_and_the_pack(self):
         P = self.module("kaggle_presubmit")
         kday = NOW.replace(hour=0, minute=0, second=0)
-        self.answer(f"competitions submissions {SLUG} --format json", json.dumps([
-            {"ref": 57, "date": (kday + (NOW - kday) / 2).strftime("%Y-%m-%d %H:%M:%S"), "description": "S2: next",
-             "status": "SubmissionStatus.PENDING", "publicScore": ""},
-            {"ref": 55, "date": (kday - timedelta(hours=30)).strftime("%Y-%m-%d %H:%M:%S"), "description": "S1: base",
-             "status": "SubmissionStatus.COMPLETE", "publicScore": "0.85"}]))
+        self.answer(f"--sdk submissions {SLUG} --json", json.dumps({"competition": SLUG, "submissions": [
+            {"ref": 57, "date": iso(kday + (NOW - kday) / 2), "description": "S2: next", "status": "PENDING",
+             "publicScore": None, "errorDescription": None},
+            {"ref": 55, "date": iso(kday - timedelta(hours=30)), "description": "S1: base", "status": "COMPLETE",
+             "publicScore": "0.85", "errorDescription": None}]}))
         self.board([("Alpha", 0.95), ("Beta", 0.9), ("Our Team", 0.85), ("Delta", 0.8),
                     *((f"T{i}", round(0.7 - i / 100, 2)) for i in range(8))])
         self.status_json.write_text(json.dumps({
@@ -427,7 +476,12 @@ class BlockTests(Hourly):
         code, out, _ = self.hourly()
         self.assertEqual(code, 0, out)
         block = block_of(out)
-        self.assertEqual(list(block), ["pick", "score", "rank", "compute", "stopped", "spend", "for you"])
+        self.assertEqual(list(block), ["pick", "score", "rank", "outlook", "progress", "tracks", "compute", "stopped",
+                                       "spend", "for you"])
+        # a status JSON without the optional outlook, lineage and tracks says so
+        self.assertEqual([block[k] for k in ("outlook", "progress", "tracks")],
+                         ["n/a (no outlook in the status JSON)", "n/a (no lineage in the status JSON)",
+                          "n/a (no tracks in the status JSON)"])
         self.assertEqual(block["pick"], f"1 of 5 slots used today, the next reset {P.local(kday + timedelta(days=1))}; "
                                         "1 pending (S2: next); pick: S3 tonight, medium confidence")
         self.assertRegex(block["score"],
@@ -507,7 +561,8 @@ class RateLimitTests(Hourly):
         for check in ("board", "subs", "kernels", "gpu"):
             self.assertFalse([x for x in out.splitlines() if x.startswith(f"{check:<10} ")], check)
         calls = [" ".join(c["args"]) for c in self.calls()]
-        self.assertFalse([c for c in calls if c.startswith(("competitions submissions", "--sdk account"))], calls)
+        self.assertFalse([c for c in calls if c.startswith(("--sdk submissions", "competitions submissions",
+                                                            "--sdk account"))], calls)
         block = block_of(out)
         self.assertEqual(block["pick"], "slots n/a (submissions rate limited)")
         self.assertIn("Kaggle GPU week n/a (rate limited)", block["compute"])
@@ -634,12 +689,15 @@ class GitTests(Hourly):
                                                 r"the oldest from .+ \(2\.0 h ago\)$")
         self.assertIn("  - git: commits unpushed for over an hour (source/): push per the project's rules (where none "
                       "allows a push, ask the owner)", out)
-        # a root that is a repo of its own as well: both are read
+        # a root that is a repo of its own as well: both are read (the flag, the same as the last pass's, is held)
         (self.root / ".gitignore").write_text("reports/status*.pdf\nreports/html/status*.html\n__data/\nsource/\n")
         self.git("init", "-q", "-b", "main")
-        self.assertRegex(self.line(self.hourly()[1], "git"),
-                         r"^git        FLAG main has no upstream branch: unpushed commits not counted; source/: main: "
-                         r"1 commit not pushed to origin/main, the oldest from .+ \(2\.0 h ago\)$")
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(self.line(out, "git"),
+                         r"^git        \(unchanged\) main has no upstream branch: unpushed commits not counted; "
+                         r"source/: main: 1 commit not pushed to origin/main, the oldest from .+ \(2\.0 h ago\)$")
+        self.assertIn("\nFLAGS: none new\nunchanged: 1 flag (git)\nSTATUS", out)
 
     @unittest.skipUnless(shutil.which("git"), "git is not installed")
     def test_a_root_inside_another_repo_has_none_of_its_own(self):
@@ -754,6 +812,17 @@ class AiTests(Hourly):
         self.assertEqual(flag, "  - agents: kaggle.master_effort in aipack/.memory/config.json must be an effort "
                                "level, as the transcripts record it: fix it")
 
+    def test_an_agents_flag_in_the_same_words_is_news_each_pass(self):
+        # each pass reads only the responses since the last one: the same words are a fresh launch or answer
+        self.workers([("b2", "claude-fable-5-1")])
+        self.today(2.0)
+        for _ in range(2):
+            code, out, _ = self.hourly()
+            self.assertEqual(code, 10, out)
+            self.assertIn("  - agents: 1 worker on a model outside the allowed list: claude-fable-5-1 (session "
+                          "5e55a0b1, agent b2)", out)
+            self.assertNotIn("unchanged:", out)
+
     def test_the_pack_sets_the_allowed_models(self):
         self.config({"kaggle.allowed_models": ["claude-*"]})
         out = self.hourly()[1]
@@ -822,8 +891,9 @@ class AiTests(Hourly):
                          r"\(spend\.jsonl\); Brev \$([\d.]+) today of \$50\.00 \(brev-costs\.md, with 2 running or "
                          r"stopped instances from its TOTAL row\)", self.line(out, "spend"))
         self.assertTrue(m, self.line(out, "spend"))
-        # $40 an hour from its start to the pass, and $2 for the parked hour
-        running = [(t - (s + timedelta(hours=4)).timestamp()) / 3600 for t in (before, after)]
+        # $40 an hour from its start to the pass, and $2 for the parked hour (the pass's clock drops the fraction of
+        # a second)
+        running = [(t - (s + timedelta(hours=4)).timestamp()) / 3600 for t in (before - 1, after)]
         self.assertTrue(2 + 40 * running[0] - 0.01 <= float(m.group(1)) <= 2 + 40 * running[1] + 0.01, m.group(1))
         self.assertIn(f"  - spend: Brev spend reached its daily limit (${m.group(1)} of $50.00): tell the owner before "
                       "more paid work", out)
@@ -881,8 +951,578 @@ class ReuseTests(Hourly):
         self.assertEqual(self.tool("kaggle_presubmit.py", SLUG, "--ack", "--fresh", "5")[0], 2)
 
 
+def real_now():
+    # the pass's own clock (the fixtures' NOW is when the tests started)
+    return datetime.now(timezone.utc).replace(microsecond=0)
+
+
+class RowTests(Hourly):
+    """The status JSON's outlook, lineage and tracks in the STATUS block, and the own-line stall."""
+
+    def status(self, doc):
+        # the page is built after the JSON, as kaggle_status.py leaves it
+        self.status_json.write_text(json.dumps({"rev": 1, "competition": SLUG, **doc}))
+        self.status_html.write_text("<html></html>")
+
+    def last(self, **changes):
+        # edit the last pass's state: {"own_line": {...}} replaces keys inside own_line
+        f = self.store("hourly", "last.json")
+        last = json.loads(f.read_text())
+        for key, value in changes.items():
+            last[key].update(value)
+        f.write_text(json.dumps(last))
+
+    def test_outlook_progress_and_tracks_rows(self):
+        P = self.module("kaggle_presubmit")
+        at = real_now() - timedelta(days=2)
+        self.status({
+            "outlook": {"at": iso(at), "lines": [
+                {"when": "in 1 day", "score": "0.44-0.45", "rank": "#90-120", "basis": "two days old"},
+                {"when": "in 3 days", "score": "0.45-0.47", "rank": "#40-80", "basis": "public forks blended"},
+                {"when": "final", "score": "0.46-0.49", "rank": "#30-70", "basis": "the own reranker lands"}]},
+            "lineage": [
+                {"entry": "201", "score": "0.432", "gain": "+0.004", "origin": "own", "what": "own reranker"},
+                {"entry": "230", "score": "0.444", "gain": "+0.012", "origin": "public", "what": "a public fork"},
+                {"entry": "236", "score": "0.451", "gain": "+0.007", "origin": "public", "what": "a blend of forks"}],
+            "tracks": [
+                {"name": "lora", "state": "running", "last_gain": "2026-10-12", "note": "waits for the long run"},
+                {"name": "rerank", "state": "running", "last_gain": None, "note": ""},
+                {"name": "old idea", "state": "dropped"}, {"name": "base", "state": "done"},
+                {"name": "tta", "state": "paused", "note": "after the final pick"}]})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        block = block_of(out)
+        # the nearest line still ahead (the first one's time has passed), and the final one
+        self.assertEqual(block["outlook"], "in 3 days: 0.45-0.47, #40-80 (public forks blended); final: 0.46-0.49, "
+                                           f"#30-70 (the own reranker lands) (as of {P.local(at)})")
+        # the own entry is new to this pass: no age yet, so no stall
+        self.assertEqual(block["progress"], "best 0.451 (entry 236, +0.007, public: a blend of forks); 3 gains: 1 own "
+                                            "(+0.004), 2 public (+0.019); newest own gain entry 201 (0.432)")
+        self.assertEqual(block["tracks"], "2 running, 1 paused, 1 done, 1 dropped: lora (last gain Oct 12): waits for "
+                                          "the long run; rerank (no gain yet)")
+        self.assertNotIn("own-line", out)
+
+    def test_rows_stay_under_300_characters(self):
+        self.status({"pick": "candidate " * 40,
+                     "questions": [f"question {i} " + "about the plan " * 8 for i in range(6)],
+                     "tracks": [{"name": f"track{i}", "state": "running", "note": "a long note " * 10}
+                                for i in range(8)]})
+        block = block_of(self.hourly()[1])
+        for field, text in block.items():
+            self.assertLessEqual(len(text), 300, field)
+        self.assertIn("; pick: candidate candidate", block["pick"])
+        self.assertTrue(block["pick"].endswith(" candidate..."), block["pick"])
+        self.assertTrue(block["tracks"].startswith("8 running: track0 (no gain yet): a long note a long note"))
+        self.assertTrue(block["tracks"].endswith("..."), block["tracks"])
+        # the flag count stays when the questions are cut
+        self.assertTrue(block["for you"].startswith("6 open questions: 1. question 0 about the plan"))
+        self.assertTrue(block["for you"].endswith("...; 0 FLAG lines"), block["for you"])
+
+    def test_the_own_line_stall_is_flagged_once_a_day(self):
+        now = real_now()
+        lineage = [{"entry": "201", "score": "0.432", "gain": "+0.004", "origin": "own", "what": "own reranker",
+                    "date": iso(now - timedelta(days=5))},
+                   {"entry": "236", "score": "0.451", "gain": "+0.019", "origin": "public", "what": "forks"}]
+        self.status({"lineage": lineage})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "own-line"), "own-line   FLAG newest own-work gain: entry 201, 5.0 days ago")
+        self.assertIn("  - own-line: no own-work gain for over 3 days (kaggle.own_stall_days): plan the next step of "
+                      "the project's own (a model or idea of its own, not a public fork), give it compute, and record "
+                      "the decision", out)
+        self.assertTrue(block_of(out)["progress"].endswith("; newest own gain entry 201 (0.432), 5 days ago (stalled)"))
+        # once a day: the next pass says it in the progress row only
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("own-line", out)
+        self.assertTrue(block_of(out)["progress"].endswith("(stalled)"))
+        self.last(own_line={"flagged": iso(now - timedelta(hours=24))})
+        self.assertIn("  - own-line: ", self.hourly()[1])
+        # an own gain today ends the stall
+        self.status({"lineage": [*lineage, {"entry": "240", "score": "0.455", "gain": "+0.004", "origin": "own",
+                                            "what": "own model", "date": iso(now)}]})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(block_of(out)["progress"], "best 0.455 (entry 240, +0.004, own: own model); 3 gains: 2 own "
+                                                    "(+0.008), 1 public (+0.019); newest own gain the best")
+
+    def test_a_bare_date_counts_from_its_start_in_this_machines_zone(self):
+        today = datetime.now().astimezone().date()
+        entry = {"entry": "201", "score": "0.432", "gain": "+0.004", "origin": "own",
+                 "date": str(today - timedelta(days=5))}
+        self.status({"lineage": [entry]})
+        out = self.hourly()[1]
+        self.assertRegex(self.line(out, "own-line"),
+                         r"^own-line   FLAG newest own-work gain: entry 201, 5\.\d days ago$")
+        # a gain dated today is no stall; "date" is the only key read
+        self.status({"lineage": [dict(entry, date=str(today))]})
+        self.assertNotIn("own-line", self.hourly()[1])
+        self.status({"lineage": [{"entry": "202", "origin": "own", "at": iso(real_now() - timedelta(days=9))}]})
+        out = self.hourly()[1]
+        self.assertNotIn("own-line", out)
+        self.assertEqual(json.loads(self.store("hourly", "last.json").read_text())["own_line"]["entry"], "202")
+
+    def test_an_undated_lineage_counts_from_the_pass_that_first_saw_it(self):
+        self.status({"lineage": [{"entry": "236", "score": "0.451", "gain": "+0.007", "origin": "public"}]})
+        self.assertNotIn("own-line", self.hourly()[1])
+        self.assertIsNone(json.loads(self.store("hourly", "last.json").read_text())["own_line"]["entry"])
+        self.last(own_line={"seen": iso(real_now() - timedelta(days=4))})
+        # the pack's setting moves the threshold
+        config = self.root / "aipack" / ".memory" / "config.json"
+        config.parent.mkdir(exist_ok=True)
+        config.write_text(json.dumps({"kaggle.own_stall_days": 7}))
+        out = self.hourly()[1]
+        self.assertNotIn("own-line", out)
+        self.assertEqual(block_of(out)["progress"], "best 0.451 (entry 236, +0.007, public); 1 gain: 0 own, 1 public "
+                                                    "(+0.007); no own gain in the lineage for 4 days")
+        config.write_text("{}")
+        out = self.hourly()[1]
+        self.assertEqual(self.line(out, "own-line"),
+                         "own-line   FLAG no own-work gain in the lineage, seen for 4.0 days")
+        self.assertTrue(block_of(out)["progress"].endswith("for 4 days (stalled)"))
+
+
+class SnoozeTests(Hourly):
+    """A flag unchanged since an earlier pass prints in full at most every kaggle.flag_repeat_hours hours."""
+
+    def shown(self, check, hours_ago):
+        f = self.store("hourly", "last.json")
+        last = json.loads(f.read_text())
+        last["flags"][check]["shown"] = iso(real_now() - timedelta(hours=hours_ago))
+        f.write_text(json.dumps(last))
+
+    def test_an_unchanged_flag_prints_in_full_every_6_hours(self):
+        self.status_html.unlink()
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn("  - status: never built: build it (kaggle_status.py)", out)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.line(out, "status"), "status     (unchanged) reports/html/status.html not built yet")
+        self.assertIn("\nFLAGS: none new\nunchanged: 1 flag (status)\nSTATUS", out)
+        self.assertNotIn("  - status:", out)
+        self.assertEqual(block_of(out)["for you"], "0 open questions; 0 owner actions; 0 FLAG lines, 1 unchanged")
+        code, out, _ = self.hourly("--json")
+        doc = json.loads(out)
+        self.assertEqual((code, doc["flags"], doc["unchanged"]), (0, 0, ["status"]))
+        self.assertIn({"check": "status", "line": "reports/html/status.html not built yet",
+                       "flag": "never built: build it (kaggle_status.py)", "unchanged": True}, doc["checks"])
+        # six hours after it last printed in full it prints again
+        self.shown("status", 6.5)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn("  - status: never built", out)
+        # a changed flag always prints in full
+        self.status_json.write_text("{not json")
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn("  - status: unreadable: ", out)
+        # the pack can have every flag print every pass
+        config = self.root / "aipack" / ".memory" / "config.json"
+        config.parent.mkdir(exist_ok=True)
+        config.write_text(json.dumps({"kaggle.flag_repeat_hours": 0}))
+        self.assertEqual(self.hourly()[0], 10)
+        # a setting that is no number is a flag of its own, and the default holds
+        config.write_text(json.dumps({"kaggle.flag_repeat_hours": "often"}))
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "status"), "status     (unchanged) reports/status.json is not a status JSON")
+        self.assertEqual(self.line(out, "settings"), "settings   FLAG 1 setting not valid, the default used")
+        self.assertIn("  - settings: kaggle.flag_repeat_hours in aipack/.memory/config.json must be a non-negative "
+                      "number: fix it", out)
+        self.assertIn("\nunchanged: 1 flag (status)\n", out)
+
+    def test_a_new_topic_after_the_last_was_committed_prints_in_full(self):
+        # the review's case: the same counts, another topic
+        self.forum([{"id": 7, "title": "A topic", "posted": 2}])
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.tool("kaggle_forum.py", "show", SLUG, "--new")[0], 0)
+        self.assertEqual(self.tool("kaggle_forum.py", "commit", SLUG)[0], 0)
+        self.forum([{"id": 7, "title": "A topic", "posted": 2}, {"id": 8, "title": "Another", "posted": 1}])
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "forum"), "forum      FLAG 1 new, 0 changed, 0 missing topics not shown and "
+                                                  "committed yet")
+        self.assertIn("  - forum: read them", out)
+        self.assertNotIn("unchanged:", out)
+
+    def test_a_page_that_changes_again_prints_in_full(self):
+        self.tool("kaggle_presubmit.py", SLUG, "--gateway", str(self.gateway))
+        self.tool("kaggle_presubmit.py", SLUG, "--ack")
+        self.pages({"rules": "Rule 1.\nRule 2, changed.\n"})
+        self.assertIn("  - review: a host post or a page change", self.hourly()[1])
+        out = self.hourly()[1]
+        self.assertTrue(self.line(out, "review").startswith("review     (unchanged) "), out)
+        # the same label, "rules (changed)", but another change: news
+        self.pages({"rules": "Rule 1.\nRule 2, changed again.\n"})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn("  - review: a host post or a page change", out)
+
+    def test_new_topics_and_new_events_print_in_full(self):
+        self.forum([{"id": 7, "title": "A topic", "posted": 2}])
+        self.subs([(55, "S1: base", "PENDING", "")])
+        self.assertIn("  - forum: read them", self.hourly()[1])
+        out = self.hourly()[1]
+        self.assertEqual(self.line(out, "forum"), "forum      (unchanged) 1 new, 0 changed, 0 missing topics not shown "
+                                                  "and committed yet")
+        # the forum line changed: a new topic
+        self.forum([{"id": 7, "title": "A topic", "posted": 2}, {"id": 8, "title": "Another", "posted": 1}])
+        out = self.hourly()[1]
+        self.assertIn("  - forum: read them", out)
+        self.assertTrue(self.line(out, "forum").startswith("forum      FLAG 2 new, 0 changed"))
+        # each submission that errors is news, even in the same words as the last one
+        self.subs([(55, "S1: base", "ERROR", "", "boom")])
+        self.assertIn("  - subs: S1: base ERROR: boom: update the records and the plan", self.hourly()[1])
+        self.subs([(56, "S1: base", "ERROR", "", "boom"), (55, "S1: base", "ERROR", "", "boom")])
+        out = self.hourly()[1]
+        self.assertIn("  - subs: S1: base ERROR: boom: update the records and the plan", out)
+        self.assertIn("unchanged: 1 flag (forum)", out)
+
+
+class TreeHourly(Hourly):
+    """A project in a Solaris tree, <tmp>/S/projects/my/proj, with solaris/ and plugins/ beside projects/ and the
+    projects it shares machines with beside it."""
+
+    def setUp(self):
+        super().setUp()
+        self.sol = self.tmp / "S"
+        root = self.sol / "projects" / "my" / "proj"
+        root.parent.mkdir(parents=True)
+        shutil.move(str(self.root), str(root))
+        self.root, self.tools = root, root / "aipack" / "plugins" / "kaggle" / "tools"
+        self.status_json, self.status_html = root / "reports" / "status.json", root / "reports" / "html" / "status.html"
+        for d in ("solaris", "plugins"):
+            (self.sol / d).mkdir()
+        self.mem = root / "aipack" / ".memory"
+        self.mem.mkdir()
+
+    def write(self, path, doc, hours_ago=None):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(doc if isinstance(doc, str) else json.dumps(doc))
+        if hours_ago is not None:
+            t = time.time() - hours_ago * 3600
+            os.utime(path, (t, t))
+        return path
+
+    def peer(self, name, group="my"):
+        # another project in the tree: its <pack>/.memory folder
+        root = self.sol / "projects" / group / name
+        self.write(root / "aipack" / "manifest.json", PACK_MANIFEST)
+        (root / "aipack" / ".memory").mkdir()
+        return root / "aipack" / ".memory"
+
+    def last_at(self, t):
+        f = self.store("hourly", "last.json")
+        last = json.loads(f.read_text())
+        last["at"] = iso(t)
+        f.write_text(json.dumps(last))
+
+
+class TreeTests(TreeHourly):
+    def test_compute_shows_each_machines_health(self):
+        now = real_now()
+        self.write(self.mem / "hosts.json", {"hosts": [{"name": "gpu-1"}, {"name": "gpu-2"}, {"name": "gpu-3"}]})
+
+        def own(h1_hours_ago):
+            # this project's file, with its own reading of the shared h1 this many hours ago
+            return self.write(self.mem / "host-health.json", {"schema": 1, "checked": iso(now), "hosts": {
+                "gpu-1": {"health": "ok", "busy": 0.97},
+                "gpu-2": {"health": "bad", "busy": 0.0, "checked": iso(now - timedelta(hours=5))},
+                "h1": {"health": "bad", "busy": 0.1, "checked": iso(now - timedelta(hours=h1_hours_ago))}}})
+
+        health = own(3)
+        landlord = self.write(self.peer("landlord") / "host-health.json", {"schema": 1, "hosts": {
+            "h1": {"health": "ok", "busy": 0.5, "checked": iso(now - timedelta(hours=2))},
+            "gpu-1": {"health": "warn", "busy": 0.25, "checked": iso(now)}}})
+        self.write(self.peer("old", group="nv") / "host-health.json", {"checked": iso(now), "hosts": {
+            "h3": {"health": "warn", "busy": 0.5}}})
+        self.write(self.mem / "resource-sharing-seen.json", {"acked": iso(now), "hosts": {
+            # the landlord's gpu-1, renamed here beside this project's own gpu-1
+            "landlord/gpu-1": {"key": "landlord/gpu-1", "name": "landlord/gpu-1", "project": "landlord",
+                               "owner": "landlord", "folder": "projects/my/landlord"},
+            "landlord/h1": {"key": "landlord/h1", "name": "h1", "project": "landlord", "owner": "landlord",
+                            "folder": "projects/my/landlord"},
+            # a record from before the seen list kept folders: no owner's file, as on the status page
+            "old/h3": {"name": "h3", "owner": "old"}}})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        # bad and warn machines first; for h1 the owner's reading is the newer one
+        self.assertEqual(block_of(out)["compute"].split("; ")[:3], [
+            "3 machines (gpu-2 bad 0% busy (5.0 h old), gpu-1 ok 97% busy, gpu-3)",
+            "booking ends n/a (no lease-ends.json)",
+            "3 shared machines from landlord, old (landlord/gpu-1 warn 25% busy, h1 ok 50% busy, h3)"])
+        self.assertEqual(self.line(out, "peers"), "peers      landlord: no clock.json; old: no clock.json")
+        # this project's own reading of h1 is newer now: it wins, as on the status page
+        own(1)
+        self.assertIn("(h1 bad 10% busy, landlord/gpu-1 warn 25% busy, h3)", block_of(self.hourly()[1])["compute"])
+        S = self.module("kaggle_status")
+        rows = {n: rec for n, _owner, rec in S.fleet(str(self.root), str(self.mem))["rows"]}
+        self.assertEqual((rows["h1"]["health"], rows["landlord/gpu-1"]["health"]), ("bad", "warn"))
+        # without the health files the names stand alone
+        health.unlink()
+        landlord.write_text("{not json")
+        self.assertEqual(block_of(self.hourly()[1])["compute"].split("; ")[:3], [
+            "3 machines (gpu-1, gpu-2, gpu-3)", "booking ends n/a (no lease-ends.json)",
+            "3 shared machines from landlord, old (landlord/gpu-1, h1, h3)"])
+
+    def test_an_older_plugin_copy_is_a_flag(self):
+        manifest = {"framework_version": "0.39.0", "project": {"name": "demo"}, "plugins": [
+            {"name": "kaggle", "version": "0.9.1"}, {"name": "reporting", "version": "0.4.1"},
+            {"name": "browserctl", "mode": "link"}, {"name": "gone", "version": "1.0.0"}]}
+        self.write(self.root / "aipack" / "manifest.json", manifest)
+        for name, version in (("kaggle", "0.10.0"), ("reporting", "0.4.1"), ("browserctl", "9.0.0")):
+            self.write(self.sol / "plugins" / name / "manifest.json", {"name": name, "version": version})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "plugins"), "plugins    FLAG 2 attached plugins, 1 older than the Solaris "
+                                                    "checkout: kaggle")
+        self.assertIn("  - plugins: older than the Solaris checkout: kaggle 0.9.1 (the checkout has 0.10.0): tell the "
+                      "owner; the update is install-plugin's, run at the Solaris root: \"update plugin kaggle in "
+                      "proj\"", out)
+        manifest["plugins"][0]["version"] = "0.10.0"
+        self.write(self.root / "aipack" / "manifest.json", manifest)
+        code, out, _ = self.hourly()
+        self.assertEqual((code, self.line(out, "plugins")),
+                         (0, "plugins    2 attached plugins at the Solaris checkout's versions"))
+        # no checkout above the project: no line
+        shutil.rmtree(self.sol / "solaris")
+        self.assertNotIn("\nplugins ", self.hourly()[1])
+
+    def test_session_alerts_since_the_last_pass(self):
+        P = self.module("kaggle_presubmit")
+        # no alerts file (an older framework): no line
+        self.assertNotIn("\nalerts ", self.hourly()[1])
+        now = real_now()
+        self.last_at(now - timedelta(minutes=10))
+        turn_end = now - timedelta(minutes=5)
+        alerts = self.write(self.mem / "alerts.jsonl", "".join(json.dumps(a) + "\n" for a in (
+            {"ts": iso(now - timedelta(hours=3)), "kind": "classifier-stop", "session": "s1", "detail": "before"},
+            {"ts": turn_end.astimezone().isoformat(), "kind": "unarmed-turn-end", "session": "s1",
+             "detail": "the turn ended with nothing armed"})) + "not json\n")
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "alerts"), f"alerts     FLAG 1 session alert since "
+                                                   f"{P.local(now - timedelta(minutes=10))}: unarmed-turn-end "
+                                                   f"{P.local(turn_end)}: the turn ended with nothing armed")
+        self.assertIn("  - alerts: a turn ended with no wake-up armed: arm the session clock before every turn end",
+                      out)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertTrue(self.line(out, "alerts").startswith("alerts     none since "))
+        # the alerts written since the last pass count, not the earlier ones
+        now = real_now()
+        self.last_at(now - timedelta(minutes=3))
+        with alerts.open("a") as f:
+            f.write(json.dumps({"ts": iso(now - timedelta(minutes=2)), "kind": "classifier-stop", "session": "s2",
+                                "detail": "the turn was refused"}) + "\n")
+        out = self.hourly()[1]
+        self.assertIn("  - alerts: the safety classifier stopped the session: log it, and keep agent prompts, model "
+                      "output and third-party text out of the master's own context", out)
+
+    def test_a_silent_peer_master_is_a_flag_for_the_owner(self):
+        P = self.module("kaggle_presubmit")
+        now = real_now()
+        landlord, guest = self.peer("landlord"), self.peer("guest", group="nv")
+        self.peer("other")
+        self.peer("bare")
+        clock = self.write(landlord / "clock.json", {
+            "schema": 1, "session": "s1", "pid": 1, "host": "m", "started": iso(now - timedelta(hours=3)),
+            "wakes_at": iso(now - timedelta(hours=2)), "state": "fired"}, hours_ago=2)
+        wakes = now + timedelta(minutes=20)
+        self.write(guest / "clock.json", {"state": "armed", "wakes_at": iso(wakes)})
+        self.write(self.mem / "resource-sharing-seen.json", {"hosts": {
+            "landlord/h1": {"key": "landlord/h1", "name": "h1", "project": "landlord", "owner": "landlord",
+                            "folder": "projects/my/landlord"}}})
+        # the guests by slug; "*" and a slug not in the tree name no one
+        self.write(self.mem / "resource-sharing.json", {"share_with": ["guest", "bare", "*", "nowhere"]})
+        written = datetime.fromtimestamp(clock.stat().st_mtime, timezone.utc)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertEqual(self.line(out, "peers"), f"peers      FLAG bare: no clock.json; guest: clock armed, wakes "
+                                                  f"{P.local(wakes)}; landlord: clock fired at {P.local(written)}")
+        self.assertIn(f"  - peers: landlord's master looks stopped: its clock fired at {P.local(written)} and none "
+                      "armed since: tell the owner (never message the peer's master about it)", out)
+        # the pack can allow a longer silence
+        self.write(self.mem / "config.json", {"kaggle.peer_silent_minutes": 180})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("FLAG", self.line(out, "peers"))
+        # an armed clock long past its wake-up died; a new classifier stop is news
+        self.write(self.mem / "config.json", {})
+        self.write(landlord / "clock.json", {"state": "armed", "wakes_at": iso(wakes)})
+        due = now - timedelta(minutes=45)
+        self.write(guest / "clock.json", {"state": "armed", "wakes_at": iso(due)})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn(f"  - peers: guest's master looks stopped: its clock was due {P.local(due)} and has not fired or "
+                      "been armed again: tell the owner", out)
+        self.last_at(now - timedelta(minutes=10))
+        stop = now - timedelta(minutes=5)
+        self.write(guest / "alerts.jsonl", json.dumps({"ts": iso(stop), "kind": "classifier-stop", "session": "g1",
+                                                       "detail": "refused on a wake-up"}) + "\n")
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 10, out)
+        self.assertIn(f"guest: clock armed, wakes {P.local(due)}; 1 classifier stop since "
+                      f"{P.local(now - timedelta(minutes=10))}", self.line(out, "peers"))
+        self.assertIn(f"  - peers: guest's master looks stopped: its clock was due {P.local(due)} and has not fired or "
+                      f"been armed again; a safety-classifier stop {P.local(stop)} (refused on a wake-up): tell the "
+                      "owner (never message the peer's master about it)", out)
+
+    def test_a_paused_or_working_peer_is_no_flag(self):
+        P = self.module("kaggle_presubmit")
+        now = real_now()
+        mem = self.peer("guest")
+        self.write(self.mem / "resource-sharing.json", {"share_with": ["guest"]})
+        # every flag in full each pass, so each step shows its own
+        self.write(self.mem / "config.json", {"kaggle.flag_repeat_hours": 0})
+        fired, t0 = {"state": "fired", "wakes_at": iso(now - timedelta(hours=3))}, time.time() - 3 * 3600
+
+        def clock(doc, at=t0):
+            os.utime(self.write(mem / "clock.json", doc), (at, at))
+
+        clock(fired)
+        written = P.local(datetime.fromtimestamp(t0, timezone.utc))
+        flag = (f"  - peers: guest's master looks stopped: its clock fired at {written} and none armed since: tell the "
+                "owner (never message the peer's master about it)")
+        self.assertIn(flag, self.hourly()[1])
+        # paused on purpose: the newest handover note (by the time in its name) has no "resumed at" line and is newer
+        # than clock.json; a sync-conflict copy and an older note do not count
+        # (the older note was touched last: the time in the name decides, not the file's)
+        self.write(mem / "handover-2026-10-01-0900.md", "# Handover\nold\nresumed at 2026-10-02 10:00\n",
+                   hours_ago=0.2)
+        note = self.write(mem / "handover-2026-10-17-1200.md", "# Handover\nnext steps\n", hours_ago=1)
+        self.write(mem / "handover-2026-10-17-1300.sync-conflict-20261017-130500-ABCDEFG.md", "Resumed at 13:05\n",
+                   hours_ago=0.5)
+        code, out, _ = self.hourly()
+        self.assertEqual((code, self.line(out, "peers")), (0, "peers      guest: paused (handover-2026-10-17-1200.md)"))
+        # resumed (in any case), or older than clock.json: not a pause
+        note.write_text("# Handover\nnext steps\nRESUMED AT 2026-10-17 14:00\n")
+        os.utime(note, (time.time() - 3600, time.time() - 3600))
+        self.assertIn(flag, self.hourly()[1])
+        note.write_text("# Handover\nnext steps\n")
+        os.utime(note, (time.time() - 4 * 3600, time.time() - 4 * 3600))
+        self.assertIn(flag, self.hourly()[1])
+        note.unlink()
+        # the owner stopped its clock with --stop: paused too; a clock replaced by a newer one is not
+        clock(dict(fired, state="stopped", stop_reason="stopped by --stop"))
+        code, out, _ = self.hourly()
+        self.assertEqual((code, self.line(out, "peers")),
+                         (0, f"peers      guest: paused (clock stopped by --stop at {written})"))
+        clock(dict(fired, state="stopped", stop_reason="replaced by a newer clock"))
+        self.assertIn("  - peers: guest's master looks stopped: its clock stopped at ", self.hourly()[1])
+        # mid-turn: its interaction log was written within the silent minutes, so it is working
+        clock(fired)
+        log = self.write(mem / "interactions" / "machine-a.jsonl", "{}\n", hours_ago=0.5)
+        self.write(mem / "interactions" / "machine-b.jsonl", "{}\n", hours_ago=5)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        logged = P.local(datetime.fromtimestamp(log.stat().st_mtime, timezone.utc))
+        self.assertEqual(self.line(out, "peers"),
+                         f"peers      guest: clock fired at {written}; working (its log written {logged})")
+        os.utime(log, (time.time() - 2 * 3600, time.time() - 2 * 3600))
+        self.assertIn(flag, self.hourly()[1])
+        # the default silence is 90 minutes: a clock fired 75 minutes ago is no flag yet
+        clock(fired, time.time() - 75 * 60)
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertNotIn("FLAG", self.line(out, "peers"))
+
+    def test_the_slug_scan_skips_archived_projects(self):
+        now = real_now()
+        # an archived project of the same slug sorts first and was stopped long ago; the live one is armed
+        archived = self.sol / "projects" / "my" / "_archive" / "guest" / "aipack"
+        self.write(archived / "manifest.json", PACK_MANIFEST)
+        self.write(archived / ".memory" / "clock.json", {"state": "fired"}, hours_ago=30)
+        wakes = now + timedelta(minutes=20)
+        self.write(self.peer("guest", group="nv") / "clock.json", {"state": "armed", "wakes_at": iso(wakes)})
+        self.write(self.mem / "resource-sharing.json", {"share_with": ["guest"]})
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.line(out, "peers"),
+                         f"peers      guest: clock armed, wakes {self.module('kaggle_presubmit').local(wakes)}")
+
+    def test_outside_a_solaris_tree_the_new_checks_say_nothing(self):
+        # a project whose sharing files name peers, but no projects/ folder above it: no peers, no plugins line
+        shutil.rmtree(self.sol / "solaris")
+        root = self.tmp / "loose"
+        shutil.move(str(self.root), str(root))
+        self.root, self.tools = root, root / "aipack" / "plugins" / "kaggle" / "tools"
+        self.write(root / "aipack" / ".memory" / "resource-sharing.json", {"share_with": ["guest"]})
+        self.peer("guest")
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        for check in ("peers", "plugins", "alerts", "own-line", "settings"):
+            self.assertNotIn(f"\n{check} ", out)
+
+
 class HelperTests(unittest.TestCase):
     H = load(TOOLS / "kaggle_hourly.py", "test_hourly_helpers")
+
+    def test_clip_cuts_at_a_words_end(self):
+        clip = self.H.clip
+        self.assertEqual(clip("alpha beta gamma", 16), "alpha beta gamma")
+        self.assertEqual(clip("alpha beta gamma", 13), "alpha beta...")
+        self.assertEqual(clip("alpha beta gamma", 12), "alpha...")
+        self.assertEqual(clip("alpha, beta gamma", 12), "alpha...")
+        # only a single word longer than the width is cut inside
+        self.assertEqual(clip("x" * 20, 10), "xxxxxxx...")
+        self.assertEqual(clip(" a\n b\tc ", 10), "a b c")
+        self.assertEqual(clip(None, 5), "")
+
+    def test_a_flag_is_held_on_what_it_is_about(self):
+        P = load(TOOLS / "kaggle_presubmit.py", "test_hourly_helpers_h")
+        now = P.parse_time("2026-10-17T20:00:00Z")
+        hold = self.H.hold_unchanged
+        lines = [("account", "errors", "the account read was incomplete"), ("agents", "x", "1 worker off the list"),
+                 ("git", "y", None)]
+        held, state = hold(P, lines, {}, now, 6, {0: "error A"})
+        self.assertEqual((held, sorted(state)), (set(), ["account", "agents"]))
+        later = now + timedelta(hours=1)
+        # the same flag about the same items is held; an agents flag never is
+        self.assertEqual(hold(P, lines, {"flags": state}, later, 6, {0: "error A"})[0], {0})
+        # the same words about other items print in full
+        self.assertEqual(hold(P, lines, {"flags": state}, later, 6, {0: "error B"})[0], set())
+        # the state keeps a digest, not the text
+        self.assertNotIn("error A", json.dumps(state))
+
+    def test_the_items_a_forum_or_review_flag_is_about(self):
+        pending = {"new": [8, 7], "changed": [5], "missing": [3], "listed": {"5": {"comments": 4}, "7": {}, "8": {}}}
+        self.assertEqual(self.H.pending_items(pending), "new: 7, 8\nchanged: 5/4\nmissing: 3")
+        self.assertEqual(self.H.pending_items(None), "")
+        # every host-post label counts, not only the 4 the line shows; and a new host comment in a listed topic
+        labels = [f'{i} "topic {i}"' for i in range(5)]
+        res = {"hits": {"host": labels, "pages": [], "forum": labels, "rules": []},
+               "forum": [{"id": 1, "fresh": [{"host": True}, {"host": False}]}]}
+        about = self.H.review_items(res)
+        self.assertIn('4 "topic 4"', about)
+        self.assertIn("topic 1: 1 host comments", about)
+        self.assertIn("others: forum", about)
+        res["forum"][0]["fresh"].append({"host": True})
+        self.assertNotEqual(self.H.review_items(res), about)
+
+    def test_versions(self):
+        v = self.H.version_key
+        self.assertLess(v("0.9.1"), v("0.10.0"))
+        self.assertEqual(v("0.9"), v("0.9.0"))
+        self.assertEqual(v("v1.2.3-rc1"), (1, 2, 3))
+        for bad in ("", None, "abc", "1.x"):
+            self.assertIsNone(v(bad), bad)
+
+    def test_the_nearest_outlook_line(self):
+        P = load(TOOLS / "kaggle_presubmit.py", "test_hourly_helpers_o")
+        now = P.parse_time("2026-10-17T20:00:00Z")
+        row = self.H.outlook_row
+        for st in (None, {}, {"outlook": {"lines": []}}, {"outlook": "soon"}):
+            self.assertEqual(row(P, st, now), "n/a (no outlook in the status JSON)")
+        # a bare date lasts its whole day; a line in the past is skipped
+        st = {"outlook": {"lines": [{"when": "2026-10-16", "score": "0.40"}, {"when": "2026-10-17", "score": "0.41"},
+                                    {"when": "2026-10-25", "score": "0.45"}, {"when": "final", "rank": "#50"}]}}
+        self.assertEqual(row(P, st, now), "Oct 17: 0.41; final: #50")
+        # nothing known ahead: the first line
+        self.assertEqual(row(P, {"outlook": {"lines": [{"when": "soon"}, {"when": "later", "score": "0.5"}]}}, now),
+                         "soon: n/a")
 
     def test_models_match_by_name_or_family(self):
         allowed = self.H.ALLOWED_MODELS

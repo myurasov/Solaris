@@ -49,7 +49,10 @@ the rules and their evidence. Kaggle commands run from the project root; `<tools
 - **Session clock:** the master keeps one wake clock running as a background command, at the Solaris root
   `uv run -m solaris.tools.session_clock --dir <project>` (`<project>`: this project's path from there), on
   `{{PACK}}/.memory/schedule.json` (the hourly pass, the daily reset, tomorrow's plan before the reset, the
-  deadlines), and starts it again with the `--after` it printed.
+  deadlines), with `--cap 55` in a Claude Code interactive session (a turn at least every 55 minutes), and starts it again with
+  the `--after` it printed. It is armed before every turn end.
+- **Hard-rules card:** `{{PACK}}/card.md` (at most about 3 KB) holds the rules that must survive a compaction; the
+  framework reloads it after each one. A new owner direction of that weight joins it in the same turn.
 - **Hourly pass:** `python3 <tools>/kaggle_hourly.py {{ANSWER_COMPETITION}}` (with `--vs <our best score>` once there
   is one); act on every FLAG, paste its STATUS block into the status message, run this project's own host and job
   checks beside it, rebuild the status page with `--keep-rev`, and rewrite the snapshot in

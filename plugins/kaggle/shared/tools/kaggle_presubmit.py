@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle_presubmit: what is new on Kaggle since the last pre-submit review.
 
@@ -33,7 +33,11 @@ so. New since the review:
              (default 24). Host topics and comments come first, in full. Hosts
              are named by hand in config.json: {"hosts": ["<display name>",
              ...], "host_topics": [<topic id>, ...]}; the authors of the host
-             topics (a pinned welcome topic, say) count as hosts too.
+             topics (a pinned welcome topic, say) count as hosts too, and so
+             does an author the forum badges as a host (the topic read's
+             host flag, which is trusted; an SDK without the author type
+             gives none). A badged author that "hosts" does not name is
+             printed in a WARNING line, to be added.
   pages      a page added, changed (with +/- line counts and the two saved
              texts to diff) or removed
   notebooks  a notebook new to the list, or one whose score changed or first
@@ -604,9 +608,10 @@ def gather(slug, root, gateway, run, d, reuse=None):
 
 # ---- comparing with the last review
 
-def hosts_of(cfg, topics):
-    """The host names, casefolded: the configured ones and the authors of the configured host topics."""
-    names = {h.casefold() for h in cfg["hosts"]}
+def hosts_of(cfg, topics, badged=()):
+    """The host names, casefolded: the configured ones, the authors of the configured host topics, and the names
+    the forum badges as hosts."""
+    names = {h.casefold() for h in cfg["hosts"]} | {n.casefold() for n in badged}
     for tid in cfg["host_topics"]:
         author = (topics.get(str(tid)) or {}).get("author")
         if author:
@@ -614,16 +619,41 @@ def hosts_of(cfg, topics):
     return names
 
 
-def forum_changes(view, base, d, cfg, now, hours):
-    """New topics and new comments since the review base (None: the last hours), with their text, hosts marked."""
-    hosts = hosts_of(cfg, view["topics"])
+def stored_topics(topics, d):
+    """{topic id: the topic as the forum watch stored it in d/topics/<id>.json, {} when it has none}."""
+    out = {}
+    for tid in topics:
+        data = read_json(Path(d) / "topics" / f"{tid}.json", None)
+        out[tid] = data if isinstance(data, dict) else {}
+    return out
+
+
+def host_badges(stored):
+    """(the authors the forum badges as hosts in the stored topics, {casefolded: name}; whether any stored post
+    carries the badge flag at all: the SDK read gives none before kagglesdk has the author type)."""
+    names, known = {}, False
+    for data in stored.values():
+        topic = data.get("topic") if isinstance(data.get("topic"), dict) else {}
+        for m in [topic, *walk(data.get("comments"))]:
+            flag = m.get("host")
+            known = known or isinstance(flag, bool)
+            author = clean(m.get("authorName")).strip()
+            if flag is True and author:
+                names.setdefault(author.casefold(), author)
+    return names, known
+
+
+def forum_changes(view, base, d, cfg, now, hours, stored=None):
+    """New topics and new comments since the review base (None: the last hours), with their text, hosts marked: a
+    configured host, the author of a host topic, or an author the forum badges as a host."""
+    stored = stored if stored is not None else stored_topics(view["topics"], d)
+    hosts = hosts_of(cfg, view["topics"], host_badges(stored)[0].values())
     known = (base or {}).get("topics") or {}
     since = now - timedelta(hours=hours)
     items = []
     for tid, t in view["topics"].items():
         b = known.get(tid)
-        data = read_json(d / "topics" / f"{tid}.json", None)
-        data = data if isinstance(data, dict) else {}
+        data = stored.get(tid) or {}
         topic = data.get("topic") if isinstance(data.get("topic"), dict) else {}
         comments = walk(data.get("comments"))
         if base is None:
@@ -640,11 +670,12 @@ def forum_changes(view, base, d, cfg, now, hours):
             continue
         author = clean(topic.get("authorName") or t.get("author") or "?")
         items.append({"id": int(tid), "title": t["title"], "author": author, "posted": t.get("posted"), "new": new,
-                      "by_host": author.casefold() in hosts, "comments": t["comments"], "was": was,
-                      "fetched": bool(topic), "unread": unread, "post": plain(topic.get("content")) if new else "",
+                      "by_host": author.casefold() in hosts or topic.get("host") is True, "comments": t["comments"],
+                      "was": was, "fetched": bool(topic), "unread": unread,
+                      "post": plain(topic.get("content")) if new else "",
                       "fresh": [{"author": clean(c.get("authorName") or "[deleted]"), "at": c.get("postDate"),
                                  "text": plain(c.get("content")),
-                                 "host": (c.get("authorName") or "").casefold() in hosts}
+                                 "host": (c.get("authorName") or "").casefold() in hosts or c.get("host") is True}
                                 for c in sorted(fresh, key=lambda c: parse_time(c.get("postDate")) or NEVER)]})
 
     def latest(i):
@@ -722,13 +753,15 @@ def board_changes(view, old, root, slug):
 
 
 def compare(view, base, cfg, *, root, slug, now, hours=HOURS, vs=None):
-    """What is new in view since the review base (None: no review yet), and the triggers it matched."""
+    """What is new in view since the review base (None: no review yet), and the triggers it matched; "badges" says
+    whether the stored forum posts carry the host badge flag, "unlisted_hosts" names the authors the forum badges as
+    hosts that config.json "hosts" does not name."""
     base = base if isinstance(base, dict) else {}
     hits = {k: [] for k, _ in TRIGGERS}
     board = view["board"] if view["board"].get("ok") else (base.get("board") or {})
     res = {"at": view["at"], "base_at": base.get("acked_at"), "view": view, "hits": hits, "errors": [],
            "sign": board.get("sign") or 1, "forum_window": base.get("forum") is None,
-           "forum": None, "pages": None, "notebooks": None, "board": None}
+           "forum": None, "pages": None, "notebooks": None, "board": None, "badges": False, "unlisted_hosts": []}
     for src in SOURCES:
         if not view[src].get("ok"):
             res["errors"].append(f"{src}: {view[src].get('error')}")
@@ -736,7 +769,13 @@ def compare(view, base, cfg, *, root, slug, now, hours=HOURS, vs=None):
         elif base.get(src) is None:
             hits["first"].append(src)
     if view["forum"].get("ok"):
-        res["forum"] = forum_changes(view["forum"], base.get("forum"), forum_dir(root, slug), cfg, now, hours)
+        fdir = forum_dir(root, slug)
+        stored = stored_topics(view["forum"]["topics"], fdir)
+        badged, res["badges"] = host_badges(stored)
+        # the forum's host badge is trusted; a badged author missing from config.json "hosts" is named for adding
+        named = {h.casefold() for h in cfg["hosts"]}
+        res["unlisted_hosts"] = sorted(n for k, n in badged.items() if k not in named)
+        res["forum"] = forum_changes(view["forum"], base.get("forum"), fdir, cfg, now, hours, stored=stored)
         for i in res["forum"]:
             label = f'{i["id"]} "{one_line(i["title"], 40)}"'
             hits["forum"].append(label)
@@ -796,10 +835,13 @@ def report(res, slug, cfg, *, vs=None, hours=HOURS, tool="kaggle_presubmit.py", 
                    + ". Wait a few minutes before the next Kaggle read, then run the check again")
     items = res["forum"] or []
     host = [i for i in items if (i["new"] and i["by_host"]) or any(c["host"] for c in i["fresh"])]
-    if not cfg["hosts"] and not cfg["host_topics"]:
+    if not cfg["hosts"] and not cfg["host_topics"] and not res.get("badges"):
         out.append("HOST POSTS: no hosts named (config.json \"hosts\", \"host_topics\"): host posts are not told apart")
     else:
         out.append(f"HOST POSTS: {len(host)}" if host else "HOST POSTS: none new")
+    if res.get("unlisted_hosts"):
+        out.append("  WARNING: the forum badges these authors as hosts, and config.json \"hosts\" does not name them "
+                   f"(add them): {', '.join(one_line(n, 40) for n in res['unlisted_hosts'])}")
     for i in host:
         out.append(f'  {i["id"]} "{one_line(i["title"], 90)}"')
         if i["new"] and i["by_host"]:

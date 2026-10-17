@@ -1,9 +1,9 @@
 ---
 name: kaggle-checks
 triggers: ["presubmit", "pre-submit check", "pre-submit review", "hourly check", "hourly pass", "gated submit"]
-summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; never retried blindly); kaggle_hourly.py runs the hourly read-only checks in one call and prints a line per check, flagging what needs a decision (board jumps, unpushed commits, agents off their allowed models, a master effort other than the one the pack sets, failed hooks, spend limits, HTTP 429 as one line), then a status block to paste into the status message.
+summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; a submit Kaggle refuses is recorded with Kaggle's reason; never retried blindly); kaggle_hourly.py runs the hourly read-only checks in one call and prints a line per check, flagging what needs a decision (board jumps, errored submissions with Kaggle's error text, unpushed commits, agents off their allowed models, a master effort other than the one the pack sets, failed hooks, spend limits, session alerts, a stopped peer master, an older plugin copy, a stalled own line, HTTP 429 as one line; an unchanged flag held back for hours), then a status block to paste into the status message (outlook, progress, tracks, machine health).
 ---
-_Rev. 5_
+_Rev. 6_
 
 # Skill: kaggle-checks - Pre-Submit Check, Gated Submit, Hourly Pass <!-- omit in toc -->
 
@@ -41,8 +41,8 @@ Run from the project root or task folder:
 | `kaggle_presubmit.py <slug> [--vs SCORE] [--hours H] [--fresh MIN]` | Reads the forum, pages, notebooks and board (the last two reused from a young hourly pass), prints what is new since the last review and a TRIGGERS block, and keeps what it showed. | 0 nothing new, 10 needs review |
 | `kaggle_presubmit.py <slug> --ack` | Records the last check's view as reviewed; no Kaggle call. | 0 |
 | `kaggle_submit.py <record.json>` | Every check of the submit, then the exact command; nothing is sent. | 0 passed, 3 refused |
-| `kaggle_submit.py <record.json> --go --review "<one line>" [--checked]` | The checks, then one `competitions submit`, recorded in the record. | 0 submitted, 3 refused, 4 unclear |
-| `kaggle_hourly.py <slug> [--vs SCORE] [--status FILE] [--jump N%] [--json]` | One hourly pass: a line per check, FLAG where a decision is needed, then the status block. | 0 nothing, 10 a flag |
+| `kaggle_submit.py <record.json> --go --review "<one line>" [--checked]` | The checks, then one `competitions submit`, recorded in the record. | 0 submitted, 3 refused by the checks, 4 unclear, 5 refused by Kaggle |
+| `kaggle_hourly.py <slug> [--vs SCORE] [--status FILE] [--jump N%] [--json]` | One hourly pass: a line per check, FLAG where a decision is needed, then the status block. | 0 nothing new (or only unchanged flags), 10 a flag printed in full |
 | `kaggle_status.py [--keep-rev] [--offline] [--out FILE]` | Builds the status page from `reports/status.json` (see Hourly Pass). | 0 built, 1 render failed |
 
 Every tool exits 1 on an error and 2 on bad usage; each takes `--gateway <path>` (default: the
@@ -54,7 +54,9 @@ Every tool exits 1 on an error and 2 on bad usage; each takes `--gateway <path>`
    `{"hosts": ["<display name>", ...], "host_topics": [<topic id>, ...]}`. The authors of the host
    topics (the pinned welcome topic, say) count as hosts too. Without it, host posts are not told
    apart. When you adopt the plugin, also run the check once, read it and `--ack` it: until the first
-   review, every check and hourly pass shows the last 24 hours of the forum again.
+   review, every check and hourly pass shows the last 24 hours of the forum again. An author the forum
+   badges as a host counts too (the topic read's `host` flag, which stays empty until the pinned SDK
+   carries the author type), and a WARNING line names any badged author missing from `hosts`: add them.
 2. **Run the check** within the half hour before the submit, away from other Kaggle reads: Kaggle
    answers a burst of reads with HTTP 429 (Too Many Requests), and the hourly pass makes the same
    reads. So the check reuses the last hourly pass's board snapshot and notebook list when that pass
@@ -95,7 +97,10 @@ attempt that landed or may have landed, the last pre-submit check is at most `--
 (default 30) with whatever it found acked, the kernel run is COMPLETE (`kernels status` names the
 latest version only: make sure it is the one in the record), and `--review` gives one line: what was
 new and the decision. `--go` records the attempt before submitting, submits once, and records
-`submitted` or `unclear`. After `unclear` (exit 4) never submit again blindly: read `competitions
+`submitted`, `refused` or `unclear`. `refused` (exit 5, printed `REFUSED BY KAGGLE: <reason>`, kept in
+the attempt's `reason`) means Kaggle answered with HTTP 400, 401, 403, 404 or 429 and its message, for example one pending
+submission. Nothing landed, so a later `--go` needs no `--checked`; run it once the reason is gone.
+After `unclear` (exit 4) never submit again blindly: read `competitions
 submissions <slug>` and `competitions submission-limits <slug>` first, and pass `--checked` only when
 the attempt is not listed. One run at a time per record: a second run is refused (exit 3) while one
 holds `<record>.lock`. The empty lock file stays beside the record: put `*.json.lock` in the project's
@@ -113,16 +118,18 @@ submission), and push no new version of the kernel between the run you submit an
 Run `kaggle_hourly.py <slug>` at the agent's hourly pass; it wakes nothing and schedules nothing (no
 daemon or watcher: the in-session clock wakes the agent). Lines: `review` (the pre-submit reads and
 triggers since the last review, not kept as a check, so `--ack` still needs a check you read),
-`board`, `notebooks`, `forum`, `subs`, `kernels`, `gpu`, `status` (the status page), `git`,
-`agents` and `spend` (these three in a project, not a task folder), and `browsers` (one `ps` read:
-this project's browserctl browsers and their age, orphaned report-render Chromes, and a count of the
-other browsers, which may be the owner's or another project's and are never flagged). Flags: a host
-post or page change since the last review; a top team's jump on the board since the snapshot the
-last pass saw (a top-10 team that improved by at least `--jump`, default 2% of its earlier score, a
-plain number being score units; or one that entered the top 10 from below place 50): refresh the
-top-teams research and record a decision within a day; a new or re-scored notebook in the top 15 (or
-at or better than `--vs`); topics the forum watch has not shown and committed; a score that landed
-or a submission that errored since the last pass; a run of this project's that ended since the last
+`board`, `notebooks`, `forum`, `subs` (the gateway's `--sdk submissions` read, which keeps Kaggle's
+error text), `kernels`, `gpu`, `status` (the status page), `git`, `agents`, `spend`, `alerts`, `peers`
+and `plugins` (these six in a project, not a task folder), `own-line` and `settings` (only when they
+flag), and `browsers` (one `ps` read: this project's browserctl browsers and their age, orphaned
+report-render Chromes, and a count of the other browsers, which may be the owner's or another
+project's and are never flagged). Flags: a host post or page change since the last review; a top
+team's jump on the board since the snapshot the last pass saw (a top-10 team that improved by at
+least `--jump`, default 2% of its earlier score, a plain number being score units; or one that
+entered the top 10 from below place 50): refresh the top-teams research and record a decision within
+a day; a new or re-scored notebook in the top 15 (or at or better than `--vs`); topics the forum
+watch has not shown and committed; a score that landed or a submission that errored since the last
+pass (with Kaggle's error text); a run of this project's that ended since the last
 pass; a status JSON that is missing or unreadable, a page that is missing, built before the JSON's
 last change, built before the newest score landed, or over 2 hours old, and a project still on
 `submissions/live-plan.json` (the live plan is retired); commits unpushed for over an hour in the
@@ -133,10 +140,41 @@ worker or the master on a model outside the allowed list, a failed hook run, the
 effort than the one the pack sets (`agents`); a daily limit reached, and with a Brev limit set a
 running instance the ledger notes in a way the tool cannot count (`spend`); an orphaned render Chrome
 or a browser of this project's up over 2 hours (stop what no running task needs); any read that
-failed.
-Act on each flag (each names its next step); with exit 0, nothing needs a decision. State:
+failed. And these:
+
+- `alerts`: this project's session alerts since the last pass (`<pack>/.memory/alerts.jsonl`, written by the
+  framework's session hooks; no file, no line): a turn that ended with no wake-up armed (arm the clock before every
+  turn end), or a safety-classifier stop (log it; keep prompts, model output and third-party text out of the
+  master's context).
+- `peers`: the master of a project this one shares machines with looks stopped. Peers are the owners in the seen
+  list and the guests in `resource-sharing.json` (the slug scan skips folders starting with `_` or `.`, such as
+  `_archive`). A peer is flagged when its `<pack>/.memory/clock.json` is not armed and was last written over
+  `"kaggle.peer_silent_minutes"` (default 90) ago, or is armed but over 30 minutes past its `wakes_at`. Neither
+  counts while a file in its `<pack>/.memory/interactions/` was written within those minutes (a long turn writes
+  its log). A new classifier stop in its alerts is flagged too. Tell the owner; never message the peer's master
+  about it (a message can wake it into the same stop). Listed, never flagged: a peer with no clock.json, and a
+  peer paused on purpose. Paused means its newest `handover-*.md` (by the time in the name; sync-conflict copies
+  skipped) has no "resumed at" line and is newer than its clock.json, or its clock was stopped by `--stop`.
+- `plugins`: an attached plugin older than the same plugin in the Solaris checkout above the project. The flag
+  names both versions and the update: install-plugin's "update plugin <name> in <project>", which the owner runs
+  at the Solaris root.
+- `own-line`: no own-work gain in the status JSON's `lineage` for `"kaggle.own_stall_days"` (default 3) days. It
+  is flagged at most once a day: plan an own step, give it compute, record the decision (the playbook core,
+  Research and Ideas).
+- `settings`: a setting the pass reads (from `<pack>/.memory/config.json`, else `<pack>/defaults.json`) is not a
+  valid number (its default is used).
+
+Act on each flag (each names its next step); with exit 0, nothing new needs a decision. State:
 `<context>/__data/kaggle/<slug>/hourly/last.json` (with the time each score was first seen, the
-board snapshot the pass saw, and the board and notebook reads the pre-submit check may reuse).
+board snapshot the pass saw, the board and notebook reads the pre-submit check may reuse, each flag's
+text and when it last printed in full, and the newest own lineage entry).
+
+**Unchanged flags.** A flag whose text matches the last pass's prints in full at most every
+`"kaggle.flag_repeat_hours"` hours (default 6; 0 prints every pass). In between, its line says `(unchanged)` and
+one line `unchanged: <n> flags (<checks>)` follows the FLAGS list. A new or changed flag always prints in full. The
+review, forum and account flags also count as changed when what they name changes (a new topic id, a new
+label, a new error). Board, notebooks, subs, kernels, agents, rate-limited, alerts and own-line flags always print. Exit 10 means a flag printed in full; a pass whose only flags
+are unchanged prints `FLAGS: none new` and exits 0, so a script that keys on `FLAG` or exit 10 stays quiet.
 
 **Rate limits.** A Kaggle read answered with HTTP 429 (Too Many Requests) stops the pass's Kaggle
 reads: one `rate-limited` FLAG line names that read and the checks skipped after it, instead of a
@@ -175,18 +213,26 @@ owner's day (`"owner.timezone"`, as ai_spend reads it). A limit reached is a FLA
 tell the owner.
 
 **The status block.** The output ends with a STATUS block to paste into the status message, one line
-each, `n/a` where the tool cannot tell, never a guess: `pick` (today's slots used of the status
-JSON's `daily_slots`, the pending submissions, and the status JSON's optional `"pick"` text, where
-the master keeps the next pick and its confidence), `score` (our best public score, by the status
-JSON's `team` on the newest board snapshot, else our best scored submission, with the medal lines),
-`rank` (our place of the number of teams), `compute` (the machines in `<pack>/.memory/hosts.json`,
-the nearest booking end in `lease-ends.json`, the machines other projects share with this one from
-resource-sharing's seen list `resource-sharing-seen.json` with their nearest planned end, as of the
-last `hostclaims.py shared --ack`, and the Kaggle GPU week), `stopped` (this project's kernel
-runs that ended since the last pass; claims live on the hosts, so `hostclaims.py status` reads
+each (under 300 characters, cut at a word's end), `n/a` where the tool cannot tell, never a guess:
+`pick` (today's slots used of the status JSON's `daily_slots`, the pending submissions, and the status
+JSON's optional `"pick"` text, where the master keeps the next pick and its confidence), `score` (our
+best public score, by the status JSON's `team` on the newest board snapshot, else our best scored
+submission, with the medal lines), `rank` (our place of the number of teams), `outlook` (the nearest
+outlook line still ahead and the `final` line, each with score, rank and basis, and when it was set),
+`progress` (the newest best; how many of the last 10 new bests were own work or public material, with
+their summed gains; the newest own gain and its age, "stalled" past `"kaggle.own_stall_days"`),
+`tracks` (how many tracks run, pause, are done or dropped; each running one with its last gain and
+note), `compute` (each machine of `<pack>/.memory/hosts.json` with its health and GPU busy share from
+`<pack>/.memory/host-health.json`, bad and warn first; the nearest booking end in `lease-ends.json`;
+the machines other projects share with this one from resource-sharing's seen list
+`resource-sharing-seen.json`, each with its health from the landlord's file and its nearest planned
+end, as of the last `hostclaims.py shared --ack`; and the Kaggle GPU week), `stopped` (this project's
+kernel runs that ended since the last pass; claims live on the hosts, so `hostclaims.py status` reads
 them), `spend` (the spend line) and `for you` (the status JSON's open questions and owner actions,
-and the number of FLAG lines). `--json` prints the whole pass as one object: `checks` (each with
-its line and flag), `flags` and `block`.
+the number of FLAG lines printed in full and of those unchanged). Without the status JSON's `outlook`,
+`lineage` or `tracks` the row says n/a. `--json` prints the whole pass as one object: `checks` (each
+with its line and flag, held ones marked `"unchanged": true`), `flags` (those printed in full),
+`unchanged` (the held checks) and `block`.
 
 **The status page.** The master keeps `reports/status.json` under the project root (`--status FILE`
 names another); `kaggle_status.py` builds `reports/html/status.html` from it and, with the reporting
@@ -196,3 +242,17 @@ rebuild it with `kaggle_status.py --keep-rev` (fresh live figures, same rev); af
 edit the JSON and run `kaggle_status.py` (it raises the rev). `--offline` makes no Kaggle call;
 `--out FILE` writes a preview elsewhere. The page holds private operations data: keep
 `reports/status*.pdf` and `reports/html/status*.html` in the project's `.gitignore`.
+
+Three optional fields of the status JSON answer the owner's usual questions under Current State: `"outlook"`
+(`{"at": "<ISO>", "lines": [{"when": "in 3 days" | "<YYYY-MM-DD>" | "final", "score": "0.45-0.47", "rank":
+"#40-80", "basis": "<short>"}]}`, the expected best score and rank as ranges with their basis), `"lineage"`
+(`[{"entry", "score", "gain", "origin": "own" | "public", "what", "date"}]`, the new bests oldest first, `date`
+optional (ISO, when it was set); the page sums the gains of own work and of public material) and `"tracks"`
+(`[{"name", "state": "running" | "paused" | "done" | "dropped", "last_gain": "<YYYY-MM-DD>" | null, "note":
+"<under 80 chars>"}]`, one per work track). Resources gains a Machine Health table when
+`<pack>/.memory/host-health.json` exists (resource-sharing's `hosthealth.py --write`) or a project sharing
+machines with this one keeps one. The plan lists in full the items of the last `"kaggle.status_plan_days"` days
+(pack setting, default 3), undated items, and every older item that is not closed; an older item counts as
+closed, per day and then per week, only when its status starts with a closed word (done, finished, complete,
+closed, dropped, cancelled, skipped, superseded, replaced, retired, abandoned, merged, rejected, no-go, n/a) and
+names no later step (next, pending, to do, queued, waiting). The JSON keeps every item.

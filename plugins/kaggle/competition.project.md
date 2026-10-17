@@ -1,7 +1,7 @@
 ---
 type: competition
 title: Kaggle competition
-summary: One project per Kaggle competition, set up to compete from the first hour - a private git repo at the root, the competition facts sheet with its kind, the first board snapshot and public-notebook survey, the status page, the session clock with the hourly pass, and the first plan.
+summary: One project per Kaggle competition, set up to compete from the first hour - a private git repo at the root, the competition facts sheet with its kind, the first board snapshot and public-notebook survey, the status page, the session clock with the hourly pass, the hard-rules card, and the first plan.
 defaults: {"mode": "local", "primary": "master", "roles": ["worker", "reviewer"]}
 plugins: {"required": ["kaggle", "reporting"], "optional": ["resource-sharing", "nvidia-brev", "browserctl"]}
 template: project-types/competition
@@ -55,7 +55,7 @@ The shape of the competition projects this type was drawn from; planning keeps i
   <project>/                 git repo, branch main
     .gitignore*  README.md*  .version  AGENTS.md  CLAUDE.md
     <pack>/                  master, worker and reviewer briefs; instructions.md (+ the facts sheet, the grant,
-                             the process*); spec.md; rules, skills, plugins
+                             the process*); spec.md; card.md (the hard-rules card); rules, skills, plugins
       .memory/               private: directions, context, config (limits, timezone), schedule, spend ledger, hosts
     source/                  code workspace: experiments, evaluation, submission kernels
     submissions/             README.md*, PLAN.md (the day's slots), <NNN>-<mmdd>-<slug>/ per candidate
@@ -256,7 +256,7 @@ steps go on.
     attached it renders `reports/status.pdf` and prints the layout check (no half-empty page). A render that cannot
     find node or Chrome: point the JSON's `render_env` at a shell file that puts them on PATH. Then
     `git check-ignore reports/status.json reports/status.pdf reports/html/status.html` prints all three paths.
-11. **Session clock and hourly pass.**
+11. **Session clock, hard-rules card and hourly pass.**
     - Write `<pack>/.memory/schedule.json`, times ISO with the owner's UTC offset; with cross-family review set up in
       Step 9, add a daily `plan-review` event before the day's plan, and add one-off events for the merge and the
       final deadlines. Daily events count 1440 minutes from their `at`, so they stay on the UTC reset across
@@ -270,9 +270,21 @@ steps go on.
       ]
       ```
 
-    - Check it at the Solaris root: `uv run -m solaris.tools.session_clock --dir <project> --cap 0.05` prints the
-      next event within seconds (exit 1 names what is wrong). The master starts the real clock when it begins (a
-      background command, started again with the `--after` it printed); this session does not.
+    - Check it at the Solaris root: `uv run -m solaris.tools.session_clock --dir <project> --check` prints the
+      next event and the start command without arming anything (exit 1 names what is wrong). The master starts
+      the real clock when it begins (a background command, started again with the `--after` it printed; in a
+      Claude Code interactive session with `--cap 55`, so a turn comes at least every 55 minutes and the prompt
+      cache stays warm); this session does not.
+    - Write `<pack>/card.md`, the project's hard-rules card, which the framework reloads after every compaction: at
+      most about 3 KB, one line per rule, the rules that must survive a compaction. The competition, its slots and
+      reset in the owner's time; what waits for the owner (writes to Kaggle, the grant's reserved list); submit only
+      through the gate, and never lose a day's slot to a pending entry; the main session never prints agent
+      prompts, model outputs, trajectories or long third-party text (workers and counting scripts read them); arm
+      the session clock before every turn end; when unsure, take the option that moves the public board faster,
+      act, then report; calls the owner has not reserved are stated as "doing X at T unless you object"; answer
+      the owner first, in about 100 words; after a compaction, re-read the playbook core, the kind skill and
+      `<pack>/.memory/context.md`. Later owner directions that must survive a compaction join it; the rest go to
+      `<pack>/instructions.md`.
     - Run one pass, `python3 <tools>/kaggle_hourly.py <competition>`, read every line, and settle what it flags:
       after steps 6 to 10, nothing should need a decision.
 12. **First plan.**
@@ -286,7 +298,8 @@ steps go on.
       research jobs for workers: the past winners' writeups of two or three similar closed competitions
       (`research/past-winners/summary.md`) and the top-teams track.
     - `reports/status.json`: `summary`, dated `plan` items (setup done, the Phase 0 day, the first scores, the phase
-      of the owner's goal) and `pick`; rebuild with `python3 <tools>/kaggle_status.py`.
+      of the owner's goal) and `pick`; the overlay seeds `outlook`, `lineage` and `tracks` empty, for the master to
+      fill from the first scores and tracks; rebuild with `python3 <tools>/kaggle_status.py`.
     - `<pack>/.memory/context.md`, Session Context: Now, Next actions (the master's first hour: read the playbook
       core and the kind skill, arm the clock, run the hourly pass, build Phase 0's candidates; and whatever earlier
       steps left there, such as the data download), Open questions, Decisions.

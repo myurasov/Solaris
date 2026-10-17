@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_sdk: reads through Kaggle's Python SDK, of data the Kaggle CLI drops or reads one process per call.
 
@@ -10,14 +10,22 @@ a plain python3:
     python3 <plugin-dir>/tools/kaggle.py --sdk topic <id>
     python3 <plugin-dir>/tools/kaggle.py --sdk notebooks <competition-slug> [--max N]
     python3 <plugin-dir>/tools/kaggle.py --sdk account [--hours H] [--page-size N] [--done REF=TIME ...]
+    python3 <plugin-dir>/tools/kaggle.py --sdk submissions <competition-slug> [--page-size N] [--json]
+    python3 <plugin-dir>/tools/kaggle.py --sdk dataset <owner/slug> [--json]
 
-It signs in as the CLI does (OAuth, access token or kaggle.json). Each read
-prints one JSON document on stdout:
+It signs in as the CLI does (OAuth, access token or kaggle.json). topic,
+notebooks and account print one JSON document on stdout; submissions and
+dataset print a few lines of text, or that one JSON document with --json:
 
 topic <id>: the topic with its opening post, and every comment with its
 replies nested: {"topic": {...}, "comments": [{..., "replies": [...]}]}.
 content is the HTML Kaggle returns; dates print as `forums topics show <id>
 --format json` prints them. No author profile paths, usernames or tiers.
+host (on the topic and on each comment) is true when the forum badges the
+author as a competition host (the SDK's author type HOST), false when it
+gives another author type, and null when the SDK gives none: kagglesdk 0.1.37's
+topic and comment types carry no author type, so it is null until the pin
+moves to an SDK that has one.
 
 notebooks <slug>: up to N notebooks (default 100, 1..1000) in the order of
 `kernels list --competition <slug> --sort-by scoreDescending`, each with its
@@ -43,11 +51,26 @@ takes a `kernels pull -m`. A failed call leaves its part null (quota, kernels
 or one status), adds one line to errors, and the read goes on; calls counts
 the calls made.
 
+submissions <slug>: the team's latest N submissions (default 20, 1..100),
+newest first, with the error text `competitions submissions` drops:
+{"competition", "fetched_at", "submissions": [{"ref", "date", "description",
+"status", "publicScore", "errorDescription"}]}. The keys are those of
+`competitions submissions --format json`; status is the bare state (PENDING,
+COMPLETE, ERROR), publicScore and errorDescription null when Kaggle sends
+none. The text form is one line per submission and an "error:" line under
+each one that has an error text.
+
+dataset <owner/slug>: the dataset's current version number and every
+version, newest first: {"ref", "title", "fetched_at", "currentVersion",
+"lastUpdated", "versions": [{"number", "date", "notes"}]}. The text form names
+the current version, then one line per version (number, date, notes).
+
 Call budget, on top of signing in: topic makes 2 calls plus one per further
 page of comments, as the CLI does; notebooks makes one call per 100 notebooks
 listed, at most 3 search pages and at most 20 single lookups (at most 24 calls
 at the default N, 33 at N=1000), and makes no more calls after a failed one;
-account makes 2 calls plus one per status read (at most 27).
+account makes 2 calls plus one per status read (at most 27); submissions and
+dataset make one call each.
 
 A failure exits 1 with one stderr line, `kaggle_sdk: <status> <reason>:
 <message>` when Kaggle answered with an HTTP error, else `kaggle_sdk:
@@ -77,11 +100,16 @@ DEFAULT_HOURS = 12
 MAX_HOURS = 8760
 DEFAULT_PAGE = 50
 STATUSES = 25
+# the submissions read: one page, the CLI's default size
+SUBMISSIONS_PAGE = 20
+MAX_SUBMISSIONS = 100
 ISO = "%Y-%m-%dT%H:%M:%SZ"
 SLUG_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 ID_RE = re.compile(r"[0-9]+")
 # a kernel ref passed back as Kaggle listed it: owner/slug
 REF_RE = re.compile(r"[^/=\s]+/[^/=\s]+")
+# Kaggle text printed as one line: no control characters
+CONTROL_RE = re.compile(r"[\x00-\x1f\x7f]")
 
 
 class SdkError(Exception):
@@ -130,6 +158,23 @@ def done_run(text):
     return ref.lower(), last
 
 
+def submissions_page(text):
+    if not ID_RE.fullmatch(text) or not 1 <= int(text) <= MAX_SUBMISSIONS:
+        raise argparse.ArgumentTypeError(f"not a page size from 1 to {MAX_SUBMISSIONS}: {text!r}")
+    return int(text)
+
+
+def dataset_ref(text):
+    parts = text.split("/")
+    if len(parts) != 2 or not all(SLUG_RE.fullmatch(p) for p in parts):
+        raise argparse.ArgumentTypeError(f"not a dataset ref owner/slug: {text!r}")
+    return parts[0], parts[1]
+
+
+def one_line(text):
+    return " ".join(CONTROL_RE.sub(" ", str(text or "")).split())
+
+
 def error_text(e):
     """A failure on one line: `<status> <reason>: <message>` when Kaggle answered with an HTTP error."""
     text = str(e) or type(e).__name__
@@ -165,9 +210,18 @@ def sign_in():
     return api
 
 
+def host_badge(message):
+    """Whether the forum badges a message's author as a competition host: the SDK's author type HOST (1) is True,
+    any other author type False, and no author type at all (kagglesdk 0.1.37's topic reads) None."""
+    kind = getattr(message, "author_type", None)
+    if kind is None:
+        return None
+    return getattr(kind, "name", None) == "HOST" or (type(kind) is int and kind == 1)
+
+
 def comment(c):
     return {"id": c.id, "authorName": c.author_name, "postDate": when(c.post_date), "votes": c.votes,
-            "content": c.content, "replies": [comment(r) for r in c.replies or []]}
+            "host": host_badge(c), "content": c.content, "replies": [comment(r) for r in c.replies or []]}
 
 
 def read_topic(api, a):
@@ -176,7 +230,7 @@ def read_topic(api, a):
         raise SdkError(f"topic {a.id} not found")
     return {"topic": {"id": topic.id, "title": topic.title, "authorName": topic.author_name,
                       "postDate": when(topic.post_date), "votes": topic.votes,
-                      "commentCount": topic.comment_count, "content": topic.content},
+                      "commentCount": topic.comment_count, "host": host_badge(topic), "content": topic.content},
             "comments": [comment(c) for c in comments or []]}
 
 
@@ -333,7 +387,60 @@ def read_account(api, a):
     return doc
 
 
-READS = {"topic": read_topic, "notebooks": read_notebooks, "account": read_account}
+def state_name(status):
+    # an SDK enum by its name (SubmissionStatus.ERROR -> ERROR); anything else as text
+    name = getattr(status, "name", None)
+    return name if isinstance(name, str) else (None if status is None else str(status).split(".")[-1])
+
+
+def read_submissions(api, a):
+    fetched_at = datetime.now(timezone.utc).strftime(ISO)
+    subs = api.competition_submissions(a.slug, page_size=a.page_size) or []
+    return {"competition": a.slug, "fetched_at": fetched_at,
+            "submissions": [{"ref": s.ref, "date": when(s.date), "description": s.description,
+                             "status": state_name(s.status), "publicScore": s.public_score or None,
+                             "errorDescription": s.error_description or None} for s in subs if s is not None]}
+
+
+def text_submissions(doc):
+    subs = doc["submissions"]
+    out = [f"{doc['competition']}: {len(subs)} submissions, newest first (read {doc['fetched_at']})"]
+    for s in subs:
+        out.append(f"{s['ref']!s:>10}  {str(s['date'] or '?').replace('T', ' ')[:16]:<16}  {s['status'] or '?':<8}  "
+                   f"{one_line(s['publicScore']) or '-':<10}  {one_line(s['description'])[:80]}")
+        if s["errorDescription"]:
+            out.append(f"{'':>10}  error: {one_line(s['errorDescription'])}")
+    return "\n".join(out)
+
+
+def read_dataset(api, a):
+    from kagglesdk.datasets.types.dataset_api_service import ApiGetDatasetRequest
+    fetched_at = datetime.now(timezone.utc).strftime(ISO)
+    req = ApiGetDatasetRequest()
+    req.owner_slug, req.dataset_slug = a.ref
+    with api.build_kaggle_client() as client:
+        ds = client.datasets.dataset_api_client.get_dataset(req)
+    versions = sorted((v for v in ds.versions or [] if v is not None), key=lambda v: v.version_number or 0,
+                      reverse=True)
+    return {"ref": "/".join(a.ref), "title": ds.title, "fetched_at": fetched_at,
+            "currentVersion": ds.current_version_number or None, "lastUpdated": when(ds.last_updated),
+            "versions": [{"number": v.version_number, "date": when(v.creation_date), "notes": v.version_notes or ""}
+                         for v in versions]}
+
+
+def text_dataset(doc):
+    vs = doc["versions"]
+    current = f"version {doc['currentVersion']} is current" if doc["currentVersion"] else "no current version given"
+    out = [f"{doc['ref']}: {current}; {len(vs)} versions, newest first (read {doc['fetched_at']})"]
+    out += [f"  v{v['number']!s:<4} {str(v['date'] or '?').replace('T', ' ')[:16]:<16}  {one_line(v['notes'])[:100]}"
+            for v in vs]
+    return "\n".join(out)
+
+
+READS = {"topic": read_topic, "notebooks": read_notebooks, "account": read_account,
+         "submissions": read_submissions, "dataset": read_dataset}
+# the reads that print text unless --json asks for the JSON document
+TEXT = {"submissions": text_submissions, "dataset": text_dataset}
 
 
 def parse(argv):
@@ -356,6 +463,14 @@ def parse(argv):
                    help=f"kernels to list, 1..{LIST_PAGE} (default {DEFAULT_PAGE})")
     s.add_argument("--done", type=done_run, action="append", default=[], metavar="REF=TIME",
                    help="a finished run already known, by kernel ref and lastRunTime: its state is not read again")
+    s = sub.add_parser("submissions", help="the team's latest submissions with their error text")
+    s.add_argument("slug", type=slug, help="competition slug")
+    s.add_argument("--page-size", type=submissions_page, default=SUBMISSIONS_PAGE,
+                   help=f"submissions to list, newest first, 1..{MAX_SUBMISSIONS} (default {SUBMISSIONS_PAGE})")
+    s.add_argument("--json", action="store_true", help="print the JSON document instead of text")
+    s = sub.add_parser("dataset", help="a dataset's current version number and its versions")
+    s.add_argument("ref", type=dataset_ref, help="dataset ref owner/slug")
+    s.add_argument("--json", action="store_true", help="print the JSON document instead of text")
     return p.parse_args(argv)
 
 
@@ -368,7 +483,10 @@ def main(argv=None):
     except Exception as e:
         print(f"kaggle_sdk: {error_text(e)}", file=sys.stderr)
         return 1
-    print(json.dumps(doc, indent=2))
+    if a.read in TEXT and not a.json:
+        print(TEXT[a.read](doc))
+    else:
+        print(json.dumps(doc, indent=2))
     return 0
 
 

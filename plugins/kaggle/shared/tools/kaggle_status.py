@@ -1,10 +1,11 @@
-# rev. 2
+# rev. 3
 
 """kaggle_status: the single status page of a Kaggle competition project.
 
-The one page the owner reads (it replaces the live plan and the phase progress reports): the current state, the
-leaderboard progress of the team and the top teams, the plan and timeline, the spending, the resources and what they
-are used for, the open questions and the suggestions. The master edits reports/status.json by hand; this tool adds
+The one page the owner reads (it replaces the live plan and the phase progress reports): the current state (with the
+outlook, the work tracks and the best-score lineage), the leaderboard progress of the team and the top teams, the plan
+and timeline, the spending, the resources with what they are used for and the machines' health, the open questions
+and the suggestions. The master edits reports/status.json by hand; this tool adds
 the live figures, raises the JSON's rev, writes the HTML and renders the PDF.
 
     python3 <plugin-dir>/tools/kaggle_status.py                 raise the rev, write the HTML, render the PDF
@@ -40,6 +41,14 @@ Found or passed as flags:
   hosts       <pack>/.memory/hosts.json (the resource-sharing inventory, a list or one under "hosts": name and gpus
               are read)
   lease ends  <pack>/.memory/lease-ends.json: {"read": "<ISO UTC>", "ends": {"<host>": "<ISO UTC>"}}
+  host health <pack>/.memory/host-health.json (resource-sharing's hosthealth.py): {"checked": "<ISO>", "hosts":
+              {"<host>": {"health": "ok|warn|bad", "gpus": 8, "gpus_visible": 8, "busy": 0.97, "xid_new": 0,
+              "temp_max_c": 71, "notes": ["..."], "checked": "<ISO>"}}}; a machine another project shares with this
+              one (resource-sharing's seen list <pack>/.memory/resource-sharing-seen.json) is read from that
+              project's file, found by the seen list's "folder" under the Solaris tree; without any such file the
+              page shows no machine health
+  plan days   "kaggle.status_plan_days" in <pack>/.memory/config.json, else <pack>/defaults.json (default 3): plan
+              items from the start of the day that many days back are listed in full, older closed ones counted
   costs       <pack>/.memory/spend.jsonl, one JSON line per cost other than Claude Code:
               {"day": "YYYY-MM-DD", "category": "cloud GPU", "usd": 1.5, "what": "<what it paid for>"}
   Claude      the project's Claude Code spend per day from solaris.tools.ai_spend (list-price estimates), run in the
@@ -70,8 +79,22 @@ and live data are escaped.
     "summary": "...",                          the state in a few plain sentences, under the headline table
     "notes": ["...", ...],
     "owner_actions": ["...", ...],             what the owner must do (none: nothing)
+    "outlook": {"at": "<ISO>", "lines": [{"when": "in 3 days", "score": "0.45-0.47", "rank": "#40-80",
+                "basis": "..."}]},             the expected best score and rank; when: "in N days" (dated from
+                                               "at"), a day, "final" or any text
+    "lineage": [{"entry": "236", "score": "0.451", "gain": "+0.007", "origin": "own|public", "what": "..."}],
+                                               the new bests, oldest first; a missing gain is the step from the
+                                               entry before; the gains are summed for own work and public material
+    "tracks": [{"name": "...", "state": "running|paused|done|dropped", "last_gain": "YYYY-MM-DD", "note": "..."}],
+                                               one line per work track (last_gain null: none yet)
     "plan": [{"when": "YYYY-MM-DD HH:MM", "what": "...", "status": "done"}],   when: a day or a time, else any
-                                               text; done items older than three days are counted, not listed
+                                               text; an item older than the plan days (see above) is counted per
+                                               day, then per week, instead of listed, when its status starts with a
+                                               closed word (done, finished, complete(d), closed, dropped,
+                                               cancel(l)ed, skipped, superseded, replaced, retired, abandoned,
+                                               merged, rejected, no-go, n/a) and names no later step (next,
+                                               pending, to do, queued, waiting, awaiting); any other status, an
+                                               empty one included, stays listed; the JSON keeps them all
     "schedule": {"daily": [["HH:MM", "<tag>"], ...], "dated": [["YYYY-MM-DD HH:MM", "<tag>"], ...]},
     "labels": {"<tag>": "<label>"},            schedule labels (default: the tag, dashes as spaces)
     "daily_budget_usd": 60,                    the whole day's spend budget, drawn on the spending chart
@@ -121,8 +144,21 @@ MAX_BOARDS = 200
 TOP_TEAMS = 8
 SPEND_DAYS = 14
 IDEAS = 5
-# plan items with such a status are done; older ones are counted, not listed
+# plan items with such a status are drawn as done on the timeline
 DONE_RE = re.compile(r"\s*(done|complete|finished|cancel|dropped|skipped|superseded|retired)", re.I)
+# an older plan item is counted, not listed, only when its status starts with a closed word and names no later step;
+# any other status, an empty one included, keeps it listed
+CLOSED_RE = re.compile(r"\s*(done|finished|complete|completed|closed|dropped|cancell?ed|cancel|skipped|superseded|"
+                       r"replaced|retired|abandoned|merged|rejected|no.?go|n/a)(?![\w/-])", re.I)
+LATER_RE = re.compile(r"\b(next|pending|to.?do|queued|waiting|awaiting)\b", re.I)
+# days of plan items listed in full, unless the pack's setting says otherwise
+PLAN_DAYS, PLAN_DAYS_KEY = 3, "kaggle.status_plan_days"
+# best-score steps listed (the totals count them all); host health files, this project's and a sharing project's
+LINEAGE_ROWS = 10
+HEALTH, SEEN = "host-health.json", "resource-sharing-seen.json"
+# a machine's health reading older than this shows its age (hosthealth.py's stale_h)
+HEALTH_OLD_HOURS = 3
+ORIGINS = {"own": "Own work", "public": "Public material"}
 # color-blind-safe series colors (the Okabe-Ito palette); team lines skip its orange, too close to the gold line
 COLORS = ("#0072b2", "#e69f00", "#009e73", "#d55e00", "#56b4e9", "#cc79a7", "#7f7f7f", "#8c6d31")
 TEAM_COLORS = ("#0072b2", "#009e73", "#d55e00", "#56b4e9", "#cc79a7", "#7f7f7f", "#8c6d31", "#2b8c8c")
@@ -649,6 +685,111 @@ def read_ideas(path, n=IDEAS):
     return titles[-n:][::-1]
 
 
+def pack_setting(root, pack, key):
+    """A pack setting: <pack>/.memory/config.json wins over <pack>/defaults.json; None where neither sets it."""
+    for f in (os.path.join(root, pack, ".memory", "config.json"), os.path.join(root, pack, "defaults.json")):
+        try:
+            cfg = json.loads(read_text(f))
+        except (OSError, ValueError):
+            continue
+        if isinstance(cfg, dict) and key in cfg:
+            return cfg[key]
+    return None
+
+
+def plan_days(root, pack):
+    """The days of plan items listed in full: the pack's "kaggle.status_plan_days", else PLAN_DAYS."""
+    v = pack_setting(root, pack, PLAN_DAYS_KEY) if pack else None
+    if v is None:
+        return PLAN_DAYS
+    if isinstance(v, bool) or not isinstance(v, int) or v < 0:
+        warn(f'"{PLAN_DAYS_KEY}" must be a whole number of days, 0 or more: {PLAN_DAYS} used')
+        return PLAN_DAYS
+    return v
+
+
+def read_health(path):
+    """({host: record} of a host health file, each record with its own "checked" time or else the file's, None);
+    (None, None) without the file; (None, why) for one that cannot be read."""
+    if not os.path.exists(path):
+        return None, None
+    try:
+        doc = json.loads(read_text(path))
+        hosts = doc["hosts"]
+        if not isinstance(hosts, dict):
+            raise ValueError("no hosts object")
+    except Exception as e:
+        return None, f"{type(e).__name__}: {e}"
+    return {str(k): dict(v, checked=v.get("checked") or doc.get("checked")) for k, v in hosts.items()
+            if isinstance(v, dict)}, None
+
+
+def tree_root(root):
+    """The Solaris tree holding the project, the folder above its "projects" folder (resource-sharing's seen list
+    names a sharing project by its folder under it); None outside one."""
+    d = os.path.abspath(root)
+    while not home_or_above(d):
+        parent = os.path.dirname(d)
+        if os.path.basename(parent) == "projects":
+            return os.path.dirname(parent)
+        d = parent
+    return None
+
+
+def newer(a, b):
+    """Whether host health record a was checked after b (a record without a readable time is never newer)."""
+    try:
+        ta = iso(a["checked"])
+    except Exception:
+        return False
+    try:
+        return ta > iso(b["checked"])
+    except Exception:
+        return True
+
+
+def fleet(root, mem):
+    """The machines' health: {"rows": [[name, owner or None, record or None]], "bad": [health files that cannot be
+    read]} from this project's host health file and, for each machine another project shares with this one (the
+    seen list), from that project's file; the newer record wins for a machine in both. None when no file exists."""
+    own, why = read_health(os.path.join(mem, HEALTH))
+    found = own is not None or why is not None
+    bad = [os.path.relpath(os.path.join(mem, HEALTH), root)] if why else []
+    rows = {name: [None, rec] for name, rec in (own or {}).items()}
+    try:
+        seen = json.loads(read_text(os.path.join(mem, SEEN)))["hosts"]
+    except Exception:
+        seen = {}
+    sroot, files = tree_root(root), {}
+    for key, s in sorted(seen.items()) if isinstance(seen, dict) else ():
+        if not isinstance(s, dict):
+            continue
+        name, owner, rec = str(s.get("name") or key), str(s.get("owner") or s.get("project") or "") or None, None
+        folder = str(s.get("folder") or "")
+        proj = os.path.normpath(os.path.join(sroot, folder)) if sroot and folder else ""
+        if proj and proj.startswith(sroot + os.sep):
+            if proj not in files:
+                try:
+                    pack = pack_of(proj)
+                except PackError:
+                    pack = None
+                path = os.path.join(proj, pack, ".memory", HEALTH) if pack else ""
+                files[proj] = read_health(path) if path else (None, None)
+                if files[proj][1]:
+                    bad.append(os.path.relpath(path, sroot))
+            hosts, why = files[proj]
+            found = found or hosts is not None or why is not None
+            # the seen list keys a machine <owner>/<the owner's name for it>; its "name" may be this project's
+            rec = (hosts or {}).get(str(key).split("/", 1)[1] if "/" in str(key) else name)
+        if name in rows:
+            rows[name][0] = owner
+            if rec and (not rows[name][1] or newer(rec, rows[name][1])):
+                rows[name][1] = rec
+        else:
+            rows[name] = [owner, rec]
+    return {"rows": [[n, *v] for n, v in rows.items()], "bad": bad} if found else None
+
+
 # charts: static inline SVG in a 760-wide viewBox
 
 def nice_ticks(lo, hi, most=7):
@@ -941,13 +1082,23 @@ def short(name, width=24):
 
 # the page
 
-def table(head, rows, widths, cls="", lft=()):
+def table(head, rows, widths, cls="", lft=(), keep=0):
+    """An HTML table. With keep, a split table keeps that many rows on each side of a page break (its first and last
+    rows are held together), and a table too short for that does not split."""
     L = ' class="lft"'
     th = "".join(f'<th style="width:{w}%"{L if i in lft else ""}>{h}</th>'
                  for i, (h, w) in enumerate(zip(head, widths)))
-    body = "".join("<tr>" + "".join(f'<td{L if i in lft else ""}>{c}</td>' for i, c in enumerate(r)) + "</tr>"
-                   for r in rows)
-    return f'<table class="{cls}"><thead><tr>{th}</tr></thead><tbody>{body}</tbody></table>'
+    trs = ["<tr>" + "".join(f'<td{L if i in lft else ""}>{c}</td>' for i, c in enumerate(r)) + "</tr>" for r in rows]
+    if not keep:
+        return f'<table class="{cls}"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table>'
+    if len(trs) < 2 * keep:
+        cls = " ".join(c for c in cls.split() if c != "split")
+        return f'<table class="{cls}"><thead><tr>{th}</tr></thead><tbody>{"".join(trs)}</tbody></table>'
+    held = '<tbody style="break-inside:avoid">'
+    body = held + "".join(trs[:keep]) + "</tbody>" + ("<tbody>" + "".join(trs[keep:-keep]) + "</tbody>"
+                                                     if len(trs) > 2 * keep else "") \
+        + held + "".join(trs[-keep:]) + "</tbody>"
+    return f'<table class="{cls}"><thead><tr>{th}</tr></thead>{body}</table>'
 
 
 class Figures:
@@ -1122,6 +1273,113 @@ def headline(st, now, ctx):
     return "".join(out)
 
 
+def aged(t, now, after=24):
+    """" (N h old)" or " (N days old)" for a time over `after` hours ago, else ""."""
+    h = (now - t).total_seconds() / 3600
+    if h < after:
+        return ""
+    return f" ({h:.0f} h old)" if h < 48 else f" ({h / 24:.0f} days old)"
+
+
+def outlook_part(st, now, ctx):
+    """The expected best score and rank, a line per time, as of the outlook's "at"; "" without lines."""
+    ol = st.get("outlook") or {}
+    lines = ol.get("lines") or []
+    if not lines:
+        return ""
+    try:
+        at = iso(ol["at"])
+    except Exception:
+        at = None
+    rows = []
+    for x in lines:
+        x = x if isinstance(x, dict) else {"basis": x}
+        s = " ".join(str(x.get("when") or "").split())
+        t, has_time = when_of(s)
+        m = re.fullmatch(r"in (\d+) days?", s, re.I)
+        if s.lower() == "final":
+            when = "Final"
+        elif t:
+            when = fmt(t, "%a %b %-d %-I:%M %p") if has_time else t.strftime("%a %b %-d")
+        else:
+            when = rich(s[:1].upper() + s[1:])
+            if m and at:
+                when += f" ({fmt(at + timedelta(days=int(m.group(1))), '%a %b %-d')})"
+        rows.append([f'<span class="nw">{when}</span>', rich(x.get("score")), rich(x.get("rank")),
+                     rich(x.get("basis"))])
+    head = f"Outlook as of {fmt(at)} {ctx['tzl']}{aged(at, now)}" if at else "Outlook"
+    return f"<h3>{head}</h3>" + table(["When", "Score", "Rank", "Basis"], rows, [22, 13, 12, 53], "split compact",
+                                      lft=(3,))
+
+
+def tracks_part(st, now):
+    """One row per work track: its state, its last gain and how long ago, a note; "" without tracks."""
+    today, rows = now.astimezone(TZ).date(), []
+    for x in st.get("tracks") or []:
+        x = x if isinstance(x, dict) else {"name": x}
+        g = x.get("last_gain")
+        t, _ = when_of(g)
+        if t:
+            n = (today - t.date()).days
+            ago = " (today)" if n == 0 else f" ({n} day{'s' if n != 1 else ''} ago)" if n > 0 else ""
+            last = f'<span class="nw">{t:%a %b %-d}{ago}</span>'
+        else:
+            last = rich(g) if g not in (None, "") else "none yet"
+        rows.append([f"<b>{rich(x.get('name'))}</b>", rich(x.get("state")), last, rich(x.get("note"))])
+    if not rows:
+        return ""
+    return "<h3>Work Tracks</h3>" + table(["Track", "State", "Last gain", "Note"], rows, [20, 11, 21, 48],
+                                          "split compact", lft=(0, 3))
+
+
+def signed(v):
+    """A gain such as "+0.007" or "−0.002" as a number, else None."""
+    return num(str(v).replace("+", "").replace("−", "-")) if v not in (None, "") else None
+
+
+def lineage_part(st):
+    """The chain of new bests, the newest LINEAGE_ROWS of it, and the gains summed for own work and public material
+    over all of it; "" without one."""
+    chain = [x if isinstance(x, dict) else {"what": x} for x in st.get("lineage") or []]
+    if not chain:
+        return ""
+    p = places(*(x.get(k) for x in chain for k in ("score", "gain") if x.get(k) not in (None, "")))
+    rows, sums, prev = [], {}, None
+    for x in chain:
+        s, g, shown = num(x.get("score")), signed(x.get("gain")), rich(x.get("gain"))
+        # a step without its gain: the rise over the entry before
+        if g is None and s is not None and prev is not None and x.get("gain") in (None, ""):
+            g = s - prev
+            shown = f"{g:+.{p}f}"
+        prev = s if s is not None else prev
+        origin = " ".join(str(x.get("origin") or "").split()).lower()
+        if g is not None:
+            k = origin if origin in ORIGINS else "other"
+            n, v = sums.get(k, (0, 0.0))
+            sums[k] = (n + 1, v + g)
+        rows.append([rich(x.get("entry")), rich(x.get("score")), shown, ORIGINS.get(origin) or rich(x.get("origin")),
+                     rich(x.get("what"))])
+    out = ["<h3>Best-Score Lineage</h3>"]
+    if sums:
+        first = chain[0]
+        base = f" since entry {rich(first.get('entry'))} ({rich(first.get('score'))})" if first.get("gain") in (
+            None, "") and first.get("entry") not in (None, "") and first.get("score") not in (None, "") else ""
+        parts = []
+        for k, label in (("own", "own work"), ("public", "public material"), ("other", "unmarked")):
+            n, v = sums.get(k, (0, 0.0))
+            if n:
+                parts.append(f"{label} {v:+.{p}f} in {n} step{'s' if n != 1 else ''}")
+            elif k != "other":
+                parts.append(f"{label} none")
+        out.append(f"<p><b>Gains{base}:</b> {'; '.join(parts)}.</p>")
+    if len(rows) > LINEAGE_ROWS:
+        out.append(f'<p class="note">The newest {LINEAGE_ROWS} of {len(rows)} steps; the gains above count them '
+                   f'all.</p>')
+    out.append(table(["Entry", "Score", "Gain", "Source", "What"], rows[-LINEAGE_ROWS:], [9, 10, 10, 15, 56],
+                     "split compact", lft=(4,)))
+    return "".join(out)
+
+
 def board_section(ctx, fig):
     pg, b = ctx["progress"], ctx["board"]
     if not pg:
@@ -1153,6 +1411,31 @@ def board_section(ctx, fig):
     return "".join(parts)
 
 
+def untagged(v):
+    """A status as plain text: its <b>, <i> or <code> tags left out."""
+    return re.sub(r"<[^>]*>", "", str(v or ""))
+
+
+def closed(status):
+    """Whether a plan item's status closes it: it starts with a closed word (CLOSED_RE) and names no later step."""
+    s = untagged(status)
+    return bool(CLOSED_RE.match(s)) and not LATER_RE.search(s)
+
+
+def plan_rollup(older, cut):
+    """Rows (day or week, closed items) of the closed plan items before cut, newest first: one per day for the week
+    before cut, then one per week from Monday to Sunday."""
+    by_day = cut.date() - timedelta(days=7)
+    groups = {}
+    for t, _, _, _ in older:
+        d = t.date()
+        mon = d - timedelta(days=d.weekday())
+        span = (d, d) if d >= by_day else (mon, min(mon + timedelta(days=6), by_day - timedelta(days=1)))
+        groups[span] = groups.get(span, 0) + 1
+    return [[f'<span class="nw">{a:%a %b %-d}{"" if a == b else f" to {b:%a %b %-d}"}</span>', str(n)]
+            for (a, b), n in sorted(groups.items(), reverse=True)]
+
+
 def plan_section(st, now, ctx, fig):
     items = []
     for i, x in enumerate(st.get("plan") or []):
@@ -1160,10 +1443,13 @@ def plan_section(st, now, ctx, fig):
         t, has_time = when_of(x.get("when"))
         items.append((t, has_time, i, x))
     items.sort(key=lambda it: (it[0] is None, it[0] or now, it[2]))
-    recent = now - timedelta(days=3)
-    shown = [it for it in items if not DONE_RE.match(str(it[3].get("status") or "")) or it[0] is None
-             or it[0] >= recent]
-    hidden = len(items) - len(shown)
+    # the last days in full, from the start of the day that many days back; of the older items only the closed ones
+    # are counted instead
+    cut = datetime.combine(now.astimezone(TZ).date() - timedelta(days=ctx.get("plan_days", PLAN_DAYS)), dtime(),
+                           tzinfo=TZ)
+    keep = [it[0] is None or it[0] >= cut or not closed(it[3].get("status")) for it in items]
+    shown = [it for it, k in zip(items, keep) if k]
+    older = [it for it, k in zip(items, keep) if not k]
     parts = []
     tzl = ctx["tzl"]
     if shown:
@@ -1182,11 +1468,15 @@ def plan_section(st, now, ctx, fig):
             rows.append([str(n), f'<span class="nw">{when}</span>', rich(x.get("what")), rich(x.get("status"))])
         parts.append(table(["#", f"When ({tzl})", "What", "Status"], rows, [5, 19, 60, 16], "split compact",
                            lft=(2, 3)))
-        if hidden:
-            parts.append(f'<p class="note">{hidden} done item{"s" if hidden != 1 else ""} older than three days '
-                         f'{"are" if hidden != 1 else "is"} left out (they stay in the status JSON).</p>')
+    elif older:
+        parts.append(f"<p>No plan items since {cut:%a %b %-d}.</p>")
     else:
         parts.append("<p>No plan items yet.</p>")
+    if older:
+        parts.append(f'<h3>Earlier Plan Items</h3><p class="note">The closed items before {cut:%a %b %-d}, counted '
+                     f'by day and then by week; the status JSON keeps them in full.</p>'
+                     + table(["Day or week", "Closed items"], plan_rollup(older, cut), [60, 40], "split compact",
+                             lft=(0,)))
     if ctx["events"]:
         labels = st.get("labels") or {}
         parts.append("<h3>Coming Schedule</h3>" + table([f"When ({tzl})", "Event"], [
@@ -1235,7 +1525,7 @@ def spend_section(st, ctx, fig):
         parts.append("<h3>Largest Costs in the Last 7 Days</h3>" + table(
             ["Day", "Category", "What", "Cost"],
             [[f'<span class="nw">{d:%a %b %-d}</span>', E(c), E(w), usd(v)] for d, c, v, w in big],
-            [14, 18, 56, 12], "compact", lft=(1, 2)))
+            [14, 18, 56, 12], "split compact", lft=(1, 2), keep=2))
     return "".join(parts)
 
 
@@ -1277,9 +1567,11 @@ def resource_section(st, now, ctx):
         rows.append([f'<b class="nw">{E(name)}</b>', "machine", E(str(h.get("gpus") or "")) if h else "",
                      lease_text(end, now) if end else NA, "",
                      "lease ended" if end and end < now else "leased" if end else "in the host list", ""])
+    health = fleet_part(ctx, now)
     if not rows:
         return "<p>No resources listed yet.</p>" + ("" if ctx["hosts"] is not None else
-                                                   f'<p class="note">Host list ({E(ctx["hosts_rel"])}): {NA}.</p>')
+                                                   f'<p class="note">Host list ({E(ctx["hosts_rel"])}): {NA}.</p>') \
+            + health
     out = [table(["Name", "Kind", "What it is", f"From and until ({tzl})", "Cost", "Status", "Used for"], rows,
                  [12, 7, 24, 17, 9, 10, 21], "split compact", lft=(0, 2, 3, 6))]
     notes = []
@@ -1289,6 +1581,47 @@ def resource_section(st, now, ctx):
         notes.append(f"Lease ends read {fmt(ctx['lease_read']) if ctx['lease_read'] else 'at an unknown time'}.")
     if notes:
         out.append(f'<p class="note">{" ".join(notes)}</p>')
+    return "".join(out) + health
+
+
+def fleet_part(ctx, now):
+    """Each machine's health, busy share, GPUs seen of its total, check time and a short note; "" without a host
+    health file."""
+    fl = ctx.get("fleet")
+    if not fl:
+        return ""
+    rows = []
+    for name, owner, h in fl["rows"]:
+        who = E(owner) if owner else "this project"
+        if not h:
+            rows.append([f'<b class="nw">{E(name)}</b>', who, NA, "", "", "", "not in its health file"])
+            continue
+        health = " ".join(str(h.get("health") or "").split())
+        busy, gpus, seen = num(h.get("busy")), num(h.get("gpus")), num(h.get("gpus_visible"))
+        gpu = f"{seen:g} of {gpus:g}" if seen is not None and gpus is not None else f"{gpus:g}" if gpus else ""
+        try:
+            t = iso(h["checked"])
+            checked = f'<span class="nw">{fmt(t)}{aged(t, now, HEALTH_OLD_HOURS)}</span>'
+        except Exception:
+            checked = NA
+        # the thresholds crossed, as the check words them; without any, the readings behind them
+        notes = h.get("notes")
+        notes = [str(x) for x in (notes if isinstance(notes, list) else [notes]) if x not in (None, "")]
+        xid, temp = num(h.get("xid_new")), num(h.get("temp_max_c"))
+        notes = notes or ([f"{xid:g} new Xid error{'s' if xid != 1 else ''}"] if xid else []) + \
+            ([f"hottest GPU {temp:g} °C"] if temp is not None else [])
+        rows.append([f'<b class="nw">{E(name)}</b>', who,
+                     (E(health) if health == "ok" else f"<b>{E(health)}</b>") if health else NA,
+                     f"{(busy * 100 if busy <= 1 else busy):.0f}%" if busy is not None else "",
+                     f"<b>{gpu}</b>" if seen is not None and gpus is not None and seen < gpus else gpu, checked,
+                     "; ".join(rich(x) for x in notes)])
+    out = ["<h3>Machine Health</h3>" + table(["Machine", "Owner", "Health", "Busy", "GPUs seen",
+                                              f"Checked ({ctx['tzl']})", "Note"], rows,
+                                             [14, 13, 8, 7, 9, 18, 31], "split compact", lft=(0, 6))]
+    if not rows:
+        out = [f"<h3>Machine Health</h3><p>{NA}: no machine in the host health files.</p>"]
+    for path in fl["bad"]:
+        out.append(f'<p class="note">Host health ({E(path)}): {NA} (the file cannot be read).</p>')
     return "".join(out)
 
 
@@ -1330,7 +1663,8 @@ def build(st, now, ctx):
     fig = Figures()
     tzl = ctx["tzl"]
     sections = [
-        ("state", "Current State", headline(st, now, ctx)),
+        ("state", "Current State", headline(st, now, ctx) + outlook_part(st, now, ctx) + tracks_part(st, now)
+         + lineage_part(st)),
         ("board", "Leaderboard Progress", board_section(ctx, fig)),
         ("plan", "Plan and Timeline", plan_section(st, now, ctx, fig)),
         ("spending", "Spending", spend_section(st, ctx, fig)),
@@ -1350,7 +1684,8 @@ def build(st, now, ctx):
                f"{b['saved']} saved board snapshots, the newest {fmt(b['when'])}" if b else "no saved board snapshot",
                "no Kaggle API reads (offline build)" if ctx["offline"] else
                f"the submissions and the GPU week read at {fmt(now)}",
-               "the cost ledger and the session records (list-price estimates)", "the host list and lease ends",
+               "the cost ledger and the session records (list-price estimates)",
+               "the host list, lease ends and host health" if ctx.get("fleet") else "the host list and lease ends",
                "the improvement suggestions"]
     head = f'''<!DOCTYPE html>
 <html lang="en">
@@ -1466,16 +1801,22 @@ def save_rev(path, rev):
 
 def check_shape(st):
     """Raise ValueError naming the first field of the wrong type."""
-    for k in ("notes", "owner_actions", "plan", "resources", "questions", "suggestions"):
+    for k in ("notes", "owner_actions", "plan", "resources", "questions", "suggestions", "lineage", "tracks"):
         if st.get(k) is not None and not isinstance(st[k], list):
             raise ValueError(f'"{k}" must be a list')
-    for k in ("schedule", "labels"):
+    for k in ("schedule", "labels", "outlook"):
         if st.get(k) is not None and not isinstance(st[k], dict):
             raise ValueError(f'"{k}" must be an object')
-    for k in ("plan", "resources", "suggestions", "questions"):
+    lines = (st.get("outlook") or {}).get("lines")
+    if lines is not None and not isinstance(lines, list):
+        raise ValueError('the outlook\'s "lines" must be a list')
+    for k in ("plan", "resources", "suggestions", "questions", "lineage", "tracks"):
         for x in st.get(k) or []:
             if not isinstance(x, (dict, str)):
                 raise ValueError(f'each item of "{k}" must be an object or a text')
+    for x in lines or []:
+        if not isinstance(x, (dict, str)):
+            raise ValueError('each of the outlook\'s "lines" must be an object or a text')
     if st.get("start") is not None:
         date.fromisoformat(str(st["start"]))
     int(st.get("rev") or 0)
@@ -1595,7 +1936,8 @@ def main(argv=None):
         events=events, project=project_name(root, pack) if pack else os.path.basename(root), tzname=tzname,
         tzl=rich(st.get("tz_label") or now.astimezone(TZ).strftime("%Z")), css=css,
         status_rel=rel(status_path), ledger_rel=rel(os.path.join(mem, "spend.jsonl")),
-        hosts_rel=rel(os.path.join(mem, "hosts.json")), ideas_rel=rel(os.path.join(mem, "improvements.md")))
+        hosts_rel=rel(os.path.join(mem, "hosts.json")), ideas_rel=rel(os.path.join(mem, "improvements.md")),
+        plan_days=plan_days(root, pack), fleet=safe("the host health", fleet, root, mem))
     sp = safe("the spending", spend_view, st, ctx, today)
     ctx["spend"] = dict(zip(("days", "cats", "data", "rows", "every"), sp)) if sp else None
     try:

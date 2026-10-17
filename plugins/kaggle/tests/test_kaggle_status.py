@@ -6,11 +6,13 @@ no network, no Chrome).
 
 import contextlib
 import gzip
+import importlib.util
 import io
 import json
 import os
 import re
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -60,6 +62,18 @@ IDEAS = """# Improvements
 
 def iso(t):
     return t.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def day(d, f="%a %b %-d"):
+    return (NOW + timedelta(days=d)).strftime(f)
+
+
+class Frozen(datetime):
+    """The tool's clock, stopped at NOW, so two builds give the same bytes."""
+
+    @classmethod
+    def now(cls, tz=None):
+        return NOW.astimezone(tz) if tz else NOW.replace(tzinfo=None)
 
 
 class Tmp(unittest.TestCase):
@@ -223,11 +237,12 @@ class PageTests(Tmp):
         self.assertIn("<td>$12.50</td>", page)
         self.assertIn("1. Approve a lease.", page)
         self.assertIn("<p>We climbed to <b>4th</b>.</p>", page)
-        # the plan: sorted by time, the old done item counted, free text last
+        # the plan: sorted by time, the old done item counted on its day, free text last
         plan = page[page.index('id="plan"'):page.index('id="spending"')]
         whats = re.findall(r'<td class="lft">([^<]*)</td><td class="lft">[^<]*</td></tr>', plan)
         self.assertEqual(whats, ["Earlier run", "Train fold 3", "Submit the blend", "Decide on fold 4"])
-        self.assertIn("1 done item older than three days is left out", plan)
+        old = (NOW - timedelta(days=9)).strftime("%a %b %-d")
+        self.assertIn(f'<td class="lft"><span class="nw">{old}</span></td><td>1</td></tr>', plan)
         self.assertIn("Leaderboard snapshot", plan)
         # the spending: Claude n/a without a Solaris checkout, the ledger's categories, the budget
         spend = page[page.index('id="spending"'):page.index('id="resources"')]
@@ -235,6 +250,9 @@ class PageTests(Tmp):
         self.assertIn("cloud GPU", spend)
         self.assertIn("budget $40", spend)
         self.assertIn('<td class="lft"><b>Total</b></td><td>$12.50</td><td>$62.50</td><td>$62.50</td>', spend)
+        # the five largest costs may split across pages, two rows held on each side
+        self.assertIn('<h3>Largest Costs in the Last 7 Days</h3><table class="split compact">', spend)
+        self.assertEqual(spend.count('<tbody style="break-inside:avoid">'), 2)
         # the resources: a JSON row joined with its host and lease, a host and a lease of their own
         res = page[page.index('id="resources"'):page.index('id="questions"')]
         self.assertIn("1x A100 80 GB", res)
@@ -367,7 +385,10 @@ class PageTests(Tmp):
         page = self.page.read_bytes()
         broken = {"plan not a list": {"plan": "S1 only"}, "item not an object": {"plan": [3]},
                   "rev not a number": {"rev": "three"}, "bad start": {"start": "soon"},
-                  "schedule not an object": {"schedule": []}}
+                  "schedule not an object": {"schedule": []}, "outlook not an object": {"outlook": ["0.45"]},
+                  "outlook lines not a list": {"outlook": {"lines": "0.45"}},
+                  "outlook line not an object": {"outlook": {"lines": [0.45]}},
+                  "lineage not a list": {"lineage": {"entry": "1"}}, "track not an object": {"tracks": [None]}}
         for case, fields in broken.items():
             self.write_status(**fields)
             st = self.status_file.read_bytes()
@@ -385,6 +406,294 @@ class PageTests(Tmp):
             self.assertIn(why, err)
         self.status_file.unlink()
         self.assertIn("cannot read the status JSON", self.run_tool()[2])
+
+
+class FieldTests(Tmp):
+    """The outlook, the best-score lineage, the work tracks, the machines' health and the plan's rollup."""
+
+    def preview(self, name="preview.html", tool=K):
+        out = self.tmp / name
+        with mock.patch.object(tool, "datetime", Frozen), contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()) as err:
+            code = tool.main(["--root", str(self.root), "--gateway", str(self.gateway), "--out", str(out)])
+        self.assertEqual((code, err.getvalue()), (0, ""))
+        return out.read_text()
+
+    def section(self, page, name):
+        return page[page.index(f'id="{name}"'):page.index(f'id="{SECTIONS[SECTIONS.index(name) + 1]}"')]
+
+    def head_tool(self):
+        """The tool as git's HEAD holds it, loaded from a copy in the temporary folder; the test is skipped where git
+        or HEAD's copy is missing (a plugin installed without the repository)."""
+        here = Path(K.__file__).resolve()
+
+        def git(*args):
+            r = subprocess.run(["git", "-C", str(here.parent), *args], capture_output=True, text=True, timeout=60)
+            if r.returncode:
+                raise OSError(r.stderr.strip())
+            return r.stdout
+
+        try:
+            top = Path(git("rev-parse", "--show-toplevel").strip()).resolve()
+            text = git("show", f"HEAD:{here.relative_to(top).as_posix()}")
+        except (OSError, ValueError, subprocess.SubprocessError) as e:
+            self.skipTest(f"no copy of kaggle_status.py at git's HEAD: {e}")
+        copy = self.tmp / "head" / "kaggle_status.py"
+        copy.parent.mkdir()
+        copy.write_text(text)
+        spec = importlib.util.spec_from_file_location("kaggle_status_head", copy)
+        tool = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(tool)
+        self.addCleanup(setattr, tool, "TZ", tool.TZ)
+        return tool
+
+    def test_without_the_new_fields_the_page_is_as_git_head_builds_it(self):
+        # the closed old items are hidden by both tools: HEAD's may count them in a note, this one in a table
+        def rollup_out(page):
+            page = re.sub(r'<p class="note">\d+ done items? older than three days (are|is) left out \(they stay in the '
+                          r'status JSON\)\.</p>', "", page)
+            return re.sub(r"<h3>Earlier Plan Items</h3>.*?</table>", "", page, flags=re.S)
+
+        def hidden(page):
+            m = re.search(r"(\d+) done items? older than three days", page)
+            return int(m.group(1)) if m else sum(map(int, re.findall(
+                r'<tr><td class="lft"><span class="nw">[^<]*</span></td><td>(\d+)</td></tr>', page)))
+
+        costs = re.compile(r"(<h3>Largest Costs in the Last 7 Days</h3>)(<table.*?</table>)", re.S)
+
+        def costs_unsplit(page):
+            # the one markup change allowed outside the plan: the costs table may split now, its first and last two
+            # rows held together
+            return costs.sub(lambda m: m.group(1) + re.sub(r"</?tbody[^>]*>", "", m.group(2)).replace(
+                '<table class="split compact">', '<table class="compact">', 1), page)
+
+        head = self.head_tool()
+        st = self.full_project()
+        st["plan"] += [{"when": (NOW - timedelta(days=d)).strftime("%Y-%m-%d %H:%M"), "what": f"Closed {d} days ago",
+                        "status": s} for d, s in ((5, "superseded by 4"), (6, "dropped"), (12, "Cancelled"),
+                                                  (20, "finished"), (21, "skipped"), (4, "retired"))]
+        seen = {"hosts": {"lord/gpu-9": {"key": "lord/gpu-9", "name": "gpu-9", "owner": "lord",
+                                         "folder": "projects/my/lord"}}}
+        # old items neither tool counts: no status, an empty one, unknown ones, one naming a later step
+        still = [{"when": (NOW - timedelta(days=d)).strftime("%Y-%m-%d %H:%M"), "what": f"Open {d} days ago",
+                  **({"status": s} if s is not None else {})}
+                 for d, s in ((5, None), (6, ""), (7, "partly done: 12 of 20"), (8, "provisioning; then onboarding"),
+                              (9, "141 / 142 test runs; 143 next"), (15, "Submitted 5 PM"))]
+        # as it is; with the new fields empty; with them null; with a seen list whose owners keep no health file;
+        # with older items still open
+        for extra, with_seen in (({}, False), ({"outlook": {"at": iso(NOW), "lines": []}, "lineage": [],
+                                                "tracks": []}, False),
+                                 ({"outlook": None, "lineage": None, "tracks": None}, False), ({}, True),
+                                 ({"plan": st["plan"] + still}, True)):
+            self.status_file.write_text(json.dumps(dict(st, **extra), indent=1))
+            if with_seen:
+                (self.mem / "resource-sharing-seen.json").write_text(json.dumps(seen))
+            before, after = self.preview("head.html", head), self.preview()
+            self.assertEqual(costs_unsplit(rollup_out(after)), costs_unsplit(rollup_out(before)), (extra, with_seen))
+            self.assertEqual((hidden(after), hidden(before)), (7, 7))
+            table = costs.search(after).group(2)
+            self.assertTrue(table.startswith('<table class="split compact">'), table)
+            self.assertEqual(table.count('<tbody style="break-inside:avoid">'), 2)
+            for h3 in ("Outlook", "Work Tracks", "Best-Score Lineage", "Machine Health"):
+                self.assertNotIn(f"<h3>{h3}", after)
+
+    def test_outlook_tracks_and_lineage_in_the_current_state(self):
+        self.boards()
+        at = NOW - timedelta(hours=30)
+        steps = [{"entry": "220", "score": "0.432", "origin": "public", "what": "a public notebook"},
+                 {"entry": "228", "score": "0.440", "gain": "+0.008", "origin": "public", "what": "a public set"},
+                 {"entry": "231", "score": "0.444", "origin": "own", "what": "our <b>reranker</b><script>"},
+                 {"entry": "236", "score": "0.451", "gain": "+0.007", "origin": "Public ", "what": "a fork"}]
+        self.write_status(
+            summary="Steady.",
+            outlook={"at": iso(at), "lines": [
+                {"when": "in 3 days", "score": "0.45-0.47", "rank": "#40-80", "basis": "two <i>own</i> runs"},
+                {"when": "2026-11-30", "score": "0.46", "rank": "#50", "basis": "the trend"},
+                {"when": "final", "score": "0.46-0.49", "rank": "#30-90", "basis": "the shake-up"}, "a plain line"]},
+            tracks=[{"name": "LoRA", "state": "paused", "last_gain": day(-10, "%Y-%m-%d"), "note": "no GPU"},
+                    {"name": "Reranker", "state": "running", "last_gain": None, "note": "first run"},
+                    {"name": "Blend", "state": "running", "last_gain": iso(NOW), "note": ""}, "Search"],
+            lineage=steps)
+        state = self.section(self.preview(), "state")
+        # after the headline table and the summary, in this order
+        heads = re.findall(r"<h3>([^<(]*)", state)
+        self.assertEqual([h.split(" as of")[0] for h in heads], ["Outlook", "Work Tracks", "Best-Score Lineage"])
+        self.assertLess(state.index("<p>Steady.</p>"), state.index("<h3>Outlook"))
+        # the outlook: as of its time, aged; "in N days" dated from it
+        self.assertIn(f"<h3>Outlook as of {at.strftime('%b %-d %-I:%M %p')} UTC (30 h old)</h3>", state)
+        self.assertIn(f'<td><span class="nw">In 3 days ({(at + timedelta(days=3)).strftime("%a %b %-d")})</span>'
+                      f'</td><td>0.45-0.47</td><td>#40-80</td><td class="lft">two <i>own</i> runs</td>', state)
+        self.assertIn('<span class="nw">Mon Nov 30</span></td><td>0.46</td>', state)
+        self.assertIn('<span class="nw">Final</span></td><td>0.46-0.49</td><td>#30-90</td>', state)
+        self.assertIn('<td class="lft">a plain line</td>', state)
+        # the tracks: the last gain and how long ago
+        self.assertIn(f'<td class="lft"><b>LoRA</b></td><td>paused</td><td><span class="nw">{day(-10)} (10 days '
+                      f'ago)</span></td><td class="lft">no GPU</td>', state)
+        self.assertIn("<td>running</td><td>none yet</td>", state)
+        self.assertIn(f'<span class="nw">{day(0)} (today)</span>', state)
+        self.assertIn('<td class="lft"><b>Search</b></td>', state)
+        # the lineage: a missing gain is the step from the entry before, the gains summed by origin
+        self.assertIn("<p><b>Gains since entry 220 (0.432):</b> own work +0.004 in 1 step; public material +0.015 in "
+                      "2 steps.</p>", state)
+        self.assertIn('<tr><td>231</td><td>0.444</td><td>+0.004</td><td>Own work</td><td class="lft">our <b>reranker'
+                      '</b>&lt;script&gt;</td></tr>', state)
+        self.assertIn("<tr><td>236</td><td>0.451</td><td>+0.007</td><td>Public material</td>", state)
+        self.assertIn("<tr><td>220</td><td>0.432</td><td></td><td>Public material</td>", state)
+        # a long chain: the newest steps listed, all of them summed; no own step says so
+        chain = [{"entry": str(i), "score": f"{0.30 + 0.01 * i:.2f}", "origin": "public"} for i in range(13)]
+        self.write_status(lineage=chain)
+        state = self.section(self.preview(), "state")
+        self.assertIn("own work none; public material +0.12 in 12 steps.", state)
+        self.assertIn("The newest 10 of 13 steps; the gains above count them all.", state)
+        self.assertEqual(len(re.findall(r"<td>Public material</td>", state)), 10)
+        self.assertNotIn("<td>2</td><td>0.32</td>", state)
+        self.assertIn("<td>3</td><td>0.33</td>", state)
+
+    def test_machine_health_from_this_project_and_the_sharing_project(self):
+        # a Solaris tree: this project and the one that shares its machines with it
+        sol = self.tmp / "sol"
+        (sol / "projects" / "my").mkdir(parents=True)
+        self.root = self.root.rename(sol / "projects" / "my" / "guest")
+        self.mem, self.status_file = self.root / "ai" / ".memory", self.root / "reports" / "status.json"
+        lord = sol / "projects" / "my" / "lord" / "aipack"
+        (lord / ".memory").mkdir(parents=True)
+        (lord / "manifest.json").write_text(PACK_MANIFEST)
+        self.write_status()
+        checked = NOW - timedelta(minutes=10)
+        (self.mem / "host-health.json").write_text(json.dumps({"schema": 1, "checked": iso(checked), "hosts": {
+            "gpu-1": {"health": "ok", "gpus": 8, "gpus_visible": 8, "busy": 0.97, "xid_new": 0, "temp_max_c": 71,
+                      "notes": [], "checked": iso(checked)},
+            "gpu-2": {"health": "bad", "gpus": 8, "gpus_visible": 6, "busy": 0.5, "xid_new": 2,
+                      "notes": ["GPU 6 <script>fenced"]},
+            "big-2": {"health": "ok", "gpus": 1, "gpus_visible": 1, "busy": 0.9, "checked": iso(NOW - timedelta(
+                hours=9))}}}))
+        (lord / ".memory" / "host-health.json").write_text(json.dumps({"schema": 1, "checked": iso(NOW), "hosts": {
+            "big-1": {"health": "warn", "gpus": 1, "gpus_visible": 1, "busy": 0.12, "notes": ["hot"],
+                      "checked": iso(NOW - timedelta(hours=5))},
+            "big-2": {"health": "warn", "gpus": 1, "gpus_visible": 1, "busy": 0.05, "xid_new": 1,
+                      "checked": iso(NOW)}}}))
+        seen = {"acked": iso(NOW), "hosts": {
+            "lord/big-1": {"key": "lord/big-1", "name": "big-1", "owner": "lord", "folder": "projects/my/lord"},
+            # this project calls the owner's big-2 lord/big-2; this project's own record of it is older
+            "lord/big-2": {"key": "lord/big-2", "name": "big-2", "owner": "lord", "folder": "projects/my/lord"},
+            "lord/big-3": {"key": "lord/big-3", "name": "big-3", "owner": "lord", "folder": "projects/my/lord"},
+            "far/x-1": {"key": "far/x-1", "name": "x-1", "owner": "far", "folder": "../../outside"}}}
+        (self.mem / "resource-sharing-seen.json").write_text(json.dumps(seen))
+        page = self.preview()
+        res = self.section(page, "resources")
+        self.assertIn("<h3>Machine Health</h3>", res)
+        rows = re.findall(r"<tr><td class=\"lft\"><b class=\"nw\">([^<]*)</b></td><td>([^<]*)</td>(.*?)</tr>", res)
+        # this project's file in its order, then the shared machines by owner and name
+        self.assertEqual([(n, o) for n, o, _ in rows], [("gpu-1", "this project"), ("gpu-2", "this project"),
+                                                        ("big-2", "lord"), ("x-1", "far"), ("big-1", "lord"),
+                                                        ("big-3", "lord")])
+        cells = {n: rest for n, _, rest in rows}
+        # the note: the thresholds crossed as the check words them, else the readings
+        self.assertEqual(cells["gpu-1"], f'<td>ok</td><td>97%</td><td>8 of 8</td><td><span class="nw">'
+                                         f'{checked.strftime("%b %-d %-I:%M %p")}</span></td><td class="lft">hottest '
+                                         f'GPU 71 °C</td>')
+        self.assertIn('<td><b>bad</b></td><td>50%</td><td><b>6 of 8</b></td>', cells["gpu-2"])
+        self.assertIn('<td class="lft">GPU 6 &lt;script&gt;fenced</td>', cells["gpu-2"])
+        # the newer record wins
+        self.assertIn('<td><b>warn</b></td><td>5%</td>', cells["big-2"])
+        self.assertIn('<td class="lft">1 new Xid error</td>', cells["big-2"])
+        self.assertIn("<td><b>warn</b></td><td>12%</td><td>1 of 1</td>", cells["big-1"])
+        self.assertIn("(5 h old)</span>", cells["big-1"])
+        for name in ("big-3", "x-1"):
+            self.assertIn('<td><span class="pending">n/a</span></td>', cells[name])
+            self.assertIn("not in its health file", cells[name])
+        self.assertIn("the host list, lease ends and host health;", page)
+        # a guest without a file of its own still sees the owner's; an unreadable file is named
+        (self.mem / "host-health.json").unlink()
+        (lord / ".memory" / "host-health.json").write_text("{not json")
+        res = self.section(self.preview(), "resources")
+        self.assertIn("<h3>Machine Health</h3>", res)
+        self.assertIn("No resources listed yet.", res)
+        self.assertIn("Host health (projects/my/lord/aipack/.memory/host-health.json): <span", res)
+        (lord / ".memory" / "host-health.json").unlink()
+        (self.mem / "host-health.json").write_text(json.dumps({"hosts": []}))
+        res = self.section(self.preview(), "resources")
+        self.assertIn("Host health (ai/.memory/host-health.json): <span", res)
+        self.assertEqual(res.count("not in its health file"), 4)
+
+    def test_a_status_closes_an_item_only_with_a_closed_word_first_and_no_later_step(self):
+        for s in ("done", "Done.", "<b>done</b>: no-go at 9 PM", "finished", "complete", "Completed 9 AM", "closed",
+                  "dropped from the day", "canceled", "Cancelled", "cancel", "skipped", "superseded by 3",
+                  "replaced by 4", "retired", "abandoned", "merged into 5", "rejected by the host", "NO-GO: alone",
+                  "no go", "n/a", "N/A now"):
+            self.assertTrue(K.closed(s), s)
+        for s in (None, "", "  ", "partly done: 12 of 20", "provisioning; then onboarding", "done-ish", "doneness",
+                  "141 / 142 test runs; 143 next", "done (review 2); review 3 next", "done, pending the score",
+                  "complete; to do: the README", "superseded; waiting for 9", "Submitted 5 PM", "read 0.451: new best",
+                  "started", "WIP", "TBD", "not done", "nogood", "n/applicable"):
+            self.assertFalse(K.closed(s), s)
+
+    def test_the_plan_lists_the_last_days_and_counts_only_older_closed_items(self):
+        (self.mem / "config.json").write_text(json.dumps({"kaggle.status_plan_days": 1}))
+        plan = [{"when": day(-30, "%Y-%m-%d"), "what": "Stale but open", "status": "<b>Pending</b> a reply"},
+                {"when": day(-20, "%Y-%m-%d 08:00"), "what": "Old run", "status": "done"},
+                {"when": day(-20, "%Y-%m-%d 09:00"), "what": "Old submit", "status": "Submitted 9 AM"},
+                {"when": day(-20, "%Y-%m-%d 10:00"), "what": "Old no-go", "status": "NO-GO: alone 1 / 1"},
+                {"when": day(-9, "%Y-%m-%d"), "what": "Nine days back", "status": "superseded by 3"},
+                {"when": day(-9, "%Y-%m-%d 12:00"), "what": "No status"},
+                {"when": day(-8, "%Y-%m-%d"), "what": "Empty status", "status": ""},
+                {"when": day(-7, "%Y-%m-%d"), "what": "Partly", "status": "partly done: 12 of 20"},
+                {"when": day(-7, "%Y-%m-%d 06:00"), "what": "Machine", "status": "provisioning; then onboarding"},
+                {"when": day(-6, "%Y-%m-%d"), "what": "Test runs", "status": "141 / 142 test runs; 143 next"},
+                {"when": day(-6, "%Y-%m-%d 06:00"), "what": "Review", "status": "done (review 2); review 3 next"},
+                {"when": day(-5, "%Y-%m-%d"), "what": "Five days back", "status": "<i>Cancelled</i>"},
+                {"when": day(-4, "%Y-%m-%d"), "what": "Not needed", "status": "n/a now"},
+                {"when": day(-4, "%Y-%m-%d 06:00"), "what": "Refused", "status": "rejected by the host"},
+                {"when": day(-2, "%Y-%m-%d 23:59"), "what": "Two days back", "status": "read 0.45"},
+                {"when": day(-1, "%Y-%m-%d"), "what": "Yesterday", "status": "done"},
+                {"when": day(1, "%Y-%m-%d"), "what": "Tomorrow", "status": "to do"},
+                {"when": "weekly", "what": "Weekly review", "status": "standing"}]
+        self.write_status(plan=plan)
+        text = self.status_file.read_text()
+        self.assertEqual(self.run_tool("--offline")[0], 0)
+        # never rewritten: only the rev rises
+        self.assertEqual(self.status_file.read_text(), text.replace('"rev": 3', '"rev": 4'))
+        page = self.section(self.page.read_text(), "plan")
+        whats = re.findall(r'<td class="lft">([^<]*)</td><td class="lft">', page)
+        # every older item that is not closed stays listed: open, empty, unknown or naming a later step
+        self.assertEqual(whats, ["Stale but open", "Old submit", "No status", "Empty status", "Partly", "Machine",
+                                 "Test runs", "Review", "Two days back", "Yesterday", "Tomorrow", "Weekly review"])
+        rows = re.findall(r'<tr><td class="lft"><span class="nw">([^<]*)</span></td><td>(\d+)</td></tr>', page)
+        d9 = NOW.date() - timedelta(days=9)
+        d20 = NOW.date() - timedelta(days=20)
+        mon9, mon20 = d9 - timedelta(days=d9.weekday()), d20 - timedelta(days=d20.weekday())
+        # by day for the week before the cut, then by week from Monday, newest first
+        self.assertEqual(rows, [(day(-4), "2"), (day(-5), "1"), (f"{mon9:%a %b %-d} to {d9:%a %b %-d}", "1"),
+                                (f"{mon20:%a %b %-d} to {mon20 + timedelta(days=6):%a %b %-d}", "2")])
+        self.assertIn(f"The closed items before {day(-1)}, counted by day and then by week; the status JSON keeps "
+                      f"them in full.", page)
+        # nothing since the cut and nothing open
+        self.write_status(plan=[plan[i] for i in (1, 3, 4)])
+        self.assertEqual(self.run_tool("--offline")[0], 0)
+        page = self.section(self.page.read_text(), "plan")
+        self.assertIn(f"<p>No plan items since {day(-1)}.</p><h3>Earlier Plan Items</h3>", page)
+        self.assertNotIn("<svg", page)
+
+    def test_the_plan_days_setting(self):
+        pack = self.mem.parent
+        self.assertEqual(K.plan_days(str(self.root), "ai"), 3)
+        (pack / "defaults.json").write_text(json.dumps({"kaggle.status_plan_days": 5}))
+        self.assertEqual(K.plan_days(str(self.root), "ai"), 5)
+        (self.mem / "config.json").write_text(json.dumps({"kaggle.status_plan_days": 0}))
+        self.assertEqual(K.plan_days(str(self.root), "ai"), 0)
+        for bad in ("two", -1, 1.5, True):
+            (self.mem / "config.json").write_text(json.dumps({"kaggle.status_plan_days": bad}))
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                self.assertEqual(K.plan_days(str(self.root), "ai"), 3, bad)
+            self.assertIn('"kaggle.status_plan_days" must be a whole number of days', err.getvalue())
+        # 0: today only
+        (self.mem / "config.json").write_text(json.dumps({"kaggle.status_plan_days": 0}))
+        self.write_status(plan=[{"when": day(-1, "%Y-%m-%d 12:00"), "what": "Yesterday", "status": "done"},
+                                {"when": day(0, "%Y-%m-%d 00:00"), "what": "Today", "status": "done"}])
+        page = self.section(self.preview(), "plan")
+        self.assertEqual(re.findall(r'<td class="lft">([^<]*)</td><td class="lft">', page), ["Today"])
+        self.assertIn(f'<span class="nw">{day(-1)}</span></td><td>1</td></tr>', page)
 
 
 class LiveTests(Tmp):
@@ -590,6 +899,25 @@ class PartTests(Tmp):
         self.assertIn('<b class="nw">gpu-1</b>', res)
         self.assertIn("1x A100 80 GB", res)
         self.assertNotIn("Host list (", res)
+
+    def test_a_split_table_can_keep_two_rows_on_each_side_of_a_break(self):
+        held = ' style="break-inside:avoid"'
+
+        def groups(n):
+            page = K.table(["N"], [[str(i)] for i in range(n)], [100], "split compact", keep=2)
+            return (re.match(r'<table class="([^"]*)">', page).group(1),
+                    [(h, re.findall(r"<td>(\d)</td>", body))
+                     for h, body in re.findall(r"<tbody((?: [^>]*)?)>(.*?)</tbody>", page)])
+
+        # too short to leave two rows on each side: it does not split
+        self.assertEqual(groups(3), ("compact", [("", ["0", "1", "2"])]))
+        self.assertEqual(groups(4), ("split compact", [(held, ["0", "1"]), (held, ["2", "3"])]))
+        self.assertEqual(groups(5), ("split compact", [(held, ["0", "1"]), ("", ["2"]), (held, ["3", "4"])]))
+        self.assertEqual(groups(6), ("split compact", [(held, ["0", "1"]), ("", ["2", "3"]), (held, ["4", "5"])]))
+        # without keep, the table as before
+        self.assertEqual(K.table(["N"], [["0"], ["1"]], [100], "split compact"),
+                         '<table class="split compact"><thead><tr><th style="width:100%">N</th></tr></thead><tbody>'
+                         '<tr><td>0</td></tr><tr><td>1</td></tr></tbody></table>')
 
     def test_improvement_titles_newest_first(self):
         path = self.mem / "improvements.md"

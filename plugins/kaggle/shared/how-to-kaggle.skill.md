@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Core of the playbook for competing on Kaggle with an autonomous agent team, read at every session start and after every compaction - the first hour and the competition facts sheet, Kaggle access, the kinds of contest and their skills, compute, phases, honest validation, daily submission discipline, agent organization, research, the base to stack changes on, a pitfalls log, and the settled decisions, each rule with the evidence behind it told as a generic example. The kind skills (kaggle-kind-*), kaggle-kernels (read before building a submission) and the tool skills hold the rest; Kaggle commands go through the kaggle-cli skill's gateway.
 ---
-_Rev. 28_
+_Rev. 29_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -107,7 +107,10 @@ Follow this sequence from minute one; each step's lead links the section with it
   - `reports/status.pdf`, the status page (`kaggle.rule.md`, OD41): `tools/kaggle_status.py` renders the master's
     `reports/status.json` plus live data, with board progress as score and rank over time and the resources each
     suggestion needs. Rebuild it in the same turn as any plan change, submission, score, verdict or launch, with
-    `--keep-rev` at the hourly pass; `.gitignore` keeps its private operations data out of git.
+    `--keep-rev` at the hourly pass; `.gitignore` keeps its private operations data out of git. Keep the JSON's
+    `outlook` (daily and after each new best), `lineage` (each new best, `own` or `public`, with its `date`) and
+    `tracks` (when a track starts, gains, stalls or stops) current, and close finished plan items so they roll up
+    (fields: the `kaggle-checks` skill).
 - **One folder per tool:** each project tool gets its own subfolder of the tools folder and a line in its README. <!-- OD15 -->
 - **Owner-facing times in the owner's timezone** (convert UTC deadlines and resets); machine logs stay UTC. Every
   written time comes from a real clock, never an estimate.
@@ -197,8 +200,8 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   end times, replacements, stuck hosts, results synced at each milestone, planning on extensions) follow the
   booking plugin attached to the project; paid cloud instances (lifecycle under standing permission, stop or
   delete, the hourly review, disk sizing, restarts that may find no capacity), the cloud-GPU plugin's run skill;
-  hosts shared with or by other projects (claims, thread caps, who else is on a host, lease ends for guests), the
-  `resource-sharing` plugin when attached.
+  hosts shared with or by other projects (claims, thread caps, who else is on a host, lease ends for guests, host
+  health by its file and TRIPPED/CLEARED lines, never hourly messages), the `resource-sharing` plugin when attached.
   Performance settings reset on reboot, so the hourly check re-applies them: CPU governor `performance` (images
   often boot with a power-saving one) and each GPU's power limit at the maximum allowed, not the default. <!-- C3 -->
 - **Paid hardware** only when no shared or leased machine fits the job, within the owner's daily cap.
@@ -236,7 +239,8 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   competition data, holdout definitions, current and fallback weights, anything a running job reads, and the
   write-up evidence ([Validation](#validation)). In the project folder, mark what can go (a `.disposable` marker or
   a rule in `housekeeping.json`) and let `solaris.tools.housekeeping` report sizes against the budget and prune;
-  ask the owner before deleting anything else.
+  data that can be re-created and is unlikely to be needed goes without asking, logged with how to get it back
+  (raw traces and submissions stay); ask the owner before deleting anything else.
 
 ## Phases
 
@@ -400,11 +404,14 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   later). Time budgets inside a kernel tie its output to the scoring machine's speed: calibrate each on the slowest
   hardware that will run it, and log how often it triggers.
 - **Parallel submissions are fine** (Kaggle scores each independently; leave a few minutes between submits).
+- **Never lose a day's slot because an earlier entry is still scoring:** submit the day's best anyway; if Kaggle
+  refuses (`kaggle_submit.py` exit 5), retry at every hourly and last-call check until the reset and report each
+  refusal; under a one-pending-entry limit, submit early in the Kaggle day. <!-- OD46 -->
 - **No blind resubmit:** after a submit errored, timed out or lost its output, read `competitions submissions
   <slug>` and `competitions submission-limits <slug>` before asking again: the first may have landed and spent its
   slot.
 - **Watch runs and scores from inside the session:** the session clock and the harness's own background commands (a
-  background sleep or poll that exits when the event lands, which wakes the session); no daemon, cron job or other
+  background poll that exits when the event lands, which wakes the session); no daemon, cron job or other
   watcher outside the session. <!-- C2 -->
   When a score lands, update the submission's README, the plan and the status page in the same turn, and add its
   lesson to the ideas backlog. The status page goes stale fast: at every push, check it is newer than the newest
@@ -421,7 +428,9 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   and a read-only reviewer attacks every result and kernel before it counts (the pack's `worker.agent.md` and
   `reviewer.agent.md`, `rules/subagents.rule.md`; harness moves and take-overs: the `handover` skill).
 - **Worker briefs** follow the subagents rule's task contract and ask for a "New ideas" block and a "for
-  instructions.md" block.
+  instructions.md" block. Each launch passes the model (below); a brief keeps each wait to about 270 seconds a
+  call, hands longer waits to a background script, and never starts a command with `sleep`.
+- **Calls the owner has not reserved** are stated as "doing X at T unless you object", never asked as a question.
 - **Adversarial review before every push to Kaggle** caught real problems every time (a missing image pin,
   uncalibrated thresholds, uncoupled fallbacks, duplicate training rows, a two-factor change that needed isolating).
 - **Cross-family review:** a model from another vendor reviews the daily plan and each pre-submit pick, read-only,
@@ -429,10 +438,11 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
 - **Outside reviews run through OpenCode:** its config is the truth for model features, verified with a real call;
   reviewers run with `yolo` and `permission: allow` inside a throwaway folder; OpenCode's own cost figure is the
   spend of record for those calls. <!-- OD19 -->
-- **Each worker runs on the model `kaggle.rule.md` sets for its kind of job,** passed on every launch, with the effort the
-  owner chose where the harness takes one per launch; where effort is session-wide (Claude Code workers inherit the session's),
-  workers run at the effort the owner chose for the master's session: no file fixes a level, and the master does
-  not ask for another.
+- **Each worker runs on the model `kaggle.rule.md` sets for its kind of job,** passed on every launch, at the
+  effort the owner chose (per launch where the harness takes one; else the master's session's, which Claude Code
+  workers inherit): no file fixes a level, and the master does not ask for another.
+- **After a stretch on a fallback model** (the usual one refused or unavailable), keep the schedule and the outside
+  reviews, and recheck that stretch's decisions when the usual model returns.
 - **Never idle:** an hourly check starts research on the next idea, launches experiments on free compute, keeps
   leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and rebuilds the
   status page.
@@ -475,6 +485,8 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
 - **A top-teams research track:** a research job on what the high-ranking teams do differently is always running or
   queued beside the daily work. It refreshes about every 12 hours and when the hourly pass flags a top-team move; its
   ranked ideas join the backlog, each recorded as taken, parked or rejected with the reason. <!-- OD39 -->
+- **Keep an own line moving:** when the hourly `own-line` flag fires, plan an own step (our own model or idea, not a
+  public fork), give it compute (taking back lent capacity under the sharing rule if needed) and record the decision.
 - **Feasibility -> experiment -> submission:** an idea reaches a submission only after an honest experiment with a go
   criterion set in advance, and a stop rule for cheap early exits (a one-day probe before a 100-GPU-hour retrain).
   Public-first mode: see [Validation](#validation) (two predictions).

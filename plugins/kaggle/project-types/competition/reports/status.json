@@ -6,6 +6,9 @@
   "start": "{{DATE}}",
   "phase": "Phase 0: the whole path in one day (an own baseline, a faithful fork, one-change probes); then {{ANSWER_GOAL}}",
   "summary": "Created {{DATE}}. Day-0 setup: the Kaggle sign-in, the competition facts sheet and its kind, the first board snapshot and public-notebook survey, the session clock, then the first plan.",
+  "outlook": {"at": "", "lines": []},
+  "lineage": [],
+  "tracks": [],
   "owner_actions": [
     "Accept the competition rules (needed before the data download and any submission): https://www.kaggle.com/competitions/{{ANSWER_COMPETITION}}/rules",
     "Verify your phone number (needed for GPU and internet notebooks): https://www.kaggle.com/settings",

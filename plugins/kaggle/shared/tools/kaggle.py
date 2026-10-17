@@ -1,4 +1,4 @@
-# rev. 6
+# rev. 7
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
@@ -26,7 +26,15 @@ ad-hoc tasks and the framework root) goes by the working directory only.
 With --sdk first it runs kaggle_sdk.py, beside this file, in that same
 environment instead of the CLI, with the rest of the arguments: read-only
 reads of data the CLI drops, through Kaggle's Python SDK. Its output and exit
-code pass through.
+code pass through. The reads (`--sdk <read> --help` for each one's options):
+
+    --sdk topic <id>                         one forum topic in full, replies nested, host badges
+    --sdk notebooks <slug> [--max N]         public notebooks with their best public scores
+    --sdk account [--hours H] ...            the account's quota, its kernels and their run states
+    --sdk submissions <slug> [--json]        the team's submissions: ref, date, status, public
+                                             score and the error text the CLI drops
+    --sdk dataset <owner/slug> [--json]      a dataset's current version number and its versions
+                                             (number, date, notes)
 
 Inside a project or task, two hooks from the tools beside this file run first,
 and neither can block or change a Kaggle command: an activity stamp for account
@@ -53,6 +61,17 @@ carries KAGGLE_SUBMIT_GATED=1, which that tool sets on its own submit call.
 Any other submit exits 3 the same way, before any install, stamp or Kaggle
 call, with a one-line pointer to that tool. KAGGLE_SHARE_QUIET does not bypass
 it; KAGGLE_SUBMIT_WITHOUT_GATE=1, the owner's explicit override, does.
+
+A submit that passes runs the same pinned CLI in its own Python with one hook
+(SUBMIT_HOOK): when Kaggle answers a submit call (StartSubmissionUpload,
+CreateSubmission, CreateCodeSubmission) with HTTP 400, 401, 403, 404 or 429
+(statuses where nothing was created) and an error message in the response
+body, which the CLI drops (it prints "400 Client Error: Bad Request ..."
+only), the hook adds one stderr line before the CLI's own: `kaggle gateway:
+Kaggle refused the submit (<status> <kind>): <message>`. Any other status
+(408, 409, 499, a 5xx, ...) gets no line: the submission may have landed. It
+reads the body's error message and kind only, never a header or the request,
+so no token reaches the output; the CLI's output and exit code are unchanged.
 
 Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
 exactly what the Kaggle CLI (or kaggle_sdk.py) printed.
@@ -91,6 +110,63 @@ PUSH_ENV = "KAGGLE_PUSH_WITHOUT_LEASE"
 SUBMIT_MARK = "KAGGLE_SUBMIT_GATED"
 SUBMIT_ENV = "KAGGLE_SUBMIT_WITHOUT_GATE"
 EXIT_REFUSED = 3
+# a submit runs the CLI through this in the venv's Python (python -c SUBMIT_HOOK <args>): it names Kaggle's reason
+# when Kaggle refuses a submit call, from the response body only; kaggle_submit.py reads that line (REFUSED_LINE)
+REFUSED_LINE = "kaggle gateway: Kaggle refused the submit"
+# the statuses whose answer means the submission was not created; 408, 409 (ALREADY_EXISTS, ABORTED), 499
+# (CANCELLED) and the rest may have landed, so they get no line (kaggle_submit.py reads only these too)
+REFUSED_STATUSES = (400, 401, 403, 404, 429)
+SUBMIT_HOOK = r"""
+import re, sys
+# python -c puts the working folder first, where a kaggle.py could shadow the CLI's package
+sys.path[:] = [p for p in sys.path if p not in ("", ".")]
+try:
+    from kagglesdk.kaggle_http_client import KaggleHttpClient
+    call = KaggleHttpClient.call
+except Exception:
+    # an SDK without this client: the CLI runs as it would on its own, with no reason line
+    KaggleHttpClient = call = None
+
+SUBMITS = ("StartSubmissionUpload", "CreateSubmission", "CreateCodeSubmission")
+REFUSED = @REFUSED_STATUSES@
+
+
+def text(value, width):
+    return " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", str(value or "")).split())[:width]
+
+
+def refusal(response):
+    # the body's {"error": {"code", "message", "status"}} (or those keys at the top); never a header
+    try:
+        body = response.json()
+    except Exception:
+        return None
+    err = body.get("error") if isinstance(body, dict) else None
+    err = err if isinstance(err, dict) else body if isinstance(body, dict) else {}
+    message = text(err.get("message"), 300)
+    return (text(err.get("status"), 40), message) if message else None
+
+
+def hooked(self, *args, **kw):
+    try:
+        return call(self, *args, **kw)
+    except Exception as e:
+        name = args[1] if len(args) > 1 else kw.get("request_name")
+        response = getattr(e, "response", None)
+        status = getattr(response, "status_code", None)
+        why = refusal(response) if name in SUBMITS and type(status) is int and status in REFUSED else None
+        if why:
+            kind = f" {why[0]}" if why[0] else ""
+            print(f"@REFUSED_LINE@ ({status}{kind}): {why[1]}", file=sys.stderr, flush=True)
+        raise
+
+
+if call is not None:
+    KaggleHttpClient.call = hooked
+sys.argv[0] = "kaggle"
+from kaggle.cli import main
+sys.exit(main())
+""".replace("@REFUSED_LINE@", REFUSED_LINE).replace("@REFUSED_STATUSES@", repr(REFUSED_STATUSES))
 
 
 def say(msg):
@@ -362,6 +438,8 @@ def main():
     # Kaggle call
     lease_gate(args)
     submit_gate(args)
+    # a submit that passed runs the CLI through SUBMIT_HOOK, which names Kaggle's reason when it refuses one
+    submit = not sdk and submit_call(args)
     if ctx is None:
         uv = find_uv()
         say("no project or task folder here - running the pinned CLI from a throwaway uv environment")
@@ -369,6 +447,8 @@ def main():
         uv_run = [uv, "run", "--quiet", "--no-project", "--python", ">=3.11", *withs]
         if sdk:
             os.execv(uv, [*uv_run, "python", tool, *args[1:]])
+        if submit:
+            os.execv(uv, [*uv_run, "python", "-c", SUBMIT_HOOK, *args])
         cmd = [*uv_run, "kaggle"]
         code = tee_leaderboard(None, cmd, args)
         if code is not None:
@@ -376,9 +456,9 @@ def main():
         os.execv(uv, [*cmd, *args])
     kaggle = ensure_env(ctx)
     stamp_activity(ctx, args)
-    if sdk:
+    if sdk or submit:
         python = str(kaggle.with_name("python"))
-        os.execv(python, [python, tool, *args[1:]])
+        os.execv(python, [python, tool, *args[1:]] if sdk else [python, "-c", SUBMIT_HOOK, *args])
     code = tee_leaderboard(ctx, [str(kaggle)], args)
     if code is not None:
         sys.exit(code)

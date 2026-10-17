@@ -74,6 +74,52 @@ print("SDK " + json.dumps(sys.argv[1:]))
 print("sdk note", file=sys.stderr)
 sys.exit(int(os.environ.get("FAKE_EXIT", "0")))
 """
+# stand-ins for the pinned CLI's packages, which a submit imports through the gateway's SUBMIT_HOOK: the SDK's HTTP
+# client answers each call with FAKE_STATUS and FAKE_BODY (a header carries a token that must never show), and the
+# CLI's main logs its arguments, makes the FAKE_CALL request and fails the way the real CLI does
+FAKE_SDK = """\
+import json, os
+
+
+class Response:
+    def __init__(self, status, body):
+        self.status_code, self.text = status, body
+        self.headers = {"Authorization": "Bearer SECRET-TOKEN", "Content-Type": "application/json"}
+
+    def json(self):
+        return json.loads(self.text)
+
+
+class HTTPError(Exception):
+    def __init__(self, message, response=None):
+        super().__init__(message)
+        self.response = response
+
+
+class KaggleHttpClient:
+    def call(self, service_name, request_name, request, response_type):
+        status = int(os.environ.get("FAKE_STATUS", "200"))
+        if status >= 400:
+            raise HTTPError(f"{status} Client Error: Bad Request for url: https://api.example.org/v1/{service_name}/"
+                            f"{request_name}", response=Response(status, os.environ.get("FAKE_BODY", "")))
+        return "ok"
+"""
+FAKE_CLI_MAIN = """\
+import json, os, sys
+from kagglesdk.kaggle_http_client import KaggleHttpClient
+
+
+def main():
+    with open({log!r}, "a") as f:
+        f.write(json.dumps(sys.argv[1:]) + "\\n")
+    try:
+        KaggleHttpClient().call("competitions.CompetitionApiService", os.environ.get("FAKE_CALL", "CreateSubmission"),
+                                None, None)
+    except Exception as e:
+        print(e, file=sys.stderr)
+        sys.exit(1)
+    print(sys.argv[0] + " ARGS " + json.dumps(sys.argv[1:]))
+"""
 
 
 def load(path):
@@ -120,6 +166,16 @@ class Env(unittest.TestCase):
         for name, text in (tools or {}).items():
             (d / name).write_text(textwrap.dedent(text))
         return d / "kaggle.py"
+
+    def cli_packages(self):
+        """The stand-in kaggle and kagglesdk packages a submit imports, on PYTHONPATH: the env to run with."""
+        site = self.tmp / "site"
+        for pkg, mod, text in (("kagglesdk", "kaggle_http_client", FAKE_SDK),
+                               ("kaggle", "cli", FAKE_CLI_MAIN.format(log=str(self.log)))):
+            (site / pkg).mkdir(parents=True, exist_ok=True)
+            (site / pkg / "__init__.py").write_text("")
+            (site / pkg / f"{mod}.py").write_text(text)
+        return {"PYTHONPATH": str(site)}
 
     def run_gw(self, args, cwd, gateway=GATEWAY, **env):
         p = subprocess.run([sys.executable, str(gateway), *args], cwd=cwd, capture_output=True, text=True,
@@ -512,17 +568,113 @@ class SubmitGateTests(Env):
 
     def test_the_mark_kaggle_submit_sets_on_its_own_call_passes(self):
         root = self.project()
-        code, out, err = self.run_gw(self.ARGS, root, **{SUBMIT.GATE_MARK: "1"})
-        self.assertEqual((code, out, err), (0, f"ARGS {json.dumps(self.ARGS)}\n", ""))
+        # a kaggle.py in the working folder must not shadow the CLI's package when the hook runs it
+        (root / "kaggle.py").write_text("raise SystemExit('shadowed')\n")
+        code, out, err = self.run_gw(self.ARGS, root, **{SUBMIT.GATE_MARK: "1"}, **self.cli_packages())
+        self.assertEqual((code, out, err), (0, f"kaggle ARGS {json.dumps(self.ARGS)}\n", ""))
         self.assertEqual(self.cli_runs(), [self.ARGS])
         self.assertEqual(self.stamps()[0]["command"], "competitions submit")
 
     def test_only_the_owners_explicit_override_lets_a_bare_submit_through(self):
         root = self.project()
-        code, out, err = self.run_gw(self.ARGS, root, KAGGLE_SUBMIT_WITHOUT_GATE="1")
-        self.assertEqual((code, out), (0, f"ARGS {json.dumps(self.ARGS)}\n"), err)
+        code, out, err = self.run_gw(self.ARGS, root, KAGGLE_SUBMIT_WITHOUT_GATE="1", **self.cli_packages())
+        self.assertEqual((code, out), (0, f"kaggle ARGS {json.dumps(self.ARGS)}\n"), err)
         self.assertIn("competitions submit without kaggle_submit.py (KAGGLE_SUBMIT_WITHOUT_GATE=1)", err)
         self.assertEqual(self.cli_runs(), [self.ARGS])
+
+    def test_a_submit_kaggle_refuses_names_the_reason_from_the_body_only(self):
+        root = self.project()
+        env = {SUBMIT.GATE_MARK: "1", **self.cli_packages()}
+        pending = "Submission not allowed: Your team already has 1 pending submissions"
+        body = json.dumps({"error": {"code": 400, "message": pending, "status": "FAILED_PRECONDITION"}})
+        printed = []
+        for call in ("CreateCodeSubmission", "CreateSubmission", "StartSubmissionUpload"):
+            code, out, err = self.run_gw(self.ARGS, root, FAKE_STATUS="400", FAKE_BODY=body, FAKE_CALL=call, **env)
+            printed.append(out + err)
+            self.assertEqual((code, out), (1, ""), err)
+            self.assertEqual(err, f"kaggle gateway: Kaggle refused the submit (400 FAILED_PRECONDITION): {pending}\n"
+                                  "400 Client Error: Bad Request for url: https://api.example.org/v1/"
+                                  f"competitions.CompetitionApiService/{call}\n")
+            # kaggle_submit.py reads that line as Kaggle's refusal
+            self.assertEqual(SUBMIT.refusal(code, err), f"400 FAILED_PRECONDITION: {pending}")
+        # the message alone at the top of the body, put on one line; a rate limit
+        top = json.dumps({"code": 429, "message": "Too many\nsubmits\x1b[0m today"})
+        code, out, err = self.run_gw(self.ARGS, root, FAKE_STATUS="429", FAKE_BODY=top, **env)
+        printed.append(out + err)
+        self.assertEqual(err.splitlines()[0], f"{GW.REFUSED_LINE} (429): Too many submits [0m today")
+        self.assertEqual(SUBMIT.refusal(code, err), "429: Too many submits [0m today")
+        # no line for a 5xx, a body without Kaggle's message, or a call that is no submit (the limits read after one);
+        # other 4xx statuses: test_only_statuses_where_nothing_was_created_name_a_refusal
+        for status, text, call in (("500", body, "CreateSubmission"), ("400", "<html>Bad</html>", "CreateSubmission"),
+                                   ("400", json.dumps({"error": {"code": 400}}), "CreateSubmission"),
+                                   ("400", body, "GetSubmissionLimits")):
+            code, out, err = self.run_gw(self.ARGS, root, FAKE_STATUS=status, FAKE_BODY=text, FAKE_CALL=call, **env)
+            printed.append(out + err)
+            self.assertEqual(code, 1)
+            self.assertNotIn("Kaggle refused", err, (status, text, call))
+            self.assertIsNone(SUBMIT.refusal(code, err))
+        self.assertEqual(self.cli_runs(), [self.ARGS] * 8)
+        # the header holding the token never reaches the output
+        self.assertNotIn("SECRET-TOKEN", "".join(printed))
+
+    def test_only_statuses_where_nothing_was_created_name_a_refusal(self):
+        root = self.project()
+        env = {SUBMIT.GATE_MARK: "1", **self.cli_packages()}
+
+        def submit(status, kind):
+            body = json.dumps({"error": {"code": status, "message": "the reason", "status": kind}})
+            return self.run_gw(self.ARGS, root, FAKE_STATUS=str(status), FAKE_BODY=body, FAKE_CALL="CreateSubmission",
+                               **env)
+
+        for status, kind in ((400, "INVALID_ARGUMENT"), (401, "UNAUTHENTICATED"), (403, "PERMISSION_DENIED"),
+                             (404, "NOT_FOUND"), (429, "RESOURCE_EXHAUSTED")):
+            code, _, err = submit(status, kind)
+            self.assertEqual(err.splitlines()[0], f"{GW.REFUSED_LINE} ({status} {kind}): the reason")
+            self.assertEqual(SUBMIT.refusal(code, err), f"{status} {kind}: the reason")
+        # a timeout, a submission that exists or was aborted, a cancelled call, or any other 4xx may have landed
+        for status, kind in ((408, "DEADLINE_EXCEEDED"), (409, "ALREADY_EXISTS"), (409, "ABORTED"),
+                             (499, "CANCELLED"), (410, "GONE"), (422, "UNPROCESSABLE")):
+            code, _, err = submit(status, kind)
+            self.assertEqual(code, 1)
+            self.assertNotIn("Kaggle refused", err, status)
+            self.assertIsNone(SUBMIT.refusal(code, err))
+        self.assertEqual(len(self.cli_runs()), 11)
+
+    def test_the_gateway_and_kaggle_submit_agree_on_the_refusal_statuses(self):
+        self.assertEqual(GW.REFUSED_STATUSES, (400, 401, 403, 404, 429))
+        self.assertEqual(SUBMIT.REFUSED_STATUSES, GW.REFUSED_STATUSES)
+        self.assertIn(f"REFUSED = {GW.REFUSED_STATUSES!r}\n", GW.SUBMIT_HOOK)
+        self.assertNotIn("@REFUSED_STATUSES@", GW.SUBMIT_HOOK)
+
+    def test_an_sdk_without_the_http_client_runs_the_plain_cli(self):
+        root = self.project()
+        env = self.cli_packages()
+        site = Path(env["PYTHONPATH"])
+        (site / "kagglesdk" / "kaggle_http_client.py").unlink()
+        (site / "kaggle" / "cli.py").write_text("import sys\n\n\ndef main():\n    print('plain ' + ' '.join(sys.argv))\n")
+        code, out, err = self.run_gw(self.ARGS, root, **{SUBMIT.GATE_MARK: "1"}, **env)
+        self.assertEqual((code, out, err), (0, "plain kaggle " + " ".join(self.ARGS) + "\n", ""))
+
+    def test_at_the_framework_root_a_submit_runs_through_the_hook_with_the_same_pins(self):
+        bindir = self.tmp / "bin"
+        bindir.mkdir()
+        (bindir / "uv").write_text(FAKE_RUN.format(python=sys.executable, log=str(self.log), name="uv"))
+        (bindir / "uv").chmod(0o755)
+        bare = self.tmp / "bare"
+        bare.mkdir()
+        self.run_gw(self.ARGS, bare, PATH=f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}",
+                    **{SUBMIT.GATE_MARK: "1"})
+        (run,) = self.cli_runs()
+        self.assertEqual(run[run.index("python"):], ["python", "-c", GW.SUBMIT_HOOK, *self.ARGS])
+        self.assertEqual([run[i + 1] for i, a in enumerate(run) if a == "--with"], GW.REQS)
+
+    def test_the_hook_is_valid_python_naming_the_line_kaggle_submit_reads(self):
+        compile(GW.SUBMIT_HOOK, "<submit hook>", "exec")
+        self.assertIn(GW.REFUSED_LINE, GW.SUBMIT_HOOK)
+        self.assertNotIn("@REFUSED_LINE@", GW.SUBMIT_HOOK)
+        self.assertRegex(f"{GW.REFUSED_LINE} (403 PERMISSION_DENIED): no", SUBMIT.REFUSED_RE)
+        for word in ("headers", "Authorization"):
+            self.assertNotIn(word, GW.SUBMIT_HOOK)
 
 
 class SdkTests(Env):
@@ -559,6 +711,12 @@ class SdkTests(Env):
         self.assertEqual(self.run_gw(args, root)[0], 0)
         self.assertEqual(self.cli_runs(), [["python", self.tool, *args[1:]]])
         self.assertFalse((root / "__data").exists())
+
+    def test_the_gateway_help_names_every_read(self):
+        sdk = load(TOOLS / "kaggle_sdk.py")
+        for read in sdk.READS:
+            self.assertIn(f"--sdk {read} ", GW.__doc__)
+        self.assertEqual(set(sdk.READS), {"topic", "notebooks", "account", "submissions", "dataset"})
 
     def test_framework_root_uses_the_same_pins(self):
         bindir = self.tmp / "bin"

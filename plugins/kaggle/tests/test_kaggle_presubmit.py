@@ -184,6 +184,64 @@ class ChangeTests(Check):
         self.assertIn("note: some topics could not be fetched (kaggle_forum.py exit 1)", out)
 
 
+class HostBadgeTests(Check):
+    def badge(self, tid, hosts):
+        """The forum's host badge on topic tid's read (the SDK read's host flag): true for the authors in hosts."""
+        key = f"--sdk topic {tid}"
+        doc = json.loads(self.table[key]["out"])
+        todo = [doc["topic"], *doc["comments"]]
+        while todo:
+            m = todo.pop()
+            m["host"] = m["authorName"] in hosts
+            todo += m.get("replies") or []
+        self.answer(key, json.dumps(doc))
+
+    def test_the_badge_is_trusted_and_a_badged_author_missing_from_the_config_is_named(self):
+        self.forum([{"id": 1, "title": "Welcome", "posted": 72, "author": "Host Hana"}])
+        self.reviewed()
+        self.config(hosts=["host hana"])
+        self.forum([{"id": 1, "title": "Welcome", "posted": 72, "author": "Host Hana",
+                     "comments": [("Nia Newhost", 0.5, "Pretrained weights are allowed.")]},
+                    {"id": 2, "title": "Data question", "posted": 1, "author": "Pat", "post": "Which files?",
+                     "comments": [("Nia Newhost", 0.4, "Use train.csv only."), ("Pat", 0.3, "Thanks")]},
+                    {"id": 3, "title": "Host notes", "posted": 0.5, "author": "Odo Host", "post": "Notes."},
+                    {"id": 4, "title": "Chat", "posted": 0.2, "author": "Quinn", "post": "Hi."}])
+        for tid in (1, 2, 3, 4):
+            self.badge(tid, {"Host Hana", "Nia Newhost", "Odo Host"})
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        host = out[out.index("HOST POSTS"):out.index("FORUM:")].splitlines()
+        self.assertEqual(host[:2], ["HOST POSTS: 3", '  WARNING: the forum badges these authors as hosts, and '
+                                    'config.json "hosts" does not name them (add them): Nia Newhost, Odo Host'])
+        for text in ("Pretrained weights are allowed.", "Use train.csv only.", "Notes."):
+            self.assertIn(f"      {text}", host)
+        self.assertIn("    new topic by Odo Host, ", "\n".join(host))
+        self.assertNotIn("Thanks", "\n".join(host))
+        self.assertNotIn("Chat", "\n".join(host))
+        (hits,) = [x for x in out.splitlines() if x.startswith("  [host post] ")]
+        self.assertEqual(sorted(hits[len("  [host post] "):].split("; ")),
+                         ['1 "Welcome"', '2 "Data question"', '3 "Host notes"'])
+        # once the config names them, no warning
+        self.config(hosts=["Host Hana", "Nia Newhost", "Odo Host"])
+        self.assertNotIn("WARNING", self.check()[1])
+
+    def test_badges_tell_host_posts_apart_without_a_config(self):
+        self.forum([{"id": 4, "title": "Ruling", "posted": 2, "author": "Hana", "post": "Rule change."},
+                    {"id": 5, "title": "Question", "posted": 2, "author": "Pat", "post": "Why?"}])
+        # a read without the badge flag (an SDK without the author type): host posts are not told apart
+        out = self.check()[1]
+        self.assertIn('HOST POSTS: no hosts named (config.json "hosts", "host_topics")', out)
+        self.assertNotIn("[host post]", out)
+        # the topics are still pending, so the next check reads them again, now with the badge
+        for tid in (4, 5):
+            self.badge(tid, {"Hana"})
+        out = self.check()[1]
+        self.assertIn("HOST POSTS: 1\n", out)
+        self.assertIn("(add them): Hana\n", out)
+        self.assertNotIn("no hosts named", out)
+        self.assertIn('[host post] 4 "Ruling"\n', out)
+
+
 class RateLimitTests(Check):
     def test_a_429_stops_the_reads_after_it(self):
         self.reviewed()

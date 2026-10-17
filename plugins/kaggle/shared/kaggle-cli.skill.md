@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 10_
+_Rev. 11_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -59,9 +59,20 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
   deleting `.venv-kaggle/` is a safe reset. Never `pip install kaggle`, `uv tool install
   kaggle`, or call a bare `kaggle` from PATH.
 - **SDK reads.** `<gateway> --sdk <read> <args>` runs one of the plugin's fixed, read-only SDK
-  reads (`tools/kaggle_sdk.py`: `topic <id>`, `notebooks <slug>`, `account`) with the same pins
-  and sign-in as the CLI. The plugin's tools use it, and an agent may run a read directly (say,
-  `--sdk topic <id>` to read one topic in full). No writes, and no SDK code of your own.
+  reads (`tools/kaggle_sdk.py`: `topic <id>`, `notebooks <slug>`, `account`, `submissions <slug>`,
+  `dataset <owner/slug>`) with the same pins and sign-in as the CLI. The plugin's tools use it, and
+  an agent may run a read directly (say, `--sdk topic <id>` to read one topic in full). No writes,
+  and no SDK code of your own.
+- **Submission errors.** `competitions submissions` drops Kaggle's error text. `<gateway> --sdk
+  submissions <slug> [--page-size N] [--json]` lists the latest N (default 20) with ref, date,
+  status, public score and the error description.
+- **Dataset versions.** The CLI shows no version numbers. `<gateway> --sdk dataset <owner/slug>
+  [--json]` prints the current version number and every version (number, date, notes), so you can
+  pin one by number.
+- **Refused submits.** When Kaggle refuses a submit with HTTP 400, 401, 403, 404 or 429 (for example "Your team already has 1
+  pending submissions"), the CLI prints only "400 Client Error: Bad Request". The gateway adds
+  `kaggle gateway: Kaggle refused the submit (<status> <kind>): <message>` from the response body
+  (never a header), and `kaggle_submit.py` records the attempt as refused (exit 5).
 - **Output.** Gateway notes go to stderr; stdout is the CLI's own output, and it can carry
   notices before the data: `Next Page Token = ...` on paginated commands, `Using competition:`,
   and an out-of-date warning once Kaggle ships past the pin. To parse, use `--format json` and
@@ -124,7 +135,8 @@ Corrections to it, verified against 2.2.4:
   takes a global forum's name). `forums topics show <id> --format json` has every comment but
   not the opening post; the table view (no `--format`) has the opening post and the reply tree
   but cuts each comment to 200 characters; `<gateway> --sdk topic <id>` reads one topic in full.
-  `tools/kaggle_forum.py` does all of this (the `kaggle-discussions` skill).
+  `tools/kaggle_forum.py` does all of this (the `kaggle-discussions` skill). No API route writes to
+  the forum: posting, replying and voting are the owner's, by hand on the web.
 - **`kernels output` trusts server file names:** 2.2.4 writes each file to `<-p dir>/<name the
   server sent>` without sanitizing it, so a crafted name can land outside `-p` (fixed upstream
   after 2.2.4). For someone else's kernel, list the files with `kernels files` first and fetch

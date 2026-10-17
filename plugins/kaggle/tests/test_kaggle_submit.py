@@ -19,6 +19,11 @@ from kaggle_standin import SLUG, Project  # noqa: E402
 
 KERNEL = "alice/demo-kernel"
 SUCCESS = "100%|##########| 1.00k/1.00k\n4 submissions remaining today.\nSuccessfully submitted to Demo Competition"
+# what the gateway prints when Kaggle refuses a submit: its own line (kaggle.py SUBMIT_HOOK), then the CLI's
+REFUSED = ("kaggle gateway: Kaggle refused the submit (400 FAILED_PRECONDITION): Submission not allowed: Your team "
+           "already has 1 pending submissions\n")
+CLI_400 = ("400 Client Error: Bad Request for url: https://api.kaggle.com/v1/competitions.CompetitionApiService/"
+           "CreateCodeSubmission\n")
 
 
 class Submit(Project):
@@ -194,6 +199,62 @@ class SubmitTests(Submit):
         self.assertEqual([a["result"] for a in attempts], ["unclear", "submitted"])
         self.assertIn("checked", attempts[1])
 
+    def test_a_submit_kaggle_refuses_is_recorded_refused_with_its_reason(self):
+        self.reviewed()
+        path = self.record()
+        reason = "400 FAILED_PRECONDITION: Submission not allowed: Your team already has 1 pending submissions"
+        self.answer(f"competitions submit {SLUG}", err=REFUSED + CLI_400, code=1)
+        code, out, _ = self.submit(path, "--go", "--review", "keep")
+        self.assertEqual(code, 5, out)
+        self.assertIn(f"REFUSED BY KAGGLE: {reason}\nNothing landed; recorded in submissions/s1/record.json", out)
+        self.assertNotIn("UNCLEAR", out)
+        (attempt,) = json.loads(path.read_text())["attempts"]
+        self.assertEqual((attempt["result"], attempt["exit"], attempt["reason"]), ("refused", 1, reason))
+        # nothing landed: the next --go needs no --checked
+        self.answer(f"competitions submit {SLUG}", SUCCESS)
+        code, out, _ = self.submit(path, "--go", "--review", "the pending one scored: submit again")
+        self.assertEqual(code, 0, out)
+        self.assertEqual([a["result"] for a in json.loads(path.read_text())["attempts"]], ["refused", "submitted"])
+        self.assertEqual(len(self.submits()), 2)
+
+    def test_only_kaggles_named_refusal_reads_as_refused(self):
+        self.reviewed()
+        # a 4xx without Kaggle's message, a 5xx, and the gateway's line on a run that did not fail: may have landed
+        for n, (err, exit_code) in enumerate(((CLI_400, 1), ("500 Server Error: Internal Server Error for url: x\n", 1),
+                                              (REFUSED, 0))):
+            self.answer(f"competitions submit {SLUG}", err=err, code=exit_code)
+            path = self.record(name=f"u{n}")
+            code, out, _ = self.submit(path, "--go", "--review", "keep")
+            self.assertEqual(code, 4, out)
+            self.assertIn("UNCLEAR", out)
+            self.assertEqual(json.loads(path.read_text())["attempts"][0]["result"], "unclear")
+        mod = self.module("kaggle_submit")
+        self.assertEqual(mod.refusal(1, "x\n" + REFUSED + "kaggle gateway: Kaggle refused the submit (429): slow\n"),
+                         "429: slow")
+        self.assertIsNone(mod.refusal(1, REFUSED.replace("(400 ", "(500 ")))
+
+    def test_only_statuses_where_nothing_was_created_read_as_refused(self):
+        self.reviewed()
+        mod = self.module("kaggle_submit")
+        for status in (400, 401, 403, 404, 429):
+            line = f"kaggle gateway: Kaggle refused the submit ({status} KIND): the reason\n"
+            self.assertEqual(mod.refusal(1, line + CLI_400), f"{status} KIND: the reason")
+        # a timeout, a submission that exists or was aborted, a cancelled call: it may have landed, so even a line
+        # naming one of these (no gateway prints it) reads as unclear, and the next --go needs --checked
+        for n, (status, kind) in enumerate(((408, "DEADLINE_EXCEEDED"), (409, "ALREADY_EXISTS"), (409, "ABORTED"),
+                                            (499, "CANCELLED"), (422, "UNPROCESSABLE"))):
+            err = f"kaggle gateway: Kaggle refused the submit ({status} {kind}): the reason\n{status} Client Error\n"
+            self.assertIsNone(mod.refusal(1, err))
+            self.answer(f"competitions submit {SLUG}", err=err, code=1)
+            path = self.record(name=f"c{n}")
+            code, out, _ = self.submit(path, "--go", "--review", "keep")
+            self.assertEqual(code, 4, out)
+            self.assertNotIn("REFUSED BY KAGGLE", out)
+            self.assertEqual(json.loads(path.read_text())["attempts"][0]["result"], "unclear")
+        code, out, _ = self.submit(path, "--go", "--review", "keep")
+        self.assertEqual(code, 3)
+        self.assertIn("ended 'unclear', so it may have landed", out)
+
     def test_an_interrupted_attempt_counts_as_unclear(self):
         self.reviewed()
         path = self.record(attempts=[{"at": "2026-10-01T10:00:00Z", "result": "submitting"}])
@@ -267,6 +328,9 @@ class SubmitTests(Submit):
         self.assertIn("This is a Kaggle write", mod.__doc__)
         self.assertIn("owner's approval", mod.__doc__)
         self.assertIn("standing grant", mod.__doc__)
+        doc = " ".join(mod.__doc__.split())
+        for code in ("0 submitted", "3 refused by the checks", "4 unclear result", "5 refused by Kaggle"):
+            self.assertIn(code, doc)
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ take the place of the SDK types the notebook search builds its requests from.
 """
 
 import contextlib
+import enum
 import io
 import json
 import os
@@ -159,9 +160,14 @@ def comment(cid, replies=(), when=WHEN):
               content=f"<p>comment {cid}</p>", replies=list(replies))
 
 
-def shown(cid, replies=(), when="2026-09-25T00:00:57.303000"):
-    return {"id": cid, "authorName": f"Author {cid}", "postDate": when, "votes": cid,
+def shown(cid, replies=(), when="2026-09-25T00:00:57.303000", host=None):
+    return {"id": cid, "authorName": f"Author {cid}", "postDate": when, "votes": cid, "host": host,
             "content": f"<p>comment {cid}</p>", "replies": list(replies)}
+
+
+# the SDK's discussions enum CommentAuthorType (kagglesdk/discussions/types/discussions_enums.py), in part
+AuthorType = enum.Enum("CommentAuthorType", {"COMMENT_AUTHOR_TYPE_UNSPECIFIED": 0, "HOST": 1, "TOPIC": 3,
+                                             "COMMENT": 4})
 
 
 class TopicTests(unittest.TestCase):
@@ -173,10 +179,24 @@ class TopicTests(unittest.TestCase):
         comments = [comment(1, [comment(2, [comment(3)])]), comment(4)]
         code, out, err = run(["topic", "5"], FakeApi(topic=self.topic, comments=comments))
         self.assertEqual((code, err), (0, ""))
+        # kagglesdk 0.1.37's topic types carry no author type: host is null, unknown
         self.assertEqual(json.loads(out), {
             "topic": {"id": 5, "title": "A topic", "authorName": "Alice", "postDate": "2026-09-25T00:00:57.303000",
-                      "votes": 3, "commentCount": 4, "content": '<p>Opening <a href="https://example.com">post</a></p>'},
+                      "votes": 3, "commentCount": 4, "host": None,
+                      "content": '<p>Opening <a href="https://example.com">post</a></p>'},
             "comments": [shown(1, [shown(2, [shown(3)])]), shown(4)]})
+
+    def test_the_host_badge_comes_from_the_author_type(self):
+        topic = NS(**vars(self.topic), author_type=AuthorType.HOST)
+        typed = [NS(**vars(comment(1, [NS(**vars(comment(2)), author_type=AuthorType.HOST)])),
+                    author_type=AuthorType.COMMENT),
+                 NS(**vars(comment(3)), author_type=AuthorType.COMMENT_AUTHOR_TYPE_UNSPECIFIED), comment(4)]
+        _, out, _ = run(["topic", "5"], FakeApi(topic=topic, comments=typed))
+        res = json.loads(out)
+        self.assertIs(res["topic"]["host"], True)
+        self.assertEqual(res["comments"], [shown(1, [shown(2, host=True)], host=False), shown(3, host=False),
+                                           shown(4)])
+        self.assertEqual([S.host_badge(NS(author_type=t)) for t in (1, 0, 3, None)], [True, False, False, None])
 
     def test_dates_print_as_the_cli_json_prints_them(self):
         comments = [comment(1, when=datetime(2026, 9, 25, 7, 5, 0)), comment(2, when=None)]
@@ -382,6 +402,133 @@ class AccountTests(unittest.TestCase):
                          (1, "", "kaggle_sdk: not signed in to Kaggle: sign in first\n"))
 
 
+SubmissionStatus = enum.Enum("SubmissionStatus", {"PENDING": 0, "COMPLETE": 1, "ERROR": 2})
+
+
+def submission(ref, status, score=None, error=None, description=None, hours_ago=1.0):
+    # an ApiSubmission as competition_submissions returns it, with more fields than the read keeps
+    return NS(ref=ref, total_bytes=10, date=WHEN - timedelta(hours=hours_ago), description=description or f"S{ref}",
+              error_description=error, file_name="submission.csv", public_score=score, private_score=None,
+              status=SubmissionStatus[status], submitted_by="Someone", submitted_by_ref="someone", team_name="T",
+              url="/s")
+
+
+class SubmissionsApi:
+    def __init__(self, subs=(), fail=False):
+        self.subs, self.fail, self.calls = list(subs), fail, []
+
+    def competition_submissions(self, competition, page_size=20):
+        self.calls.append((competition, page_size))
+        if self.fail:
+            raise http_error(403, "Permission denied")
+        return self.subs[:page_size]
+
+
+class SubmissionTests(unittest.TestCase):
+    SUBS = [submission(52, "ERROR", error="A system error. Please try resubmitting.\nIf it persists, contact us.",
+                       description="S9: lane 3", hours_ago=0.5),
+            submission(51, "PENDING", hours_ago=1), submission(50, "COMPLETE", score="0.451", hours_ago=3)]
+
+    def test_json_keeps_the_cli_keys_and_adds_the_error_text(self):
+        api = SubmissionsApi(self.SUBS)
+        code, out, err = run(["submissions", SLUG, "--json"], api)
+        self.assertEqual((code, err, api.calls), (0, "", [(SLUG, 20)]))
+        res = json.loads(out)
+        self.assertEqual((res["competition"], list(res)), (SLUG, ["competition", "fetched_at", "submissions"]))
+        self.assertRegex(res["fetched_at"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        self.assertEqual(res["submissions"][0], {
+            "ref": 52, "date": "2026-09-24T23:30:57.303000", "description": "S9: lane 3", "status": "ERROR",
+            "publicScore": None,
+            "errorDescription": "A system error. Please try resubmitting.\nIf it persists, contact us."})
+        self.assertEqual([(s["status"], s["publicScore"], s["errorDescription"]) for s in res["submissions"][1:]],
+                         [("PENDING", None, None), ("COMPLETE", "0.451", None)])
+
+    def test_text_names_each_submission_and_its_error(self):
+        code, out, _ = run(["submissions", SLUG, "--page-size", "2"], SubmissionsApi(self.SUBS))
+        lines = out.splitlines()
+        self.assertEqual(code, 0)
+        self.assertRegex(lines[0], rf"^{SLUG}: 2 submissions, newest first \(read .*Z\)$")
+        self.assertRegex(lines[1], r"^\s+52  2026-09-24 23:30  ERROR     -           S9: lane 3$")
+        self.assertEqual(lines[2].strip(),
+                         "error: A system error. Please try resubmitting. If it persists, contact us.")
+        self.assertRegex(lines[3], r"^\s+51  2026-09-24 23:00  PENDING   -           S51$")
+        self.assertEqual(len(lines), 4)
+        code, out, _ = run(["submissions", SLUG], SubmissionsApi([]))
+        self.assertEqual((code, out.splitlines()[0][:len(SLUG) + 15]), (0, f"{SLUG}: 0 submissions"))
+
+    def test_a_failed_read_and_bad_arguments(self):
+        self.assertEqual(run(["submissions", SLUG], SubmissionsApi(fail=True)),
+                         (1, "", "kaggle_sdk: 403 Forbidden: Permission denied\n"))
+        for argv in (["submissions"], ["submissions", "a/b"], ["submissions", SLUG, "--page-size", "0"],
+                     ["submissions", SLUG, "--page-size", "101"]):
+            code, out, err = run(argv)
+            self.assertEqual((code, out), (2, ""), argv)
+            self.assertIn("usage:", err)
+        self.assertEqual(S.parse(["submissions", SLUG, "--page-size", "100"]).page_size, 100)
+
+
+class DatasetApi:
+    """A signed-in KaggleApi whose client answers get_dataset."""
+
+    def __init__(self, dataset=None, fail=False):
+        self.dataset, self.fail, self.asked = dataset, fail, []
+
+    def get_dataset(self, req):
+        self.asked.append((req.owner_slug, req.dataset_slug))
+        if self.fail:
+            raise http_error(404, "Not found")
+        return self.dataset
+
+    def build_kaggle_client(self):
+        return contextlib.nullcontext(NS(datasets=NS(dataset_api_client=self)))
+
+
+def version(n, notes, day):
+    return NS(version_number=n, creation_date=datetime(2026, 10, day, 10, 9), creator_name="Someone",
+              creator_ref="someone", version_notes=notes, status="ready")
+
+
+class DatasetTests(unittest.TestCase):
+    DS = NS(ref="ann/priors", title="Priors", current_version_number=4, last_updated=datetime(2026, 10, 5, 10, 9),
+            versions=[version(3, "fix ids", 4), version(4, "Popularity prior\nv4", 5), version(1, None, 1)],
+            files=[], tags=[], owner_name="Ann")
+
+    def setUp(self):
+        p = mock.patch.dict(sys.modules, {"kagglesdk.datasets.types.dataset_api_service":
+                                          module("dataset_api_service", ApiGetDatasetRequest=Bag)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_the_current_version_and_every_version_newest_first(self):
+        api = DatasetApi(self.DS)
+        code, out, err = run(["dataset", "Ann/priors", "--json"], api)
+        self.assertEqual((code, err, api.asked), (0, "", [("Ann", "priors")]))
+        res = json.loads(out)
+        self.assertEqual((res["ref"], res["title"], res["currentVersion"], res["lastUpdated"]),
+                         ("Ann/priors", "Priors", 4, "2026-10-05T10:09:00"))
+        self.assertEqual(res["versions"], [
+            {"number": 4, "date": "2026-10-05T10:09:00", "notes": "Popularity prior\nv4"},
+            {"number": 3, "date": "2026-10-04T10:09:00", "notes": "fix ids"},
+            {"number": 1, "date": "2026-10-01T10:09:00", "notes": ""}])
+        code, out, _ = run(["dataset", "Ann/priors"], DatasetApi(self.DS))
+        lines = out.splitlines()
+        self.assertRegex(lines[0], r"^Ann/priors: version 4 is current; 3 versions, newest first \(read .*Z\)$")
+        self.assertEqual(lines[1:], ["  v4    2026-10-05 10:09  Popularity prior v4",
+                                     "  v3    2026-10-04 10:09  fix ids", "  v1    2026-10-01 10:09  "])
+
+    def test_a_failed_read_and_bad_refs(self):
+        self.assertEqual(run(["dataset", "ann/priors"], DatasetApi(fail=True)),
+                         (1, "", "kaggle_sdk: 404 Not Found: Not found\n"))
+        for argv in (["dataset"], ["dataset", "priors"], ["dataset", "a/b/c"], ["dataset", "../x"],
+                     ["dataset", "a/"]):
+            code, out, err = run(argv)
+            self.assertEqual((code, out), (2, ""), argv)
+            self.assertIn("usage:", err)
+        empty = NS(ref="", title=None, current_version_number=None, last_updated=None, versions=[])
+        code, out, _ = run(["dataset", "ann/priors"], DatasetApi(empty))
+        self.assertEqual((code, out.splitlines()[0][:43]), (0, "ann/priors: no current version given; 0 ver"))
+
+
 class ErrorTests(unittest.TestCase):
     def test_error_lines(self):
         self.assertEqual(S.error_text(http_error(429, "too\nmany")), "429 Too Many Requests: too many")
@@ -450,7 +597,8 @@ class SignInTests(unittest.TestCase):
                                capture_output=True, text=True, timeout=60)
         self.assertEqual((p.returncode, p.stderr), (0, ""))
         self.assertEqual(json.loads(p.stdout), {"topic": {"id": 8, "title": "T", "authorName": "A", "postDate": None,
-                                                          "votes": 0, "commentCount": 0, "content": ""},
+                                                          "votes": 0, "commentCount": 0, "host": None,
+                                                          "content": ""},
                                                 "comments": []})
 
 

@@ -1,4 +1,4 @@
-# rev. 5
+# rev. 6
 
 """kaggle_hourly: one scripted hourly pass of the read-only Kaggle checks, printed as flags.
 
@@ -29,8 +29,12 @@ file), read-only and unstamped (KAGGLE_SHARE_QUIET=1):
              one in the top 15 of the list, or at or better than --vs
   forum      topics the forum watch found and has not had shown and committed
              (kaggle_forum.py show, then commit). FLAG: any
-  subs       `competitions submissions <slug>`: those still scoring. FLAG: a
-             score landed, or a submission errored, since the last pass
+  subs       the gateway's `--sdk submissions <slug> --json` (one call, with
+             Kaggle's error text; a gateway that does not know that read, an
+             older copy, gets `competitions submissions <slug>` instead, without
+             error texts): those still scoring. FLAG: a score landed, or a
+             submission errored, since the last pass; each error as `<what>
+             ERROR: <Kaggle's error text, one line, 120 characters>`
   kernels    `kaggle_share.py status --json`: queued and running kernels, this
              project's and the others'. FLAG: a run of this project's ended
              since the last pass
@@ -71,6 +75,41 @@ file), read-only and unstamped (KAGGLE_SHARE_QUIET=1):
              TOTAL row notes as running or stopped at its $/h rate from its
              ISO start time) against "brev.daily_limit_usd". FLAG: a limit
              reached; with a limit, a running note it cannot count
+  alerts     this project's session alerts since the last pass (the last hour
+             on a first pass): <pack>/.memory/alerts.jsonl, one JSON object a
+             line that the framework's session hooks write ({ts, kind,
+             session, detail}; kind classifier-stop or unarmed-turn-end). No
+             file, no line. FLAG: any, with the step for its kind
+  peers      the masters of the projects this one shares machines with: the
+             owners of the machines in its seen list (resource-sharing-seen.json,
+             by the folder each record names, else by slug, never a folder whose
+             name starts with "_" or ".") and the guests its
+             resource-sharing.json share_with names (by slug; "*" names no one),
+             each from its <pack>/.memory: clock.json (the session clock's
+             heartbeat: state, wakes_at), handover-*.md, interactions/ and
+             alerts.jsonl. No peer, no line. Said, never flagged: a peer without
+             clock.json, and one paused on purpose (its newest handover note, by
+             the time in its name, has no "resumed at" line and is newer than
+             its clock.json; or its clock was stopped by --stop). FLAG: a clock
+             not armed whose file was last written over
+             "kaggle.peer_silent_minutes" (default 90) ago, or an armed clock
+             whose wakes_at is over 30 minutes past, either only when no file of
+             its interactions/ was written within those minutes (a long turn
+             writes its log); or a classifier-stop since the last pass: tell the
+             owner and never message the peer's master about it
+  plugins    the plugins <pack>/manifest.json lists with a version (a linked
+             one aside) against the same plugins in the Solaris checkout above
+             the project (the folder holding solaris/ and plugins/). No
+             checkout, no line. FLAG: an older copy, with both versions and
+             install-plugin's update, which the owner runs at the Solaris root
+  own-line   from the status JSON's "lineage": no own-work gain for
+             "kaggle.own_stall_days" days (default 3). An entry's gain time is
+             its optional "date" (an ISO date, from its start in this machine's
+             zone, or an ISO time), else when a pass first saw it; with no own
+             entry, the oldest dated entry, else when a pass first saw the
+             lineage. A line only with its FLAG, at most once a day
+  settings   FLAG: a setting this tool reads that is not a valid number (its
+             default is used)
   browsers   one `ps` read: this project's browserctl browsers and their age,
              orphaned report-render Chromes (their render.js gone) and a count
              of the other browsers, never flagged. FLAG: an orphaned render
@@ -80,39 +119,69 @@ file), read-only and unstamped (KAGGLE_SHARE_QUIET=1):
   429 is not one) stops the pass's Kaggle reads: one `rate-limited` FLAG line
   names the read and the checks skipped after it, instead of a FLAG per read.
 
-The git, agents and spend lines need an ai-pack (a project, not a task folder);
-agents and spend also a Solaris checkout above the project. Settings come from
-<pack>/.memory/config.json, else <pack>/defaults.json; days are the owner's
-("owner.timezone", as ai_spend reads it).
+The git, agents, spend, alerts, peers and plugins lines need an ai-pack (a
+project, not a task folder); agents and spend also a Solaris checkout above the
+project, peers a Solaris tree (a projects/ folder above the project). Settings
+come from <pack>/.memory/config.json, else <pack>/defaults.json; days are the
+owner's ("owner.timezone", as ai_spend reads it).
 
-Then the STATUS block, one line each, n/a where the tool cannot tell: pick
-(today's slots used of the status JSON's "daily_slots", pending submissions,
-the status JSON's "pick" text), score (our best public score, the medal lines
-of the newest board snapshot), rank, compute (the machines of
-<pack>/.memory/hosts.json, the nearest booking end in lease-ends.json, the
-machines other projects share with this one from resource-sharing's seen list
-with their nearest planned end, the Kaggle GPU week), stopped (this project's kernel runs that ended since the
-last pass; claims live on the hosts), spend (the spend line), for you (the
-status JSON's open questions and owner actions, and the number of FLAG lines).
---json prints the whole pass, block included, as one JSON object.
+Unchanged flags: a flag whose text is the same as at the last pass prints in
+full at most every "kaggle.flag_repeat_hours" hours (default 6; 0 prints every
+flag every pass). In between its check's line is marked (unchanged) instead of
+FLAG and one line `unchanged: <n> flags (<checks>)` follows the FLAGS list. A
+new or changed flag always prints in full. Three flags also count as changed
+when what they are about changes: review (any label of its host-post and page
+triggers, the other triggers by name, the host comments read in a topic, a page
+change's detail), forum (the pending topic ids, each changed one with its
+comment count) and account (its errors). The board, notebooks, subs, kernels,
+rate-limited, alerts, own-line and agents flags are news of their pass and
+always print.
+
+Then the STATUS block, one line each, under 300 characters (cut at a word's
+end), n/a where the tool cannot tell: pick (today's slots used of the status
+JSON's "daily_slots", pending submissions, the status JSON's "pick" text),
+score (our best public score, the medal lines of the newest board snapshot),
+rank, outlook (the status JSON's "outlook": its nearest line still ahead and its
+"final" line, each with score, rank and basis, and when it was set), progress
+(the status JSON's "lineage": the newest best, how many of the last 10 new
+bests were own work and how many public material with their summed gains, the
+newest own gain and its age, "stalled" past kaggle.own_stall_days), tracks (the
+status JSON's "tracks": how many run, pause, are done or dropped, and each
+running one with its last gain and note), compute (the machines of
+<pack>/.memory/hosts.json; the nearest booking end in lease-ends.json; the
+machines other projects share with this one from resource-sharing's seen list,
+and their nearest planned end; each machine with its health and GPU busy share,
+bad and warn first, from the reading the status page picks (kaggle_status.py's
+fleet): this project's <pack>/.memory/host-health.json or, for a shared one, its
+owner's file reached through the seen list, the one checked later where both
+have it; the Kaggle GPU week), stopped (this project's kernel runs that ended since the last pass;
+claims live on the hosts), spend (the spend line), for you (the status JSON's
+open questions and owner actions, the number of FLAG lines printed in full and
+of those unchanged). --json prints the whole pass, block included, as one JSON
+object ("flags" counts those printed in full, "unchanged" names the others,
+each marked "unchanged" in "checks").
 
 The first pass has no earlier one to compare submissions and kernel runs with.
 State: <context>/__data/kaggle/<slug>/hourly/last.json (the submissions with the
 time each score was first seen, this project's running kernels, the board
 snapshot the pass saw, and the board snapshot and notebook list it read fresh,
-which kaggle_presubmit.py reuses while they are young). Exit codes: 0 nothing
-needs a decision, 10 a FLAG was raised, 1 error, 2 bad usage. Stdlib only.
+which kaggle_presubmit.py reuses while they are young; a digest of each flag
+and what it is about, and when it last printed in full; the newest own entry of the lineage, when a pass
+first saw it and when its stall was last flagged). Exit codes: 0 nothing needs
+a decision (or only unchanged flags), 10 a FLAG printed in full, 1 error, 2 bad
+usage. Stdlib only.
 """
 
 import argparse
 import fnmatch
+import hashlib
 import importlib.util
 import json
 import os
 import re
 import subprocess
 import sys
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
@@ -153,8 +222,35 @@ FIRST_HOURS = 1.0
 BREV_TIME = re.compile(r"\d{4}-\d\d-\d\d[T ]\d\d:\d\d(?::\d\d(?:\.\d+)?)?(?:Z|[+-]\d\d:?\d\d)?")
 BREV_USD = re.compile(r"\$\s*(\d[\d,]*(?:\.\d+)?)")
 BREV_RATE = re.compile(r"\$\s*(\d[\d,]*(?:\.\d+)?)\s*(?:/\s*h(?:our|r)?\b|(?:per|an)\s+hour\b)", re.I)
-BLOCK = ("pick", "score", "rank", "compute", "stopped", "spend", "for you")
+BLOCK = ("pick", "score", "rank", "outlook", "progress", "tracks", "compute", "stopped", "spend", "for you")
 NA = "n/a"
+# a status block row stays under this many characters, cut at a word's end
+ROW_WIDTH = 300
+# pack settings with their defaults: how often an unchanged flag prints in full (0: every pass), how long a sharing
+# peer's clock may sit unarmed, and how many days without an own-work gain make a stall
+REPEAT_KEY, SILENT_KEY, STALL_KEY = "kaggle.flag_repeat_hours", "kaggle.peer_silent_minutes", "kaggle.own_stall_days"
+REPEAT_HOURS, SILENT_MINUTES, STALL_DAYS = 6.0, 90.0, 3.0
+# a peer's armed clock this far past its wake-up died without a write; the stall flag comes once a day (a little
+# under, so hourly passes do not drift past it)
+PEER_LATE_MINUTES = 30
+STALL_REPEAT_HOURS = 23
+# the progress row splits the last GAINS new bests by origin; a host's health checked longer ago is marked
+GAINS = 10
+HEALTH_OLD_HOURS = 3.0
+# a flag of these checks is news of this pass (or keeps its own pace), never held back as unchanged
+EVENT_CHECKS = ("board", "notebooks", "subs", "kernels", "rate-limited", "alerts", "own-line", "agents")
+SEEN_FILE = "resource-sharing-seen.json"
+# a handover note's name holds when it was written; a note without a "resumed at" line marks its project paused
+HANDOVER_RE = re.compile(r"handover-(\d{4}-\d\d-\d\d(?:-\d{4})?)")
+RESUMED_RE = re.compile(r"resumed\s+at", re.I)
+HEALTH_ORDER = {"bad": 0, "warn": 1}
+PLUGIN_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+WHEN_RE = re.compile(r"in\s+(\d+(?:\.\d+)?)\s*(hour|day|week)s?", re.I)
+DATE_RE = re.compile(r"\d{4}-\d\d-\d\d")
+# a gateway (or its kaggle_sdk.py) that does not know a read refuses it as bad usage (exit 2, argparse's words)
+USAGE_RE = re.compile(r"invalid choice|unrecognized arguments|^usage:", re.M)
+# Kaggle's error text of a submission, on one line in its flag
+ERROR_WIDTH = 120
 
 
 class HourlyError(Exception):
@@ -210,9 +306,10 @@ def shared_hosts(path):
     return [h for _, h in sorted(hosts.items()) if isinstance(h, dict)]
 
 
-def shared_part(shared, now, P):
-    # "N shared machines from <owners> (names); nearest shared end ..." for the compute field
-    names = [str(h.get("name") or "?") for h in shared]
+def shared_part(shared, now, P, labels=None):
+    # "N shared machines from <owners> (names); nearest shared end ..." for the compute field; labels: each machine's
+    # name with its health, in the order of shared
+    names = labels or [str(h.get("name") or "?") for h in shared]
     owners = sorted({str(h.get("owner") or h.get("project") or "?") for h in shared})
     text = (plural(len(names), "shared machine") + " from " + ", ".join(owners) + " (" + ", ".join(names[:4])
             + (f" +{len(names) - 4} more" if len(names) > 4 else "") + ")")
@@ -235,15 +332,573 @@ def plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
 
 
+def clip(text, width):
+    """text on one line, at most width characters: cut at a word's end, with "..." where cut."""
+    s = " ".join(re.sub(r"[\x00-\x1f\x7f]", " ", "" if text is None else str(text)).split())
+    if len(s) <= width:
+        return s
+    cut = s[:width - 3]
+    # a cut inside a word goes back to its start; only a single word longer than the width is cut inside
+    if s[width - 3] != " " and " " in cut:
+        cut = cut[:cut.rfind(" ")]
+    return cut.rstrip(" ,;:") + "..."
+
+
+def day_text(P, v):
+    """A date or time as "Oct 12" (a bare date as written, a time in this machine's zone); other text as given."""
+    s = clip(v, 40)
+    if DATE_RE.fullmatch(s):
+        try:
+            return date.fromisoformat(s).strftime("%b %d")
+        except ValueError:
+            return s
+    t = P.parse_time(s)
+    return P.local(t, "%b %d") if t else s
+
+
+def number_setting(P, pack, key, default, zero=False):
+    """(a pack's number setting, else default; a problem with it or None). zero: 0 is a valid value."""
+    value, src = pack_setting(P, pack, key) if pack else (None, None)
+    if value is None:
+        return default, None
+    if positive(value) or zero and value == 0 and not isinstance(value, bool):
+        return float(value), None
+    return default, f"{key} in {P._rel(src)} must be a {'non-negative' if zero else 'positive'} number: fix it"
+
+
+def projects_root(root):
+    """The Solaris tree the project sits in, as resource-sharing reads it: the folder holding its projects/, else
+    None."""
+    for d in Path(root).resolve().parents:
+        if d.name == "projects":
+            return d.parent
+    return None
+
+
+def solaris_checkout(P, root):
+    """The Solaris checkout above the project: the nearest folder at or above it holding solaris/ and plugins/."""
+    for d in P.walk_up(Path(root).resolve()):
+        if (d / "solaris").is_dir() and (d / "plugins").is_dir():
+            return d
+    return None
+
+
+def pack_or_none(P, d):
+    try:
+        return P.pack_of(d)
+    except P.PresubmitError:
+        return None
+
+
+def project_slugs(P, sroot):
+    """{slug: project root} of the projects in a Solaris tree (projects/<group>/<slug>/, or one level deeper), each by
+    the slug resource-sharing gives it: its resource-sharing.json "project", else its folder's name."""
+    def dirs(d):
+        try:
+            # "_archive" and other "_" or "." folders hold no live project
+            return sorted(c for c in d.iterdir() if c.is_dir() and not c.name.startswith((".", "_")))
+        except OSError:
+            return []
+
+    out = {}
+    for group in dirs(sroot / "projects"):
+        for d in dirs(group):
+            for cand in [d] if pack_or_none(P, d) else dirs(d):
+                pack = pack_or_none(P, cand)
+                if pack:
+                    cfg = P.read_json(pack / ".memory" / "resource-sharing.json", None)
+                    slug = cfg.get("project") if isinstance(cfg, dict) and cfg.get("project") else cand.name
+                    out.setdefault(str(slug), cand.resolve())
+    return out
+
+
+def peer_root(P, sroot, folder, slug, cache):
+    """A sharing peer's project root: <sroot>/<folder> when its seen-list record names the folder, else the project
+    with that slug (the tree scanned once into cache); None when neither is found or the folder leaves the tree."""
+    if folder:
+        path = (sroot / str(folder)).resolve()
+        return path if (sroot / "projects").resolve() in path.parents and path.is_dir() else None
+    if not slug:
+        return None
+    if "scan" not in cache:
+        cache["scan"] = project_slugs(P, sroot)
+    return cache["scan"].get(slug)
+
+
+def sharing_peers(P, root, pack):
+    """[(slug, project root)] of the projects this one shares machines with: the owners of the machines in its seen
+    list (resource-sharing-seen.json, by the folder each record names) and the guests its resource-sharing.json
+    shares with (by slug; "*" names no one in particular); [] outside a Solaris tree."""
+    sroot = projects_root(root)
+    if sroot is None:
+        return []
+    cache, mem, found = {}, pack / ".memory", {}
+    for h in shared_hosts(mem / SEEN_FILE):
+        slug = str(h.get("project") or h.get("owner") or "")
+        path = peer_root(P, sroot, h.get("folder"), slug, cache)
+        if path:
+            found.setdefault(slug or path.name, path)
+    cfg = P.read_json(mem / "resource-sharing.json", None)
+    guests = cfg.get("share_with") if isinstance(cfg, dict) else None
+    for slug in guests if isinstance(guests, list) else []:
+        if isinstance(slug, str) and slug.strip() and slug != "*" and slug not in found:
+            path = peer_root(P, sroot, None, slug, cache)
+            if path:
+                found[slug] = path
+    me, out, paths = Path(root).resolve(), [], set()
+    for slug, path in sorted(found.items()):
+        if path != me and path not in paths:
+            paths.add(path)
+            out.append((slug, path))
+    return out
+
+
+def read_alerts(path):
+    """[(time, kind, detail)] of a session alerts file (one JSON object a line, written by the framework's session
+    hooks), oldest first; None without the file. A line that is no such object is skipped."""
+    try:
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return None
+    out = []
+    for raw in text.splitlines():
+        try:
+            d = json.loads(raw)
+        except ValueError:
+            continue
+        t = parse_utc(str(d.get("ts"))) if isinstance(d, dict) else None
+        if t:
+            out.append((t, clip(d.get("kind") or "alert", 40), clip(d.get("detail"), 200)))
+    return sorted(out, key=lambda a: a[0])
+
+
+def alerts_line(P, pack, since):
+    """(line, flag or None) of this project's session alerts (<pack>/.memory/alerts.jsonl) since the last pass; None
+    without the file."""
+    alerts = read_alerts(pack / ".memory" / "alerts.jsonl")
+    if alerts is None:
+        return None
+    new = [a for a in alerts if a[0] > since]
+    if not new:
+        return f"none since {P.local(since)}", None
+    shown = "; ".join(f"{k} {P.local(t)}" + (f": {clip(d, 80)}" if d else "") for t, k, d in new[-3:])
+    line = f"{plural(len(new), 'session alert')} since {P.local(since)}: {shown}" + (
+        f" (+{len(new) - 3} earlier)" if len(new) > 3 else "")
+    kinds, steps = {k for _t, k, _d in new}, []
+    if "unarmed-turn-end" in kinds:
+        steps.append("a turn ended with no wake-up armed: arm the session clock before every turn end")
+    if "classifier-stop" in kinds:
+        steps.append("the safety classifier stopped the session: log it, and keep agent prompts, model output and "
+                     "third-party text out of the master's own context")
+    if kinds - {"unarmed-turn-end", "classifier-stop"}:
+        steps.append("read them and log what stopped the session")
+    return line, "; ".join(steps)
+
+
+def mtime(path):
+    try:
+        return datetime.fromtimestamp(Path(path).stat().st_mtime, timezone.utc)
+    except OSError:
+        return None
+
+
+def paused_note(mem, clock_time):
+    """The newest handover note (<mem>/handover-<YYYY-MM-DD-HHMM>.md, by the time in its name; Syncthing's
+    sync-conflict copies skipped) when it marks the project paused on purpose: it has no "resumed at" line and was
+    written after clock.json (clock_time; None without one). Else None."""
+    notes = []
+    for p in Path(mem).glob("handover-*.md"):
+        m = HANDOVER_RE.match(p.name)
+        if m and "sync-conflict" not in p.name and p.is_file():
+            notes.append((m.group(1), p.name, p))
+    if not notes:
+        return None
+    newest = max(notes)[2]
+    try:
+        text, written = newest.read_text(encoding="utf-8", errors="replace"), mtime(newest)
+    except OSError:
+        return None
+    if RESUMED_RE.search(text) or (clock_time and written and written <= clock_time):
+        return None
+    return newest
+
+
+def newest_log(mem):
+    """When the newest file of <mem>/interactions/ (the session's interaction log, one file per machine) was written,
+    else None."""
+    try:
+        times = [e.stat().st_mtime for e in os.scandir(Path(mem) / "interactions") if e.is_file()]
+    except OSError:
+        return None
+    return datetime.fromtimestamp(max(times), timezone.utc) if times else None
+
+
+def peer_state(P, slug, path, since, now, silent_minutes):
+    """(line part, problem or None) for a sharing peer's master, from its <pack>/.memory: clock.json (the session
+    clock's heartbeat), its handover notes, its interaction log and alerts.jsonl. A peer paused on purpose (its newest
+    handover note marks it paused, or its clock was stopped by --stop) is said, never flagged. A problem: a clock not
+    armed and last written over silent_minutes ago, or an armed one whose wake-up is over PEER_LATE_MINUTES past,
+    either unless its interaction log was written within silent_minutes (a long turn writes it); or a new
+    safety-classifier stop."""
+    pack = pack_or_none(P, path)
+    if pack is None:
+        return f"{slug}: no ai-pack found", None
+    mem, problems, late = pack / ".memory", [], None
+    clock_file = mem / "clock.json"
+    clock = P.read_json(clock_file, None)
+    clock = clock if isinstance(clock, dict) else None
+    written = mtime(clock_file) if clock else None
+    note = paused_note(mem, written)
+    if note:
+        return f"{slug}: paused ({note.name})", None
+    if clock is None:
+        part = f"{slug}: no clock.json"
+    else:
+        state = clip(clock.get("state"), 20) or "in no state"
+        wakes = P.parse_time(clock.get("wakes_at"))
+        written = written or now
+        if state == "stopped" and "--stop" in str(clock.get("stop_reason") or ""):
+            return f"{slug}: paused (clock stopped by --stop at {P.local(written)})", None
+        if state == "armed":
+            part = f"{slug}: clock armed" + (f", wakes {P.local(wakes)}" if wakes else "")
+            if wakes and (now - wakes).total_seconds() > PEER_LATE_MINUTES * 60:
+                late = f"its clock was due {P.local(wakes)} and has not fired or been armed again"
+        else:
+            part = f"{slug}: clock {state} at {P.local(written)}"
+            if (now - written).total_seconds() > silent_minutes * 60:
+                late = f"its clock {state} at {P.local(written)} and none armed since"
+    if late:
+        log = newest_log(mem)
+        if log and (now - log).total_seconds() <= silent_minutes * 60:
+            part += f"; working (its log written {P.local(log)})"
+        else:
+            problems.append(late)
+    stops = [a for a in read_alerts(mem / "alerts.jsonl") or [] if a[1] == "classifier-stop" and a[0] > since]
+    if stops:
+        t, _k, detail = stops[-1]
+        part += f"; {plural(len(stops), 'classifier stop')} since {P.local(since)}"
+        problems.append(f"a safety-classifier stop {P.local(t)}" + (f" ({clip(detail, 80)})" if detail else ""))
+    return part, (f"{slug}'s master looks stopped: " + "; ".join(problems)) if problems else None
+
+
+def peers_line(P, root, pack, since, now, silent_minutes):
+    """(line, flag or None) for the masters of the projects this one shares machines with; None without any. The
+    flag is for the owner: the peer's master is never messaged about it (a message can wake it into the same stop)."""
+    peers = sharing_peers(P, root, pack)
+    if not peers:
+        return None
+    parts, problems = [], []
+    for slug, path in peers:
+        part, problem = peer_state(P, slug, path, since, now, silent_minutes)
+        parts.append(part)
+        if problem:
+            problems.append(problem)
+    return "; ".join(parts), ("; ".join(problems) + ": tell the owner (never message the peer's master about it)"
+                              if problems else None)
+
+
+def version_key(v):
+    """A version's numbers padded to three ("0.10" -> (0, 10, 0)), for comparing; None when it is not one."""
+    m = re.fullmatch(r"v?(\d+(?:\.\d+)*)(?:[-+].*)?", str(v or "").strip())
+    if not m:
+        return None
+    nums = [int(x) for x in m.group(1).split(".")]
+    return tuple(nums + [0] * (3 - len(nums)))
+
+
+def plugins_line(P, root, pack):
+    """(line, flag or None) for the plugins the pack's manifest lists with a version against the same plugins in the
+    Solaris checkout above the project (a linked one is the checkout's own); None without a checkout or a plugin
+    found in both."""
+    sol = solaris_checkout(P, root)
+    manifest = P.read_json(pack / "manifest.json", None)
+    listed = manifest.get("plugins") if isinstance(manifest, dict) else None
+    if sol is None or not isinstance(listed, list):
+        return None
+    behind, checked = [], 0
+    for p in listed:
+        name = p.get("name") if isinstance(p, dict) else None
+        if not isinstance(name, str) or not PLUGIN_RE.fullmatch(name) or p.get("mode") == "link":
+            continue
+        src = P.read_json(sol / "plugins" / name / "manifest.json", None)
+        new = src.get("version") if isinstance(src, dict) else None
+        have, there = version_key(p.get("version")), version_key(new)
+        if have is None or there is None:
+            continue
+        checked += 1
+        if have < there:
+            behind.append((name, clip(p.get("version"), 20), clip(new, 20)))
+    if not checked:
+        return None
+    line = plural(checked, "attached plugin")
+    if not behind:
+        return line + " at the Solaris checkout's versions", None
+    project = Path(root).name
+    return (f"{line}, {len(behind)} older than the Solaris checkout: {', '.join(n for n, _a, _b in behind)}",
+            "older than the Solaris checkout: " + ", ".join(f"{n} {a} (the checkout has {b})" for n, a, b in behind)
+            + ": tell the owner; the update is install-plugin's, run at the Solaris root: "
+            + ", ".join(f'"update plugin {n} in {project}"' for n, _a, _b in behind))
+
+
+def fleet_health(S, root, pack):
+    """{machine: its health record} exactly as the status page picks them (kaggle_status.fleet): this project's
+    host-health.json and, for each machine another project shares with this one, its owner's file reached through the
+    seen list's folder; for a machine in both, the record checked later. {} without either file."""
+    fleet = getattr(S, "fleet", None)
+    got = fleet(str(root), str(pack / ".memory")) if fleet else None
+    rows = got.get("rows") if isinstance(got, dict) else None
+    return {str(r[0]): r[2] for r in rows or [] if isinstance(r, (list, tuple)) and len(r) == 3
+            and isinstance(r[2], dict)}
+
+
+def health_text(P, name, rec, now):
+    """A machine's name with its health and GPU busy share ("gpu-1 ok 97% busy"), marked when checked long ago."""
+    if not isinstance(rec, dict):
+        return name
+    bits = [name]
+    if isinstance(rec.get("health"), str) and rec["health"].strip():
+        bits.append(clip(rec["health"], 10))
+    busy = rec.get("busy")
+    if isinstance(busy, (int, float)) and not isinstance(busy, bool) and 0 <= busy <= 1.5:
+        bits.append(f"{busy * 100:.0f}% busy")
+    t = P.parse_time(rec.get("checked"))
+    if t and (now - t).total_seconds() > HEALTH_OLD_HOURS * 3600:
+        bits.append(f"({ago(t, now)} old)")
+    return " ".join(bits)
+
+
+def by_health(names, health):
+    # the machines in bad, then warn health first; the rest keep their order
+    return sorted(names, key=lambda n: HEALTH_ORDER.get(str((health.get(n) or {}).get("health")), 2))
+
+
+def lineage_of(st):
+    v = (st or {}).get("lineage")
+    return [x for x in v if isinstance(x, dict)] if isinstance(v, list) else []
+
+
+def origin(e):
+    o = str(e.get("origin") or "").strip().lower()
+    return o if o in ("own", "public") else "other"
+
+
+def own_line(P, st, last, now, days):
+    """The own-work line of the status JSON's lineage, or None without a lineage: {"entry" (the newest own entry, None
+    without one), "score", "days" (since its gain), "stalled", "flag" ((line, flag) at most once a day while stalled,
+    else None), "state" (for last.json)}. An entry's gain time is its optional "date" (an ISO date, its start in this
+    machine's zone, or an ISO time) when it carries one, else when a pass first saw it; without an own entry, the
+    oldest dated entry's, else when a pass first saw the lineage."""
+    lineage = lineage_of(st)
+    if not lineage:
+        return None
+    prev = last.get("own_line") if isinstance(last.get("own_line"), dict) else {}
+    own = [e for e in lineage if origin(e) == "own"]
+
+    def dated(e):
+        s = clip(e.get("date"), 40)
+        if DATE_RE.fullmatch(s):
+            try:
+                return datetime.combine(date.fromisoformat(s), datetime.min.time(), datetime.now().astimezone().tzinfo)
+            except ValueError:
+                return None
+        return P.parse_time(s)
+
+    if own:
+        newest = own[-1]
+        key = clip(newest.get("entry") or newest.get("score") or "?", 40)
+        t = dated(newest)
+    else:
+        newest, key = {}, None
+        t = min((x for x in map(dated, lineage) if x), default=None)
+    same = "seen" in prev and prev.get("entry") == key
+    t = t or (P.parse_time(prev.get("seen")) if same else None) or now
+    state = {"entry": key, "seen": P.iso(t)}
+    if same and prev.get("flagged"):
+        state["flagged"] = prev["flagged"]
+    age = max(0.0, (now - t).total_seconds() / 86400)
+    flagged, flag = P.parse_time(state.get("flagged")), None
+    if age >= days and not (flagged and timedelta(0) <= now - flagged < timedelta(hours=STALL_REPEAT_HOURS)):
+        state["flagged"] = P.iso(now)
+        flag = ((f"newest own-work gain: entry {key}, {age:.1f} days ago" if key else
+                 f"no own-work gain in the lineage, seen for {age:.1f} days"),
+                f"no own-work gain for over {days:g} days ({STALL_KEY}): plan the next step of the project's own (a "
+                "model or idea of its own, not a public fork), give it compute, and record the decision")
+    return {"entry": key, "score": clip(newest.get("score"), 16), "days": age, "stalled": age >= days, "flag": flag,
+            "state": state}
+
+
+def outlook_row(P, st, now):
+    """The outlook row: the status JSON's nearest outlook line and its "final" line, with when it was set."""
+    o = (st or {}).get("outlook")
+    rows = o.get("lines") if isinstance(o, dict) else None
+    rows = [x for x in rows if isinstance(x, dict)] if isinstance(rows, list) else []
+    if not rows:
+        return f"{NA} (no outlook in the status JSON)"
+    at = P.parse_time(o.get("at"))
+
+    def final(x):
+        return str(x.get("when") or "").strip().lower() == "final"
+
+    rest = [x for x in rows if not final(x)]
+    ahead = [(t, i) for i, x in enumerate(rest) for t in [when_time(P, x.get("when"), at or now)] if t and t >= now]
+    near = rest[min(ahead)[1]] if ahead else (rest[0] if rest else None)
+    shown = [x for x in (near, next((x for x in rows if final(x)), None)) if x]
+    return "; ".join(outlook_text(P, x) for x in shown) + (f" (as of {P.local(at)})" if at else "")
+
+
+def when_time(P, when, base):
+    """When an outlook line's "when" falls: "in N hours|days|weeks" from base, an ISO date (to its end) or time;
+    None for other text."""
+    s = clip(when, 40)
+    m = WHEN_RE.fullmatch(s)
+    if m:
+        return base + timedelta(**{m.group(2).lower() + "s": float(m.group(1))})
+    t = P.parse_time(s)
+    return t + timedelta(days=1) if t and DATE_RE.fullmatch(s) else t
+
+
+def outlook_text(P, x):
+    when = clip(x.get("when"), 40)
+    what = ", ".join(clip(x.get(k), 24) for k in ("score", "rank") if x.get(k) not in (None, ""))
+    basis = clip(x.get("basis"), 80)
+    return f"{'final' if when.lower() == 'final' else day_text(P, when) or '?'}: {what or NA}" + (
+        f" ({basis})" if basis else "")
+
+
+def progress_row(P, st, own):
+    """The progress row from the status JSON's lineage: the newest best, how many of the last GAINS new bests were own
+    work or public material (with their summed gains), and the newest own gain."""
+    lineage = lineage_of(st)
+    if not lineage:
+        return f"{NA} (no lineage in the status JSON)"
+    best = lineage[-1]
+    bits = [x for x in (f"entry {clip(best.get('entry'), 16)}" if best.get("entry") not in (None, "") else "",
+                        clip(best.get("gain"), 12)) if x]
+    kind = origin(best)
+    bits.append(("unmarked" if kind == "other" else kind) + (f": {clip(best.get('what'), 60)}" if best.get("what")
+                                                             else ""))
+    parts = [f"best {clip(best.get('score'), 16) or '?'} ({', '.join(bits)})"]
+    last, counts = lineage[-GAINS:], []
+    for kind_ in ("own", "public", "other"):
+        mine = [e for e in last if origin(e) == kind_]
+        if mine or kind_ != "other":
+            gains = [v for v in (P.num(e.get("gain")) for e in mine) if v is not None and v == v]
+            counts.append(f"{len(mine)} {'unmarked' if kind_ == 'other' else kind_}"
+                          + (f" ({sum(gains):+.4g})" if gains else ""))
+    parts.append(f"{'the last ' if len(lineage) > GAINS else ''}{plural(len(last), 'gain')}: {', '.join(counts)}")
+    if own:
+        if own["entry"] is None:
+            text = "no own gain in the lineage" + (f" for {own['days']:.0f} days" if own["days"] >= 1 else "")
+        else:
+            text = "newest own gain " + ("the best" if kind == "own" else f"entry {own['entry']}" + (
+                f" ({own['score']})" if own["score"] else "")) + (
+                f", {own['days']:.0f} days ago" if own["days"] >= 1 else "")
+        parts.append(text + (" (stalled)" if own["stalled"] else ""))
+    return "; ".join(parts)
+
+
+def tracks_row(P, st):
+    """The tracks row: how many work tracks run, pause, are done or dropped, then each running one with its last gain
+    and note."""
+    v = (st or {}).get("tracks")
+    tracks = [t for t in v if isinstance(t, dict)] if isinstance(v, list) else []
+    if not tracks:
+        return f"{NA} (no tracks in the status JSON)"
+
+    def state(t):
+        return clip(t.get("state"), 20).lower() or "unset"
+
+    running = [t for t in tracks if state(t) == "running"]
+    counts = {}
+    for t in tracks:
+        if state(t) != "running":
+            counts[state(t)] = counts.get(state(t), 0) + 1
+    order = [s for s in ("paused", "done", "dropped") if s in counts] + sorted(set(counts) - {"paused", "done",
+                                                                                              "dropped"})
+    items = [f"{clip(t.get('name'), 30) or '?'} ("
+             + (f"last gain {day_text(P, t['last_gain'])}" if t.get("last_gain") else "no gain yet") + ")"
+             + (f": {clip(t.get('note'), 80)}" if clip(t.get("note"), 80) else "") for t in running]
+    return (f"{len(running)} running" + "".join(f", {counts[s]} {s}" for s in order)
+            + (": " + "; ".join(items) if items else ""))
+
+
+def review_items(res):
+    """What the review flag is about, in full: every label of its urgent triggers (the line shows the first 4 of each),
+    the other triggers by name, the host comments read in each topic, and each page change with its detail."""
+    hits = res.get("hits") if isinstance(res.get("hits"), dict) else {}
+    parts = [f"{k}: " + "\n".join(map(str, hits[k])) for k in URGENT if hits.get(k)]
+    parts.append("others: " + ", ".join(sorted(k for k, v in hits.items() if v and k not in URGENT)))
+    for i in [i for i in res.get("forum") or [] if isinstance(i, dict)]:
+        hosts = sum(1 for c in i.get("fresh") or [] if isinstance(c, dict) and c.get("host"))
+        if hosts:
+            parts.append(f"topic {i.get('id')}: {hosts} host comments")
+    parts += [" ".join(map(str, x)) for x in res.get("pages") or [] if isinstance(x, (list, tuple))]
+    return "\n".join(parts)
+
+
+def pending_items(pending):
+    """What the forum flag is about, in full: the pending topic ids (each changed one with the comment count it was
+    listed with) and the missing ones, from the forum watch's pending.json."""
+    if not isinstance(pending, dict):
+        return ""
+    listed = pending.get("listed") if isinstance(pending.get("listed"), dict) else {}
+
+    def item(i):
+        n = listed[str(i)].get("comments") if isinstance(listed.get(str(i)), dict) else None
+        return str(i) if n is None else f"{i}/{n}"
+
+    out = []
+    for k in ("new", "changed", "missing"):
+        ids = pending.get(k) if isinstance(pending.get(k), list) else []
+        out.append(f"{k}: " + ", ".join(item(i) for i in sorted(ids, key=str)))
+    return "\n".join(out)
+
+
+def hold_unchanged(P, lines, last, now, hours, about=None):
+    """(the indexes of the flags held back as unchanged, the flag state for last.json). A flag whose text, and what
+    it is about (about: {index of its line: the full set of items it names, as text}), is the same as at the last pass
+    prints in full at most every `hours` hours (0: always); an EVENT_CHECKS flag, a new and a changed flag always
+    print. The state keeps a digest of each, not the text."""
+    before = last.get("flags") if isinstance(last.get("flags"), dict) else {}
+    about = about or {}
+    held, state = set(), {}
+    for i, (check, _line, flag) in enumerate(lines):
+        if not flag:
+            continue
+        key = check if check not in state else f"{check}#{i}"
+        sig = hashlib.sha256(f"{flag}\n{about.get(i, '')}".encode("utf-8", "replace")).hexdigest()[:20]
+        b = before.get(key) if isinstance(before.get(key), dict) else {}
+        shown = P.parse_time(b.get("shown"))
+        if (check not in EVENT_CHECKS and hours > 0 and b.get("sig") == sig and shown
+                and timedelta(0) <= now - shown < timedelta(hours=hours)):
+            held.add(i)
+            state[key] = {"sig": sig, "shown": b["shown"]}
+        else:
+            state[key] = {"sig": sig, "shown": P.iso(now)}
+    return held, state
+
+
 def read_submissions(P, slug, gw, root, run=_run):
-    """The team's submissions, newest first as the CLI lists them: ([{key, status, score, what, date}], error)."""
-    code, out, err = run([sys.executable, str(gw), "competitions", "submissions", slug, "--format", "json"], root)
-    if code != 0:
-        return None, f"competitions submissions failed (exit {code}): {P.tail(err or out)}"
-    # CLI 2.2.4 prints this instead of an empty JSON list
-    rows = [] if "No submissions found" in out else P.first_json(out, "[")
-    if not isinstance(rows, list):
-        return None, f"competitions submissions printed no list: {P.tail(out)}"
+    """The team's submissions, newest first: ([{key, status, score, what, date, error}], error). One read: the
+    gateway's `--sdk submissions <slug> --json`, which keeps Kaggle's error text; a gateway that does not know that
+    read (an older copy: a usage error) gets the CLI's `competitions submissions --format json` instead, without
+    error texts."""
+    code, out, err = run([sys.executable, str(gw), "--sdk", "submissions", slug, "--json"], root)
+    if code == 0:
+        doc = P.first_json(out, "{")
+        rows = doc.get("submissions") if isinstance(doc, dict) else None
+        if not isinstance(rows, list):
+            return None, f"--sdk submissions printed no submissions list: {P.tail(out)}"
+    elif code == 2 and USAGE_RE.search(f"{err}\n{out}"):
+        code, out, err = run([sys.executable, str(gw), "competitions", "submissions", slug, "--format", "json"], root)
+        if code != 0:
+            return None, f"competitions submissions failed (exit {code}): {P.tail(err or out)}"
+        # CLI 2.2.4 prints this instead of an empty JSON list
+        rows = [] if "No submissions found" in out else P.first_json(out, "[")
+        if not isinstance(rows, list):
+            return None, f"competitions submissions printed no list: {P.tail(out)}"
+    else:
+        return None, f"--sdk submissions failed (exit {code}): {P.tail(err or out)}"
     subs = []
     for r in rows:
         if isinstance(r, dict):
@@ -252,7 +907,8 @@ def read_submissions(P, slug, gw, root, run=_run):
                          "status": str(r.get("status") or "").split(".")[-1].upper(),
                          "score": str(r.get("publicScore") or "").strip(),
                          "what": P.one_line(r.get("description") or r.get("fileName") or "?", 40),
-                         "date": P.iso(when) if when else None})
+                         "date": P.iso(when) if when else None,
+                         "error": clip(r.get("errorDescription"), ERROR_WIDTH)})
     return subs, None
 
 
@@ -325,7 +981,8 @@ def page_state(P, root, status_path, now, given, scored=None):
         return line, f"the page was built before the newest score landed ({scored[1]}): rebuild it " \
                      "(kaggle_status.py --keep-rev)"
     if (now - built).total_seconds() > STALE_HOURS * 3600:
-        return line, f"the page is {ago(built, now)} old: rebuild it (kaggle_status.py --keep-rev)"
+        # the age is in the line: the flag's text stays the same while the page stays old
+        return line, f"the page is over {STALE_HOURS:g} hours old: rebuild it (kaggle_status.py --keep-rev)"
     return line, None
 
 
@@ -818,7 +1475,7 @@ def landed(P, s, prev, first, now):
 
 def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jump=JUMP_DEFAULT):
     """One hourly pass with the kaggle_presubmit module P: ([(check, line, flag or None)], the state for last.json,
-    its path, the status block {field: text})."""
+    its path, the status block {field: text}, the indexes of the flags held back as unchanged)."""
     root = Path(root)
     gw = P.find_gateway(gateway)
     now = now or P.utc_now()
@@ -833,9 +1490,12 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
     status_path = Path(status).resolve() if status else root / "reports" / "status.json"
     st = P.read_json(status_path, None)
     st = st if isinstance(st, dict) else None
-    lines = []
+    lines, about = [], {}
 
-    def add(check, line, flag=None):
+    def add(check, line, flag=None, what=None):
+        # what: the full set of items a flag names, when its text and line do not hold them all (see hold_unchanged)
+        if what is not None:
+            about[len(lines)] = what
         lines.append((check, line, flag))
 
     # every Kaggle read of the pass goes through this: after an HTTP 429 the rest are skipped
@@ -856,7 +1516,7 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
         add("review", f"{since}; triggers: {', '.join(others) or 'none'}"
             + (f"; {' | '.join(urgent)}" if urgent else ""),
             f"a host post or a page change: run kaggle_presubmit.py {slug}, read it, decide, then --ack"
-            if urgent else None)
+            if urgent else None, review_items(res))
         for src in P.SOURCES:
             # a read the rate limit stopped is named once, in the rate-limited line
             if not view[src].get("ok") and src != reads.hit and src not in reads.skipped:
@@ -882,7 +1542,8 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
             unread = "{} new, {} changed, {} missing topics not shown and committed yet".format(*topics)
             forum = P._rel(TOOLS / "kaggle_forum.py")
             add("forum", unread if any(topics) else "nothing unread",
-                f"read them: python3 {forum} show {slug} --new, log what matters, then commit" if any(topics) else None)
+                f"read them: python3 {forum} show {slug} --new, log what matters, then commit" if any(topics) else None,
+                pending_items(pending))
     reads.check = "subs"
     subs, err = read_submissions(P, slug, gw, root, reads)
     if err:
@@ -917,10 +1578,19 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
         add("gpu", gpu_line(P, share, ours))
         if share.get("errors"):
             add("account", P.one_line("; ".join(map(str, share["errors"])), 200),
-                "the account read was incomplete: see kaggle_share.py status")
+                "the account read was incomplete: see kaggle_share.py status", "\n".join(map(str, share["errors"])))
     page = status_page(P, root, status_path, now, given=bool(status), scored=newest_score(P, keep, subs))
     if page:
         add("status", *page)
+    settings = [number_setting(P, pack, REPEAT_KEY, REPEAT_HOURS, zero=True),
+                number_setting(P, pack, SILENT_KEY, SILENT_MINUTES), number_setting(P, pack, STALL_KEY, STALL_DAYS)]
+    (repeat, _), (silent, _), (stall_days, _) = settings
+    own = own_line(P, st, last, now, stall_days)
+    keep.pop("own_line", None)
+    if own:
+        keep["own_line"] = own["state"]
+        if own["flag"]:
+            add("own-line", *own["flag"])
     spend = None
     if pack:
         git = git_line(P, root, now)
@@ -931,6 +1601,14 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
         add("agents", *agents_line(P, S, root, pack, since, now))
         spend = spend_line(P, S, root, pack, now)
         add("spend", *spend)
+        for check, got in (("alerts", alerts_line(P, pack, since)),
+                           ("peers", peers_line(P, root, pack, since, now, silent)),
+                           ("plugins", plugins_line(P, root, pack))):
+            if got:
+                add(check, *got)
+        bad = [p for _v, p in settings if p]
+        if bad:
+            add("settings", plural(len(bad), "setting") + " not valid, the default used", "; ".join(bad))
     add("browsers", *browsers(P, root, now))
     if reads.hit:
         # the account read feeds the kernels and the gpu lines
@@ -939,10 +1617,14 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
                             f"{', '.join(named) or 'none'}",
             "Kaggle is rate limiting the account: wait a few minutes before the next Kaggle read (the skipped checks "
             "run at the next pass)")
-    flags = sum(1 for _c, _l, f in lines if f)
+    held, shown = hold_unchanged(P, lines, last, now, repeat, about)
+    keep.pop("flags", None)
+    if shown:
+        keep["flags"] = shown
+    flags = sum(1 for i, (_c, _l, f) in enumerate(lines) if f and i not in held)
     block = status_block(P, S, root, pack, st, now, slug=slug, subs=subs, share=share, ours=ours, ended=ended,
-                         spend=spend, flags=flags, limited=bool(reads.hit))
-    return lines, dict(keep, schema=1, at=P.iso(now)), state_path, block
+                         spend=spend, flags=flags, limited=bool(reads.hit), held=len(held), own=own)
+    return lines, dict(keep, schema=1, at=P.iso(now)), state_path, block, held
 
 
 def board_jump(P, root, slug, newest, seen, jump, line):
@@ -977,8 +1659,9 @@ def newest_score(P, keep, subs):
     return t, what.get(k) or f"submission {k} {known[k].get('score')}"
 
 
-def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, spend, flags, limited):
-    """The STATUS block: {field: text} for BLOCK, n/a where the tool cannot tell."""
+def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, spend, flags, limited, held=0, own=None):
+    """The STATUS block: {field: text} for BLOCK, one line each under ROW_WIDTH characters, n/a where the tool cannot
+    tell. flags: the FLAG lines printed in full; held: those held back as unchanged; own: own_line's result."""
     why = "rate limited" if limited else "not read"
     out = {}
     # pick: the Kaggle day's slots, the pending submissions and the master's pick
@@ -1000,7 +1683,7 @@ def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, s
         parts.append(f"{len(pending)} pending" + (f" ({', '.join(s['what'] for s in pending[:3])})" if pending else ""))
     pick = (st or {}).get("pick")
     if isinstance(pick, str) and pick.strip():
-        parts.append(f"pick: {P.one_line(pick, 200)}")
+        parts.append(f"pick: {clip(pick, 200)}")
     out["pick"] = "; ".join(parts)
     # score and rank: the newest full board snapshot
     names = full_snapshots(P, root, slug)
@@ -1024,15 +1707,20 @@ def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, s
             ours_score = f"{best['score']} (our best submission; {reason})" if best else f"{NA} ({reason})"
             out["rank"] = f"{NA} ({reason})"
         out["score"] = f"{ours_score}; {medals} (board {when})"
-    # compute: the machines, the nearest booking end, the Kaggle GPU week
+    # the status JSON's outlook, lineage and work tracks
+    out["outlook"] = outlook_row(P, st, now)
+    out["progress"] = progress_row(P, st, own)
+    out["tracks"] = tracks_row(P, st)
+    # compute: the machines with their health, the nearest booking end, the Kaggle GPU week
     parts = []
     if pack:
         mem = pack / ".memory"
         hosts = S.read_hosts(str(mem / "hosts.json"))
+        health = fleet_health(S, root, pack)
         if hosts is None:
             parts.append(f"machines {NA} (no hosts.json)")
         else:
-            names_ = [str(h["name"]) for h in hosts]
+            names_ = [health_text(P, n, health.get(n), now) for n in by_health([str(h["name"]) for h in hosts], health)]
             parts.append(plural(len(names_), "machine") + (f" ({', '.join(names_[:4])}"
                                                             + (f" +{len(names_) - 4} more" if len(names_) > 4 else "")
                                                             + ")" if names_ else ""))
@@ -1044,9 +1732,10 @@ def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, s
         else:
             parts.append("every booking in lease-ends.json has ended" if ends else f"booking ends {NA} (no "
                                                                                     "lease-ends.json)")
-        shared = shared_hosts(mem / "resource-sharing-seen.json")
+        shared = shared_hosts(mem / SEEN_FILE)
         if shared:
-            parts.append(shared_part(shared, now, P))
+            names_ = by_health([str(h.get("name") or "?") for h in shared], health)
+            parts.append(shared_part(shared, now, P, [health_text(P, n, health.get(n), now) for n in names_]))
     else:
         parts.append(f"machines {NA} (no ai-pack)")
     parts.append(f"Kaggle GPU week: {gpu_line(P, share, ours)}" if share else f"Kaggle GPU week {NA} ({why})")
@@ -1063,12 +1752,13 @@ def status_block(P, S, root, pack, st, now, *, slug, subs, share, ours, ended, s
     else:
         for key, word in (("questions", "open question"), ("owner_actions", "owner action")):
             items = [x for x in st.get(key) or [] if x] if isinstance(st.get(key), list) else []
-            texts = [P.one_line(x.get("text") or x.get("question") if isinstance(x, dict) else x, 80) for x in items]
+            texts = [clip(x.get("text") or x.get("question") if isinstance(x, dict) else x, 80) for x in items]
             parts.append(plural(len(texts), word) + (": " + "; ".join(f"{i}. {t}" for i, t in enumerate(texts, 1))
                                                     if texts else ""))
-    parts.append(plural(flags, "FLAG line"))
-    out["for you"] = "; ".join(parts)
-    return {field: out[field] for field in BLOCK}
+    # the flag count stays when the questions are cut
+    tail = plural(flags, "FLAG line") + (f", {held} unchanged" if held else "")
+    out["for you"] = f"{clip('; '.join(parts), ROW_WIDTH - len(tail) - 2)}; {tail}"
+    return {field: clip(out[field], ROW_WIDTH) for field in BLOCK}
 
 
 def notebook_line(P, root, slug, n, vs, sign):
@@ -1108,8 +1798,12 @@ def submission_line(subs, before):
     news = [f"{s['what']} scored {s['score']}" for s in landed_] + [f"{s['what']} ERROR" for s in errored]
     if not news:
         return line + "; nothing landed since the last pass", None
-    return line + "; since the last pass: " + "; ".join(news[:5]), (
-        "a score landed or a submission errored: update the records and the plan")
+    # each error with Kaggle's own text (the CLI's read has none)
+    said = [f"{s['what']} ERROR: {s.get('error') or 'no error text from Kaggle'}" for s in errored[:3]]
+    said += [f"+{len(errored) - 3} more errors"] if len(errored) > 3 else []
+    said += [plural(len(landed_), "score") + " landed"] if landed_ else []
+    return line + "; since the last pass: " + "; ".join(news[:5]), "; ".join(said) + (
+        ": update the records and the plan")
 
 
 def kernel_line(P, share, ours, before, now):
@@ -1184,25 +1878,30 @@ def main(argv=None):
         root = P.find_root()
         if root is None:
             raise HourlyError("no project or task folder here: run from one")
-        lines, state, state_path, block = run_pass(P, a.slug, root, gateway=a.gateway, vs=vs, status=a.status,
-                                                   jump=a.jump)
+        lines, state, state_path, block, held = run_pass(P, a.slug, root, gateway=a.gateway, vs=vs, status=a.status,
+                                                         jump=a.jump)
         P.write_json(state_path, state)
     except (HourlyError, P.PresubmitError) as e:
         print(f"kaggle_hourly: {e}", file=sys.stderr)
         return 1
-    flags = [(check, flag) for check, _l, flag in lines if flag]
+    flags = [(check, flag) for i, (check, _l, flag) in enumerate(lines) if flag and i not in held]
+    unchanged = [lines[i][0] for i in sorted(held)]
     if a.json:
         print(json.dumps({"slug": a.slug, "at": state["at"], "note": P.DISCLAIMER,
-                          "checks": [{"check": c, "line": line, "flag": f} for c, line, f in lines],
-                          "flags": len(flags), "block": block}, indent=1, ensure_ascii=False))
+                          "checks": [dict({"check": c, "line": line, "flag": f}, **({"unchanged": True} if i in held
+                                                                                    else {}))
+                                     for i, (c, line, f) in enumerate(lines)],
+                          "flags": len(flags), "unchanged": unchanged, "block": block}, indent=1, ensure_ascii=False))
         return EXIT_FLAG if flags else 0
     print(f"HOURLY {a.slug}, {P.local(P.utc_now())}")
     print(P.DISCLAIMER)
-    for check, line, flag in lines:
-        print(f"{check:<10} {'FLAG ' if flag else ''}{line}")
-    print(f"FLAGS: {len(flags)}" if flags else "FLAGS: none: nothing needs a decision")
+    for i, (check, line, flag) in enumerate(lines):
+        print(f"{check:<10} {'(unchanged) ' if i in held else 'FLAG ' if flag else ''}{line}")
+    print(f"FLAGS: {len(flags)}" if flags else "FLAGS: none new" if held else "FLAGS: none: nothing needs a decision")
     for check, flag in flags:
         print(f"  - {check}: {flag}")
+    if unchanged:
+        print(f"unchanged: {plural(len(unchanged), 'flag')} ({', '.join(unchanged)})")
     print("STATUS (paste into the status message)")
     for field in BLOCK:
         print(f"{field + ':':<9} {block[field]}")

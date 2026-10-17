@@ -55,8 +55,9 @@ The short form of the facts sheet in `{{PACK}}/instructions.md` (Competition Fac
   attacks every result and kernel before it counts.
 - **Know-how:** the kaggle plugin's playbook and skills (`{{PACK}}/plugins/kaggle/`), plus this project's
   `{{PACK}}/instructions.md`: the facts sheet, the owner's standing grant and rules, the process, the lessons.
-- **Rhythm:** an in-session clock wakes the master at least every 25 minutes; an hourly read-only pass (board,
-  public notebooks, forum, submissions, compute, spend) flags what needs a decision; no daemon or outside watcher.
+- **Rhythm:** an in-session clock wakes the master for each scheduled event (the hourly pass, the reset, the next
+  day's plan); an hourly read-only pass (board, public notebooks, forum, submissions, compute, spend) flags what
+  needs a decision; no daemon or outside watcher.
 - **Kaggle:** every command goes through the plugin's pinned CLI gateway; each submission passes the pre-submit
   check and the gated submit.
 - **Compute:** {{ANSWER_COMPUTE}}.
