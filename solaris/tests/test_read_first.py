@@ -7,9 +7,22 @@ from __future__ import annotations
 
 import io
 import json
+import os
+import re
+import time
 from pathlib import Path
 
+import pytest
+
 from solaris.tools import read_first as R
+
+
+@pytest.fixture(autouse=True)
+def _no_session(monkeypatch, tmp_path_factory):
+    # A test run inside a registered Claude Code session must still see orchestrator mode.
+    monkeypatch.delenv(R._SESSION_ENV, raising=False)
+    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path_factory.mktemp("cache")))
+    monkeypatch.delenv(R._BUDGET_ENV, raising=False)
 
 
 def test_detect_ide_prefers_claude_when_both_present():
@@ -424,3 +437,324 @@ def test_heal_sweeps_per_machine_log_folders(tmp_path):
         logs = tmp_path / rel / "interactions"
         assert (logs / "box1.jsonl").read_bytes() == b'{"ts": "a"}\n{"ts": "b"}\n'
         assert sorted(p.name for p in logs.iterdir()) == ["box1.jsonl"]
+
+
+# Project mode: a session registered by session_clock --dir <project> gets the project's set.
+
+_SID = "0a1b2c3d-4e5f-test-session"
+
+_LINK = """<!-- Linked plugin: managed by install-plugin (link mode). Machine-local development pointer. -->
+
+# Linked Plugin: linked
+
+This project uses the **linked** plugin in **link mode**: nothing is copied into `aipack/plugins/linked/`; the live
+plugin source is loaded directly. On every turn, treat the plugin as if it were materialized here:
+
+- **Plugin root:** `%s` - relative to this ai-pack's root, the directory **above**
+  `aipack/` (not to this file). Shared files are in `shared/` there; the live version is in its `manifest.json`.
+- Load each `shared/*.rule.md` as always-on; treat each `shared/*.skill.md` as trigger-invoked.
+"""
+
+
+def _write(path, text):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _huge(tag, paragraphs=100):
+    return "\n\n".join("%s paragraph %d %s" % (tag, i, "x" * 200) for i in range(paragraphs)) + "\n"
+
+
+def _solaris(root):
+    """A temporary Solaris root (framework rules, orchestrator files, a plugin) holding one project."""
+    for name in ("commits", "safety", "interaction", "subagents", "token-economy", "yagni"):
+        _write(root / "solaris" / "rules" / (name + ".rule.md"), "# %s\nFW-%s body\n" % (name, name.upper()))
+    _write(root / ".memory" / "instructions.md", "FRAMEWORK-MEMORY\n")
+    _write(root / "solaris" / "solaris.agent.md", "ORCHESTRATOR-ROLE\n")
+    _write(root / "plugins" / "linked" / "shared" / "linked.rule.md", "LINKED-RULE\n")
+    _write(root / "plugins" / "linked" / "shared" / "linked.skill.md", "LINKED-SKILL\n")
+    pack = root / "projects" / "my" / "demo" / "aipack"
+    _write(pack / "manifest.json", json.dumps({
+        "framework_version": "0.44.0", "project": {"name": "Demo Project", "slug": "demo"},
+        "agents": {"primary": "master"},
+        "plugins": [{"name": "copied", "version": "1.0.0"}, {"name": "linked", "mode": "link"}]}))
+    _write(pack / "rules" / "small.rule.md", "SMALL-RULE\n")
+    _write(pack / "rules" / "huge.rule.md", _huge("HUGE"))
+    _write(pack / "plugins" / "copied" / "copied.rule.md", "COPIED-RULE\n")
+    _write(pack / "plugins" / "copied" / "copied.skill.md", "COPIED-SKILL\n")
+    _write(pack / "plugins" / "linked.link.md", _LINK % "../../../plugins/linked/")
+    _write(pack / ".memory" / "context.md", "ctx\n")
+    return pack
+
+
+def _register(pack, session=_SID, age_days=0.0, updated=None, raw=None):
+    path = R.registry_dir() / (session + ".json")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    data = {"schema": 1, "session": session, "solaris": str(pack.parents[3]), "dir": str(pack.parent),
+            "pack": str(pack), "updated": updated or "2026-10-17T13:00:00-07:00"}
+    path.write_text(raw if raw is not None else json.dumps(data), encoding="utf-8")
+    if age_days:
+        t = time.time() - age_days * 86400
+        os.utime(path, (t, t))
+    return path
+
+
+@pytest.fixture
+def project(tmp_path, monkeypatch):
+    """A registered project session at a temporary Solaris root; returns the pack folder."""
+    pack = _solaris(tmp_path)
+    monkeypatch.setattr(R, "REPO_ROOT", tmp_path)
+    monkeypatch.setattr(R, "heal_sync_conflicts", lambda: "")
+    monkeypatch.setattr(R, "migrate_legacy_memory", lambda: None)
+    monkeypatch.setattr(R, "detect_ide", lambda env=None: "claude")
+    monkeypatch.setenv(R._SESSION_ENV, _SID)
+    _register(pack)
+    return pack
+
+
+def _all_parts(capsys):
+    outs = []
+    for part in range(1, R.PROJECT_PARTS + 1):
+        assert R.main([] if part == 1 else ["--part", str(part)]) == 0
+        outs.append(capsys.readouterr().out)
+    return outs
+
+
+def _delim(rel):
+    return "\n----- " + rel + " -----\n"
+
+
+_LABEL = re.compile(r"^----- (.+?)(?: \((?:TRUNCATED|POINTER) - [^)]*\))? -----$", re.M)
+
+
+def _labels(out):
+    """The file labels of one part's output, in order."""
+    return _LABEL.findall(out)
+
+
+def test_orchestrator_main_is_render_full_and_parts_5_to_8_print_nothing(capsys, monkeypatch):
+    monkeypatch.setattr(R, "heal_sync_conflicts", lambda: "")
+    monkeypatch.setattr(R, "migrate_legacy_memory", lambda: None)
+    for ide in ("claude", "cursor"):
+        monkeypatch.setattr(R, "detect_ide", lambda env=None, ide=ide: ide)
+        for part in (5, 6, 7, 8):
+            assert R.main(["--part", str(part)]) == 0
+            assert capsys.readouterr().out == ""
+    monkeypatch.setattr(R, "detect_ide", lambda env=None: "claude")
+    for part, argv in ((1, []), (2, ["--part", "2"]), (3, ["--part", "3"]), (4, ["--part", "4"])):
+        assert R.main(argv) == 0
+        assert capsys.readouterr().out == R.render_full(part=part)
+    assert R.main(["--remind"]) == 0
+    assert capsys.readouterr().out == R._REMINDER
+
+
+def test_project_mode_loads_the_project_set_not_the_orchestrators(project, capsys):
+    outs = _all_parts(capsys)
+    joined = "".join(outs)
+    assert all(len(out) <= R._budget() for out in outs)
+    assert outs[0].startswith("=== SOLARIS READ-FIRST, PROJECT demo, PART 1")
+    assert "SOLARIS READ-FIRST (auto-loaded" not in joined
+    # Part 1 is the floor alone, whole; never the orchestrator role or the framework memory.
+    commits = (project.parents[3] / "solaris/rules/commits.rule.md").read_text(encoding="utf-8")
+    safety = (project.parents[3] / "solaris/rules/safety.rule.md").read_text(encoding="utf-8")
+    assert outs[0].endswith(_delim("solaris/rules/commits.rule.md") + commits
+                            + _delim("solaris/rules/safety.rule.md") + safety)
+    assert _labels(outs[0]) == ["solaris/rules/commits.rule.md", "solaris/rules/safety.rule.md"]
+    for marker in ("FRAMEWORK-MEMORY", "ORCHESTRATOR-ROLE", "FW-SUBAGENTS", "FW-TOKEN-ECONOMY", "FW-YAGNI"):
+        assert marker not in joined
+    # Part 2 starts with the generated block (no card): the project, the clock command, the MUST-READ list.
+    assert _labels(outs[1])[0] == R._BLOCK_LABEL and "card.md" not in joined
+    for text in ("project Demo Project (`demo`)", "`uv run -m solaris.tools.session_clock --dir projects/my/demo`",
+                 "- `projects/my/demo/aipack/master.agent.md`", "- `projects/my/demo/aipack/instructions.md`",
+                 "- `projects/my/demo/aipack/.memory/context.md`"):
+        assert outs[1].count(text) == 1, text
+    assert "PAUSED" not in joined
+    # Pack rules, a copied plugin's rule, a linked plugin's rule and the interaction rule, once each.
+    for rel, body in (("projects/my/demo/aipack/rules/small.rule.md", "SMALL-RULE\n"),
+                      ("projects/my/demo/aipack/plugins/copied/copied.rule.md", "COPIED-RULE\n"),
+                      ("plugins/linked/shared/linked.rule.md", "LINKED-RULE\n"),
+                      ("solaris/rules/interaction.rule.md", "# interaction\nFW-INTERACTION body\n")):
+        assert joined.count(_delim(rel) + body) == 1, rel
+    assert "COPIED-SKILL" not in joined and "LINKED-SKILL" not in joined
+    # The oversized rule gets part 3 to itself and keeps nearly all of it.
+    assert _labels(outs[2]) == ["projects/my/demo/aipack/rules/huge.rule.md"]
+    assert "(TRUNCATED - read the rest yourself)" in outs[2] and len(outs[2]) > R._budget() - 150
+    assert outs[3:] == ["", "", "", "", ""]
+
+
+def test_project_card_opens_part_2_and_the_reminder_names_it(project, capsys):
+    assert R.main(["--remind"]) == 0
+    out = capsys.readouterr().out
+    assert "Demo Project" in out and "no hard-rules card yet (`projects/my/demo/aipack/card.md`)" in out
+    card = "# Demo - Hard Rules Card\n\n- CARD-RULE\n"
+    _write(project / "card.md", card)
+    outs = _all_parts(capsys)
+    assert _labels(outs[1])[:2] == ["projects/my/demo/aipack/card.md", R._BLOCK_LABEL]
+    assert _delim("projects/my/demo/aipack/card.md") + card in outs[1]
+    assert R.main(["--remind"]) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("[Solaris read-first] Project session: Demo Project (`demo`")
+    assert "the hard-rules card `projects/my/demo/aipack/card.md`" in out and len(out) < 1000
+    assert R.main(["--check", "--pack", str(project)]) == 0
+    assert "card: whole (%d characters)" % len(card) in capsys.readouterr().out
+
+
+def test_an_oversized_card_is_truncated_and_the_block_stays_whole(project, capsys):
+    _write(project / "card.md", _huge("CARD", 60))
+    block = R._session_block(R.project_context(project), project.parents[3])
+    outs = _all_parts(capsys)
+    assert len(outs[1]) <= R._budget()
+    assert _labels(outs[1])[:2] == ["projects/my/demo/aipack/card.md", R._BLOCK_LABEL]
+    assert "card.md (TRUNCATED - read the rest yourself)" in outs[1] and _delim(R._BLOCK_LABEL) + block in outs[1]
+    assert R.main(["--check", "--pack", str(project)]) == 0
+    out = capsys.readouterr().out
+    assert "card: TRUNCATED to " in out and "over the room left in part 2" in out
+
+
+def test_large_rules_get_parts_of_their_own_and_the_rest_fill_first_fit(project, capsys):
+    # Like a pack's subagents (11.8 KB) and token-economy (9.8 KB) rules: each gets a full part (never the
+    # smaller part 4) and keeps about the budget; the mid-size rules fill part 2's rest, then part 4.
+    _write(project / "rules" / "subagents.rule.md", _huge("SUB", 54))
+    _write(project / "rules" / "economy.rule.md", _huge("ECO", 45))
+    _write(project / "rules" / "mid.rule.md", _huge("MID", 30))
+    _write(project / "rules" / "mid2.rule.md", _huge("MID2", 30))
+    outs = _all_parts(capsys)
+    assert all(len(out) <= R._budget() for out in outs)
+    assert _labels(outs[2]) == ["projects/my/demo/aipack/rules/huge.rule.md"]
+    big = {_labels(out)[0]: out for out in (outs[4], outs[5])}
+    assert set(big) == {"projects/my/demo/aipack/rules/subagents.rule.md",
+                        "projects/my/demo/aipack/rules/economy.rule.md"}
+    for out in big.values():
+        assert "(TRUNCATED - read the rest yourself)" in out and len(out) > R._budget() - 150
+    assert "projects/my/demo/aipack/rules/mid.rule.md" in _labels(outs[1]) + _labels(outs[3])
+    assert "projects/my/demo/aipack/rules/mid2.rule.md" in _labels(outs[1]) + _labels(outs[3])
+    assert "SMALL-RULE" in outs[1] and outs[6:] == ["", ""]
+
+
+def test_more_than_8_parts_make_the_largest_rules_pointers(project, capsys):
+    # Seven mid-size rules need part 2's rest and parts 3-8, plus a part for the huge rule: 9 parts.
+    for i in range(7):
+        _write(project / "rules" / ("big%d.rule.md" % i), _huge("BIG%d" % i, 30))
+    _write(project / "card.md", "CARD-RULE\n")
+    outs = _all_parts(capsys)
+    joined = "".join(outs)
+    assert all(out and len(out) <= R._budget() for out in outs)
+    for marker in ("CARD-RULE", "SMALL-RULE", "COPIED-RULE", "LINKED-RULE", "FW-INTERACTION"):
+        assert joined.count(marker) == 1
+    for i in range(7):
+        assert joined.count(_delim("projects/my/demo/aipack/rules/big%d.rule.md" % i)) == 1
+    assert joined.count("\n----- projects/my/demo/aipack/rules/huge.rule.md (POINTER") == 1
+    assert R.main(["--check", "--pack", str(project)]) == 0
+    out = capsys.readouterr().out
+    assert "parts used: 8 of 8" in out
+    assert "WARNING: the files need 9 parts, more than 8" in out and out.rstrip().endswith("huge.rule.md")
+    # A tiny budget still never overflows a part.
+    ctx = R.project_context(project)
+    for part in range(1, R.PROJECT_PARTS + 1):
+        assert len(R.render_project(ctx, budget=2_000, part=part)) <= 2_000
+
+
+def test_project_part4_keeps_room_for_the_sweep_note(project, capsys, monkeypatch):
+    # Rules sized to fill part 4 to its room: a note of a usual size still arrives whole, a longer one is cut.
+    ctx = R.project_context(project)
+    room4 = R._budget() - len(R._project_header(ctx, 4)) - R._NOTE_ROOM
+    for i in range(2):
+        rel = "projects/my/demo/aipack/rules/fill%d.rule.md" % i
+        _write(project.parents[3] / rel, "y" * (room4 - len(_delim(rel)) - 1) + "\n")
+    out = R.render_project(ctx, part=4)
+    assert _labels(out) == ["projects/my/demo/aipack/rules/fill0.rule.md"]
+    assert len(out) == R._budget() - R._NOTE_ROOM
+    for note, whole in (("3 Syncthing conflict copies left in memory folders: " + "p" * 250, True),
+                        ("n" * 3_000, False)):
+        monkeypatch.setattr(R, "heal_sync_conflicts", lambda note=note: note)
+        assert R.main(["--part", "4"]) == 0
+        out = capsys.readouterr().out
+        assert out.startswith("[Solaris] " + (note + "\n" if whole else note[:40])) and len(out) <= R._budget()
+        assert "\n=== SOLARIS READ-FIRST, PROJECT demo, PART 4" in out
+
+
+def test_stale_foreign_or_broken_registry_means_orchestrator_mode(project, capsys, monkeypatch):
+    orchestrator = R.render_full(part=1)
+
+    def foreign():  # only another session is registered
+        _register(project, session="another")
+        monkeypatch.setenv(R._SESSION_ENV, "someone-else")
+
+    cases = [
+        lambda: _register(project, age_days=15),  # older than 14 days
+        lambda: _register(project, raw="{not json"),
+        lambda: _register(project, raw=json.dumps({"pack": str(project / "gone")})),
+        lambda: _register(project, raw=json.dumps({"pack": "projects/my/demo/aipack"})),  # not absolute
+        foreign,
+    ]
+    for make in cases:
+        monkeypatch.setenv(R._SESSION_ENV, _SID)
+        make()
+        assert R.main([]) == 0
+        assert capsys.readouterr().out == orchestrator
+        assert R.main(["--part", "6"]) == 0
+        assert capsys.readouterr().out == ""
+    assert R.load_registry("../" + _SID) is None and R.load_registry("") is None
+    _register(project, age_days=13)
+    assert R.load_registry(_SID)["pack"] == str(project)
+
+
+def test_registry_honors_xdg_cache_home_and_home():
+    assert R.registry_dir({"XDG_CACHE_HOME": "/c"}) == Path("/c/solaris/sessions")
+    assert R.registry_dir({"XDG_CACHE_HOME": "", "HOME": "/h"}) == Path("/h/.cache/solaris/sessions")
+    assert R.registry_dir({"XDG_CACHE_HOME": "rel", "HOME": "/h"}) == Path("/h/.cache/solaris/sessions")
+
+
+def test_paused_project_lists_its_newest_handover_note(project, capsys):
+    mem = project / ".memory"
+    _write(mem / "handover-2026-10-01-0900.md", "old note, resumed at 2026-10-02 10:00\n")
+    note = _write(mem / "handover-2026-10-17-1200.md", "# Handover\nnext steps\n")
+    _register(project, updated="2026-10-17T11:00:00-07:00")
+    t = R._epoch("2026-10-17T12:00:00-07:00")
+    os.utime(note, (t, t))
+    listed = "- `projects/my/demo/aipack/.memory/handover-2026-10-17-1200.md` - PAUSED"
+    assert listed in "".join(_all_parts(capsys))
+    # Written before the session's registry update: not a pause of this session.
+    _register(project, updated="2026-10-17T13:00:00-07:00")
+    assert "PAUSED" not in "".join(_all_parts(capsys))
+    # Resumed: never listed, also without a registry (--check --pack).
+    _register(project, updated="2026-10-17T11:00:00-07:00")
+    note.write_text("# Handover\nresumed at 2026-10-17 12:30\n", encoding="utf-8")
+    os.utime(note, (t, t))
+    assert "PAUSED" not in "".join(_all_parts(capsys))
+    assert R.paused_handover(project) is None
+
+
+def test_link_mode_falls_back_to_the_plugin_folder_then_to_the_pointer(project, capsys):
+    link = project / "plugins" / "linked.link.md"
+    link.write_text("# Linked Plugin: linked\n(no plugin root line)\n", encoding="utf-8")
+    assert _delim("plugins/linked/shared/linked.rule.md") + "LINKED-RULE\n" in "".join(_all_parts(capsys))
+    gone = project / "plugins" / "gone.link.md"
+    gone.write_text(_LINK % "../../../plugins/gone/", encoding="utf-8")
+    joined = "".join(_all_parts(capsys))
+    assert joined.count(_delim("projects/my/demo/aipack/plugins/gone.link.md")) == 1
+
+
+def test_check_shows_the_project_packing(project, capsys, monkeypatch):
+    for argv in (["--check", "--pack", str(project)], ["--check", "--session", _SID], ["--check", "--session"]):
+        assert R.main(argv) == 0
+        out = capsys.readouterr().out
+        assert out.startswith("read_first check (project mode)") and "card: none" in out, argv
+        assert "primary master" in out and "truncated to" in out
+        for part in range(1, 7):
+            assert ("part %d rendered payload" % part) in out
+        assert "OVER BUDGET" not in out
+    assert R.main(["--check", "--session", "no-such-session"]) == 0
+    out = capsys.readouterr().out
+    assert "orchestrator mode" in out and "part 4 rendered payload" in out
+    assert R.main(["--check", "--pack", str(project / "missing")]) == 0
+    assert "no pack folder" in capsys.readouterr().out
+
+
+def test_project_mode_is_fail_safe(project, capsys, monkeypatch):
+    def boom(*a, **k):
+        raise RuntimeError("broken")
+
+    monkeypatch.setattr(R, "plan_project", boom)
+    assert R.main([]) == 0 and capsys.readouterr().out == ""

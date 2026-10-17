@@ -91,7 +91,8 @@ Create `projects/` if it does not exist (gitignored, lazily created). The templa
    then run step 4's `apply-type` with `--dry-run` at once, so an overlay clash stops creation before the rest
    of the pack is written) - the manifest is
    what makes the folder the pack.
-2. Copy the files `revs` never renders - `<pack>/instructions.md`, `spec.md`, `defaults.json` and
+2. Copy the files `revs` never renders - `<pack>/instructions.md`, `card.md` (the hard-rules card), `spec.md`,
+   `defaults.json` and
    `.memory/*` (including the private owner-directions log `.memory/directions.md` and
    `.memory/improvements.md`, the project's suggestions for the framework and plugins, which it never
    edits itself), the root `CLAUDE.md`, and the `source/` stub -
