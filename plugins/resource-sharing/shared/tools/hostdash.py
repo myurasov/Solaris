@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """hostdash: a live view of the jobs and load on the hosts in the resource-sharing inventory.
 
@@ -12,7 +12,8 @@ tied to has gone), its tmux sessions, and its three busiest processes (the login
 any other login's by program name only: a command line can carry secrets). Read-only. Each host keeps one ssh
 connection open between refreshes (ControlMaster, closed two minutes after its last use), so a refresh every few
 seconds stays cheap. The inventory and the options are hostclaims.py's: <pack>/.memory/hosts.json plus the hosts
-other projects share with this one, or --hosts FILE; --project, --local-root and --ssh work as there. Stdlib
+other projects share with this one, or --hosts FILE (or host names from those); --project, --local-root and --ssh
+work as there. Stdlib
 only, Python 3.8 or newer. --once exits 4 when a host does not answer, else 0.
 """
 
@@ -260,7 +261,9 @@ def build_parser():
     ap.add_argument("--host", action="append", help="inventory host (repeat; default: every host)")
     ap.add_argument("--timeout", type=float, default=10.0, help="seconds before a host counts as unreachable "
                     "(default 10)")
-    ap.add_argument("--hosts", help="use exactly this inventory JSON [{name, target, opts}] (or HOSTCLAIMS_HOSTS)")
+    ap.add_argument("--hosts", help="use exactly this inventory file (*.json, or a path) [{name, target, opts}], or "
+                    "only these host names (NAME[,NAME], OWNER/NAME) from the project's inventory or seen list (or "
+                    "HOSTCLAIMS_HOSTS)")
     ap.add_argument("--project", help="project folder to act for (default: found from here)")
     ap.add_argument("--local-root", help="show this machine, with the claims folder DIR (no ssh)")
     ap.add_argument("--ssh", help="ssh program (default ssh, or HOSTCLAIMS_SSH)")

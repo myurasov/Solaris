@@ -1640,6 +1640,102 @@ class TestSharedHosts(TestDiscovery):
     test_owner_installs_and_guests_claim_and_ask = None
 
 
+class TestHostNames(TestDiscovery):
+    # --hosts takes host names as well as an inventory file
+    test_one_way_and_mutual_sharing = None
+    test_owner_installs_and_guests_claim_and_ask = None
+
+    def names(self, project, value):
+        ctx = hc.Ctx(hc.build_parser().parse_args(["--project", project, "--hosts", value, "status"]))
+        return ctx, [(h["name"], h["owner"], h["target"]) for h in ctx.inventory()]
+
+    def test_names_from_the_project_inventory(self):
+        ctx, got = self.names(self.a, "cpu-1,gpu-1")
+        self.assertEqual([(n, o) for n, o, _ in got], [("cpu-1", "proj-c"), ("gpu-1", "proj-a")])
+        self.assertIn("--hosts cpu-1,gpu-1 status", hc.tool_cmd(ctx, "status"))
+        # a folder of the same name here is no inventory file
+        os.makedirs(os.path.join(self.tmp, "gpu-1"))
+        self.assertEqual(self.names(self.a, "gpu-1")[1], [("gpu-1", "proj-a", "local")])
+        # a guest names a shared host as status does
+        self.assertEqual(self.names(self.b, "proj-a/gpu-1")[1], [("proj-a/gpu-1", "proj-a", "local")])
+        r = self.cli("status", base=["--project", self.b, "--hosts", "proj-a/gpu-1"])
+        self.assertEqual(sorted(r["hosts"]), ["proj-a/gpu-1"])
+        r = self.cli("status", base=["--project", self.b, "--hosts", "nope"], code=hc.USAGE)
+        self.assertIn("unknown host 'nope'", r["error"])
+        self.assertIn("gpu-1", r["error"])
+        self.cli("shared", base=["--project", self.b, "--hosts", "gpu-1"], code=hc.USAGE)
+        # a missing file stays a file error; names need a project to look them up in
+        r = self.cli("status", base=["--project", self.b, "--hosts", os.path.join(self.tmp, "gone.json")], code=hc.USAGE)
+        self.assertIn("cannot read the host inventory", r["error"])
+        self.assertIn("run inside a project", self.cli("status", base=["--hosts", "gpu-1"], code=hc.USAGE)["error"])
+
+    def test_a_host_whose_owner_cannot_be_read_comes_from_the_seen_list(self):
+        alpha = self.project("my/alpha", "ai", "alpha", ["proj-b"], [])
+        inv = os.path.join(alpha, "ai", ".memory", "hosts.json")
+        with open(inv, "w") as f:
+            json.dump([{"name": "gpu-7", "target": "user@alpha-7", "opts": ["-p", "2222"]}], f)
+        self.cli("shared", "--ack", base=["--project", self.b])
+        ctx, got = self.names(self.b, "gpu-7")
+        self.assertEqual((got, ctx.inventory()[0]["opts"]), ([("gpu-7", "alpha", "user@alpha-7")], ["-p", "2222"]))
+        with open(inv, "w") as f:
+            f.write("[")
+        for name in ("gpu-7", "alpha/gpu-7"):
+            ctx, got = self.names(self.b, name)
+            self.assertEqual(got, [("gpu-7", "alpha", "user@alpha-7")])
+            self.assertTrue(any(n.startswith(name + ": from the seen list") for n in ctx.notes), ctx.notes)
+        # a local host in the seen list names no claims folder: not taken from there
+        with open(os.path.join(self.a, "ai", ".memory", "hosts.json"), "w") as f:
+            f.write("[")
+        self.cli("status", base=["--project", self.b, "--hosts", "proj-a/gpu-1"], code=hc.USAGE)
+        # a host its owner, readable again, no longer shares is not taken from the seen list either
+        with open(inv, "w") as f:
+            json.dump([{"name": "gpu-7", "target": "user@alpha-7"}], f)
+        with open(os.path.join(alpha, "ai", ".memory", "resource-sharing.json"), "w") as f:
+            json.dump({"project": "alpha", "share_with": []}, f)
+        self.assertIn("unknown host 'gpu-7'", self.cli("status", base=["--project", self.b, "--hosts", "gpu-7"],
+                                                       code=hc.USAGE)["error"])
+
+    def test_a_name_two_owners_carry_must_name_its_owner(self):
+        # proj-c and proj-d each share a cpu-1 with proj-a, which lists the second as proj-d/cpu-1 (a remote target:
+        # merge_hosts takes two entries with one target for one host)
+        d = self.project("my/proj-d", "ai", "proj-d", ["proj-a"], [])
+        with open(os.path.join(d, "ai", ".memory", "hosts.json"), "w") as f:
+            json.dump([{"name": "cpu-1", "target": "user@d-1"}], f)
+        r = self.cli("status", base=["--project", self.a, "--hosts", "cpu-1"], code=hc.USAGE)
+        self.assertIn("ambiguous host 'cpu-1': hosts of 2 owners carry it; name one as OWNER/NAME: proj-c/cpu-1, "
+                      "proj-d/cpu-1", r["error"])
+        self.assertEqual([self.names(self.a, n)[1] for n in ("proj-c/cpu-1", "proj-d/cpu-1")],
+                         [[("cpu-1", "proj-c", "local")], [("proj-d/cpu-1", "proj-d", "user@d-1")]])
+        # a project's own host and a shared one of the same name, too
+        self.assertIn("proj-a/gpu-1, proj-b/gpu-1", self.cli("status", base=["--project", self.b, "--hosts", "gpu-1"],
+                                                             code=hc.USAGE)["error"])
+        self.assertEqual(self.names(self.b, "proj-b/gpu-1")[1], [("gpu-1", "proj-b", "local")])
+        # and two owners in the seen list, whose files cannot be read now
+        for slug in ("alpha", "beta"):
+            root = self.project("my/" + slug, "ai", slug, ["proj-b"], [])
+            with open(os.path.join(root, "ai", ".memory", "hosts.json"), "w") as f:
+                json.dump([{"name": "gpu-7", "target": "user@%s-7" % slug}], f)
+        self.cli("shared", "--ack", base=["--project", self.b])
+        for slug in ("alpha", "beta"):
+            with open(os.path.join(self.tmp, "sol", "projects", "my", slug, "ai", ".memory", "hosts.json"), "w") as f:
+                f.write("[")
+        r = self.cli("status", base=["--project", self.b, "--hosts", "gpu-7"], code=hc.USAGE)
+        self.assertIn("name one as OWNER/NAME: alpha/gpu-7, beta/gpu-7", r["error"])
+        # (named as status named it while beta could be read)
+        self.assertEqual(self.names(self.b, "beta/gpu-7")[1], [("beta/gpu-7", "beta", "user@beta-7")])
+
+    def test_what_counts_as_an_inventory_file(self):
+        for v in ("hosts.json", "inv/HOSTS.JSON", "./hosts", "/etc/inv", "~/inv", "a/b/c", ".hidden"):
+            self.assertIsNone(hc.hosts_option(v)[1], v)
+        for v, names in (("gpu-1", ["gpu-1"]), ("proj-a/gpu-1", ["proj-a/gpu-1"]), ("a, b/c", ["a", "b/c"])):
+            self.assertEqual(hc.hosts_option(v), (None, names))
+        # a file of that name in the working folder, even a readable inventory, never turns the name into a file
+        with open(os.path.join(self.tmp, "gpu-1"), "w") as f:
+            json.dump([{"name": "elsewhere", "target": "user@elsewhere"}], f)
+        self.assertEqual(self.names(self.a, "gpu-1")[1], [("gpu-1", "proj-a", "local")])
+        self.assertEqual(self.names(self.a, "./gpu-1")[1], [("elsewhere", "proj-a", "user@elsewhere")])
+
+
 class RealBase(Base):
     # the machine's own readings: no simulate.json in effect (only readers named in a test are patched)
     def setUp(self):

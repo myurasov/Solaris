@@ -1,9 +1,9 @@
 ---
 name: resource-sharing
-triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance", "host health", "gpu health", "host dashboard", "hosts dashboard"]
-summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock (memory counted as PSS, cores a running job is pinned to never granted twice), ties claims to their jobs' processes, renews claims in place, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield (paired claims in a set order), moves stale claims aside, reports usage and each GPU's last claim, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit; hosthealth.py checks GPU hosts (and applies the safe performance settings where the sharing rules allow) and hostdash.py shows their jobs and load live.
+triggers: ["claim a host", "host claims", "hostclaims", "share hosts", "shared hosts", "which hosts are free", "launch a host job", "resource sharing", "share resources", "shared resources", "sharing links", "extension request", "extend the lease", "audit my hosts", "owner audit", "shared pool", "fit a job", "reuse an instance", "host health", "gpu health", "health file", "host dashboard", "hosts dashboard"]
+summary: Share hosts between agents and projects with claim files kept on each host - hostclaims.py claims capacity under a lock (memory counted as PSS, cores a running job is pinned to never granted twice), ties claims to their jobs' processes, renews claims in place, launches jobs pinned in tmux with a heartbeat and done marker, asks lower-priority jobs to yield (paired claims in a set order), moves stale claims aside, reports usage and each GPU's last claim, runs shared pools for account-level limits, and handles owners and guests - sharing links between projects (guests see new, gone and changed shared hosts with `shared`; owners share new machines at once with `install --all`), one owner per host, extension and maintenance requests, paid-instance fit, and the owner's audit; hosthealth.py checks GPU hosts (and applies the safe performance settings where the sharing rules allow) and keeps a health file guests read instead of hourly messages (only threshold crossings are sent), and hostdash.py shows their jobs and load live.
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: resource-sharing - Hosts Shared by Many Agents <!-- omit in toc -->
 
@@ -17,6 +17,7 @@ _Rev. 9_
 - [Paid Hosts and Fit](#paid-hosts-and-fit)
 - [Owner Audit](#owner-audit)
 - [Host Health and Live View](#host-health-and-live-view)
+- [Sharing Host Health](#sharing-host-health)
 - [Pools](#pools)
 - [Conventions for Agents](#conventions-for-agents)
 - [Troubleshooting](#troubleshooting)
@@ -45,8 +46,11 @@ run or session.
    `user@address`, `opts` the ssh options). Optional per host: `owner`
    (a project slug; default: this project), `lease` (below), `root` (the claims folder, default
    `~/.solaris/claims`) and `gpus` (free text such as `2x H200 NVL`, which `shared` shows guests).
-   `--hosts FILE` uses exactly that file instead; `--local-root DIR` works on a folder on this machine
-   (tests, dry runs).
+   `--hosts FILE` uses exactly that file instead (a value ending in `.json`, or a path starting with `/`, `~`
+   or `.`; a file in the working folder never turns a host name into one); `--hosts NAME[,NAME]` takes only
+   those hosts from the project's inventory and the hosts shared with it, or from the seen list (below) when
+   their owner's files cannot be read now. A name that hosts of two owners carry is refused with the
+   candidates: name one as `OWNER/NAME`. `--local-root DIR` works on a folder on this machine (tests, dry runs).
 2. **Sharing links.** `<pack>/.memory/resource-sharing.json` (private) names this project and whom it
    shares its own hosts with:
 
@@ -344,13 +348,20 @@ Two companions of `hostclaims.py` sit beside it (`<tools>` below is the folder h
 same inventory (the project's `hosts.json` plus the hosts shared with it; `--host`, `--hosts`, `--project`,
 `--local-root` and `--ssh` work as there):
 
-- `python3 <tools>/hosthealth.py [--host H] [--fix] [--json]` checks each GPU host over ssh: the GPUs visible
-  against the inventory's `gpus` count (a GPU in confidential-computing mode, off the bus or failing to start
-  is missing from the driver's list), Xid codes in the kernel log since boot (the application-class codes 13,
-  31, 43 and 45 are left out), GPU start failures, and per GPU persistence mode, MIG and compute modes, power
-  limit against its default, throttling (hardware or thermal slowdown, power brake) and uncorrected ECC errors;
-  plus load, free memory and disk, and the CPU governor. Exit codes: 0 healthy, 3 problems found, 4 a host did
-  not answer.
+- `python3 <tools>/hosthealth.py [--host H] [--fix] [--write] [--json]` checks each GPU host over ssh: the GPUs
+  visible against the inventory's `gpus` count (a GPU in confidential-computing mode, off the bus or failing to
+  start is missing from the driver's list), Xid codes in the kernel log of the current boot (the
+  application-class codes 13, 31, 43 and 45 are left out), GPU start failures, and per GPU persistence mode, MIG
+  and compute modes, power limit against its default, throttling (hardware or thermal slowdown, power brake) and
+  uncorrected ECC errors; plus load, free memory and disk, and the CPU governor. The Xid count comes from the
+  kernel journal (`journalctl -k -b 0`) where the login may read it; where `journalctl` is missing or denied,
+  from `dmesg`, whose ring buffer drops its oldest lines on a busy host, so its count can fall while new events
+  hide. The output names the source (`Xid from journalctl -k -b 0` or `Xid from dmesg`). The journal keeps a
+  boot only within its size limits (journald's `SystemMaxUse` and the like): on a long boot whose oldest lines
+  were vacuumed, a since-boot count covers only what is left. `--write` keeps the health file guests read (see
+  Sharing Host Health) and reads only the journal lines after where the host's last check stopped (a cursor; one
+  whose line was vacuumed resumes at the next line left), so after its first reading it counts every new event
+  and reads little, however long the boot. Exit codes: 0 healthy, 3 problems found, 4 a host did not answer.
 - `--fix` first applies three settings that are safe under running jobs: persistence mode on, each GPU's power
   limit back up to its default (never above it by default: a maximum over the default can overload a power
   supply the GPUs share), and the `performance` CPU governor. An owner who wants the most performance passes
@@ -360,7 +371,7 @@ same inventory (the project's `hosts.json` plus the hosts shared with it; `--hos
   other host the check and the fix keep the default as before, so a guest that sets the policy gets no lasting
   problem there (with `--fix` the output says why). The two are
   equal on many GPUs. A reboot resets these settings (persistence mode survives only where
-  the persistence daemon runs), so owners run `hosthealth.py --fix` with their hourly checks. It acts as the
+  the persistence daemon runs), so owners run `hosthealth.py --fix --write` with their hourly checks. It acts as the
   calling project and follows ownership: on a host the project owns on record (the host's `host.json` from
   `install`, else an `owner` its inventory entry names; a host listed without one is nobody's here), every GPU
   and core (and it enables the persistence daemon); on a host where it only holds live claims, the cores of
@@ -380,6 +391,58 @@ same inventory (the project's `hosts.json` plus the hosts shared with it; `--hos
   by program name only, as a command line can carry secrets), over one ssh connection per host kept open
   between refreshes. `--once` prints one snapshot: after a restart it is a quick first look, before `status`
   and the done markers.
+
+## Sharing Host Health
+
+Host health travels between projects as a file, not as chat: every message wakes the project it goes to, so an
+hourly reading from an owner, and a guest's reply that agrees with it, cost a turn on each side and say nothing new.
+
+- **Owners** add `--write` to their hourly check (`python3 <tools>/hosthealth.py --fix --write`). It keeps the
+  newest health of each host it checked in `<pack>/.memory/host-health.json` (atomic replace; hosts not checked
+  this time keep their entries, hosts gone from `hosts.json` drop out):
+
+  ```json
+  {"schema": 1, "checked": "<ISO>", "hosts": {"<name>": {"health": "ok" | "warn" | "bad", "gpus": 8,
+   "gpus_visible": 8, "busy": 0.97, "xid_new": 0, "temp_max_c": 71, "notes": ["<short>"], "checked": "<ISO>"}}}
+  ```
+
+  `gpus` is the count the inventory names (else the count visible), `busy` the mean GPU use (0 to 1), `xid_new`
+  the hardware-class Xid events since the previous check (`null` while the kernel log cannot be read), and each
+  note one threshold the host is over. Beside it, `host-health-state.json` keeps what the next check compares
+  with. The output prints `TRIPPED <host> <what>` when a host crosses a threshold and `CLEARED <host> <what>` when
+  it comes back, and nothing on a host whose health holds. Those lines, and any change to a shared host's
+  availability (it stops answering or comes back, is drained, retired, rebooted for repair, or its lease ends
+  sooner), are the only health messages an owner sends the projects it shares the host with; it never sends
+  hourly readings, and guests neither ask for them nor reply to agree.
+- **Guests** read the owner's file instead: `python3 <tools>/hosthealth.py --shared` prints, with no ssh, each
+  host shared with the project as its owner's file has it, with the reading's age and its notes (exit 3 when one
+  is not `ok`, its reading is older than `stale_h` hours, or there is none: then ask the owner whether its
+  checks still run). Treat a `bad` host as a `TRIPPED` message: start nothing new there and move work off it;
+  watch a `warn` one. The file names hosts as the owner's inventory does (the part after the slash in the
+  seen list's key, `<owner>/<name>`).
+
+Settings, each overridden per project as `"hosthealth.<key>"` in `<pack>/.memory/config.json` (or the pack's
+`defaults.json`). Every one turns off with 0 (`false` for `throttle_warn`, `[]` for `xid_bad_codes`):
+
+| Key | Default | Health | Off |
+|---|---|---|---|
+| `temp_warn_c`, `temp_bad_c` | 85, 90 | the hottest GPU's temperature in C: warn, bad | that level is never reached |
+| `gpus_missing_warn`, `gpus_missing_bad` | 1, 1 | this many GPUs missing from the driver's list against the inventory's `gpus` count: warn, bad | that level is never reached |
+| `xid_new_warn` | 1 | this many new hardware-class Xid events since the last check: warn | no count; the bad codes still count |
+| `xid_bad_codes` | `[48, 79, 95, 154]` | a new Xid of these codes (a GPU to reset, a host to reboot): bad | no code is bad by itself |
+| `throttle_warn` | `true` | a GPU held back by hardware or thermal slowdown or the power brake: warn | not judged |
+| `idle_busy_pct`, `idle_mem_gb` | 90, 1 | a GPU this busy with less memory (GB) in use runs no real job (hung, or a stray process): warn | not judged |
+| `unreachable_bad_checks` | 2 | a host that did not answer this many checks in a row: bad; before that a failed check is only a note, and the entry keeps its last reading | never trips |
+| `clear_checks` | 2 | a level clears after this many clean checks in a row (an unreachable host too), so a flapping host sends nothing | clears at the first clean check |
+| `stale_h` | 3 | `--shared`: an owner's reading older than this many hours is stale | never stale |
+
+A failing driver (no `nvidia-smi`, or one that errs, where GPUs are expected) is bad, and uncorrected ECC errors
+warn. A rise counts at once, so `warn` to `bad` prints a `TRIPPED` line too. The first reading of a kernel-log
+source only sets its Xid base, and after a reboot every Xid since boot is new. The journal and `dmesg` keep a base
+each, with the events the other counted since: runs that alternate between them (the owner's `--fix` reads the
+journal through `sudo`, a plain run only `dmesg`) neither lose nor count twice an event, and the journal finds the
+events a wrapped `dmesg` lost. A setting the tool cannot use stops it (exit 2) before any check; an unknown
+`hosthealth.*` key is named in a note.
 
 ## Pools
 
@@ -432,8 +495,10 @@ locally, never in a synced folder (a sync tool copies lock files instead of lock
   `install --all` after adding machines or changing `share_with`, and tell the projects they share with.
 - Guests keep everything they write on a host, caches included, inside their own folder there, and report
   host problems to the owner instead of fixing them (see Owners, Guests and Requests).
-- Owners run `hosthealth.py --fix` with their hourly checks and repair what it reports; anyone may look with
-  `hosthealth.py` or `hostdash.py --once`.
+- Owners run `hosthealth.py --fix --write` with their hourly checks and repair what it reports; anyone may look
+  with `hosthealth.py` or `hostdash.py --once`.
+- Health goes by file: owners send guests only `TRIPPED` and `CLEARED` lines and changes to a shared host's
+  availability; guests read `hosthealth.py --shared` and never ask for, send or acknowledge hourly readings.
 
 ## Troubleshooting
 

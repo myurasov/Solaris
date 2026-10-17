@@ -1,8 +1,9 @@
 """Tests for shared/tools/hosthealth.py and shared/tools/hostdash.py (stdlib unittest, offline).
 
 Parsing and decisions run on canned host output. The end-to-end cases run the real shell scripts on this machine,
-through a fake ssh program or as the local target, with stand-in nvidia-smi, dmesg and systemctl programs first on
-PATH and a fake CPU folder: no sudo, and no real GPU or CPU setting is read for a decision or changed.
+through a fake ssh program or as the local target, with stand-in nvidia-smi, journalctl, dmesg and systemctl
+programs first on PATH and a fake CPU folder: no sudo, and no real GPU, CPU or kernel-log reading is used for a
+decision or changed. The health file cases write into temporary project folders.
 
     python3 -m unittest discover -s plugins/resource-sharing/tests -v
 """
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import types
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -120,6 +122,50 @@ FAKE_DMESG = ("#!/bin/sh\necho '[ 10.0] NVRM: Xid (PCI:0000:3b:00): 79, pid=0, G
 FAKE_SYSTEMCTL = ('#!/bin/sh\necho "$*" >> @LOG@\ncase "$1" in cat) exit 0;; is-active) exit 3;; enable) exit 0;; esac\n'
                   'exit 1\n')
 
+# a kernel journal this login may not read: journalctl answers with a hint and no kernel lines, as for a login
+# outside the adm group (the default here, so the cases above read the stand-in dmesg)
+FAKE_JOURNAL_DENIED = ('#!/bin/sh\necho "Hint: You are currently not seeing messages from other users and the system." '
+                       '>&2\n')
+# a readable journal of this boot, its kernel lines in a JSON file as [[cursor number, line]], every call logged:
+# --show-cursor ends with the last line's cursor (none when no line is shown), --after-cursor=cN shows the lines past
+# N (a vacuumed cursor resumes at the next line left). ROOT_ONLY makes it readable through sudo only.
+FAKE_JOURNAL = r'''#!@PY@
+import json, os, sys
+args = sys.argv[1:]
+with open(@LOG@, "a") as f:
+    f.write("journalctl " + " ".join(args) + "\n")
+if @ROOT_ONLY@ and not os.environ.get("HC_SUDO"):
+    sys.stderr.write("No journal files were opened due to insufficient permissions.\n")
+    sys.exit(1)
+if "-n" in args and args[args.index("-n") + 1] == "0":
+    sys.exit(0)
+with open(@LINES@) as f:
+    lines = json.load(f)
+after = [a.split("=", 1)[1] for a in args if a.startswith("--after-cursor=")]
+if after:
+    if not after[0].startswith("c") or not after[0][1:].isdigit():
+        sys.stderr.write("Failed to seek to cursor: Invalid argument\n")
+        sys.exit(1)
+    lines = [x for x in lines if x[0] > int(after[0][1:])]
+for _, text in lines:
+    print(text)
+if "--show-cursor" in args and lines:
+    print("-- cursor: c%d" % lines[-1][0])
+'''
+X79 = "NVRM: Xid (PCI:0000:3b:00): 79, pid=0, GPU has fallen off the bus."
+JOURNAL_LINES = [X79, X79, X79, "NVRM: Xid (PCI:0000:3c:00): 13, pid=123, Graphics Exception",
+                 "NVRM: Xid (PCI:0000:3d:00): 149, NETIR_LINK_DOWN Nonfatal", "NVRM: RmInitAdapter failed! (0x22:0x38:776)",
+                 "eth0: link up"]
+
+
+def boot_id():
+    # what the probe reads here for the boot (nothing off Linux)
+    try:
+        with open("/proc/sys/kernel/random/boot_id") as f:
+            return f.read().strip()
+    except OSError:
+        return ""
+
 # a kernel log only root reads (dmesg_restrict), and a passwordless sudo that logs each call
 FAKE_DMESG_ROOT = ('#!/bin/sh\n[ -n "$HC_SUDO" ] || { echo "dmesg: read kernel buffer failed: Operation not '
                    'permitted" >&2; exit 1; }\n' + FAKE_DMESG.split("\n", 1)[1])
@@ -190,6 +236,7 @@ class Machine(unittest.TestCase):
                                                                                                     repr(self.log))
         write(os.path.join(self.bin, "nvidia-smi"), smi, 0o755)
         write(os.path.join(self.bin, "dmesg"), FAKE_DMESG, 0o755)
+        write(os.path.join(self.bin, "journalctl"), FAKE_JOURNAL_DENIED, 0o755)
         write(os.path.join(self.bin, "systemctl"), FAKE_SYSTEMCTL.replace("@LOG@", repr(self.log)), 0o755)
         self.ssh = os.path.join(self.tmp, "fake-ssh")
         write(self.ssh, FAKE_SSH, 0o755)
@@ -222,6 +269,17 @@ class Machine(unittest.TestCase):
     def governors(self):
         return dict((int(n[3:]), read(os.path.join(self.cpu, n, "cpufreq", "scaling_governor")).strip())
                     for n in os.listdir(self.cpu))
+
+    def journal(self, lines=None, root_only=False):
+        self.jlines = os.path.join(self.tmp, "journal.json")
+        self.set_journal(JOURNAL_LINES if lines is None else lines)
+        write(os.path.join(self.bin, "journalctl"), FAKE_JOURNAL.replace("@PY@", sys.executable).replace(
+            "@LOG@", repr(self.log)).replace("@LINES@", repr(self.jlines)).replace("@ROOT_ONLY@", repr(root_only)),
+            0o755)
+
+    def set_journal(self, lines, first=1):
+        with open(self.jlines, "w") as f:
+            json.dump([[first + i, x] for i, x in enumerate(lines)], f)
 
     def calls(self):
         return read(self.log).splitlines() if os.path.exists(self.log) else []
@@ -673,6 +731,452 @@ class TestPowerMax(Machine):
         self.run_tool(hh, *base, code=hh.USAGE)
 
 
+class TestKernelJournal(Machine):
+    def probe(self, script=None, kernel=None):
+        r = subprocess.run(["sh", "-s"], input=(script or hh.host_script(None, kernel=kernel)).encode(),
+                           stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
+        return hh.assess(r.stdout.decode(), 3)
+
+    def lines(self, rec):
+        return hh.host_lines({"name": "box"}, dict(rec, owner=None, fix=None))
+
+    def test_the_journal_of_this_boot_keeps_what_the_ring_buffer_lost(self):
+        self.journal()
+        rec = self.probe()
+        self.assertEqual((rec["xid_source"], rec["xid_read"], rec["xids"], rec["gpu_start_failures"], rec["xid_cursor"]),
+                         ("journal", "boot", {79: 3, 13: 1, 149: 1}, 1, "c7"))
+        self.assertIn("journalctl -k -b 0 -o cat --no-pager --show-cursor", self.calls())
+        self.assertIn("Xid 79 x3, 149 x1 since boot (hardware or driver class: see NVIDIA's Xid catalog)",
+                      rec["problems"])
+        self.assertTrue(self.lines(rec)[1].endswith("; Xid from journalctl -k -b 0"), self.lines(rec))
+        # without --write dmesg is not read beside the journal
+        self.assertEqual(rec["xids_alt"], {})
+
+    def test_after_the_first_reading_only_the_new_lines_are_read(self):
+        self.journal()
+        kernel = {"cursor": "c7", "boot": boot_id(), "base": {79: 3, 13: 1, 149: 1}, "init": 1}
+        self.set_journal(JOURNAL_LINES + [X79])
+        rec = self.probe(kernel=kernel)
+        self.assertEqual((rec["xid_read"], rec["xids"], rec["gpu_start_failures"], rec["xid_cursor"]),
+                         ("after", {79: 4, 13: 1, 149: 1}, 1, "c8"))
+        self.assertIn("journalctl -k -b 0 -o cat --no-pager --show-cursor --after-cursor=c7", self.calls())
+        self.assertIn("(the lines since the last check, added to its counts)", self.lines(rec)[1])
+        # with --write, dmesg is counted beside it for its own base
+        self.assertEqual(rec["xids_alt"], {"dmesg": {79: 1, 13: 1}})
+        # nothing new: the counts stand, and no cursor comes back (the state keeps the old one)
+        rec = self.probe(kernel=dict(kernel, cursor="c8", base={79: 4, 13: 1, 149: 1}))
+        self.assertEqual((rec["xid_read"], rec["xids"], rec["xid_cursor"]), ("after", {79: 4, 13: 1, 149: 1}, None))
+        # another boot, or a cursor the journal refuses: the whole boot is read again
+        for k in (dict(kernel, boot="another-boot"), dict(kernel, cursor="bad cursor")):
+            rec = self.probe(kernel=k)
+            self.assertEqual((rec["xid_read"], rec["xids"][79]), ("boot", 4))
+
+    def test_a_vacuumed_journal(self):
+        # journald dropped the boot's oldest lines: a whole-boot reading counts what is left, and a cursor whose line
+        # is gone resumes at the next line left, so no new event is lost
+        self.journal()
+        self.set_journal(JOURNAL_LINES[3:] + [X79], first=4)
+        self.assertEqual(self.probe()["xids"], {79: 1, 13: 1, 149: 1})
+        rec = self.probe(kernel={"cursor": "c2", "boot": boot_id(), "base": {79: 2}, "init": 0})
+        self.assertEqual((rec["xid_read"], rec["xids"], rec["xid_cursor"]), ("after", {79: 3, 13: 1, 149: 1}, "c8"))
+
+    def test_a_denied_or_failing_journal_falls_back_to_dmesg(self):
+        # the default stand-in answers with a hint and exit 0; a journal with no files fails
+        for journal in (FAKE_JOURNAL_DENIED, "#!/bin/sh\necho 'No journal files were found.' >&2\nexit 1\n"):
+            write(os.path.join(self.bin, "journalctl"), journal, 0o755)
+            rec = self.probe()
+            self.assertEqual((rec["xid_source"], rec["xids"], rec["gpu_start_failures"]), ("dmesg", {79: 1, 13: 1}, 1))
+            self.assertIn("; Xid from dmesg (a ring buffer: on a busy host its oldest lines are gone)",
+                          self.lines(rec)[1])
+        # neither readable: unknown, as before
+        write(os.path.join(self.bin, "dmesg"), FAKE_DMESG_ROOT, 0o755)
+        rec = self.probe()
+        self.assertEqual((rec["xid_source"], rec["xids"]), (None, None))
+        self.assertNotIn("Xid from", self.lines(rec)[1])
+
+    def test_a_root_only_journal_is_read_through_sudo_in_the_owners_scope_only(self):
+        if os.getuid() == 0:
+            self.skipTest("root needs no sudo")
+        self.journal(root_only=True)
+        write(os.path.join(self.bin, "dmesg"), FAKE_DMESG_ROOT, 0o755)
+        write(os.path.join(self.bin, "sudo"), FAKE_SUDO.replace("@LOG@", repr(self.log)), 0o755)
+        rec = self.probe(HOST_SCRIPT({"scope": "host"}, cpu=self.cpu))
+        self.assertEqual((rec["xid_source"], rec["xids"][79]), ("journal", 3))
+        self.assertIn("sudo -n journalctl -k -b 0 -o cat --no-pager --show-cursor", self.calls())
+        self.assertNotIn("sudo -n dmesg", self.calls())
+        self.set_gpus([gpu(0), gpu(1), gpu(2)])
+        rec = self.probe(HOST_SCRIPT({"scope": "claims", "gpus": [1], "cores": [0]}, cpu=self.cpu))
+        self.assertIsNone(rec["xids"])
+        self.assertEqual([c for c in self.calls() if c.startswith("sudo ")], [])
+
+
+T0 = 1_900_000_000.0
+
+
+class TestHealthJudgement(unittest.TestCase):
+    def test_thresholds(self):
+        th = dict(hh.HEALTH)
+        rec = hh.assess(HEALTHY, 2)
+        self.assertEqual(hh.readings(rec, 2, th, {}), {})
+        g = rec["gpus"]
+        g[1]["temp_c"] = 86.0
+        self.assertEqual(hh.readings(rec, 2, th, None)["temp"], ("warn", "GPU 1 at 86 C"))
+        g[1]["temp_c"] = 90.0
+        self.assertEqual(hh.readings(rec, 2, th, None)["temp"], ("bad", "GPU 1 at 90 C"))
+        self.assertNotIn("temp", hh.readings(rec, 2, dict(th, temp_warn_c=0, temp_bad_c=0), None))
+        # GPUs missing against the inventory: bad, or warn below gpus_missing_bad
+        self.assertEqual(hh.readings(rec, 3, th, None)["gpus"], ("bad", "2 of 3 GPUs visible"))
+        self.assertEqual(hh.readings(rec, 3, dict(th, gpus_missing_bad=2), None)["gpus"][0], "warn")
+        # new Xid events: warn, bad for a code that needs a GPU reset or a reboot
+        self.assertEqual(hh.readings(rec, 2, th, {149: 2})["xid"], ("warn", "2 new Xid (149 x2)"))
+        self.assertEqual(hh.readings(rec, 2, th, {79: 1, 149: 1})["xid"], ("bad", "2 new Xid (79 x1, 149 x1)"))
+        self.assertNotIn("xid", hh.readings(rec, 2, dict(th, xid_new_warn=3), {149: 2}))
+        # a GPU busy with almost no memory in use; a unified-memory GPU reports none and is not judged
+        g[0]["mem_used_gb"] = 0.2
+        self.assertEqual(hh.readings(rec, 2, th, None)["idle"][1],
+                         "busy with almost no memory in use (hung, or a stray process): GPU 0 98% with 0.2 GB")
+        self.assertNotIn("idle", hh.readings(rec, 2, dict(th, idle_busy_pct=0), None))
+        unified = hh.assess(UNIFIED, 1)
+        unified["gpus"][0]["util_pct"] = 100.0
+        self.assertEqual(hh.readings(unified, 1, th, None), {})
+        sick = hh.readings(hh.assess(SICK, 2), 2, th, None)
+        self.assertEqual(sick, {
+            "driver": ("bad", "nvidia-smi: Unable to determine the device handle for GPU0000:3B:00.0: Unknown Error"[:80]),
+            "gpus": ("bad", "1 of 2 GPUs visible"), "temp": ("bad", "GPU 0 at 91 C"),
+            "throttle": ("warn", "held back: GPU 0 hardware slowdown, hardware thermal slowdown"),
+            "ecc": ("warn", "uncorrected ECC errors: GPU 0 2")})
+        self.assertNotIn("throttle", hh.readings(hh.assess(SICK, 2), 2, dict(th, throttle_warn=False), None))
+
+    def test_zero_turns_every_setting_off(self):
+        th = dict(hh.HEALTH)
+        rec = hh.assess(SICK, 3)
+        rec["gpus"][0].update(util_pct=100.0, mem_used_gb=0.2)
+        on = hh.readings(rec, 3, th, {79: 1, 149: 2})
+        self.assertEqual(set(on), set(["driver", "gpus", "temp", "xid", "throttle", "ecc", "idle"]))
+
+        def off(**kw):
+            return hh.readings(rec, 3, dict(th, **kw), {79: 1, 149: 2})
+        # each pair's bad level alone, then both
+        self.assertEqual((off(temp_bad_c=0)["temp"][0], off(gpus_missing_bad=0)["gpus"][0]), ("warn", "warn"))
+        self.assertEqual((off(temp_warn_c=0)["temp"][0], off(gpus_missing_warn=0)["gpus"][0]), ("bad", "bad"))
+        self.assertNotIn("temp", off(temp_warn_c=0, temp_bad_c=0))
+        self.assertNotIn("gpus", off(gpus_missing_warn=0, gpus_missing_bad=0))
+        self.assertEqual(off(xid_bad_codes=[])["xid"][0], "warn")
+        self.assertEqual(off(xid_new_warn=0)["xid"][0], "bad")
+        self.assertNotIn("xid", off(xid_new_warn=0, xid_bad_codes=[]))
+        self.assertNotIn("throttle", off(throttle_warn=False))
+        self.assertNotIn("idle", off(idle_busy_pct=0))
+        self.assertNotIn("idle", off(idle_mem_gb=0))
+        # an unreachable host never trips, a level clears at the first clean check, a reading is never stale
+        down, st = {"error": "ssh: x", "code": hh.UNREACHABLE}, {}
+        for _ in range(3):
+            _, st, ch = hh.judge({"name": "box"}, down, st, dict(th, unreachable_bad_checks=0), T0)
+            self.assertEqual(ch, [])
+        lv, _ = hh.hold({}, {"temp": ("bad", "GPU 0 at 95 C")}, set(), th, T0)
+        self.assertEqual(hh.hold(lv, {}, set(), dict(th, clear_checks=0), T0)[1], [("CLEARED", "temp", "bad", "now ok")])
+        self.assertEqual((hh.is_stale(10 ** 9, dict(th, stale_h=0)), hh.is_stale(4 * 3600, th), hh.is_stale(None, th)),
+                         (False, True, True))
+        # every setting is covered above
+        self.assertEqual(sorted(hh.HEALTH), sorted([
+            "temp_warn_c", "temp_bad_c", "gpus_missing_warn", "gpus_missing_bad", "xid_new_warn", "xid_bad_codes",
+            "throttle_warn", "idle_busy_pct", "idle_mem_gb", "unreachable_bad_checks", "clear_checks", "stale_h"]))
+
+    def reading(self, src, xids, boot="b1", alt=None, cursor=None, read="boot"):
+        return {"xids": xids, "xid_source": src, "boot_id": boot, "xids_alt": alt or {}, "xid_cursor": cursor,
+                "xid_read": read if src == "journal" else None, "gpu_start_failures": 0}
+
+    def test_each_source_keeps_its_own_xid_base(self):
+        R = self.reading
+        # the owner's sudo run reads the journal, and dmesg beside it; a plain run reads dmesg only
+        new, k = hh.count_xids(R("journal", {79: 1, 13: 5}, alt={"dmesg": {79: 1}}, cursor="c1"), {})
+        self.assertEqual(new, {})
+        new, k = hh.count_xids(R("dmesg", {79: 2}), k)
+        self.assertEqual(new, {79: 1})
+        # the journal sees that event too, and one more: only the second is new
+        new, k = hh.count_xids(R("journal", {79: 3, 13: 5}, alt={"dmesg": {79: 3}}, cursor="c3", read="after"), k)
+        self.assertEqual(new, {79: 1})
+        self.assertEqual(hh.count_xids(R("dmesg", {79: 3}), k)[0], {})
+        # dmesg alone sees an event, then its ring buffer wraps and hides the next: the journal counts that one once
+        new, k = hh.count_xids(R("dmesg", {79: 4}), k)
+        self.assertEqual(new, {79: 1})
+        new, k = hh.count_xids(R("dmesg", {79: 1}), k)
+        self.assertEqual(new, {})
+        new, k = hh.count_xids(R("journal", {79: 5, 13: 5}, cursor="c5", read="after"), k)
+        self.assertEqual(new, {79: 1})
+        self.assertEqual((k["sources"]["journal"]["pending"], k["sources"]["dmesg"]["pending"]), ({}, {"79": 1}))
+
+    def test_a_first_source_reboots_and_cursors(self):
+        R = self.reading
+        _, k = hh.count_xids(R("dmesg", {79: 1}), {})
+        # the journal's first reading counts through dmesg read beside it, which has a base
+        new, k = hh.count_xids(R("journal", {79: 4}, alt={"dmesg": {79: 2}}, cursor="c4"), k)
+        self.assertEqual((new, k["sources"]["journal"]["xids"]), ({79: 1}, {"79": 4}))
+        # after a reboot every Xid since boot is new, once: the journal starts the boot from nothing with it pending
+        new, k = hh.count_xids(R("dmesg", {79: 2, 48: 1}, boot="b2"), k)
+        self.assertEqual((new, k["boot"], k["sources"]["journal"]), ({79: 2, 48: 1}, "b2",
+                                                                    {"xids": {}, "pending": {"48": 1, "79": 2}}))
+        new, k = hh.count_xids(R("journal", {79: 2, 48: 1}, boot="b2", cursor="c9"), k)
+        self.assertEqual(new, {})
+        # a read with no line after the cursor keeps it; the probe gets it with the base it continues from
+        _, k = hh.count_xids(R("journal", {79: 2, 48: 1, 13: 1}, boot="b2", read="after"), k)
+        self.assertEqual(hh.kernel_arg({"kernel": k}), {"cursor": "c9", "boot": "b2", "base": {79: 2, 48: 1, 13: 1},
+                                                        "init": 0})
+        # a whole-boot read without a cursor drops it; an unread kernel log changes nothing
+        _, k2 = hh.count_xids(R("journal", {79: 2, 48: 1}, boot="b2"), k)
+        self.assertEqual(hh.kernel_arg({"kernel": k2}), {})
+        self.assertEqual(hh.count_xids(dict(R("journal", None)), k), (None, k))
+
+    def test_a_rise_counts_at_once_a_fall_after_clean_checks(self):
+        th = dict(hh.HEALTH)
+        lv, ch = hh.hold({}, {"temp": ("bad", "GPU 2 at 93 C")}, set(), th, T0)
+        self.assertEqual(ch, [("TRIPPED", "temp", "bad", "GPU 2 at 93 C")])
+        lv2, ch = hh.hold(lv, {"temp": ("bad", "GPU 2 at 94 C")}, set(), th, T0 + 3600)
+        self.assertEqual((ch, lv2["temp"]["detail"], lv2["temp"]["since"]), ([], "GPU 2 at 94 C", lv["temp"]["since"]))
+        lv3, ch = hh.hold(lv2, {"temp": ("warn", "GPU 2 at 87 C")}, set(), th, T0)
+        self.assertEqual((ch, lv3["temp"]["level"], lv3["temp"]["clean"]), ([], "bad", 1))
+        # a rise in between counts from zero again
+        again, ch = hh.hold(lv3, {"temp": ("bad", "GPU 2 at 91 C")}, set(), th, T0)
+        self.assertEqual((ch, again["temp"]["clean"]), ([], 0))
+        lv4, ch = hh.hold(lv3, {"temp": ("warn", "GPU 2 at 86 C")}, set(), th, T0)
+        self.assertEqual((ch, lv4["temp"]["level"]), ([("CLEARED", "temp", "bad", "now warn: GPU 2 at 86 C")], "warn"))
+        _, ch = hh.hold(lv4, {}, set(), dict(th, clear_checks=1), T0)
+        self.assertEqual(ch, [("CLEARED", "temp", "warn", "now ok")])
+        # reach clears like any other level; a key not read this time keeps its state
+        prev = {"reach": {"level": "bad", "detail": "unreachable: x", "clean": 0},
+                "xid": {"level": "bad", "detail": "1 new Xid (79 x1)", "clean": 0}}
+        lv, ch = hh.hold(prev, {}, set(["xid"]), th, T0)
+        self.assertEqual((ch, lv["reach"]["clean"], lv["xid"]), ([], 1, prev["xid"]))
+
+    def test_one_failed_check_sends_nothing(self):
+        th = dict(hh.HEALTH)
+        h = {"name": "box", "gpus": "2x H200 NVL"}
+        down = {"error": "ssh: connect to host box port 22: Connection timed out", "code": hh.UNREACHABLE}
+        up = dict(hh.assess(HEALTHY, 2), error=None)
+        last = {"health": "warn", "gpus": 2, "gpus_visible": 2, "busy": 0.97, "xid_new": 0, "temp_max_c": 86,
+                "notes": ["temp warn: GPU 1 at 86 C"], "checked": "2026-10-17T12:00:00-07:00"}
+        prev = {"levels": {"temp": {"level": "warn", "detail": "GPU 1 at 86 C", "clean": 0}},
+                "kernel": {"boot": "b", "sources": {"dmesg": {"xids": {"79": 1}, "pending": {}}}}}
+        why = "unreachable: ssh: connect to host box port 22: Connection timed out"
+        e, st, ch = hh.judge(h, down, prev, th, T0, last)
+        # the entry keeps its last reading, with a note; nothing to send
+        self.assertEqual(ch, [])
+        self.assertEqual((e["health"], e["busy"], e["temp_max_c"], e["checked"]), ("warn", 0.97, 86, last["checked"]))
+        self.assertEqual(e["notes"], ["temp warn: GPU 1 at 86 C", why + " (1 of 2 failed checks in a row before it counts)"])
+        self.assertEqual((st["unreachable"], st["levels"]["temp"]["level"], st["kernel"]), (1, "warn", prev["kernel"]))
+        # back at the next check: still nothing about reach
+        self.assertFalse([c for c in hh.judge(h, up, st, th, T0)[2] if c[1] == "reach"])
+        # the second failure in a row trips it, and the readings are unknown
+        e, st, ch = hh.judge(h, down, st, th, T0, last)
+        self.assertEqual(ch, [("TRIPPED", "reach", "bad", why + " (2 failed check(s) in a row)")])
+        self.assertEqual((e["health"], e["gpus"], e["gpus_visible"], e["busy"], e["temp_max_c"]), ("bad", 2, None, None,
+                                                                                                   None))
+        self.assertEqual(st["levels"]["temp"]["level"], "warn")
+        # it clears after clear_checks good checks; a failure in between keeps it tripped and counts again
+        e, st, ch = hh.judge(h, up, st, th, T0)
+        self.assertEqual((ch, e["health"]), ([], "bad"))
+        e, st, ch = hh.judge(h, down, st, th, T0, e)
+        self.assertEqual((ch, e["health"], st["levels"]["reach"]["clean"]), ([], "bad", 0))
+        # (temp's clean count went on from before the failure: a failed check reads nothing)
+        e, st, ch1 = hh.judge(h, up, st, th, T0)
+        e, st, ch2 = hh.judge(h, up, st, th, T0)
+        self.assertEqual(([c[:2] for c in ch1], [c[:2] for c in ch2], e["health"]),
+                         ([("CLEARED", "temp")], [("CLEARED", "reach")], "ok"))
+
+    def test_settings_from_the_pack(self):
+        tmp = tempfile.mkdtemp(prefix="hc-th-")
+        self.addCleanup(shutil.rmtree, tmp, True)
+        write(os.path.join(tmp, "ai", "defaults.json"), json.dumps({"hosthealth.temp_warn_c": 80,
+                                                                    "hosthealth.clear_checks": 3, "economy.level": 1}))
+        conf = os.path.join(tmp, "ai", ".memory", "config.json")
+        write(conf, json.dumps({"hosthealth.temp_warn_c": 83, "hosthealth.xid_bad_codes": [79],
+                                "hosthealth.colour": "red"}))
+        th, notes = hh.health_settings({"root": tmp, "pack": "ai"})
+        self.assertEqual((th["temp_warn_c"], th["clear_checks"], th["xid_bad_codes"], th["temp_bad_c"]),
+                         (83, 3, [79], 90))
+        self.assertTrue(any("unknown setting hosthealth.colour left out" in n for n in notes), notes)
+        for bad in ({"hosthealth.temp_bad_c": "hot"}, {"hosthealth.throttle_warn": 1},
+                    {"hosthealth.xid_bad_codes": 79}, {"hosthealth.idle_mem_gb": -1}):
+            write(conf, json.dumps(bad))
+            with self.assertRaises(hc.Fail) as e:
+                hh.health_settings({"root": tmp, "pack": "ai"})
+            self.assertEqual(e.exception.code, hh.USAGE)
+        write(conf, "{")
+        self.assertTrue(any(n.startswith("cannot read " + conf) for n in hh.health_settings({"root": tmp,
+                                                                                            "pack": "ai"})[1]))
+
+
+class TestHealthFile(Machine):
+    def project(self, hosts, share_with=None):
+        proj = os.path.join(self.tmp, "proj")
+        write(os.path.join(proj, "ai", "manifest.json"), json.dumps({"framework_version": "0.44.0",
+                                                                     "project": {"name": "proj"}}))
+        write(os.path.join(proj, "ai", ".memory", "hosts.json"), json.dumps(hosts))
+        if share_with is not None:
+            write(os.path.join(proj, "ai", ".memory", "resource-sharing.json"),
+                  json.dumps({"project": "proj", "share_with": share_with}))
+        return proj
+
+    def check(self, proj, *extra):
+        return self.run_tool(hh, "--project", proj, "--write", *extra)[1].splitlines()
+
+    def doc(self, proj, name=hh.HEALTH_FILE):
+        return json.loads(read(os.path.join(proj, "ai", ".memory", name)))
+
+    def test_the_health_file_and_threshold_crossings(self):
+        self.set_gpus([gpu(i) for i in range(3)])
+        proj = self.project([{"name": "box", "target": "local", "gpus": "3x H200 NVL"}], share_with=["guest"])
+        out = self.check(proj)
+        path = os.path.join(proj, "ai", ".memory", hh.HEALTH_FILE)
+        doc = self.doc(proj)
+        e = doc["hosts"]["box"]
+        self.assertEqual(sorted(doc), ["checked", "hosts", "schema"])
+        self.assertEqual(sorted(e), ["busy", "checked", "gpus", "gpus_visible", "health", "notes", "temp_max_c",
+                                     "xid_new"])
+        self.assertEqual((doc["schema"], e["health"], e["gpus"], e["gpus_visible"], e["busy"], e["xid_new"],
+                          e["temp_max_c"], e["notes"]), (1, "ok", 3, 3, 0.07, 0, 45, []))
+        for t in (doc["checked"], e["checked"]):
+            self.assertLess(abs(hc.parse_iso(t) - time.time()), 120)
+        self.assertIn("health file %s: 1 host(s): 1 ok; no threshold crossed since the last check" % path, out)
+        self.assertFalse([ln for ln in out if ln.startswith(("TRIPPED", "CLEARED", "send the"))], out)
+        # GPU 2 runs hot: one line to send, and the file says bad
+        hot = gpu(2)
+        hot["temperature.gpu"] = "93"
+        self.set_gpus([gpu(0), gpu(1), hot])
+        out = self.check(proj)
+        self.assertIn("TRIPPED box temp bad: GPU 2 at 93 C", out)
+        self.assertIn("send the TRIPPED and CLEARED lines of box to the projects you share them with (guest); they "
+                      "read the rest in the health file", out)
+        e = self.doc(proj)["hosts"]["box"]
+        self.assertEqual((e["health"], e["temp_max_c"], e["notes"]), ("bad", 93, ["temp bad: GPU 2 at 93 C"]))
+        # the same reading an hour later: nothing to send
+        out = self.check(proj)
+        self.assertFalse([ln for ln in out if ln.startswith(("TRIPPED", "CLEARED", "send the"))], out)
+        # cooled down: held for one clean check, then cleared
+        self.set_gpus([gpu(i) for i in range(3)])
+        self.assertFalse([ln for ln in self.check(proj) if ln.startswith("CLEARED")])
+        self.assertEqual(self.doc(proj)["hosts"]["box"]["notes"], ["temp bad: GPU 2 at 93 C (clean for 1 of 2 checks)"])
+        self.assertIn("CLEARED box temp bad: now ok", self.check(proj))
+        self.assertEqual(self.doc(proj)["hosts"]["box"]["health"], "ok")
+        # a new Xid 79 in the kernel log is bad at once: the GPU fell off the bus
+        write(os.path.join(self.bin, "dmesg"), FAKE_DMESG + "echo '[ 99.0] NVRM: Xid (PCI:0000:3b:00): 79, pid=0, GPU "
+                                                            "has fallen off the bus.'\n", 0o755)
+        self.assertIn("TRIPPED box xid bad: 1 new Xid (79 x1)", self.check(proj))
+        self.assertEqual(self.doc(proj)["hosts"]["box"]["xid_new"], 1)
+        self.assertEqual(self.doc(proj, hh.STATE_FILE)["hosts"]["box"]["kernel"]["sources"]["dmesg"]["xids"],
+                         {"13": 1, "79": 2})
+        # the project clears at the first clean check
+        write(os.path.join(proj, "ai", ".memory", "config.json"), json.dumps({"hosthealth.clear_checks": 1}))
+        self.assertIn("CLEARED box xid bad: now ok", self.check(proj))
+        self.set_gpus([gpu(0), gpu(1)])
+        self.assertIn("TRIPPED box gpus bad: 2 of 3 GPUs visible", self.check(proj))
+        # a setting the tool cannot use stops it before any check
+        write(os.path.join(proj, "ai", ".memory", "config.json"), json.dumps({"hosthealth.temp_bad_c": "hot"}))
+        self.run_tool(hh, "--project", proj, "--write", code=hh.USAGE)
+
+    def test_the_journal_is_read_on_from_the_last_check_and_sources_may_alternate(self):
+        # the journal readable (as through the owner's sudo), then denied (a plain run reads dmesg), then readable
+        self.set_gpus([gpu(i) for i in range(3)])
+        proj = self.project([{"name": "box", "target": "local", "gpus": "3x H200 NVL"}])
+        dmesg = os.path.join(self.bin, "dmesg")
+        self.journal()
+        self.check(proj)
+
+        def sources():
+            return self.doc(proj, hh.STATE_FILE)["hosts"]["box"]["kernel"]["sources"]
+        self.assertEqual((sources()["journal"]["cursor"], sources()["dmesg"]["xids"]), ("c7", {"13": 1, "79": 1}))
+        self.assertEqual(self.doc(proj)["hosts"]["box"]["xid_new"], 0)
+        self.assertFalse([c for c in self.calls() if "--after-cursor" in c])
+        # a new event: only the journal lines after the cursor are read
+        self.set_journal(JOURNAL_LINES + [X79])
+        write(dmesg, FAKE_DMESG + "echo '[ 99.0] %s'\n" % X79, 0o755)
+        out = self.check(proj)
+        self.assertIn("journalctl -k -b 0 -o cat --no-pager --show-cursor --after-cursor=c7", self.calls())
+        self.assertIn("TRIPPED box xid bad: 1 new Xid (79 x1)", out)
+        # a plain run reads only dmesg, which shows one more event
+        write(os.path.join(self.bin, "journalctl"), FAKE_JOURNAL_DENIED, 0o755)
+        write(dmesg, FAKE_DMESG + "echo '[ 99.0] %s'\necho '[ 99.5] %s'\n" % (X79, X79), 0o755)
+        self.check(proj)
+        self.assertEqual(self.doc(proj)["hosts"]["box"]["xid_new"], 1)
+        # the journal again, holding that event and nothing more: it is not counted twice
+        self.journal(JOURNAL_LINES + [X79, X79])
+        self.set_gpus([gpu(i) for i in range(3)])
+        self.check(proj)
+        self.assertIn("journalctl -k -b 0 -o cat --no-pager --show-cursor --after-cursor=c8", self.calls())
+        self.assertEqual(self.doc(proj)["hosts"]["box"]["xid_new"], 0)
+        self.assertEqual(sources()["journal"]["xids"], {"13": 1, "149": 1, "79": 5})
+
+    def test_unreachable_hosts_and_hosts_no_longer_listed(self):
+        down = os.path.join(self.tmp, "down-ssh")
+        write(down, "#!/bin/sh\necho 'ssh: connect to host far port 22: Connection timed out' >&2\nexit 255\n", 0o755)
+        box = {"name": "box", "target": "local", "gpus": "3x H200 NVL"}
+        proj = self.project([box, {"name": "far", "target": "user@far"}])
+        # one failed check sends nothing: a note only
+        out = self.check(proj, "--ssh", down)
+        self.assertFalse([ln for ln in out if ln.startswith(("TRIPPED", "CLEARED"))], out)
+        e = self.doc(proj)["hosts"]["far"]
+        self.assertEqual((e["health"], e["gpus"], e["gpus_visible"], e["busy"], e["notes"]), (
+            "ok", None, None, None, ["unreachable: ssh: connect to host far port 22: Connection timed out (1 of 2 failed "
+                                     "checks in a row before it counts)"]))
+        self.assertIn("TRIPPED far reach bad: unreachable: ssh: connect to host far port 22: Connection timed out (2 "
+                      "failed check(s) in a row)", self.check(proj, "--ssh", down))
+        # a check of one host leaves the other's entry as it was
+        self.check(proj, "--host", "box")
+        self.assertEqual(self.doc(proj)["hosts"]["far"]["health"], "bad")
+        # a host retired from the inventory leaves the file and the state
+        write(os.path.join(proj, "ai", ".memory", "hosts.json"), json.dumps([box]))
+        self.check(proj)
+        self.assertEqual((sorted(self.doc(proj)["hosts"]), sorted(self.doc(proj, hh.STATE_FILE)["hosts"])),
+                         (["box"], ["box"]))
+        # --write and --shared need a project, --shared no checks
+        self.run_tool(hh, "--hosts", self.inventory([box]), "--write", code=hh.USAGE)
+        self.run_tool(hh, "--project", proj, "--shared", "--fix", code=hh.USAGE)
+
+    def test_guests_read_the_owners_file(self):
+        sol = os.path.join(self.tmp, "sol")
+
+        def project(slug, share_with, hosts, config=None):
+            root = os.path.join(sol, "projects", "my", slug)
+            write(os.path.join(root, "ai", "manifest.json"), json.dumps({"framework_version": "0.44.0",
+                                                                         "project": {"name": slug}}))
+            write(os.path.join(root, "ai", ".memory", "resource-sharing.json"),
+                  json.dumps({"project": slug, "share_with": share_with}))
+            write(os.path.join(root, "ai", ".memory", "hosts.json"), json.dumps(hosts))
+            return root
+
+        owner = project("landlord", ["guest"], [{"name": "box", "target": "user@box", "gpus": "8x H100"},
+                                                {"name": "spare", "target": "user@spare"}])
+        guest = project("guest", [], [])
+        rc, out = self.run_tool(hh, "--project", guest, "--shared", code=hh.PROBLEMS)
+        self.assertIn("box [owner landlord]: no reading in its owner's health file: ask landlord to run hosthealth.py "
+                      "--write with its hourly checks", out)
+        now = time.time()
+
+        def entry(health, age_s, notes=()):
+            return {"health": health, "gpus": 8, "gpus_visible": 8, "busy": 0.97, "xid_new": 0, "temp_max_c": 87,
+                    "notes": list(notes), "checked": hh.local_iso(now - age_s)}
+
+        def publish(**hosts):
+            write(os.path.join(owner, "ai", ".memory", hh.HEALTH_FILE),
+                  json.dumps({"schema": 1, "checked": hh.local_iso(now), "hosts": hosts}))
+
+        publish(box=entry("warn", 600, ["temp warn: GPU 2 at 87 C"]), spare=entry("ok", 5 * 3600))
+        rc, out = self.run_tool(hh, "--project", guest, "--shared", code=hh.PROBLEMS)
+        lines = out.splitlines()
+        self.assertIn("box [owner landlord]: warn, checked 10m ago; 8 of 8 GPUs visible, busy 97%, hottest 87 C, 0 new "
+                      "Xid", lines)
+        self.assertIn("  temp warn: GPU 2 at 87 C", lines)
+        self.assertIn("spare [owner landlord]: ok, checked 5.0h ago: stale, its owner's checks may have stopped (ask "
+                      "it); 8 of 8 GPUs visible, busy 97%, hottest 87 C, 0 new Xid", lines)
+        rc, out = self.run_tool(hh, "--project", guest, "--shared", "--json", code=hh.PROBLEMS)
+        recs = json.loads(out)["hosts"]
+        self.assertEqual((recs["landlord/box"]["health"], recs["landlord/box"]["stale"], recs["landlord/spare"]["stale"]),
+                         ("warn", False, True))
+        # all fresh and ok, by the guest's own staleness setting
+        write(os.path.join(guest, "ai", ".memory", "config.json"), json.dumps({"hosthealth.stale_h": 6}))
+        publish(box=entry("ok", 600), spare=entry("ok", 5 * 3600))
+        self.run_tool(hh, "--project", guest, "--shared", code=hh.OK)
+
+
 class TestDashboard(Machine):
     def test_a_claim_with_an_attached_process_still_has_one(self):
         root = os.path.join(self.tmp, "claims")
@@ -777,6 +1281,21 @@ class TestPortability(unittest.TestCase):
             self.assertIn("hosthealth.py", doc)
             self.assertIn("hostdash.py", doc)
         self.assertIn("hosthealth.py --fix", rule)
+
+    def test_docs_carry_the_health_file(self):
+        root = os.path.dirname(HERE)
+        skill = " ".join(read(os.path.join(root, "shared", "resource-sharing.skill.md")).split())
+        rule = " ".join(read(os.path.join(root, "shared", "resource-sharing.rule.md")).split())
+        for want in ("host-health.json", "`TRIPPED <host> <what>`", "`CLEARED <host> <what>`", "hosthealth.py --shared",
+                     "journalctl -k -b 0", "`--hosts NAME[,NAME]`", "never sends hourly readings"):
+            self.assertIn(want, skill)
+        # every threshold is documented, in the skill and the tool's own help
+        for key in hh.HEALTH:
+            self.assertIn("`%s`" % key, skill)
+            self.assertIn(key, hh.__doc__)
+        for want in ("host-health.json", "TRIPPED", "hosthealth.py --shared", "never ask for, send or acknowledge "
+                     "hourly readings"):
+            self.assertIn(want, rule)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,4 @@
-_Rev. 5_
+_Rev. 6_
 
 # Rule: Resource Sharing (Always-On) <!-- omit in toc -->
 
@@ -29,6 +29,10 @@ hosts. The how-to is in `resource-sharing.skill.md`.
 - **Pick up sharing changes.** Guests run `shared` at every audit and at least hourly: bring NEW hosts into use
   through claims, stop using GONE ones (release your claims there), then `shared --ack`. Owners run `install --all`
   right after adding machines or changing `share_with`, and tell the projects they share with.
+- **Health by file, not by chat.** Owners keep `<pack>/.memory/host-health.json` current (`hosthealth.py --write`
+  with their hourly checks) and message guests only its `TRIPPED` or `CLEARED` lines and changes to a shared
+  host's availability; guests read the owner's file (`hosthealth.py --shared`) and never ask for, send or
+  acknowledge hourly readings.
 - **Never delete or stop a shared host blind.** Before deleting, stopping or releasing a host other projects
   may use - including a teardown step of another plugin's flow, such as a cloud run's stop or delete at its
   end - run `audit --host <name>` and go ahead only on a `delete` or `release` advice (no live claims, no work

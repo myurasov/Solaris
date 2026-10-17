@@ -1,4 +1,4 @@
-# rev. 5
+# rev. 6
 
 """hostclaims: share hosts between agents through claim files kept on each host.
 
@@ -8,7 +8,7 @@ reads and writes the host's claims folder under a file lock, so checking free
 capacity and writing a claim happen in one step. No daemons: between calls only
 the jobs started with `run` and their watchers (in tmux) run on a host.
 
-    python3 hostclaims.py [--hosts FILE] [--ssh PROG] [--agent NAME] <command> ...
+    python3 hostclaims.py [--hosts FILE.json|NAME,...] [--ssh PROG] [--agent NAME] <command> ...
 
 Commands: install, uninstall, status, shared, claim, run, renew, release, reap,
 yield, usage, pool, lease, extend, request, approve, decline, fit, audit
@@ -3400,33 +3400,115 @@ def merge_hosts(own, peers):
     return out, notes
 
 
-def load_inventory(ctx):
+# a host name as --hosts takes it: NAME, or OWNER/NAME
+HOST_ARG_RE = re.compile(r"^[^/\s.~][^/\s]*(/[^/\s]+)?$")
+
+
+def hosts_option(value):
+    # --hosts (or HOSTCLAIMS_HOSTS): (inventory file, None), or (None, host names) for NAME[,NAME] or OWNER/NAME. A
+    # value is a file when it ends in .json or reads as a path (from / ~ or ., or with more than the one slash of
+    # OWNER/NAME); what sits in the working folder never decides
+    if not value:
+        return None, None
+    names = [n.strip() for n in value.split(",") if n.strip()]
+    if value.lower().endswith(".json") or not names or not all(HOST_ARG_RE.match(n) for n in names):
+        return os.path.expanduser(value), None
+    return None, names
+
+
+def own_hosts(hosts, slug):
+    return [dict(h, project=h.get("project") or slug, owner=h.get("owner") or slug,
+                 owner_explicit=bool(h.get("owner"))) for h in hosts]
+
+
+def project_hosts(ctx, unread=None):
+    # the project's hosts.json merged with the hosts other projects share with it; unread as for peer_hosts
     me = ctx.project
-    slug = me["slug"] if me else None
-
-    def own(hosts):
-        return [dict(h, project=h.get("project") or slug, owner=h.get("owner") or slug,
-                     owner_explicit=bool(h.get("owner"))) for h in hosts]
-
-    if ctx.local_root:
-        return own([{"name": "local", "target": "local", "root": ctx.local_root}])
-    path = ctx.hosts_path or os.environ.get("HOSTCLAIMS_HOSTS")
-    if path:
-        inv = read_inventory(os.path.expanduser(path))
-        if inv is None:
-            raise Fail("cannot read the host inventory %s" % path, USAGE)
-        return own(inv)
-    if not me:
-        raise Fail("no host inventory: pass --hosts FILE or --local-root DIR, set HOSTCLAIMS_HOSTS, or run inside "
-                   "a project", USAGE)
     inv = read_inventory(os.path.join(me["root"], me["pack"], ".memory", "hosts.json")) or []
-    peers, notes = peer_hosts(me)
-    merged, more = merge_hosts(own(inv), peers)
+    peers, notes = peer_hosts(me, unread)
+    merged, more = merge_hosts(own_hosts(inv, me["slug"]), peers)
     ctx.notes = notes + more
     if not merged:
         raise Fail("no hosts: %s/.memory/hosts.json is missing or empty, and no project shares hosts with %s"
-                   % (me["pack"], slug), USAGE)
+                   % (me["pack"], me["slug"]), USAGE)
     return merged
+
+
+def host_key(h):
+    # OWNER/NAME, the name as its owner's inventory has it
+    return h.get("shared_key") or "%s/%s" % (h.get("owner"), h["name"])
+
+
+def named_hosts(ctx):
+    # --hosts NAME[,NAME]: those hosts from the project's inventory (its own and the ones shared with it), or from its
+    # seen list for a host whose owner's files cannot be read now. A NAME that hosts of two owners carry is refused:
+    # OWNER/NAME picks one.
+    me, names = ctx.project, ctx.host_names
+    if not me:
+        raise Fail("--hosts %s: host names are looked up in a project's inventory and seen list: run inside a project "
+                   "or pass --project (an inventory file ends in .json, or is a path from / ~ or .)"
+                   % ",".join(names), USAGE)
+    unread = {}
+    try:
+        inv = project_hosts(ctx, unread)
+    except Fail:
+        inv = []
+    seen = read_json(os.path.join(me["root"], me["pack"], ".memory", SEEN_NAME))
+    recs = seen.get("hosts") if isinstance(seen, dict) and isinstance(seen.get("hosts"), dict) else {}
+    # as shared keeps them: a record whose owner cannot be read now, matched by its folder or, from an older seen
+    # list, by slug; a local target there names no claims folder
+    recs = dict((k, r) for k, r in recs.items() if isinstance(r, dict) and "/" in k
+                and r.get("target") not in (None, "local")
+                and (r["folder"] in unread if r.get("folder") else r.get("project") in unread.values()))
+
+    def matches(n, key, *names):
+        return n == key or n in names or ("/" not in n and key.split("/", 1)[1] == n)
+
+    out = []
+    for n in names:
+        found = {}
+        for h in inv:
+            key = host_key(h)
+            if matches(n, key, h["name"], "%s/%s" % (h.get("project"), key.split("/", 1)[1])):
+                found.setdefault(key, h)
+        for key, r in sorted(recs.items()):
+            if key not in found and matches(n, key, r.get("name")):
+                valid_target(r["target"])
+                found[key] = {"name": r.get("name") or key.split("/", 1)[1], "target": r["target"],
+                              "project": r.get("project") or r.get("owner"), "owner": r.get("owner"),
+                              "owner_explicit": bool(r.get("owner")), "seen_list": True}
+        if len(found) > 1:
+            raise Fail("ambiguous host %r: hosts of %d owners carry it; name one as OWNER/NAME: %s"
+                       % (n, len(found), ", ".join(sorted(found))), USAGE)
+        if not found:
+            known = sorted(set(h["name"] for h in inv) | set(recs))
+            raise Fail("unknown host %r: no such host in the inventory or seen list of %s (hosts: %s); an inventory "
+                       "file ends in .json, or is a path from / ~ or ." % (n, me["slug"], ", ".join(known) or "none"),
+                       USAGE)
+        h = list(found.values())[0]
+        if h.pop("seen_list", False):
+            ctx.notes.append("%s: from the seen list (its owner's inventory is not readable now), with no ssh options "
+                             "or claims folder from there" % n)
+        if h not in out:
+            out.append(h)
+    return out
+
+
+def load_inventory(ctx):
+    me = ctx.project
+    if ctx.local_root:
+        return own_hosts([{"name": "local", "target": "local", "root": ctx.local_root}], me["slug"] if me else None)
+    if ctx.hosts_file:
+        inv = read_inventory(ctx.hosts_file)
+        if inv is None:
+            raise Fail("cannot read the host inventory %s" % ctx.hosts_file, USAGE)
+        return own_hosts(inv, me["slug"] if me else None)
+    if ctx.host_names:
+        return named_hosts(ctx)
+    if not me:
+        raise Fail("no host inventory: pass --hosts FILE or --local-root DIR, set HOSTCLAIMS_HOSTS, or run inside "
+                   "a project", USAGE)
+    return project_hosts(ctx)
 
 
 def load_policy(path, project):
@@ -3487,6 +3569,7 @@ class Ctx(object):
         self.args = args
         self.local_root = getattr(args, "local_root", None)
         self.hosts_path = getattr(args, "hosts", None)
+        self.hosts_file, self.host_names = hosts_option(self.hosts_path or os.environ.get("HOSTCLAIMS_HOSTS"))
         self.ssh = shlex.split(getattr(args, "ssh", None) or os.environ.get("HOSTCLAIMS_SSH") or "ssh")
         self.json = bool(getattr(args, "json", False))
         self.as_owner = bool(getattr(args, "as_owner", False))
@@ -3754,10 +3837,12 @@ def tool_cmd(ctx, *args):
     # a command to run as printed: this tool, the caller's --project/--hosts/--local-root and any explicit
     # --agent and --as-owner, then args
     parts = ["python3", os.path.abspath(__file__)]
-    for flag, v in (("--project", getattr(ctx.args, "project", None)), ("--hosts", ctx.hosts_path),
-                    ("--local-root", ctx.local_root)):
+    for flag, v in (("--project", getattr(ctx.args, "project", None)),
+                    ("--hosts", ctx.hosts_path if ctx.hosts_file else None), ("--local-root", ctx.local_root)):
         if v:
             parts += [flag, os.path.abspath(os.path.expanduser(v))]
+    if ctx.hosts_path and ctx.host_names:
+        parts += ["--hosts", ",".join(ctx.host_names)]
     if getattr(ctx.args, "agent", None):
         parts += ["--agent", ctx.args.agent]
     if ctx.as_owner:
@@ -4011,7 +4096,10 @@ def live_line(v, t):
 
 def cmd_shared(ctx, a):
     # guest side: the hosts other projects share with this one against the seen list; no ssh unless --probe
-    inv_file = ctx.hosts_path or os.environ.get("HOSTCLAIMS_HOSTS")
+    inv_file = ctx.hosts_file
+    if ctx.host_names:
+        raise Fail("shared compares every host shared with this project: --hosts takes an inventory file here, not "
+                   "host names", USAGE)
     if ctx.local_root or not (ctx.project or inv_file):
         raise Fail("shared lists the hosts other projects share with this one: run it in a project (or pass "
                    "--hosts FILE with --seen FILE)", USAGE)
@@ -4751,7 +4839,9 @@ def cmd_decide(ctx, a, decision):
 def add_common(p, top):
     d = (lambda v: v) if top else (lambda v: argparse.SUPPRESS)
     p.add_argument("--hosts", default=d(None), help="use exactly this inventory JSON [{name, target, opts}] instead "
-                   "of the project's hosts.json merged with the hosts other projects share (or HOSTCLAIMS_HOSTS)")
+                   "of the project's hosts.json merged with the hosts other projects share (a file ends in .json or is "
+                   "a path from / ~ or .), or only these host names (NAME[,NAME]; OWNER/NAME where two owners' hosts "
+                   "share a name) from those or from the seen list (or HOSTCLAIMS_HOSTS)")
     p.add_argument("--project", default=d(None), help="project folder to act for (default: found from here)")
     p.add_argument("--local-root", default=d(None), help="work on a claims folder on this machine instead (no ssh)")
     p.add_argument("--ssh", default=d(None), help="ssh program (default ssh, or HOSTCLAIMS_SSH)")
