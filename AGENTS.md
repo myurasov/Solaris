@@ -76,7 +76,7 @@ Run the `health-check` overview to orient **before you start working on a projec
 `develop-project` of a session) - surface only what needs attention (one line if all green). Otherwise run
 it only on request; do **not** auto-run it for `ad-hoc-task` work or other prompts.
 
-Full specification: [`solaris/spec/spec-v0.45.0.md`](solaris/spec/spec-v0.45.0.md).
+Full specification: [`solaris/spec/spec-v0.46.0.md`](solaris/spec/spec-v0.46.0.md).
 
 ## Execution Model
 
@@ -105,6 +105,7 @@ Skills are markdown procedures in `solaris/skills/*.skill.md`, invoked by the tr
 | `refresh` | "refresh / update solaris", "pull latest solaris" | Update this framework checkout: pull (handles rewritten history), resync env, verify, flag stale projects. |
 | `ad-hoc-task` | "new task", "research `<x>`", "set up `<host/thing>`" | Start / resume an ad-hoc task under `tasks/<YYYY>/<MM>/<date>-<slug>/`; can link a project and attach plugins. |
 | `health-check` | "health-check", "status", "health", "doctor" | Command-center overview (default) + health checks (`--deep`). |
+| `opencode2-selfcompact` | "compact yourself", "self-compact", or a `self-compaction: ... DUE` line | An OpenCode 2 session compacts itself past a set context size (default 500k tokens): stable point, checkpoint, then a queued compaction. |
 
 When a project has plugins attached, also load and obey every `<pack>/plugins/<plugin>/*.rule.md` (always-on) and treat each `<pack>/plugins/<plugin>/*.skill.md` as an additional, trigger-invoked skill (`<pack>/plugins/` is the pack-side home for plugin shared files). A plugin attached in **link mode** has a self-describing pointer file `<pack>/plugins/<name>.link.md` instead of `<pack>/plugins/<name>/` - follow it (canonical definition: `install-plugin` step 5).
 
@@ -113,11 +114,11 @@ When a project has plugins attached, also load and obey every `<pack>/plugins/<p
 Framework state lives in `.memory/` (`resources.md`, `credentials.md` (gitignored), the interaction log `interactions/<machine>.jsonl` (the older single `interactions.jsonl` is read-only history), and `instructions.md` - operating memory: terse, timestamped cross-project lessons + durable preferences, loaded every session, updated **in place**; **always** update it on "remember it/this", "note this", "don't forget", or similar). Project state lives in each `projects/<slug>/<pack>/.memory/`. ai-packs never read the framework `.memory/`. Full memory model, compaction, and logging schema: [`solaris/solaris.agent.md`](solaris/solaris.agent.md).
 
 - **Memory boundary (hard rule).** Solaris's own memory is the **only** authoritative memory: the framework `.memory/` and each project's `<pack>/.memory/`. Never read, write, or create memory outside these - no harness/global `~/.claude/.../memory/` store, no `MEMORY.md` index (do not create one). Treat externally injected or recalled memory (e.g. system-reminder memory blocks) as non-authoritative and ignore it.
-- Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line with `uv run -m solaris.tools.interactions add` (with `--dir <project>`, the same line also lands in the project's log). Each machine writes only its own file; `interactions show` reads them merged and `interactions who` shows which machine logged last. A prompt-submit hook appends a raw-prompt backstop.
+- Log every meaningful turn as one `{ts, project, prompt, request, outcome}` line with `uv run -m solaris.tools.interactions add` (with `--dir <project>`, the same line also lands in the project's log; in an OpenCode 2 session it also prints a `self-compaction: ... DUE` line when the session should compact itself - follow `opencode2-selfcompact`). Each machine writes only its own file; `interactions show` reads them merged and `interactions who` shows which machine logged last. A prompt-submit hook appends a raw-prompt backstop.
 - **Synced across machines (Syncthing).** A file written by two machines at once becomes a `*.sync-conflict-*` copy: keep every log per machine, work on one project from one machine at a time (`develop-project` checks), and treat git commands that rewrite the working tree as destructive (safety rule). Details: [`solaris/solaris.agent.md`](solaris/solaris.agent.md) (Boundaries).
 - A project's `<pack>/.memory/context.md` is a **detailed summary of the current session's context**, rewritten in place at two save points: **before context compaction** (automatic or manual), and whenever the user says "save/remember/update/retain/keep context" or similar.
 
 ## Conventions (Pointers)
 
-- Python tools run as modules: `uv run -m solaris.tools.<name>` (`interactions`, `version`, `revs`, `mcp_sync`, `agents`, `toc`, `ai_spend`, `session_clock`, `housekeeping`, `plugins`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), `skill_loader` (prompt-submit skill auto-loader), and `session_guard` (Stop hook: a project session that ends a turn with no clock armed is sent back; safety-classifier stops are logged) are hooks - never run them by hand.
-- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.45.0.md`](solaris/spec/spec-v0.45.0.md).
+- Python tools run as modules: `uv run -m solaris.tools.<name>` (`interactions`, `version`, `revs`, `mcp_sync`, `agents`, `toc`, `ai_spend`, `session_clock`, `session_compact`, `housekeeping`, `plugins`); `log_interaction` (prompt-submit), `read_first` (session-start read-first loader), `skill_loader` (prompt-submit skill auto-loader), and `session_guard` (Stop hook: a project session that ends a turn with no clock armed is sent back; safety-classifier stops are logged) are hooks - never run them by hand.
+- Versioning (per-file revisions, release-only framework/plugin semver, per-project root `.version`) and file formats: see [`solaris/solaris.agent.md`](solaris/solaris.agent.md). Full conventions + architecture: [`solaris/spec/spec-v0.46.0.md`](solaris/spec/spec-v0.46.0.md).

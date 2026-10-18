@@ -29,7 +29,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.45.0.md`](spec/spec-v0.45.0.md).
+[`spec/spec-v0.46.0.md`](spec/spec-v0.46.0.md).
 
 ## Persona Model
 
@@ -142,6 +142,10 @@ There is one running agent. It adopts a persona by reading the active context:
   event from `<pack>/.memory/schedule.json`, or `re-arm` at the cap, and ends with `next: <exact command>`;
   writes `<pack>/.memory/clock.json` and, in Claude Code, the session registry the hooks read; one clock per
   project: a new start stops the older one)
+- `uv run -m solaris.tools.session_compact check|request|set-limit [--dir PATH]` (OpenCode 2 self-compaction:
+  measures the session's context against `selfcompact.limit`, default 500k tokens, and queues a compaction once
+  the checkpoint and stable-point gates pass; `interactions add` prints a line when one is due; procedure:
+  `skills/opencode2-selfcompact.skill.md`)
 - `uv run -m solaris.tools.session_guard` (the Stop and StopFailure hook; not called by hand: a registered project
   session that ends a turn with no clock armed and no fresh handover note is sent back with the start command, at
   most twice a turn; unarmed turn ends, safety-classifier stops and lasting API errors go to

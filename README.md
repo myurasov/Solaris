@@ -236,10 +236,12 @@ versions, and tasks.
 | "self-reflect", "review project improvements" | `self-reflect` | Review interaction logs and project suggestions; propose framework improvements. |
 | "new task / research X" | `ad-hoc-task` | Start/resume dated ad-hoc work under `tasks/`. |
 | "health-check" / "status" | `health-check` | Command-center overview; `--deep` for full checks. |
+| "compact yourself", or a `DUE` line | `opencode2-selfcompact` | An OpenCode 2 session compacts itself past a set context size, after saving a checkpoint. |
 
 Stdlib-only tools back the skills and run as modules (`uv run -m solaris.tools.<name>`): `version`,
 `revs`, `mcp_sync`, `agents`, `toc`, `ai_spend` (estimated AI spend per project and day),
-`session_clock` (a wake clock for scheduled agent work), `housekeeping` (a project's folder sizes against its
+`session_clock` (a wake clock for scheduled agent work), `session_compact` (an OpenCode 2 session's
+self-compaction, which `interactions add` checks on every logged turn), `housekeeping` (a project's folder sizes against its
 data budget, tidying of its private folder, pruning by rule and of re-creatable data), `plugins` (plugin dependencies and the project
 types plugins provide, such as `kaggle:competition`), plus `uv run pytest` for the test suite. `read_first`, `skill_loader`,
 `log_interaction` and `session_guard` are hooks - never run by hand.
@@ -247,5 +249,5 @@ types plugins provide, such as `kaggle:competition`), plus `uv run pytest` for t
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.45.0.md`](solaris/spec/spec-v0.45.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.46.0.md`](solaris/spec/spec-v0.46.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.
