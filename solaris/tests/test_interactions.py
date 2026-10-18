@@ -23,6 +23,7 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(I, "REPO_ROOT", tmp_path)
     monkeypatch.setattr(I, "_now", lambda: NOW)
     monkeypatch.setenv("SOLARIS_MACHINE", "box1")
+    monkeypatch.delenv("OPENCODE_SESSION_ID", raising=False)  # no self-compaction check against a real server
     (tmp_path / ".memory").mkdir()
     pack = tmp_path / "projects" / "my" / "demo" / "aipack"
     (pack / ".memory").mkdir(parents=True)

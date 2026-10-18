@@ -26,10 +26,12 @@ Run::
 with ``--dir``, the identical line to the project's file (``--stdin`` reads the fields from a JSON object, which
 avoids shell quoting; flags win). ``--trigger`` (or a ``trigger`` key on stdin) takes ``owner``, ``clock``,
 ``worker`` or ``peer``. It refuses an empty ``project`` or ``-``: name the project, the ad-hoc task, or
-``solaris`` for framework work. ``show`` merges the history file and every machine's file by ``ts`` (``--last 0``
-prints everything; ``--json`` prints whole lines, ``trigger`` included). ``who`` lists each log file's latest
-entry. ``machine`` prints this machine's name: ``SOLARIS_MACHINE`` when set, else the macOS LocalHostName or the
-short host name, lowercased, with anything outside ``[a-z0-9-]`` turned into ``-``.
+``solaris`` for framework work. In an OpenCode 2 session ``add`` also prints one line when the session should
+compact itself (solaris.tools.session_compact; the project's checkpoint only when ``--project`` names the project
+at ``--dir``), which never changes its exit code. ``show`` merges the history file and every machine's file by
+``ts`` (``--last 0`` prints everything; ``--json`` prints whole lines, ``trigger`` included). ``who`` lists each
+log file's latest entry. ``machine`` prints this machine's name: ``SOLARIS_MACHINE`` when set, else the macOS
+LocalHostName or the short host name, lowercased, with anything outside ``[a-z0-9-]`` turned into ``-``.
 
 Exit codes: 0 ok; 1 an error (no ai-pack, an unwritable log); 2 bad arguments; 3 (``who`` only) another machine
 logged within ``--minutes`` (default 60), so the log's project may be in use there - as of the last sync.
@@ -307,7 +309,22 @@ def cmd_add(a) -> int:
             print(f"interactions: cannot write {path}: {e}", file=sys.stderr)
             return 1
     print(f"logged {entry['ts']} ({machine}) -> " + ", ".join(_rel(p) for p in targets))
+    note = _compaction_note(a.dir, fields["project"])
+    if note:
+        print(note)
     return 0
+
+
+def _compaction_note(project_dir, project: str) -> "str | None":
+    """In an OpenCode 2 session, one line when the session should compact itself (solaris.tools.session_compact).
+    An ad-hoc task linked to a project logs with its ``--dir`` too, but its checkpoint stays in the framework."""
+    if not os.environ.get("OPENCODE_SESSION_ID"):
+        return None
+    try:
+        from solaris.tools import session_compact as SC
+        return SC.due_line(project_dir if SC.is_project_session(project_dir, project) else None)
+    except Exception:  # noqa: BLE001 - the turn is logged already; this hint never fails the call
+        return None
 
 
 def cmd_show(a) -> int:

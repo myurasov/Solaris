@@ -363,8 +363,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/info/harnesses.md": {
-      "rev": 7,
-      "hash": "7dfc6cba5a8f18d2831757de697d6009a012cd9da98a1ea901ef8aba196b8f60",
+      "rev": 8,
+      "hash": "ded57f1b56731b086bf4db268f494ce02b2a8719a1e680abc534e38f9b2691b3",
       "history": [
         {
           "rev": 1,
@@ -393,6 +393,10 @@
         {
           "rev": 7,
           "hash": "7dfc6cba5a8f18d2831757de697d6009a012cd9da98a1ea901ef8aba196b8f60"
+        },
+        {
+          "rev": 8,
+          "hash": "ded57f1b56731b086bf4db268f494ce02b2a8719a1e680abc534e38f9b2691b3"
         }
       ]
     },

@@ -57,6 +57,12 @@ FALSE_TRIGGERS = [
     ("ad-hoc-task", "research into what high-ranking teams do differently - yes as a constant parallel track"),
     ("update-project", "update the battery pack firmware and the ice pack table"),
     ("update-project", "tell the other sessions when you change framework files so they can update them"),
+    ("opencode2-selfcompact", "compact the instructions file oldest-first"),
+    ("opencode2-selfcompact", "the session compacted overnight, what did it keep?"),
+    ("opencode2-selfcompact", "how do I compact the session log files?"),
+    ("opencode2-selfcompact", "fix the self-compact docs"),
+    ("opencode2-selfcompact", "rename selfcompact.limit to something shorter"),
+    ("opencode2-selfcompact", "implement an opencode2-selfcompact skill in core"),
 ]
 
 
@@ -126,6 +132,9 @@ REAL_TRIGGERS = [
     ("update-project", "migrate my/demo-app"),
     ("update-project", "update-project demo-app"),
     ("update-project", "update the project"),
+    ("opencode2-selfcompact", "compact yourself"),
+    ("opencode2-selfcompact", "self-compact now, then go on"),
+    ("opencode2-selfcompact", "save state and compact the session"),
 ]
 
 # Real requests that the first tightening lost (review finding 9, and a replay of the logged prompts): each

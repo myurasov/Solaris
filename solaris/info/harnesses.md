@@ -75,6 +75,14 @@ As of **2026-10-01**, for the two harnesses Solaris runs on:
   config load (no models, "Integration not found"), so query a warm `opencode serve`; `opencode run`
   reads stdin, so give it `</dev/null` in scripts and heredocs; `session export` leaves out unfinished
   or empty assistant turns; `opencode service restart` kills tool commands running under the service.
+- OpenCode 2.x compaction: the model has no compaction tool and `/compact` is a TUI action, while the automatic
+  compaction fires near the window's limit, wherever the turn is, with nothing saved first. Every tool shell
+  carries `OPENCODE_SESSION_ID`, and `POST /api/session/<id>/compact` (on the background service recorded in
+  `~/.local/state/opencode/service.json`) queues a compaction and returns at once, so a session can ask for its
+  own: `{"delivery": "queue"}` runs it after the turn, `"steer"` at the next step boundary (the route's default
+  when no delivery is given). Solaris builds self-compaction on it (`solaris.tools.session_compact`, the
+  `opencode2-selfcompact` skill; verified on 2.0.29). A program started from a tool shell (another agent CLI, a
+  script) inherits `OPENCODE_SESSION_ID` and would act for that session: start it with `env -u OPENCODE_SESSION_ID`.
 - Both harnesses now have a subagent tool (Cursor since 2.4), so the subagents rule's
   checkpointed-inline fallback - the lookup still runs, sliced/grepped within the read budget, notes
   to a scratch file, only conclusions restated - applies only to harnesses without one (the bulk-read
