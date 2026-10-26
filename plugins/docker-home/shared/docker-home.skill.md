@@ -3,7 +3,7 @@ name: docker-home
 triggers: ["build docker home", "start docker home", "stop docker home", "enter docker home", "docker home status", "rebuild docker home", "remove docker home", "docker-home"]
 summary: Build, start, enter, rebuild or remove this project's docker home (a per-project Linux container that runs the coding harness with only the project folder mounted) through the dh-*.sh shortcut scripts in this overlay, strictly on the user's request.
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Skill: docker-home - Run the Agent Inside a Project Container <!-- omit in toc -->
 
@@ -76,7 +76,10 @@ build there, in a session on that host.
 the tmux session, later calls re-attach to it. Inside, the user starts `claude`, `codex` or
 `opencode` in the project directory; the first run in a fresh home directory asks for a login (Claude
 Code prints an OAuth URL to open in any browser, Codex offers device login, opencode takes API keys),
-after which the logins persist in the home directory. Detach with `Ctrl-b d`; the session and any
+after which the logins persist in the home directory. opencode (2.x) runs its background service on a
+per-project port seeded in the home's `~/.config/opencode/service.json`, so under host networking it does
+not collide with the host's own service (49374) or another project's container; inside,
+`opencode service set port <n>` changes it. Detach with `Ctrl-b d`; the session and any
 running agent keep going. `dh-enter.sh <command>` runs a one-off command instead of the tmux session
 (for example `dh-enter.sh claude --version`); this form is the one an agent may use, since it needs
 no terminal.

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# rev. 2
+# rev. 3
 # docker-home: start this project's container (create it on first start, seeding the home directory).
 # Mounts: the project folder (rw), the container's home (rw), this overlay re-mounted read-only on
 # top of the project so the container can never rewrite the scripts the host executes, the optional
@@ -47,6 +47,15 @@ EOF
 fi
 if [ ! -f "$DH_HOME/.profile" ]; then
   printf '# seeded by docker-home: login shells (tmux) read .bashrc too\n[ -f "$HOME/.bashrc" ] && . "$HOME/.bashrc"\n' > "$DH_HOME/.profile"
+fi
+if [ ! -f "$DH_HOME/.config/opencode/service.json" ]; then
+  # OpenCode 2's background service defaults to 127.0.0.1:49374, which host networking shares with the
+  # host's own service and other projects' containers: a per-project port below the ephemeral ranges.
+  # OpenCode stores the service password in this file.
+  mkdir -p "$DH_HOME/.config/opencode"
+  printf '{\n  "port": %d\n}\n' "$(( 24000 + $(printf '%s' "$SLUG" | cksum | cut -d' ' -f1) % 1000 ))" \
+    > "$DH_HOME/.config/opencode/service.json"
+  chmod 600 "$DH_HOME/.config/opencode/service.json"
 fi
 # ssh: client config and known hosts are copied in (writable; private keys stay on the host, the
 # forwarded agent signs). DH_MOUNT_SSH=keys mounts the whole ~/.ssh read-only instead; 0 does nothing.

@@ -13,6 +13,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
     LANG=C.UTF-8 \
     LC_ALL=C.UTF-8 \
     DISABLE_AUTOUPDATER=1 \
+    OPENCODE_DISABLE_AUTOUPDATE=1 \
     UV_LINK_MODE=copy
 
 # Base tooling: git, tmux (long-lived sessions), ssh/rsync (remote hosts), ripgrep/jq, python3, compilers.
@@ -37,8 +38,9 @@ RUN curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg \
 # uv (Python project + interpreter manager), system-wide.
 RUN curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin UV_NO_MODIFY_PATH=1 sh
 
-# The harnesses. Auto-update is disabled (see DISABLE_AUTOUPDATER); dh-rebuild.sh refreshes them.
-RUN npm install -g @anthropic-ai/claude-code @openai/codex opencode-ai \
+# The harnesses. Auto-update is disabled (DISABLE_AUTOUPDATER, OPENCODE_DISABLE_AUTOUPDATE); dh-rebuild.sh
+# refreshes them. OpenCode 2 is @opencode/cli: the npm name opencode-ai is the 1.x line.
+RUN npm install -g @anthropic-ai/claude-code @openai/codex @opencode/cli \
     && npm cache clean --force
 
 # The container user mirrors the host user (uid/gid from build args). ubuntu:24.04 ships a stock
