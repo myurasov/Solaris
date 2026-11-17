@@ -1,4 +1,4 @@
-_Rev. 2_
+_Rev. 3_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
@@ -13,10 +13,11 @@ else in the pack applies unchanged. Autocode's own guide (`autocode_me action=he
   1. `autocode_me action=status`, then `autocode_me action=register id=<agent id>` with the ID the start prompt
      names (recorded under "Autocode" in `<pack>/instructions.md`). A live session holding the ID means another
      controller runs this project: stop and tell the owner.
-  2. Turn Solaris self-compaction off for this session when autocode compacts it (`status` shows a compaction
-     threshold, not `off`): `uv run --directory <solaris root> -m solaris.tools.session_compact set-limit off`.
-     Autocode's compaction is then the only one; never run `session_compact request`, and ignore any
-     `self-compaction: ... DUE` line.
+  2. Solaris self-compaction is off for a project with this plugin attached (copied or linked): autocode's
+     compaction is the only one. Outside a project (a session at the Solaris root or in a task), turn it off for the
+     session when autocode compacts it (`status` shows a compaction threshold, not `off`): `uv run --directory
+     <solaris root> -m solaris.tools.session_compact set-limit off`. Never run `session_compact request`, and ignore
+     any `self-compaction: ... DUE` line.
   3. Read the read-first set by hand (no hook loads it here): `uv run --directory <solaris root> -m
      solaris.tools.read_first --check --pack <pack>` names the files; read each, then `<pack>/.memory/context.md`,
      the newest `handover-*.md` and the tail of `directions.md`.
@@ -35,8 +36,9 @@ else in the pack applies unchanged. Autocode's own guide (`autocode_me action=he
   in context.md and autocode_wake list; resume what is due or end the turn." It replaces the Stop hook. To pause the
   project on purpose, write the handover note and cancel the wakes (`autocode_wake action=cancel`).
 - **Compaction:** `[autocode] compaction next` is the pre-compaction save point: bring the work to a stable state,
-  rewrite `<pack>/.memory/context.md` (live jobs, wakes, locks, open asks, the next steps), then end the turn. After
-  the compaction, run Start step 3 before anything else.
+  rewrite `<pack>/.memory/context.md` (live jobs, wakes, locks, open asks, the next steps), then end the turn.
+  `[autocode] compaction done` comes once the compaction went through: run Start step 3, then carry on with the
+  steps `context.md` lists, without waiting to be asked; end the turn only when nothing is left.
 - **Workers:** a short task whose result this turn needs runs as an OpenCode subagent with the tier's `model`. Long
   work (hours, or work that must outlive a restart) runs as an autocode job: set a few generic lanes once
   (`autocode_me action=job_set job=worker-1 model=... trigger=fire-only run_usd=<cap> timeout=<limit> prompt="Act as

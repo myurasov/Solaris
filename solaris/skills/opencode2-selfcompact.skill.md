@@ -48,9 +48,13 @@ All optional. A project's `<pack>/.memory/config.json`, then its `<pack>/default
 
 | Key | Default | Meaning |
 |---|---|---|
-| `selfcompact.enabled` | `true` | `false` turns the due line off (`--force` still works) |
+| `selfcompact.enabled` | `true` (`false` with the `autocode` plugin attached) | `false` turns the due line off (`--force` still works) |
 | `selfcompact.limit` | `500k` | context tokens, an integer or k/m shorthand; floor 100k |
 | `selfcompact.min_interval_minutes` | `30` | the shortest time between two compactions |
+
+A project with the `autocode` plugin attached (copied, in its manifest's `plugins`, or linked through
+`<pack>/plugins/autocode.link.md`) has self-compaction off: autocode compacts its sessions. Only the project's own
+`selfcompact.enabled` (its `.memory/config.json` or `defaults.json`) turns it back on; the framework's file does not.
 
 One session can run on its own limit: `session_compact set-limit 333k` (`--clear` drops it), and `check` then
 reports `limit_source: session`. `set-limit off` turns self-compaction off for that session alone: an autocode agent

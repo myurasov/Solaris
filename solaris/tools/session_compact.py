@@ -38,6 +38,9 @@ then the framework's ``.memory/config.json``: ``selfcompact.enabled`` (default t
 (context tokens, an integer or k/m shorthand such as ``500k``; default 500k, floor 100k) and
 ``selfcompact.min_interval_minutes`` (default 30). A bad value falls back to its default and is reported as
 ``config_error``. ``set-limit`` keeps its override in ``${XDG_CACHE_HOME:-~/.cache}/solaris/selfcompact/``.
+A project with the ``autocode`` plugin attached (in its manifest's ``plugins``, or linked through
+``<pack>/plugins/autocode.link.md``) has self-compaction off, as autocode compacts its sessions; only the project's
+own ``selfcompact.enabled`` turns it back on (the owner, 2026-11-17).
 Paths and commands are printed relative to the current folder (the Solaris root) when they lie inside it.
 
 Run::
@@ -163,13 +166,34 @@ def _json_object(path: Path) -> "tuple[dict, str | None]":
     return (data, None) if isinstance(data, dict) else ({}, f"{_rel(path)} is not a JSON object")
 
 
+def autocode_attached(pack: "Path | None") -> bool:
+    """Whether the autocode plugin is attached to the pack: in its manifest's plugins, or linked."""
+    if pack is None:
+        return False
+    if (pack / "plugins" / "autocode.link.md").is_file():
+        return True
+    data, _ = _json_object(pack / "manifest.json")
+    plugins = data.get("plugins") if isinstance(data, dict) else None
+    return any(isinstance(x, dict) and x.get("name") == "autocode" for x in plugins or [])
+
+
 def load_config(pack: "Path | None" = None) -> dict:
-    """The selfcompact.* settings with defaults; a project's files win over the framework's, key by key."""
+    """The selfcompact.* settings with defaults; a project's files win over the framework's, key by key. With the
+    autocode plugin attached, self-compaction is off unless the project's own files turn it on."""
     cfg = {"enabled": True, "limit": DEFAULT_LIMIT, "min_interval_minutes": DEFAULT_INTERVAL,
            "limit_source": "default", "error": None}
     files = [pack / ".memory" / "config.json", pack / "defaults.json"] if pack is not None else []
     found: dict = {}
-    for path in files + [REPO_ROOT / ".memory" / "config.json"]:
+    for path in files:
+        data, error = _json_object(path)
+        cfg["error"] = cfg["error"] or error
+        for key in SETTINGS:
+            if "selfcompact." + key in data and key not in found:
+                found[key] = (data["selfcompact." + key], path)
+    if "enabled" not in found and autocode_attached(pack):
+        found["enabled"] = (False, pack / "manifest.json")
+        cfg["enabled_source"] = "autocode plugin"
+    for path in [REPO_ROOT / ".memory" / "config.json"]:
         data, error = _json_object(path)
         cfg["error"] = cfg["error"] or error
         for key in SETTINGS:
@@ -476,7 +500,11 @@ def assess(client: Client, sid: str, cfg: dict, now: "float | None" = None) -> d
                          f"{cfg['min_interval_minutes']:g}-minute minimum interval")
     elif not cfg["enabled"]:
         out["reason"] = ("over the limit, but self-compaction is off for this session (set-limit off)"
-                         if cfg.get("enabled_source") == "session" else "over the limit, but selfcompact.enabled is off")
+                         if cfg.get("enabled_source") == "session"
+                         else "over the limit, but self-compaction is off: the autocode plugin is attached "
+                              "(autocode compacts this project's sessions)"
+                         if cfg.get("enabled_source") == "autocode plugin"
+                         else "over the limit, but selfcompact.enabled is off")
     else:
         out.update(due=True, reason="the context is at or over the limit")
     return out

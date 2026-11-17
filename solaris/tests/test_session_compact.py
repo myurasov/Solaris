@@ -192,6 +192,46 @@ def test_settings_default_and_project_files_win_key_by_key(env):
     assert S.load_config(None)["limit"] == 800_000   # no project: the framework file alone
 
 
+@pytest.mark.parametrize("attach", ["copy", "link"])
+def test_the_autocode_plugin_turns_self_compaction_off_for_its_project(env, capsys, attach):
+    """The owner, 2026-11-17: "when solaris autocode plugin is linked or added to project, standard self-compaction
+    should be disabled" - autocode compacts the session; the project's own files may still turn it back on."""
+    root, _ = env
+    pack = root / "projects" / "my" / "demo" / "aipack"
+    if attach == "copy":
+        data = json.loads(MANIFEST)
+        data["plugins"] = [{"name": "autocode", "version": "0.2.0"}]
+        (pack / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
+    else:
+        (pack / "plugins").mkdir()
+        (pack / "plugins" / "autocode.link.md").write_text("# linked\n", encoding="utf-8")
+    cfg = S.load_config(pack)
+    assert cfg["enabled"] is False and cfg["enabled_source"] == "autocode plugin"
+    # the framework's own file does not turn it back on; the project's does
+    (root / ".memory" / "config.json").write_text(json.dumps({"selfcompact.enabled": True}), encoding="utf-8")
+    assert S.load_config(pack)["enabled"] is False
+    (pack / ".memory" / "config.json").write_text(json.dumps({"selfcompact.enabled": True}), encoding="utf-8")
+    assert S.load_config(pack)["enabled"] is True
+    (pack / ".memory" / "config.json").unlink()
+    # check and request say why, for the project
+    code, out = run(capsys, "check", "--dir", "projects/my/demo")
+    assert not out["due"] and "autocode plugin" in out["reason"]
+    assert S.due_line(root / "projects" / "my" / "demo") is None
+    # other projects and the framework keep it
+    assert S.load_config(None)["enabled"] is True
+
+
+def test_other_plugins_leave_self_compaction_on(env):
+    root, _ = env
+    pack = root / "projects" / "my" / "demo" / "aipack"
+    data = json.loads(MANIFEST)
+    data["plugins"] = [{"name": "reporting", "version": "0.4.2"}, {"name": "autocode-tools", "mode": "link"}]
+    (pack / "manifest.json").write_text(json.dumps(data), encoding="utf-8")
+    (pack / "plugins").mkdir()
+    (pack / "plugins" / "reporting.link.md").write_text("# linked\n", encoding="utf-8")
+    assert S.load_config(pack)["enabled"] is True
+
+
 @pytest.mark.parametrize("data,needle", [
     ({"selfcompact.limit": "lots"}, "selfcompact.limit"),
     ({"selfcompact.limit": 50_000}, "floor"),

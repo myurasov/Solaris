@@ -22,5 +22,7 @@ hook- and clock-based duties onto them, so a Solaris project runs unattended wit
 
 On the machine that runs the project, open OpenCode 2 in the project folder (a TUI, or `opencode run` against the
 background service) and give it: "Act as the project's primary persona and run as autocode agent `<id>`: follow
-`<pack>/plugins/autocode/autocode.rule.md`, Start." The session registers, turns Solaris self-compaction off for
-itself, loads the read-first set, converts the schedule into wakes on its first start and stops the old clock.
+`<pack>/plugins/autocode/autocode.rule.md`, Start." The session registers, loads the read-first set, converts the
+schedule into wakes on its first start and stops the old clock. Attaching the plugin (copied or linked) turns Solaris
+self-compaction off for the project, as autocode compacts its sessions; after a compaction, autocode's
+`[autocode] compaction done` tells the session to go on with what is left (autocode 1.0.0-rc4 and later).
