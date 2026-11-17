@@ -81,8 +81,10 @@ As of **2026-10-01**, for the two harnesses Solaris runs on:
   `~/.local/state/opencode/service.json`) queues a compaction and returns at once, so a session can ask for its
   own: `{"delivery": "queue"}` runs it after the turn, `"steer"` at the next step boundary (the route's default
   when no delivery is given). Solaris builds self-compaction on it (`solaris.tools.session_compact`, the
-  `opencode2-selfcompact` skill; verified on 2.0.29). A program started from a tool shell (another agent CLI, a
-  script) inherits `OPENCODE_SESSION_ID` and would act for that session: start it with `env -u OPENCODE_SESSION_ID`.
+  `opencode2-selfcompact` skill; verified on 2.0.29, re-checked on 2.0.32: every route and field it uses is in the
+  service's own `/openapi.json`, the place to re-check after an upgrade; `/doc` is not JSON). A program started from
+  a tool shell (another agent CLI, a script) inherits `OPENCODE_SESSION_ID` and would act for that session: start
+  it with `env -u OPENCODE_SESSION_ID`.
 - Both harnesses now have a subagent tool (Cursor since 2.4), so the subagents rule's
   checkpointed-inline fallback - the lookup still runs, sliced/grepped within the read budget, notes
   to a scratch file, only conclusions restated - applies only to harnesses without one (the bulk-read
