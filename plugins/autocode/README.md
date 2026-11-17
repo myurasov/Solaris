@@ -6,7 +6,8 @@
 
 ## What It Does
 
-Runs a project's primary session as an **autocode agent** under OpenCode 2. Autocode (the owner's agent server)
+Runs a project's primary session as an **autocode agent** under OpenCode 2.3 or later (autocode 1.0.0 refuses an
+older OpenCode). Autocode (the owner's agent server)
 gives the session wakes, messages, locks, jobs, approvals and compaction; this plugin's rule maps the persona's
 hook- and clock-based duties onto them, so a Solaris project runs unattended without Claude Code hooks or
 `session_clock`. Outside an autocode session the rule is dormant.
@@ -25,4 +26,5 @@ background service) and give it: "Act as the project's primary persona and run a
 `<pack>/plugins/autocode/autocode.rule.md`, Start." The session registers, loads the read-first set, converts the
 schedule into wakes on its first start and stops the old clock. Attaching the plugin (copied or linked) turns Solaris
 self-compaction off for the project, as autocode compacts its sessions; after a compaction, autocode's
-`[autocode] compaction done` tells the session to go on with what is left (autocode 1.0.0-rc4 and later).
+`[autocode] compaction done` tells the session to go on with what is left. A subagent's result comes in a later
+turn (OpenCode 2.3 runs subagents in the background), and the session's shells find `autocode` by name.

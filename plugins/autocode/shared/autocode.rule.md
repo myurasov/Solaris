@@ -1,4 +1,4 @@
-_Rev. 3_
+_Rev. 4_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
@@ -12,7 +12,8 @@ else in the pack applies unchanged. Autocode's own guide (`autocode_me action=he
 - **Start** (a new session, and after a compaction):
   1. `autocode_me action=status`, then `autocode_me action=register id=<agent id>` with the ID the start prompt
      names (recorded under "Autocode" in `<pack>/instructions.md`). A live session holding the ID means another
-     controller runs this project: stop and tell the owner.
+     controller runs this project: stop and tell the owner. A tool that answers that this OpenCode is too old
+     (autocode 1.0.0 needs OpenCode 2.3.0 or later) means nothing here is connected: tell the owner and stop.
   2. Solaris self-compaction is off for a project with this plugin attached (copied or linked): autocode's
      compaction is the only one. Outside a project (a session at the Solaris root or in a task), turn it off for the
      session when autocode compacts it (`status` shows a compaction threshold, not `off`): `uv run --directory
@@ -31,15 +32,23 @@ else in the pack applies unchanged. Autocode's own guide (`autocode_me action=he
   (Kaggle-reset-tied ones in UTC, people-tied ones in `America/Los_Angeles`), one-shots are `at` wakes, and a new
   event is a new wake (name = event, text = what to do and where its notes are). `schedule.json` stays as a frozen
   record. A background job ends with `autocode fire me <wake>` on a `fire-only` wake
-  (`nohup sh -c '<cmd>; autocode fire me <wake> --text "exit $?"' > <log> 2>&1 &`), never a polling loop.
+  (`nohup sh -c '<cmd>; autocode fire me <wake> --text "exit $?"' > <log> 2>&1 &`), never a polling loop; the
+  session's shells find `autocode` by name. After the owner replaced a token, a job started before it cannot fire
+  its wake (its shell kept the old token): check such jobs by hand once.
 - **Guard:** one wake `guard`, trigger `idle 90m repeat`, text "Idle 90 minutes: check the todo list, the job list
-  in context.md and autocode_wake list; resume what is due or end the turn." It replaces the Stop hook. To pause the
-  project on purpose, write the handover note and cancel the wakes (`autocode_wake action=cancel`).
+  in context.md and autocode_wake list; resume what is due or end the turn." It replaces the Stop hook. Idle time
+  counts from the turn's end, also while a subagent still works in the background. To pause the project on
+  purpose, write the handover note and cancel the wakes (`autocode_wake action=cancel`).
 - **Compaction:** `[autocode] compaction next` is the pre-compaction save point: bring the work to a stable state,
   rewrite `<pack>/.memory/context.md` (live jobs, wakes, locks, open asks, the next steps), then end the turn.
   `[autocode] compaction done` comes once the compaction went through: run Start step 3, then carry on with the
   steps `context.md` lists, without waiting to be asked; end the turn only when nothing is left.
-- **Workers:** a short task whose result this turn needs runs as an OpenCode subagent with the tier's `model`. Long
+  `[autocode] compaction failed` (one asked for with `autocode_me action=compact` did not happen): nothing
+  changed; ask again if it is still needed.
+- **Workers:** a short task runs as an OpenCode subagent with the tier's `model`. OpenCode 2.3 runs subagents in
+  the background: the tool returns at once, and the result comes later as a `<subagent ...>` message in a turn of
+  its own. So launch it, go on with work that does not overlap or end the turn, and take the result when it comes;
+  never sleep or poll for it. The owner's Stop All stops subagents too. Long
   work (hours, or work that must outlive a restart) runs as an autocode job: set a few generic lanes once
   (`autocode_me action=job_set job=worker-1 model=... trigger=fire-only run_usd=<cap> timeout=<limit> prompt="Act as
   <pack>/worker.agent.md of <project>; your brief is the path in the run text; end with autocode_me action=finish"`;
