@@ -426,6 +426,21 @@ def test_set_limit_applies_to_this_session_only(env, capsys):
     assert S.main(["set-limit"]) == 2 and S.main(["set-limit", "300k", "--clear"]) == 2
 
 
+def test_set_limit_off_turns_self_compaction_off_for_this_session_only(env, capsys):
+    assert S.due_line() is not None
+    code, out = run(capsys, "set-limit", "off")
+    assert code == 0 and out["enabled"] is False
+    code, out = run(capsys, "check")
+    assert not out["due"] and "off for this session" in out["reason"]
+    assert S.due_line() is None
+    assert S.session_config(None, "ses_other")["enabled"] is True
+    code, out = run(capsys, "request", "--dry-run")
+    assert code == 5 and "off for this session" in out["reason"]
+    code, out = run(capsys, "set-limit", "--clear")
+    assert code == 0 and out["enabled"] is True
+    assert S.due_line() is not None
+
+
 def test_due_line_is_quiet_unless_due_and_never_raises(env, monkeypatch):
     _, fake = env
     assert S.SKILL in S.due_line()

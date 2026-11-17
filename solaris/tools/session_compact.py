@@ -17,9 +17,10 @@ delivery (the default) compacts right after the turn's final message; ``--now`` 
 and the turn goes on, and it also refuses running subagents, staged changes and an unfinished merge, rebase,
 cherry-pick or revert. ``--force`` (the owner asked for a compaction) skips the enabled, limit and interval gates,
 never the others; ``--dry-run`` runs every gate and queues nothing. ``set-limit`` overrides the limit for the
-calling session only. ``interactions add`` runs the same measurement (within a few seconds, skipped while
-``selfcompact.enabled`` is off) and prints one line when a compaction is due, so a session learns it without
-spending a call on it.
+calling session only; ``set-limit off`` turns self-compaction off for that session alone (an autocode agent whose
+compaction autocode runs: the autocode plugin's start step), and ``--clear`` drops either override.
+``interactions add`` runs the same measurement (within a few seconds, skipped while self-compaction is off) and
+prints one line when a compaction is due, so a session learns it without spending a call on it.
 
 The session is ``$OPENCODE_SESSION_ID``, which OpenCode 2 sets in every tool shell; it must be a top-level session
 that is running right now. The API is the background service recorded in
@@ -43,7 +44,7 @@ Run::
 
     uv run -m solaris.tools.session_compact check [--dir <project>] [--brief]
     uv run -m solaris.tools.session_compact request [--dir <project>] [--now] [--force] [--dry-run]
-    uv run -m solaris.tools.session_compact set-limit 333k|--clear [--dir <project>]
+    uv run -m solaris.tools.session_compact set-limit 333k|off|--clear [--dir <project>]
 
 Exit codes: 0 done (``check`` always, unless ``--dir`` holds no ai-pack; ``request`` also when a compaction is
 already queued, ``pending``); 2 bad arguments or no ai-pack at ``--dir``; 3 not applicable (see above) or the API
@@ -190,16 +191,20 @@ def override_path(sid: str) -> Path:
 
 
 def session_config(pack: "Path | None", sid: "str | None") -> dict:
-    """load_config with the calling session's set-limit override applied."""
+    """load_config with the calling session's set-limit override applied (a limit, or off)."""
     cfg = load_config(pack)
     if not C.valid_session(sid):
         return cfg
     path = override_path(sid)
     try:
-        limit = _limit(json.loads(path.read_text(encoding="utf-8"))["limit"])
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if data.get("enabled") is False:
+            cfg.update(enabled=False, enabled_source="session")
+            return cfg
+        limit = _limit(data["limit"])
     except FileNotFoundError:
         return cfg
-    except (OSError, ValueError, TypeError, KeyError) as e:
+    except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
         cfg["error"] = cfg["error"] or f"session limit override {path.name}: {e}; ignored"
         return cfg
     cfg.update(limit=limit, limit_source="session")
@@ -470,7 +475,8 @@ def assess(client: Client, sid: str, cfg: dict, now: "float | None" = None) -> d
         out["reason"] = (f"the last compaction{failed}, at {_clock(created)}, is inside the "
                          f"{cfg['min_interval_minutes']:g}-minute minimum interval")
     elif not cfg["enabled"]:
-        out["reason"] = "over the limit, but selfcompact.enabled is off"
+        out["reason"] = ("over the limit, but self-compaction is off for this session (set-limit off)"
+                         if cfg.get("enabled_source") == "session" else "over the limit, but selfcompact.enabled is off")
     else:
         out.update(due=True, reason="the context is at or over the limit")
     return out
@@ -759,19 +765,22 @@ def cmd_set_limit(a) -> int:
         except OSError as e:
             return _emit(EXIT_USAGE, ok=False, reason=f"cannot remove {path}: {e}")
     else:
-        try:
-            limit = _limit(a.tokens)
-        except ValueError as e:
-            return _emit(EXIT_USAGE, ok=False, reason=str(e))
+        if a.tokens.strip().lower() == "off":
+            override = {"enabled": False}
+        else:
+            try:
+                override = {"limit": _limit(a.tokens)}
+            except ValueError as e:
+                return _emit(EXIT_USAGE, ok=False, reason=str(e))
         try:
             C.private_dirs(path.parent)
             stamp = datetime.now().astimezone().isoformat(timespec="seconds")
-            write_text_atomic(path, json.dumps({"limit": limit, "set_at": stamp}) + "\n")
+            write_text_atomic(path, json.dumps({**override, "set_at": stamp}) + "\n")
         except OSError as e:
             return _emit(EXIT_USAGE, ok=False, reason=f"cannot write {path}: {e}")
     cfg = session_config(pack, sid)
-    return _emit(EXIT_OK, ok=True, session_id=sid, limit=cfg["limit"], limit_source=cfg["limit_source"],
-                 config_error=cfg["error"])
+    return _emit(EXIT_OK, ok=True, session_id=sid, enabled=cfg["enabled"], limit=cfg["limit"],
+                 limit_source=cfg["limit_source"], config_error=cfg["error"])
 
 
 def main(argv: "list[str] | None" = None) -> int:
@@ -788,8 +797,9 @@ def main(argv: "list[str] | None" = None) -> int:
     req.add_argument("--force", action="store_true",
                      help="the owner asked: skip the enabled, limit and interval gates, never the others")
     req.add_argument("--dry-run", action="store_true", help="run every gate, queue nothing")
-    lim = sub.add_parser("set-limit", parents=[shared], help="override the limit for this session only")
-    lim.add_argument("tokens", nargs="?", help="context tokens, an integer or k/m shorthand (floor 100k)")
+    lim = sub.add_parser("set-limit", parents=[shared], help="override the limit for this session only, or turn "
+                                                             "self-compaction off for it")
+    lim.add_argument("tokens", nargs="?", help="context tokens, an integer or k/m shorthand (floor 100k), or off")
     lim.add_argument("--clear", action="store_true", help="drop the override")
     a = parser.parse_args(argv)
     if a.cmd == "set-limit" and bool(a.tokens) == bool(a.clear):

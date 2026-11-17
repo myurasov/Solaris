@@ -53,7 +53,8 @@ All optional. A project's `<pack>/.memory/config.json`, then its `<pack>/default
 | `selfcompact.min_interval_minutes` | `30` | the shortest time between two compactions |
 
 One session can run on its own limit: `session_compact set-limit 333k` (`--clear` drops it), and `check` then
-reports `limit_source: session`. "Context" is the prompt of the session's newest finished model step: fresh input
+reports `limit_source: session`. `set-limit off` turns self-compaction off for that session alone: an autocode agent
+whose compaction autocode runs (the autocode plugin's start step does this), so the two never both compact. "Context" is the prompt of the session's newest finished model step: fresh input
 plus cache reads and writes. On a model whose window is below the limit, OpenCode's own compaction comes first;
 set a lower limit for that session. A session still near the limit right after compacting (a large kept recent
 history) needs a higher limit; meanwhile the minimum interval keeps it from compacting in a loop.
