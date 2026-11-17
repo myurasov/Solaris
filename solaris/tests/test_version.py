@@ -87,6 +87,42 @@ def test_manifest_roundtrip_and_set(tmp_path, pack):
         V.set_aipack_version(proj, "not-a-version")
 
 
+@pytest.mark.parametrize("pack", PACKS)
+def test_set_plugin_version_records_a_copied_plugins_version(tmp_path, capsys, pack, monkeypatch):
+    """The owner approved, 2026-11-17: a setter for a copied plugin's recorded version, so updating a copy
+    (install-plugin, update-project) needs no hand edit of the manifest."""
+    plugins_dir = tmp_path / "plugins"
+    (plugins_dir / "autocode").mkdir(parents=True)
+    (plugins_dir / "autocode" / "manifest.json").write_text(json.dumps({"name": "autocode", "version": "0.2.0"}),
+                                                            encoding="utf-8")
+    monkeypatch.setattr(V, "PLUGINS_DIR", plugins_dir)
+    proj = tmp_path / "p"
+    _write_manifest(proj, "0.48.0", plugins=[{"name": "autocode", "version": "0.1.0"},
+                                             {"name": "reporting", "version": "0.4.2"},
+                                             {"name": "browserctl", "mode": "link"}], pack=pack)
+    # by default the plugin source's version
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "autocode"]) == 0
+    assert "autocode = 0.2.0" in capsys.readouterr().out
+    assert V.plugin_recorded_version(proj, "autocode") == "0.2.0"
+    # or a version given; the other entries and fields stay as they were
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "reporting", "0.4.3"]) == 0
+    data = V.read_manifest(proj)
+    assert data["plugins"] == [{"name": "autocode", "version": "0.2.0"}, {"name": "reporting", "version": "0.4.3"},
+                               {"name": "browserctl", "mode": "link"}]
+    assert data["framework_version"] == "0.48.0" and data["_comment"] == "do not edit"
+    capsys.readouterr()
+    # refused: a linked plugin (it records no version), one not attached, a bad version, a source that is missing
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "browserctl", "1.0.0"]) == 1
+    assert "linked" in capsys.readouterr().out
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "absent"]) == 1
+    assert "not attached" in capsys.readouterr().out
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "reporting", "x"]) == 1
+    assert "not a MAJOR.MINOR.PATCH version" in capsys.readouterr().out
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "reporting"]) == 1   # no plugins/reporting here
+    assert "source" in capsys.readouterr().out
+    assert V.read_manifest(proj)["plugins"][1] == {"name": "reporting", "version": "0.4.3"}
+
+
 def _write_migration(mig_dir, to_v, from_v, title="t", breaking=False, revertible=True):
     mig_dir.mkdir(parents=True, exist_ok=True)
     (mig_dir / f"{to_v}.md").write_text(

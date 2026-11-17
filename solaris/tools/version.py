@@ -22,6 +22,7 @@ Run as a module::
     uv run -m solaris.tools.version chain --dir projects/todo
     uv run -m solaris.tools.version set --dir projects/todo 0.2.0
     uv run -m solaris.tools.version plugin --dir projects/isaac-lab --plugin nvidia-isaac-lab
+    uv run -m solaris.tools.version set-plugin --dir projects/isaac-lab --plugin nvidia-isaac-lab [VERSION]
     uv run -m solaris.tools.version check-plugins --dir projects/isaac-lab
     uv run -m solaris.tools.version project --dir projects/todo
     uv run -m solaris.tools.version project-set --dir projects/todo 1.0.0
@@ -167,9 +168,25 @@ def plugin_recorded_version(project_dir: "str | Path", name: str) -> "str | None
     return None
 
 
-def plugin_source_version(name: str, plugins_dir: Path = PLUGINS_DIR) -> str:
-    with open(Path(plugins_dir) / name / "manifest.json", encoding="utf-8") as fh:
+def plugin_source_version(name: str, plugins_dir: "Path | None" = None) -> str:
+    with open(Path(plugins_dir or PLUGINS_DIR) / name / "manifest.json", encoding="utf-8") as fh:
         return str(json.load(fh)["version"])
+
+
+def set_plugin_version(project_dir: "str | Path", name: str, version: "str | None" = None) -> str:
+    """Record a copied plugin's version in the ai-pack manifest (default: its source's version); the version written.
+    The owner approved, 2026-11-17: updating a copy (install-plugin, update-project) needs no hand edit. A linked
+    plugin records no version (ValueError), nor does one that is not attached (KeyError)."""
+    manifest = read_manifest(project_dir)
+    entry = next((e for e in manifest.get("plugins", []) if isinstance(e, dict) and e.get("name") == name), None)
+    if entry is None:
+        raise KeyError(f"plugin {name!r} is not attached to {project_dir}")
+    if entry.get("mode") == "link":
+        raise ValueError(f"plugin {name!r} is linked: it runs the live source and records no version")
+    value = str(parse(version if version is not None else plugin_source_version(name)))
+    entry["version"] = value
+    write_manifest(project_dir, manifest)
+    return value
 
 
 # --------------------------------------------------------------------------- migrations
@@ -294,6 +311,22 @@ def _cmd_plugin(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_set_plugin(args: argparse.Namespace) -> int:
+    try:
+        value = set_plugin_version(args.dir, args.plugin, args.version)
+    except FileNotFoundError:
+        print(f"plugin {args.plugin!r}: no source in plugins/ to read its version from; give one")
+        return 1
+    except KeyError as e:
+        print(e.args[0])
+        return 1
+    except ValueError as e:
+        print(e)
+        return 1
+    print(f"set plugin {args.plugin} = {value} in {_manifest_path(args.dir)}")
+    return 0
+
+
 def _cmd_check_plugins(args: argparse.Namespace) -> int:
     plugins = read_manifest(args.dir).get("plugins", [])
     if not plugins:
@@ -376,6 +409,11 @@ def build_parser() -> argparse.ArgumentParser:
     sp_plugin = _with_dir("plugin", "print a plugin's recorded version in the ai-pack")
     sp_plugin.add_argument("--plugin", required=True, help="plugin name")
     sp_plugin.set_defaults(func=_cmd_plugin)
+
+    sp_setp = _with_dir("set-plugin", "record a copied plugin's version in the ai-pack manifest (default: its source's)")
+    sp_setp.add_argument("--plugin", required=True, help="plugin name")
+    sp_setp.add_argument("version", nargs="?", help="semver MAJOR.MINOR.PATCH (default: the plugin source's version)")
+    sp_setp.set_defaults(func=_cmd_set_plugin)
 
     _with_dir("check-plugins", "compare each attached plugin's recorded version vs its source").set_defaults(func=_cmd_check_plugins)
 

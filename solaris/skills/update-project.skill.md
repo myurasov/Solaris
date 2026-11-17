@@ -87,7 +87,9 @@ List every old path with its hits and what was done in the summary (section 5), 
 Step 1's revisions sync already reconciled each `<pack>/plugins/<plugin>/`. Additionally, for any plugin with a
 minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to apply
 `plugins/<name>/migrations/`. Then record each copied plugin's source version in its `plugins[]` entry of
-`<pack>/manifest.json`, patch releases included, so `version check-plugins` reports `ok`.
+`<pack>/manifest.json`, patch releases included, so `version check-plugins` reports `ok`:
+`uv run -m solaris.tools.version set-plugin --dir projects/<slug> --plugin <name>` for each (linked plugins record
+no version and are skipped).
 `uv run -m solaris.tools.plugins check --dir projects/<slug>` must pass after the update (exit 3 names a required dependency a plugin now declares: attach it with `install-plugin`).
 
 **Linked** plugins (`"mode": "link"` entries) need no sync or migration - they always run the live source;
