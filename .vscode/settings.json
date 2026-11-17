@@ -78,7 +78,20 @@
     "plaintext"
   ],
   "markdown.preview.fontSize": 13,
-  "problems.visibility": false,
+  // --- No problems detection --------------------------------------------------
+  // Diagnostics are switched off at each source. Do not use
+  // "problems.visibility": false - it pins a "Problems are turned off" warning
+  // to the status bar that re-appears on every reload.
+  "python.pyrefly.disableTypeErrors": true,
+  "json.validate.enable": false,
+  "css.validate": false,
+  "scss.validate": false,
+  "less.validate": false,
+  "html.validate.scripts": false,
+  "html.validate.styles": false,
+  "javascript.validate.enable": false,
+  "typescript.validate.enable": false,
+  "markdown.validate.enabled": false,
   "git.autoRepositoryDetection": "subFolders",
   "git.repositoryScanMaxDepth": 4,
   "git.repositoryScanIgnoredFolders": [
@@ -106,8 +119,8 @@
   "cursorpyright.analysis.ignore": [
     "**"
   ],
-  // Pyrefly (meta.pyrefly) remains the sole Python checker; keep it off the
-  // whole tree so it only ever analyses open files.
+  // Pyrefly (meta.pyrefly) remains the sole Python language server (type errors
+  // off above); keep it off the whole tree so it only ever analyses open files.
   "python.pyrefly.diagnosticMode": "openFilesOnly",
   "pyrefly.trace.server": "off",
   // --- File watcher: 117k of the 182k files here are .venv / node_modules ---
