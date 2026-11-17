@@ -487,8 +487,13 @@ def assess(client: Client, sid: str, cfg: dict, now: "float | None" = None) -> d
     if tokens is None:
         out["reason"] = "no finished model step to measure yet"
         return out
+    off = (None if cfg["enabled"]
+           else "self-compaction is off for this session (set-limit off)" if cfg.get("enabled_source") == "session"
+           else "self-compaction is off: the autocode plugin is attached (autocode compacts this project's sessions)"
+           if cfg.get("enabled_source") == "autocode plugin"
+           else "self-compaction is off: selfcompact.enabled is off")
     if tokens < cfg["limit"]:
-        out["reason"] = "under the limit"
+        out["reason"] = off or "under the limit"
         return out
     last = client.last_compaction(sid) or {}
     created = last.get("created_ms")
@@ -498,13 +503,8 @@ def assess(client: Client, sid: str, cfg: dict, now: "float | None" = None) -> d
     elif created and now - created / 1000 < cfg["min_interval_minutes"] * 60:
         out["reason"] = (f"the last compaction{failed}, at {_clock(created)}, is inside the "
                          f"{cfg['min_interval_minutes']:g}-minute minimum interval")
-    elif not cfg["enabled"]:
-        out["reason"] = ("over the limit, but self-compaction is off for this session (set-limit off)"
-                         if cfg.get("enabled_source") == "session"
-                         else "over the limit, but self-compaction is off: the autocode plugin is attached "
-                              "(autocode compacts this project's sessions)"
-                         if cfg.get("enabled_source") == "autocode plugin"
-                         else "over the limit, but selfcompact.enabled is off")
+    elif off:
+        out["reason"] = f"over the limit, but {off}"
     else:
         out.update(due=True, reason="the context is at or over the limit")
     return out

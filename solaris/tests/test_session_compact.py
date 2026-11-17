@@ -196,7 +196,7 @@ def test_settings_default_and_project_files_win_key_by_key(env):
 def test_the_autocode_plugin_turns_self_compaction_off_for_its_project(env, capsys, attach):
     """The owner, 2026-11-17: "when solaris autocode plugin is linked or added to project, standard self-compaction
     should be disabled" - autocode compacts the session; the project's own files may still turn it back on."""
-    root, _ = env
+    root, fake = env
     pack = root / "projects" / "my" / "demo" / "aipack"
     if attach == "copy":
         data = json.loads(MANIFEST)
@@ -213,9 +213,13 @@ def test_the_autocode_plugin_turns_self_compaction_off_for_its_project(env, caps
     (pack / ".memory" / "config.json").write_text(json.dumps({"selfcompact.enabled": True}), encoding="utf-8")
     assert S.load_config(pack)["enabled"] is True
     (pack / ".memory" / "config.json").unlink()
-    # check and request say why, for the project
+    # check and request say why, for the project, over the limit and under it (the orchestrator's report,
+    # 2026-11-17: under the limit the reason said only "under the limit")
     code, out = run(capsys, "check", "--dir", "projects/my/demo")
     assert not out["due"] and "autocode plugin" in out["reason"]
+    fake.assistant[1]["tokens"]["cache"]["read"] = 1_000
+    code, out = run(capsys, "check", "--dir", "projects/my/demo")
+    assert not out["due"] and out["reason"].startswith("self-compaction is off: the autocode plugin is attached")
     assert S.due_line(root / "projects" / "my" / "demo") is None
     # other projects and the framework keep it
     assert S.load_config(None)["enabled"] is True
@@ -292,6 +296,9 @@ def test_assess_pending_stale_interval_and_disabled(env):
     assert S.assess(client, SID, {**cfg, "min_interval_minutes": 5}, NOW)["due"]
     off = S.assess(client, SID, {**cfg, "min_interval_minutes": 5, "enabled": False}, NOW)
     assert not off["due"] and "enabled is off" in off["reason"]
+    # off says so under the limit too
+    under = S.assess(client, SID, {**cfg, "enabled": False, "limit": 10_000_000}, NOW)
+    assert not under["due"] and under["reason"] == "self-compaction is off: selfcompact.enabled is off"
     fake.assistant = [{"id": "m9", "time": {"created": 1}}]
     assert S.assess(client, SID, cfg, NOW)["reason"].startswith("no finished model step")
 
