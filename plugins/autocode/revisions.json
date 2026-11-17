@@ -1,0 +1,30 @@
+{
+  "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
+  "schema_version": 1,
+  "files": {
+    "shared/autocode.rule.md": {
+      "rev": 2,
+      "hash": "39d16f1c2aa26e4a93535b9d61fb2e552c4d2cd005fe0a6c7be9871b4d7e3c60",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "09d39e2869df4330665efb37218a75e9136b6136b35eecd57a7bed368fd5aa20"
+        },
+        {
+          "rev": 2,
+          "hash": "39d16f1c2aa26e4a93535b9d61fb2e552c4d2cd005fe0a6c7be9871b4d7e3c60"
+        }
+      ]
+    },
+    "shared/tools/wakes.py": {
+      "rev": 1,
+      "hash": "a2d9e103a71d31cd442b73699aba44ce1e404d9a5a2a4fed8fe011f37e75310e",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "a2d9e103a71d31cd442b73699aba44ce1e404d9a5a2a4fed8fe011f37e75310e"
+        }
+      ]
+    }
+  }
+}

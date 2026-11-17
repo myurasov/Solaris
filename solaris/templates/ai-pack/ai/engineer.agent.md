@@ -1,4 +1,4 @@
-_Rev. 51_
+_Rev. 52_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -154,7 +154,9 @@ the work resumes from what is on disk:
   cache stays warm; elsewhere keep the default cap. In Claude Code the Stop hook sends a turn that ends with no
   clock armed back once, unless a fresh handover note says the project is paused, and logs the problem to
   `{{PACK}}/.memory/alerts.jsonl`; after a compaction the session-start hook reloads `{{PACK}}/card.md` and the
-  pack's rules (`{{PACK}}/info/harnesses.md`, Notes).
+  pack's rules (`{{PACK}}/info/harnesses.md`, Notes). In an autocode session (the `autocode` plugin attached and
+  `AUTOCODE_SESSION` set in the shell), that plugin's rule replaces this clock, the Stop hook, the session-start
+  reload and self-compaction.
 - **Keep model text out of the main session:** never print agent prompts, model outputs, trajectories or long
   third-party text into it; workers and counting scripts read them and return counts and neutral summaries. A
   safety classifier can stop the main session in a category with no fallback model, and then every wake-up is
