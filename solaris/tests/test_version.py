@@ -123,6 +123,51 @@ def test_set_plugin_version_records_a_copied_plugins_version(tmp_path, capsys, p
     assert V.read_manifest(proj)["plugins"][1] == {"name": "reporting", "version": "0.4.3"}
 
 
+def test_setters_rerender_the_pack_readme(tmp_path, capsys, monkeypatch):
+    """The orchestrator's report, 2026-11-17: the pack README lists each plugin's version and the framework version
+    from the manifest; version set and set-plugin re-render the managed files at once (revs ff, which never
+    overwrites a project's own edit) and record their baseline, so no step order leaves them stale."""
+    from solaris.tools import revs as R
+    tpl = tmp_path / "tpl"
+    (tpl / "ai").mkdir(parents=True)
+    (tpl / "AGENTS.md").write_text("_Rev. 1_\n\n# ag\n", encoding="utf-8")
+    (tpl / "ai" / "engineer.agent.md").write_text("_Rev. 1_\n\n# dev\n", encoding="utf-8")
+    (tpl / "ai" / "README.md").write_text("_Rev. 1_\n\n# {{NAME}} on {{FRAMEWORK_VERSION}}\n\n{{PLUGINS}}\n",
+                                          encoding="utf-8")
+    plugins_dir = tmp_path / "plugins"
+    (plugins_dir / "autocode" / "shared").mkdir(parents=True)
+    (plugins_dir / "autocode" / "manifest.json").write_text(json.dumps({"name": "autocode", "version": "0.2.0"}),
+                                                            encoding="utf-8")
+    monkeypatch.setattr(V, "PLUGINS_DIR", plugins_dir)
+    monkeypatch.setattr(R, "TEMPLATE_DIR", tpl)
+    monkeypatch.setattr(R, "PLUGINS_DIR", plugins_dir)
+    proj = tmp_path / "p"
+    _write_manifest(proj, "0.48.0", plugins=[{"name": "autocode", "version": "0.1.0"}], pack="aipack")
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins_dir)
+    readme = proj / "aipack" / "README.md"
+    assert "`autocode` 0.1.0" in readme.read_text(encoding="utf-8")
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "autocode"]) == 0
+    assert "`autocode` 0.2.0" in readme.read_text(encoding="utf-8")
+    assert V.main(["set", "--dir", str(proj), "0.48.2"]) == 0
+    assert "on 0.48.2" in readme.read_text(encoding="utf-8")
+    assert "README" in capsys.readouterr().out
+    rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins_dir)}
+    assert set(rows.values()) == {"in-sync"}
+    # a project's own README edit stays; the setter says the file needs a merge, and still records the version
+    readme.write_text("_Rev. 1_\n\n# my own words\n", encoding="utf-8")
+    capsys.readouterr()
+    assert V.main(["set-plugin", "--dir", str(proj), "--plugin", "autocode", "0.2.1"]) == 0
+    out = capsys.readouterr().out
+    assert "my own words" in readme.read_text(encoding="utf-8")
+    assert "aipack/README.md" in out and "merge" in out
+    assert V.plugin_recorded_version(proj, "autocode") == "0.2.1"
+    # its baseline was not moved: it still shows as a conflict, so no later ff overwrites the edit
+    rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins_dir)}
+    assert rows["aipack/README.md"] == "conflict"
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins_dir)
+    assert "my own words" in readme.read_text(encoding="utf-8")
+
+
 def _write_migration(mig_dir, to_v, from_v, title="t", breaking=False, revertible=True):
     mig_dir.mkdir(parents=True, exist_ok=True)
     (mig_dir / f"{to_v}.md").write_text(

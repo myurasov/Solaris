@@ -60,8 +60,11 @@ Finish by re-recording the baseline: `uv run -m solaris.tools.revs baseline --di
 A migration exists only when a **minor/major** framework bump needed one (patch never does). If so,
 `version chain` lists the steps; apply each `solaris/migrations/<to_version>.md` in order (Pre-flight /
 Migrate / Validate), then `version set --dir projects/<slug> <to_version>`. In a chain, a later migration's
-revs and versions supersede an earlier one's Validate checks. After the last step, run `revs ff` and
-`revs baseline` again: the pack README and primary persona print the framework version from the manifest.
+revs and versions supersede an earlier one's Validate checks. **Always finish at the framework version**, a
+patch release included (an empty chain: `version check` still exits 1): `uv run -m solaris.tools.version set
+--dir projects/<slug> $(uv run -m solaris.tools.version current)`. `version set` (and `set-plugin`, section 3)
+re-renders the managed files that print manifest values (the pack README, the primary persona) through `revs ff`
+at once, naming any it could not merge.
 On failure, stop at the last good step and surface its Revert. Migrations written before 0.39.0 say `ai/`; read that as the project's
 `<pack>/`.
 
@@ -89,7 +92,7 @@ minor/major bump that shipped `migrations/`, run `install-plugin` (migrate) to a
 `plugins/<name>/migrations/`. Then record each copied plugin's source version in its `plugins[]` entry of
 `<pack>/manifest.json`, patch releases included, so `version check-plugins` reports `ok`:
 `uv run -m solaris.tools.version set-plugin --dir projects/<slug> --plugin <name>` for each (linked plugins record
-no version and are skipped).
+no version and are skipped); it re-renders the pack README's plugin list at once.
 `uv run -m solaris.tools.plugins check --dir projects/<slug>` must pass after the update (exit 3 names a required dependency a plugin now declares: attach it with `install-plugin`).
 
 **Linked** plugins (`"mode": "link"` entries) need no sync or migration - they always run the live source;

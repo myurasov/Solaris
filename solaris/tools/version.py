@@ -296,9 +296,25 @@ def _cmd_chain(args: argparse.Namespace) -> int:
     return 0
 
 
+def _rerender(project_dir: "str | Path") -> None:
+    """Re-render the managed files that print manifest values (the pack README's plugin list and framework version,
+    the primary persona's version), so a setter never leaves them stale (the orchestrator's report, 2026-11-17).
+    This is revs ff: it records the baseline of each file it writes, and never overwrites a project's own edit (it
+    skips it, named here, and its baseline stays, so the conflict still shows; no revs baseline here)."""
+    from solaris.tools import revs as R   # revs never imports version: no cycle
+    # the module's paths, read now (tests point them at a temporary tree)
+    result = R.fast_forward(Path(project_dir), R.TEMPLATE_DIR, R.PLUGINS_DIR)
+    written = [rel for rel, v in result["applied"] if v in ("fast-forward", "missing")]
+    if written:
+        print("re-rendered: " + ", ".join(written) + " (the pack README among them when its values changed)")
+    for rel, v in result["skipped"]:
+        print(f"needs a merge ({v}): {rel} - update-project section 1")
+
+
 def _cmd_set(args: argparse.Namespace) -> int:
     set_aipack_version(args.dir, args.version)
     print(f"set framework_version = {args.version} in {_manifest_path(args.dir)}")
+    _rerender(args.dir)
     return 0
 
 
@@ -324,6 +340,7 @@ def _cmd_set_plugin(args: argparse.Namespace) -> int:
         print(e)
         return 1
     print(f"set plugin {args.plugin} = {value} in {_manifest_path(args.dir)}")
+    _rerender(args.dir)
     return 0
 
 
@@ -402,7 +419,7 @@ def build_parser() -> argparse.ArgumentParser:
     _with_dir("check", "compare ai-pack vs framework (exit 0 match / 1 migrate / 2 downgrade)").set_defaults(func=_cmd_check)
     _with_dir("chain", "print the migration chain that would be applied").set_defaults(func=_cmd_chain)
 
-    sp_set = _with_dir("set", "write framework_version into the ai-pack manifest")
+    sp_set = _with_dir("set", "write framework_version into the ai-pack manifest (re-renders the managed files)")
     sp_set.add_argument("version", help="semver MAJOR.MINOR.PATCH")
     sp_set.set_defaults(func=_cmd_set)
 
@@ -410,7 +427,8 @@ def build_parser() -> argparse.ArgumentParser:
     sp_plugin.add_argument("--plugin", required=True, help="plugin name")
     sp_plugin.set_defaults(func=_cmd_plugin)
 
-    sp_setp = _with_dir("set-plugin", "record a copied plugin's version in the ai-pack manifest (default: its source's)")
+    sp_setp = _with_dir("set-plugin", "record a copied plugin's version in the ai-pack manifest (default: its "
+                        "source's; re-renders the managed files)")
     sp_setp.add_argument("--plugin", required=True, help="plugin name")
     sp_setp.add_argument("version", nargs="?", help="semver MAJOR.MINOR.PATCH (default: the plugin source's version)")
     sp_setp.set_defaults(func=_cmd_set_plugin)

@@ -209,7 +209,8 @@ For a plugin already attached to a project (driven here or by `update-project`).
   re-merge `mcps.json`, and set the recorded plugin `version` to the source's on every release, patch
   included (`version check-plugins` wants an exact match):
   `uv run -m solaris.tools.version set-plugin --dir projects/<slug> --plugin <name>` (the source's version by
-  default; give one to record another). It refuses a linked plugin, which records none.
+  default; give one to record another). It refuses a linked plugin, which records none, and re-renders the pack
+  README's plugin list at once (through `revs ff`; a README the project edited is named, never overwritten).
 - **migrate** (plugin minor/major bump with `migrations/`): apply `plugins/<name>/migrations/<to>.md`
   against `<pack>/plugins/<name>/`, then update the recorded version (`version set-plugin`, as above).
 - **repair** (attached but broken): `revs ff` restores missing files, re-merge `mcps.json`, then
