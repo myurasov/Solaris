@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import shutil
@@ -940,3 +941,189 @@ def test_help_describes_recreatable_data_and_holds(capsys):
     for text in ('"recreatable": true', ".recreatable marker", "never deleted", "submission*", "held while in use",
                  "protect_names", '"raw", "raw-*"'):
         assert text in out, text
+
+
+def _link(root, tmp_path, name):
+    """Keep the data root ``name`` on "another drive": a folder outside the project, linked into its root."""
+    target = tmp_path / "drive" / name
+    target.mkdir(parents=True)
+    os.symlink(target, root / name)
+    return target
+
+
+def _other_drive(monkeypatch, drive):
+    """Make renames and hard links between ``drive`` and the rest fail like moves across file systems."""
+    base, rename, link = os.path.realpath(drive) + os.sep, os.rename, os.link
+
+    def on_drive(path):
+        return (os.path.realpath(os.path.dirname(path)) + os.sep).startswith(base)
+
+    def guarded(real):
+        def call(src, dst, *args, **kwargs):
+            if on_drive(src) != on_drive(dst):
+                raise OSError(errno.EXDEV, "Invalid cross-device link")
+            return real(src, dst, *args, **kwargs)
+        return call
+    monkeypatch.setattr(H.os, "rename", guarded(rename))
+    monkeypatch.setattr(H.os, "link", guarded(link))
+
+
+def test_linked_root_is_measured_budgeted_and_pruned(proj, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(H, "LARGE", 1000)
+    out = _link(proj, tmp_path, "__out")
+    _write(out / "old" / "f", "x" * 3000)
+    _write(out / "marked" / "g", "y" * 10)
+    _write(out / "marked" / ".disposable", "")
+    _write(out / "jobs" / "run-9" / "run.sh", "echo")
+    _age(out / "old", 30)
+    _age(out / "marked", 30)
+    # as on a real second drive: the link itself sits on the project's file system, its target on another
+    spot, real = os.path.join(os.path.realpath(proj), "__out"), os.lstat
+    monkeypatch.setattr(H.os, "lstat", lambda p, *a, **k: _OtherDevice(real(p, *a, **k)) if os.fspath(p) == spot
+                        else real(p, *a, **k))
+    _config(proj, linked_roots=["__out", "__data"], budget_gb={"__out": 1e-6, "project": 1},
+            prune=[{"glob": "__out/old", "older_than_days": 1}])
+    code, res = _json(proj, capsys)
+    target = os.path.realpath(out)
+    assert code == 3 and res["config"]["linked_roots"] == {"__out": target}
+    entry = next(e for e in res["sizes"]["entries"] if e["path"] == "__out")
+    assert entry == {"path": "__out", "dir": True, "bytes": 3014, "files": 4, "link": target}
+    assert [e["path"] for e in res["sizes"]["large"]] == ["__out/old"]
+    budgets = {b["name"]: b for b in res["budgets"]}
+    assert budgets["__out"]["measured"] and budgets["__out"]["over"] and budgets["__out"]["bytes"] == 3014
+    assert budgets["project"]["bytes"] == res["sizes"]["total_bytes"] > 3014
+    assert res["live"]["jobs"] == [{"path": "__out/jobs/run-9", "why": "recent"}]
+    assert sorted(c["path"] for c in res["prune"]) == ["__out/marked", "__out/old"] and _held(res) == {}
+    code, text = _main(proj, capsys)
+    assert f"__out/ -> {target}" in text and "not measured" not in text
+    assert _main(proj, capsys, "prune", "--apply")[0] == 0
+    assert not (out / "old").exists() and not (out / "marked").exists() and (out / "jobs" / "run-9").exists()
+    assert (proj / "__out").is_symlink()
+    assert sorted((e["action"], e["path"]) for e in _log(proj)) == [("delete", "__out/marked"),
+                                                                    ("delete", "__out/old")]
+
+
+def test_leading_double_star_reaches_into_a_linked_root(proj, tmp_path, capsys):
+    out = _link(proj, tmp_path, "__out")
+    _write(out / "a" / "cache" / "f")
+    _write(out / "b" / "keepme" / "f")
+    _age(out / "a", 30)
+    _age(out / "b", 30)
+    _config(proj, linked_roots=["__out"], prune=[{"glob": "**/cache", "older_than_days": 1}])
+    code, res = _json(proj, capsys, "prune")
+    assert [c["path"] for c in res["prune"]] == ["__out/a/cache"]
+    _config(proj, linked_roots=["__out"], prune=[{"glob": "__out/*", "older_than_days": 1}], protect=["**/keepme"])
+    code, res = _json(proj, capsys, "prune")
+    assert [c["path"] for c in res["prune"]] == ["__out/a"] and _held(res) == {"__out/b": "protected"}
+
+
+def test_a_symlink_below_a_linked_root_and_an_unlisted_link_are_never_followed(proj, tmp_path, capsys):
+    out = _link(proj, tmp_path, "__out")
+    outside, big = tmp_path / "outside", tmp_path / "big"
+    _write(outside / "precious.txt")
+    _write(big / "old" / "f")
+    os.symlink(outside, out / "link")
+    os.symlink(big, proj / "__data")
+    for path in (outside, big, out / "link"):
+        _age(path, 30)
+    _config(proj, linked_roots=["__out"], budget_gb={"__data": 1},
+            prune=[{"glob": "__out/*", "older_than_days": 1}, {"glob": "__out/link/*", "older_than_days": 1},
+                   {"glob": "__data/*", "older_than_days": 1}])
+    code, res = _json(proj, capsys)
+    assert res["prune"] == [] and next(e for e in res["sizes"]["entries"] if e["path"] == "__out")["files"] == 1
+    assert _held(res) == {"__data": "symlink: not walked", "__data/old": "symlink", "__out/link": "symlink",
+                          "__out/link/precious.txt": "symlink"}
+    assert [(b["name"], b["measured"]) for b in res["budgets"]] == [("__data", False)]
+    assert _main(proj, capsys, "prune", "--apply")[0] == 0
+    assert (outside / "precious.txt").exists() and (big / "old" / "f").exists() and (out / "link").is_symlink()
+
+
+def test_linked_roots_config_and_targets_are_checked(proj, tmp_path, capsys):
+    _config(proj, linked_roots=["source"])
+    code, out = _main(proj, capsys)
+    assert code == 1 and "linked_roots entry 'source' must be one of __data, __out" in out
+    _config(proj, linked_roots=["__out", "__data"])
+    (proj / "__data").mkdir()
+    assert _main(proj, capsys)[0] == 0   # listed, but a real folder or absent: nothing to follow
+    os.symlink(tmp_path / "unplugged", proj / "__out")
+    code, out = _main(proj, capsys)
+    assert code == 1 and "linked root __out" in out and "is its drive mounted?" in out
+    os.unlink(proj / "__out")
+    os.symlink(proj / "source", proj / "__out")
+    code, out = _main(proj, capsys, "prune", "--apply")
+    assert code == 1 and "must point outside the project" in out
+    os.unlink(proj / "__out")
+    os.symlink(tmp_path, proj / "__out")
+    assert _main(proj, capsys)[0] == 1   # a folder that holds the project is no data root either
+    os.unlink(proj / "__out")
+    (proj / "__data").rmdir()
+    (tmp_path / "drive" / "sub").mkdir(parents=True)
+    os.symlink(tmp_path / "drive", proj / "__data")
+    os.symlink(tmp_path / "drive" / "sub", proj / "__out")
+    code, out = _main(proj, capsys)
+    assert code == 1 and "overlap" in out
+
+
+def test_a_linked_root_changed_during_the_run_is_a_plain_symlink_again(proj, tmp_path):
+    out = _link(proj, tmp_path, "__out")
+    root = os.path.realpath(proj)
+    linked = H.linked_roots(root, {"linked_roots": ["__out"]})
+    assert linked == {"__out": os.path.realpath(out)}
+    assert H._project_rel(root, os.path.realpath(out / "jobs" / "a.sh"), linked) == "__out/jobs/a.sh"
+    assert H._project_rel(root, os.path.realpath(out / "jobs" / "a.sh")) == ""
+    assert not H._symlink_on_path(root, "__out/old", linked) and H._symlink_on_path(root, "__out/old")
+    elsewhere = tmp_path / "elsewhere"
+    _age(_write(elsewhere / "old" / "f"), 30)
+    os.unlink(proj / "__out")
+    os.symlink(elsewhere, proj / "__out")
+    assert H._symlink_on_path(root, "__out/old", linked)
+    assert not H._inside(os.path.join(root, "__out/old"), root, linked)
+    done, failed = H.apply_prune(root, str(proj / "aipack" / ".memory" / H.LOG),
+                                 [{"path": "__out/old", "rule": "r", "bytes": 1}], None, linked)
+    assert not done and "refused" in failed[0]["error"] and (elsewhere / "old" / "f").exists()
+
+
+def test_tidy_moves_job_scratch_onto_a_linked_root_across_file_systems(proj, tmp_path, capsys, monkeypatch):
+    out = _link(proj, tmp_path, "__out")
+    _other_drive(monkeypatch, tmp_path / "drive")
+    mem = proj / "aipack" / ".memory"
+    _write(mem / "jobs" / "run-1" / "sub" / "out.txt", "data")
+    os.symlink("out.txt", mem / "jobs" / "run-1" / "sub" / "ln")
+    _age(mem / "jobs" / "run-1", 5)
+    code, res = _json(proj, capsys, "tidy")   # not listed: the move would leave the project
+    assert res["untidy"] == [] and _held(res, "untidy_held") == {"aipack/.memory/jobs/run-1": "outside the project"}
+    _config(proj, linked_roots=["__out"])
+    code, res = _json(proj, capsys, "tidy")
+    assert [(m["path"], m["to"]) for m in res["untidy"]] == [("aipack/.memory/jobs/run-1", "__out/jobs/run-1")]
+    assert _main(proj, capsys, "tidy", "--apply")[0] == 0
+    moved = out / "jobs" / "run-1"
+    assert (moved / "sub" / "out.txt").read_text() == "data" and os.readlink(moved / "sub" / "ln") == "out.txt"
+    assert not (mem / "jobs" / "run-1").exists() and [p.name for p in (out / "jobs").iterdir()] == ["run-1"]
+    assert [(e["action"], e["path"], e["to"]) for e in _log(proj)] == [
+        ("move", "aipack/.memory/jobs/run-1", "__out/jobs/run-1")]
+
+
+def test_a_move_across_file_systems_keeps_the_source_until_the_copy_matches(proj, tmp_path, monkeypatch):
+    out = _link(proj, tmp_path, "__out")
+    _other_drive(monkeypatch, tmp_path / "drive")
+    root, log = os.path.realpath(proj), str(proj / "aipack" / ".memory" / H.LOG)
+    linked = H.linked_roots(root, {"linked_roots": ["__out"]})
+    src = _write(proj / "aipack" / ".memory" / "jobs" / "run-1" / "out.txt", "data")
+    note = _write(proj / "aipack" / ".memory" / "note.md", "note")
+    moves = [{"path": "aipack/.memory/jobs/run-1", "to": "__out/jobs/run-1", "bytes": 4, "reason": "job scratch"},
+             {"path": "aipack/.memory/note.md", "to": "__out/note.md", "bytes": 4, "reason": "r"}]
+    with monkeypatch.context() as patch:
+        patch.setattr(H.filecmp, "cmp", lambda *a, **k: False)
+        done, failed = H.apply_moves(root, log, moves, linked)
+    assert not done and all("differs" in f["error"] for f in failed) and len(failed) == 2
+    assert src.read_text() == "data" and note.read_text() == "note"
+    assert list((out / "jobs").iterdir()) == [] and [p.name for p in out.iterdir()] == ["jobs"]
+    os.mkfifo(proj / "aipack" / ".memory" / "jobs" / "run-1" / "pipe")
+    done, failed = H.apply_moves(root, log, moves[:1], linked)
+    assert not done and "special file" in failed[0]["error"] and src.exists()
+    os.unlink(proj / "aipack" / ".memory" / "jobs" / "run-1" / "pipe")
+    done, failed = H.apply_moves(root, log, moves, linked)
+    assert not failed and [d["to"] for d in done] == ["__out/jobs/run-1", "__out/note.md"]
+    assert (out / "jobs" / "run-1" / "out.txt").read_text() == "data" and (out / "note.md").read_text() == "note"
+    assert not src.parent.exists() and not note.exists()
+    assert sorted(p.name for p in out.iterdir()) == ["jobs", "note.md"]

@@ -16,7 +16,8 @@ than ``README.md``, and top-level entries that are not on the root allowlist; hi
 ``prune`` deletes only (a) entries matched by a ``prune`` rule of the config and older than the rule's
 ``older_than_days``, and (b) folders under ``__data/`` or ``__out/`` that hold a ``.disposable`` or ``.recreatable``
 marker file. It never deletes outside ``__data/``, ``__out/`` and ``<pack>/.memory/archive/``, never ``.git``, a mount
-point or a tree that holds either, never a symlink or anything reached through one, never anything protected by a
+point or a tree that holds either, never a symlink or anything reached through one (a linked root, below, is the one
+exception), never anything protected by a
 ``.keep`` marker (in the entry, inside it or above it) or by a ``protect`` glob, and never a tree it could not read in
 full.
 
@@ -55,6 +56,17 @@ never follow symlinks, and a hard-linked file counts once. Every applied move or
 (``ts`` UTC, ``action``, ``path``, ``to`` for a move, ``bytes``, ``rule``, and ``how`` for re-creatable data) to
 ``<pack>/.memory/housekeeping.jsonl``.
 
+Linked roots: the one exception to "never a symlink". A project may keep ``__data/`` or ``__out/`` on another drive
+and link it into the project root. When the config lists the name under ``linked_roots`` and that top-level entry is
+a symlink to a folder outside the project, its target counts as part of the project: it is measured, checked
+against its budget, pruned by the rules and markers, read for live jobs, and ``tidy`` moves job scratch into it
+(copying across the file systems, comparing the copy with the source, then removing the source). Every other guard
+stays: a symlink below a linked root is never followed, nothing outside the link's target is touched, and a link
+that is not listed is reported as ``symlink: not walked``. A listed link whose target is missing (a drive that is
+not mounted) is an error, so a report never reads an absent drive as an empty folder; so is a link that points into
+the project or into another linked root's target. The targets are read once per run: a link changed during the run
+counts as a plain symlink from then on.
+
 Config (optional, project-owned, committed), ``<pack>/housekeeping.json``::
 
     {"budget_gb": {"project": 150, "__data": 80, "__out": 60}, "keep_recent_hours": 24,
@@ -62,7 +74,7 @@ Config (optional, project-owned, committed), ``<pack>/housekeeping.json``::
                {"glob": "__data/downloads/*", "older_than_days": 2, "recreatable": true,
                 "how": "tools/fetch/fetch.sh downloads it again"}],
      "protect": ["__data/source"], "protect_names": ["log", "logs", "*.log"],
-     "memory_allow": ["notes-*.md"], "root_allow": ["paper"]}
+     "memory_allow": ["notes-*.md"], "root_allow": ["paper"], "linked_roots": ["__data", "__out"]}
 
 Globs are relative to the project root (``{pack}`` stands for the pack folder, ``**`` spans folders), except
 ``protect_names``, which are names (no ``/``) and replace the default list when given; a
@@ -85,6 +97,7 @@ from __future__ import annotations
 
 import argparse
 import errno
+import filecmp
 import fnmatch
 import json
 import math
@@ -156,7 +169,8 @@ MEMORY_IGNORE = (".DS_Store", ".stfolder", ".stversions", ".stignore", ".syncthi
 # Top-level entries of a project root besides its pack and the manifest's workspaces.
 ROOT_ALLOW = ("AGENTS.md", "CLAUDE.md", "README.md", "LICENSE*", "NOTICE*", "DISCLAIMER*", "source", "tools",
               "reports", "research", "submissions", "__*")
-CONFIG_KEYS = ("budget_gb", "keep_recent_hours", "prune", "protect", "protect_names", "memory_allow", "root_allow")
+CONFIG_KEYS = ("budget_gb", "keep_recent_hours", "prune", "protect", "protect_names", "memory_allow", "root_allow",
+               "linked_roots")
 
 HELP_EPILOG = f"""\
 re-creatable data (pruned at every pass without asking; each deletion logs its how):
@@ -177,6 +191,10 @@ held while in use (tidy and prune):
   keep_recent_hours, named by a running process, or named by a live job's script. The plan prints the referrer
   (a file, or a process as its pid, executable name and the path it names). When the process list cannot be
   read, or the scripts pass the read caps, every move and deletion is held.
+__data/ or __out/ on another drive, linked into the project root:
+  list the name in housekeeping.json, "linked_roots": ["__data", "__out"]; the link's target is then measured,
+  budgeted and pruned like the folder itself. A link that is not listed is never walked; a symlink below a linked
+  root is never followed; a listed link whose target is missing (drive not mounted) is an error.
 """
 
 _now = time.time   # tests swap the clock
@@ -211,7 +229,8 @@ def _str_list(value, what: str) -> list:
 def load_config(pack: Path) -> dict:
     """The project's ``<pack>/housekeeping.json`` over the defaults; HousekeepingError when it is malformed."""
     cfg = {"file": None, "budget_gb": {}, "keep_recent_hours": float(KEEP_RECENT_HOURS), "prune": [],
-           "protect": [], "protect_names": list(PROTECT_NAMES), "memory_allow": [], "root_allow": []}
+           "protect": [], "protect_names": list(PROTECT_NAMES), "memory_allow": [], "root_allow": [],
+           "linked_roots": []}
     path = pack / CONFIG
     if not os.path.lexists(path):
         return cfg
@@ -269,7 +288,42 @@ def load_config(pack: Path) -> dict:
     for name in cfg["protect_names"]:
         if "/" in name or "\\" in name:
             raise HousekeepingError(f"{where}: protect_names entry {name!r} must be a name, not a path")
+    if "linked_roots" in data:
+        cfg["linked_roots"] = _str_list(data["linked_roots"], f"{where}: linked_roots")
+        for name in cfg["linked_roots"]:
+            if name not in DATA_ROOTS:
+                raise HousekeepingError(f"{where}: linked_roots entry {name!r} must be one of "
+                                        f"{', '.join(DATA_ROOTS)}")
     return cfg
+
+
+def linked_roots(root: str, cfg: dict) -> dict:
+    """The config's linked roots that are symlinks right now, each with its real target: top-level data folders kept
+    on another drive, whose targets count as part of the project (module doc). A listed name that is a real folder,
+    or absent, needs nothing. HousekeepingError when a listed link does not resolve to a folder outside the project
+    and apart from the other links' targets. The targets are read once: a link that points elsewhere later in the
+    run counts as a plain symlink again."""
+    out = {}
+    for name in cfg.get("linked_roots", ()):
+        path = os.path.join(root, name)
+        if not os.path.islink(path):
+            continue
+        real = os.path.realpath(path)
+        if not os.path.isdir(real):
+            raise HousekeepingError(f"linked root {name} -> {os.readlink(path)} is not a folder (is its drive "
+                                    "mounted?)")
+        if _below(real, root) or _below(root, real):
+            raise HousekeepingError(f"linked root {name} -> {real} must point outside the project")
+        for other, base in out.items():
+            if _below(real, base) or _below(base, real):
+                raise HousekeepingError(f"linked roots {other} -> {base} and {name} -> {real} overlap")
+        out[name] = real
+    return out
+
+
+def _below(path: str, base: str) -> bool:
+    """True when the real path ``path`` is ``base`` or below it."""
+    return path == base or path.startswith(base.rstrip(os.sep) + os.sep)
 
 
 def _names_re(patterns) -> "re.Pattern | None":
@@ -310,21 +364,26 @@ class Tree:
 
 
 class Walker:
-    """Measures trees under a project root: never follows symlinks, counts each hard-linked file once."""
+    """Measures trees under a project root: never follows symlinks (but for the top-level ``linked`` roots, whose
+    targets it walks), counts each hard-linked file once."""
 
-    def __init__(self, root: str, record: tuple = (), names: "re.Pattern | None" = None):
+    def __init__(self, root: str, record: tuple = (), names: "re.Pattern | None" = None,
+                 linked: "dict | None" = None):
         self.root = root
         self.record = tuple(r + "/" for r in record)   # keep the Tree of every folder at or under these
         self.names = names                              # protect_names: note the first entry they name
+        self.linked = dict(linked or {})                # top-level links walked as the folders they point at
         self.dirs: dict = {}
         self.seen: set = set()
         self.unreadable: list = []
 
     def measure(self, rel: str, children: "list | None" = None) -> Tree:
-        """The Tree of the entry at ``rel``: a folder is walked; anything else, a symlink too, counts itself.
-        With ``children``, a folder's direct children are appended as ``(name, is_dir, Tree)``."""
+        """The Tree of the entry at ``rel``: a folder is walked; anything else, a symlink too, counts itself (a
+        linked root is walked as its target). With ``children``, a folder's direct children are appended as
+        ``(name, is_dir, Tree)``."""
+        path = os.path.join(self.root, rel)
         try:
-            st = os.lstat(os.path.join(self.root, rel))
+            st = os.stat(path) if rel in self.linked else os.lstat(path)
         except OSError:
             return self._lost(rel)
         if stat.S_ISDIR(st.st_mode):
@@ -414,31 +473,50 @@ def _matches(name: str, patterns) -> bool:
     return any(fnmatch.fnmatchcase(name.casefold(), p.casefold()) for p in patterns)
 
 
-def _inside(path: str, root: str) -> bool:
-    """True when ``path``, symlinks resolved, is ``root`` (a real path) or below it."""
+def _inside(path: str, root: str, linked: "dict | None" = None) -> bool:
+    """True when ``path``, symlinks resolved, is ``root`` (a real path) or below it, or is the target of one of the
+    ``linked`` roots (name to real target) or below it."""
     real = os.path.realpath(path)
-    return real == root or real.startswith(root.rstrip(os.sep) + os.sep)
+    return _below(real, root) or any(_below(real, base) for base in (linked or {}).values())
 
 
-def _symlink_on_path(root: str, rel: str) -> bool:
-    """True when ``rel`` or any folder on the way to it from ``root`` is a symlink."""
+def _symlink_on_path(root: str, rel: str, linked: "dict | None" = None) -> bool:
+    """True when ``rel`` or any folder on the way to it from ``root`` is a symlink; a ``linked`` root that still
+    points at its target, as the first part of ``rel``, does not count."""
     here = root
-    for part in rel.split("/"):
+    for i, part in enumerate(rel.split("/")):
         here = os.path.join(here, part)
-        if os.path.islink(here):
+        if os.path.islink(here) and not (i == 0 and linked and os.path.realpath(here) == linked.get(part)):
             return True
     return False
 
 
-def _glob(root: str, pattern: str, hidden: bool, case_sensitive: bool = True) -> list:
-    """Paths relative to ``root`` that match ``pattern``; ``**`` never enters a symlinked folder. Without ``hidden``
-    a hidden name matches only where the pattern spells it out."""
+def _project_rel(root: str, real: str, linked: "dict | None" = None) -> str:
+    """The path from the project root of the real path ``real`` when it lies in the project or in the target of a
+    ``linked`` root, else empty."""
+    if real.startswith(root.rstrip(os.sep) + os.sep):
+        return _norm(os.path.relpath(real, root))
+    for name, base in (linked or {}).items():
+        if real.startswith(base.rstrip(os.sep) + os.sep):
+            return _norm(os.path.join(name, os.path.relpath(real, base)))
+    return ""
+
+
+def _glob(root: str, pattern: str, hidden: bool, case_sensitive: bool = True, linked: "dict | None" = None) -> list:
+    """Paths relative to ``root`` that match ``pattern``; ``**`` never enters a symlinked folder, but a leading
+    ``**`` is also matched below each ``linked`` root. Without ``hidden`` a hidden name matches only where the
+    pattern spells it out."""
     spelled = {part for part in pattern.split("/") if not any(c in part for c in "*?[")}
     try:
         paths = list(Path(root).glob(pattern, case_sensitive=case_sensitive, recurse_symlinks=False))
+        hits = {p.relative_to(root).as_posix() for p in paths}
+        if pattern.split("/", 1)[0] == "**":
+            for name in linked or ():
+                base = Path(root, name)
+                hits.update(f"{name}/{p.relative_to(base).as_posix()}" for p in base.glob(
+                    pattern, case_sensitive=case_sensitive, recurse_symlinks=False) if p != base)
     except ValueError as exc:
         raise HousekeepingError(f"bad glob {pattern!r}: {exc}") from None
-    hits = {p.relative_to(root).as_posix() for p in paths}
     if not hidden:
         hits = {h for h in hits if all(not part.startswith(".") or part in spelled for part in h.split("/"))}
     return sorted(hits)
@@ -624,7 +702,8 @@ class Refs:
                     return
 
 
-def find_refs(root: str, pack: str, recent: float, walker: "Walker | None" = None) -> Refs:
+def find_refs(root: str, pack: str, recent: float, walker: "Walker | None" = None,
+              linked: "dict | None" = None) -> Refs:
     """Find the live jobs and index what they, the running processes and the context file name (module doc)."""
     refs = Refs()
     memory = f"{pack}/.memory"
@@ -648,12 +727,13 @@ def find_refs(root: str, pack: str, recent: float, walker: "Walker | None" = Non
         for token in _TOKEN.findall(cmd):
             if token.startswith("/") and len(files) < SCAN_FILES:
                 real = os.path.realpath(token)
-                if real.startswith(root + os.sep) and os.path.isfile(real):
-                    files.append(_norm(os.path.relpath(real, root)))
+                rel = _project_rel(root, real, linked)
+                if rel and os.path.isfile(real):
+                    files.append(rel)
     jobs = []
     for top in JOB_ROOTS:
         top = top.replace("{pack}", pack)
-        if _symlink_on_path(root, top):
+        if _symlink_on_path(root, top, linked):
             continue
         for entry in _listdir(os.path.join(root, top)):
             try:
@@ -689,7 +769,8 @@ def find_refs(root: str, pack: str, recent: float, walker: "Walker | None" = Non
     return refs
 
 
-def _plan_move(root, rel, dest, is_dir, tree, why, recent, moves, held, taken, refs=None, job=False) -> None:
+def _plan_move(root, rel, dest, is_dir, tree, why, recent, moves, held, taken, refs=None, job=False,
+               linked=None) -> None:
     item = {"path": rel, "dir": is_dir, "bytes": tree.bytes, "newest": _iso(tree.newest), "reason": why}
     used, by = refs.held(rel, job, named=False, live=False) if refs else ("", "")
     if used:
@@ -702,17 +783,18 @@ def _plan_move(root, rel, dest, is_dir, tree, why, recent, moves, held, taken, r
         held.append({**item, "held": ".keep"})
     elif tree.mount:
         held.append({**item, "held": "mount point"})
-    elif not (_inside(os.path.dirname(os.path.join(root, rel)), root)
-              and _inside(os.path.dirname(os.path.join(root, dest)), root)):
+    elif not (_inside(os.path.dirname(os.path.join(root, rel)), root, linked)
+              and _inside(os.path.dirname(os.path.join(root, dest)), root, linked)):
         held.append({**item, "held": "outside the project"})
     else:
         moves.append({**item, "to": _free(root, dest, is_dir, taken)})
 
 
-def plan_tidy(root: str, pack: str, cfg: dict, recent: float, refs: "Refs | None" = None) -> "tuple[list, list]":
+def plan_tidy(root: str, pack: str, cfg: dict, recent: float, refs: "Refs | None" = None,
+              linked: "dict | None" = None) -> "tuple[list, list]":
     """The moves tidy would make, and the untidy items held back (in use, recent, unreadable or leaving the
     project)."""
-    walker = Walker(root)
+    walker = Walker(root, linked=linked)
     memory = f"{pack}/.memory"
     moves, held, taken = [], [], set()
     entries = _listdir(os.path.join(root, memory))
@@ -747,7 +829,7 @@ def plan_tidy(root: str, pack: str, cfg: dict, recent: float, refs: "Refs | None
                              "reason": "job scratch", "held": "named in context or handover", "by": by})
                 continue
             _plan_move(root, rel, f"__out/jobs/{entry.name}", True, tree, "job scratch", recent, moves, held, taken,
-                       refs, job=True)
+                       refs, job=True, linked=linked)
     moves.sort(key=lambda m: (-m["bytes"], m["path"]))
     return moves, held
 
@@ -755,13 +837,16 @@ def plan_tidy(root: str, pack: str, cfg: dict, recent: float, refs: "Refs | None
 class Guard:
     """What every prune candidate is checked against, when planned and again right before it is deleted."""
 
-    def __init__(self, root: str, pack: str, cfg: dict, now: float, refs: "Refs | None" = None):
+    def __init__(self, root: str, pack: str, cfg: dict, now: float, refs: "Refs | None" = None,
+                 linked: "dict | None" = None):
         self.root, self.pack, self.refs = root, pack, refs
+        self.linked = dict(linked or {})
         self.recent = now - cfg["keep_recent_hours"] * 3600
         self.prune_roots = (*DATA_ROOTS, f"{pack}/.memory/archive")
         self.jobs = tuple(r.replace("{pack}", pack) for r in JOB_ROOTS)
         self.protect = [p.replace("{pack}", pack) for p in cfg["protect"]]
-        self.protected = {rel for p in self.protect for rel in _glob(root, p, hidden=True, case_sensitive=False)}
+        self.protected = {rel for p in self.protect
+                          for rel in _glob(root, p, hidden=True, case_sensitive=False, linked=self.linked)}
         self.names = _names_re(cfg["protect_names"])
 
     def check(self, rel: str, match: dict, walker: Walker, now: float) -> "tuple[dict, str]":
@@ -777,10 +862,10 @@ class Guard:
             return item, "outside __data/, __out/ and the archive"
         if match["how"] is not None and (rel + "/").startswith(self.pack + "/"):
             return item, "in the pack: re-creatable rules never reach it"
-        if _symlink_on_path(root, rel):
+        if _symlink_on_path(root, rel, self.linked):
             return item, "symlink"
         path = os.path.join(root, rel)
-        if not _inside(path, root):
+        if not _inside(path, root, self.linked):
             return item, "outside the project"
         tree = walker.dirs.get(rel) or walker.measure(rel)
         item.update({"dir": os.path.isdir(path), "bytes": tree.bytes, "newest": _iso(tree.newest),
@@ -804,7 +889,8 @@ class Guard:
                 item["entry"] = named
                 return item, "protected name"
         try:
-            own_fs = os.lstat(path).st_dev == os.lstat(os.path.dirname(path)).st_dev
+            # the parent is no symlink (checked above) unless it is a linked root, whose target is the parent then
+            own_fs = os.lstat(path).st_dev == os.stat(os.path.dirname(path)).st_dev
         except OSError:
             own_fs = False
         if tree.mount or not own_fs:
@@ -841,10 +927,11 @@ def _marker_how(root: str, rel: str) -> str:
 def plan_prune(root: str, pack: str, cfg: dict, now: float, walker: Walker,
                refs: "Refs | None" = None) -> "tuple[list, list]":
     """Prune candidates and the matches held back. ``walker`` has walked the prune roots, recording them."""
-    guard = Guard(root, pack, cfg, now, refs)
+    linked = walker.linked
+    guard = Guard(root, pack, cfg, now, refs, linked)
     held, found = [], {}
     for r in guard.prune_roots:
-        if os.path.islink(os.path.join(root, r)):
+        if os.path.islink(os.path.join(root, r)) and _symlink_on_path(root, r, linked):
             held.append({"path": r, "rule": "", "held": "symlink: not walked"})
     for rel, tree in walker.dirs.items():
         if "/" in rel and rel.split("/", 1)[0] in DATA_ROOTS:
@@ -856,7 +943,7 @@ def plan_prune(root: str, pack: str, cfg: dict, now: float, walker: Walker,
         label = f"{rule['glob']} older than {rule['older_than_days']:g} days"
         if rule.get("recreatable"):
             label += ", re-creatable"
-        for rel in _glob(root, rule["glob"].replace("{pack}", pack), hidden=False):
+        for rel in _glob(root, rule["glob"].replace("{pack}", pack), hidden=False, linked=linked):
             found.setdefault(rel, {"rule": label, "days": rule["older_than_days"], "how": rule.get("how")})
     cands = []
     for rel in sorted(found, key=lambda r: (r.count("/"), r)):
@@ -872,8 +959,74 @@ def plan_prune(root: str, pack: str, cfg: dict, now: float, walker: Walker,
     return cands, held
 
 
-def apply_moves(root: str, log: str, moves: list) -> "tuple[list, list]":
-    """Make the planned moves (never over an existing entry); log each one made."""
+def _listing(top: str) -> dict:
+    """Every entry at or below ``top`` by relative path (``top`` itself is ""): its kind with a file's size or a
+    symlink's target. OSError for anything that is not a file, a folder or a symlink."""
+    out, stack = {}, [""]
+    while stack:
+        rel = stack.pop()
+        path = os.path.join(top, rel) if rel else top
+        st = os.lstat(path)
+        if stat.S_ISDIR(st.st_mode):
+            out[rel] = ("dir", 0)
+            with os.scandir(path) as entries:
+                stack.extend(os.path.join(rel, e.name) for e in entries)
+        elif stat.S_ISREG(st.st_mode):
+            out[rel] = ("file", st.st_size)
+        elif stat.S_ISLNK(st.st_mode):
+            out[rel] = ("link", os.readlink(path))
+        else:
+            raise OSError(f"holds a special file ({rel or os.path.basename(top)}): not moved")
+    return out
+
+
+def _move_across(src: str, dst: str) -> None:
+    """Move ``src`` to ``dst`` on another file system: copy it beside the target, compare the copy with the source
+    byte for byte, put the copy in place (never over an existing entry), and only then remove the source. OSError
+    when a step fails; until the copy is in place the source is untouched and the partial copy is removed."""
+    tmp = f"{dst}.moving-{os.getpid()}"
+    if os.path.lexists(tmp):
+        raise OSError(f"{os.path.basename(tmp)} exists")
+    before = _listing(src)
+    is_dir = before[""][0] == "dir"
+    placed = False
+    try:
+        if is_dir:
+            shutil.copytree(src, tmp, symlinks=True)
+        else:
+            shutil.copy2(src, tmp, follow_symlinks=False)
+        same = _listing(tmp) == before == _listing(src) and all(
+            filecmp.cmp(os.path.join(src, rel) if rel else src, os.path.join(tmp, rel) if rel else tmp, shallow=False)
+            for rel, (kind, _) in before.items() if kind == "file")
+        if not same:
+            raise OSError("the copy differs from the source (still changing?): not moved")
+        if is_dir:
+            if os.path.lexists(dst):
+                raise OSError(f"{os.path.basename(dst)} exists")
+            os.rename(tmp, dst)
+            placed = True
+        else:
+            os.link(tmp, dst, follow_symlinks=False)   # fails if dst appeared meanwhile
+            placed = True
+            os.unlink(tmp)
+    finally:
+        if not placed and os.path.lexists(tmp):
+            if os.path.isdir(tmp) and not os.path.islink(tmp):
+                shutil.rmtree(tmp, ignore_errors=True)
+            else:
+                os.unlink(tmp)
+    try:
+        if is_dir:
+            shutil.rmtree(src)
+        else:
+            os.unlink(src)
+    except OSError as exc:
+        raise OSError(f"copied to the target, but the source was not removed: {exc}") from None
+
+
+def apply_moves(root: str, log: str, moves: list, linked: "dict | None" = None) -> "tuple[list, list]":
+    """Make the planned moves (never over an existing entry); log each one made. A move into or out of a ``linked``
+    root crosses file systems by copy, compare and remove."""
     done, failed = [], []
     for m in moves:
         src, dst = os.path.join(root, m["path"]), os.path.join(root, m["to"])
@@ -882,7 +1035,7 @@ def apply_moves(root: str, log: str, moves: list) -> "tuple[list, list]":
                 raise OSError("gone")
             if os.path.lexists(dst):
                 raise OSError(f"{m['to']} exists")
-            if not (_inside(os.path.dirname(src), root) and _inside(os.path.dirname(dst), root)):
+            if not (_inside(os.path.dirname(src), root, linked) and _inside(os.path.dirname(dst), root, linked)):
                 raise OSError("refused: outside the project")
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             try:
@@ -894,9 +1047,11 @@ def apply_moves(root: str, log: str, moves: list) -> "tuple[list, list]":
                     os.link(src, dst, follow_symlinks=False)   # fails if dst appeared meanwhile
                     os.unlink(src)
             except OSError as exc:
-                if exc.errno == errno.EXDEV:
+                if exc.errno != errno.EXDEV:
+                    raise
+                if not (linked and {m["path"].split("/", 1)[0], m["to"].split("/", 1)[0]} & set(linked)):
                     raise OSError("on another file system: not moved") from None
-                raise
+                _move_across(src, dst)
         except OSError as exc:
             failed.append({"action": "move", "path": m["path"], "to": m["to"], "error": str(exc)})
             continue
@@ -915,13 +1070,13 @@ def _record(log: str, entry: dict, failed: list) -> None:
         failed.append({"action": "log", "path": entry["path"], "error": f"not logged: {exc}"})
 
 
-def apply_prune(root: str, log: str, cands: list, recheck=None) -> "tuple[list, list]":
+def apply_prune(root: str, log: str, cands: list, recheck=None, linked: "dict | None" = None) -> "tuple[list, list]":
     """Delete the candidates, checking each one again first (``recheck`` returns why it may not go); log each
     deletion run."""
     done, failed = [], []
     for c in cands:
         rel, path = c["path"], os.path.join(root, c["path"])
-        if _symlink_on_path(root, rel) or not _inside(path, root):
+        if _symlink_on_path(root, rel, linked) or not _inside(path, root, linked):
             failed.append({"action": "delete", "path": rel, "error": "refused: symlink or outside the project"})
             continue
         why = recheck(c) if recheck else ""
@@ -952,8 +1107,9 @@ def measure_sizes(root: str, walker: Walker) -> dict:
     for entry in _listdir(root):
         kids = [] if entry.name in DATA_ROOTS else None
         tree = walker.measure(entry.name, kids)
-        entries.append({"path": entry.name, "dir": entry.is_dir(follow_symlinks=False), "bytes": tree.bytes,
-                        "files": tree.files})
+        link = walker.linked.get(entry.name)
+        entries.append({"path": entry.name, "dir": bool(link) or entry.is_dir(follow_symlinks=False),
+                        "bytes": tree.bytes, "files": tree.files, **({"link": link} if link else {})})
         for name, is_dir, kid in kids or ():
             if kid.bytes >= LARGE:
                 large.append({"path": f"{entry.name}/{name}", "dir": is_dir, "bytes": kid.bytes,
@@ -973,13 +1129,14 @@ def check_budgets(root: str, pack: str, cfg: dict, sizes: dict, walker: Walker) 
         else:
             rel = _norm(key.replace("{pack}", pack)).rstrip("/")
             path = os.path.join(root, rel)
-            if not os.path.lexists(path) or _symlink_on_path(root, rel):
+            if not os.path.lexists(path) or _symlink_on_path(root, rel, walker.linked):
                 why = "missing" if not os.path.lexists(path) else "symlink"
                 out.append({"name": key, "bytes": 0, "budget_gb": gb, "budget_bytes": int(gb * GB), "over": False,
                             "measured": False, "note": f"not measured: {why}"})
                 continue
             tree = walker.dirs.get(rel)
-            size = top[rel] if rel in top else tree.bytes if tree else Walker(root).measure(rel).bytes
+            size = (top[rel] if rel in top else tree.bytes if tree
+                    else Walker(root, linked=walker.linked).measure(rel).bytes)
         out.append({"name": key, "bytes": size, "budget_gb": gb, "budget_bytes": int(gb * GB),
                     "over": size > gb * GB, "measured": True})
     return out
@@ -1008,11 +1165,14 @@ def run(root: str, pack: str, cfg: dict, manifest: dict, command: str, apply: bo
     started, now = time.monotonic(), _now()
     recent = now - cfg["keep_recent_hours"] * 3600
     log = os.path.join(root, pack, ".memory", LOG)
+    linked = linked_roots(root, cfg)
     res = {"project": root, "pack": pack, "command": command, "apply": apply,
-           "config": {"file": cfg["file"], "keep_recent_hours": cfg["keep_recent_hours"]}, "elapsed_s": 0.0,
+           "config": {"file": cfg["file"], "keep_recent_hours": cfg["keep_recent_hours"],
+                      **({"linked_roots": linked} if linked else {})}, "elapsed_s": 0.0,
            "sizes": None, "budgets": None, "untidy": None, "untidy_held": None, "prune": None, "prune_held": None,
            "layout": None, "live": None, "unreadable": [], "applied": [], "failed": [], "exit": 0, "reason": ""}
-    walker = Walker(root, record=(*DATA_ROOTS, f"{pack}/.memory/archive"), names=_names_re(cfg["protect_names"]))
+    walker = Walker(root, record=(*DATA_ROOTS, f"{pack}/.memory/archive"), names=_names_re(cfg["protect_names"]),
+                    linked=linked)
     if command == "report":
         res["sizes"] = measure_sizes(root, walker)
         res["budgets"] = check_budgets(root, pack, cfg, res["sizes"], walker)
@@ -1021,24 +1181,24 @@ def run(root: str, pack: str, cfg: dict, manifest: dict, command: str, apply: bo
         for r in walker.record:
             if os.path.lexists(os.path.join(root, r)):
                 walker.measure(r.rstrip("/"))
-    refs = find_refs(root, pack, recent, walker)
+    refs = find_refs(root, pack, recent, walker, linked)
     res["live"] = {"jobs": [{"path": p, "why": w} for p, w in sorted(refs.live.items())], "scripts": refs.scanned,
                    "processes": refs.processes, "complete": refs.complete, "note": refs.note}
     if command in ("report", "tidy"):
-        res["untidy"], res["untidy_held"] = plan_tidy(root, pack, cfg, recent, refs)
+        res["untidy"], res["untidy_held"] = plan_tidy(root, pack, cfg, recent, refs, linked)
     if command in ("report", "prune"):
         res["prune"], res["prune_held"] = plan_prune(root, pack, cfg, now, walker, refs)
     res["unreadable"] = [u for u in walker.unreadable if os.path.lexists(os.path.join(root, u))]
     if apply and command == "tidy":
-        res["applied"], res["failed"] = apply_moves(root, log, res["untidy"])
+        res["applied"], res["failed"] = apply_moves(root, log, res["untidy"], linked)
     elif apply and command == "prune":
-        guard = Guard(root, pack, cfg, now, refs)
+        guard = Guard(root, pack, cfg, now, refs, linked)
 
         def recheck(c):
             # a fresh look at the candidate itself right before it goes
             match = {"rule": c["rule"], "days": c.get("older_than_days"), "how": c.get("how")}
-            return guard.check(c["path"], match, Walker(root, names=guard.names), _now())[1]
-        res["applied"], res["failed"] = apply_prune(root, log, res["prune"], recheck)
+            return guard.check(c["path"], match, Walker(root, names=guard.names, linked=linked), _now())[1]
+        res["applied"], res["failed"] = apply_prune(root, log, res["prune"], recheck, linked)
     res["elapsed_s"] = round(time.monotonic() - started, 2)
     attention = []
     if res["budgets"] and any(b["over"] for b in res["budgets"]):
@@ -1102,7 +1262,8 @@ def render(res: dict, where: str) -> str:
     sizes = res["sizes"]
     if sizes is not None:
         lines.append(f"Sizes: {human(sizes['total_bytes'])} in {sizes['files']:,} files")
-        _capped(lines, sizes["entries"], lambda e: f"  {human(e['bytes']):>9}  {_shown(e)}")
+        _capped(lines, sizes["entries"], lambda e: f"  {human(e['bytes']):>9}  {_shown(e)}"
+                                                   + (f" -> {e['link']}" if e.get("link") else ""))
         if sizes["large"]:
             lines.append(f"  Over {human(LARGE)} in {' and '.join(r + '/' for r in DATA_ROOTS)}:")
             _capped(lines, sizes["large"], lambda e: f"  {human(e['bytes']):>9}  {_shown(e)}")
