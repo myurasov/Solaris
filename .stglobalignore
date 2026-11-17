@@ -40,6 +40,7 @@
 
 // Git runs only on the machine that holds a repo's clone; the other machines keep no .git. No (?d):
 // a directory deleted on another device must not take that clone (and any unpushed commits) with it.
+!projects/my/autocode/source/.git
 **/.git
 
 // Project data and run outputs (the ai-pack's local-only `__data/` and `__out/`): large,
