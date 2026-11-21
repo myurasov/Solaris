@@ -6,11 +6,16 @@
 
 ## What It Does
 
-Runs a project's primary session as an **autocode agent** under OpenCode 2.3 or later (autocode 1.0.0 refuses an
-older OpenCode). Autocode (the owner's agent server)
+Runs a project's primary session as an **autocode agent** under OpenCode 2.3 or later, with autocode 1.1.0-rc1 or
+later. Autocode (the owner's agent server)
 gives the session wakes, messages, locks, jobs, approvals and compaction; this plugin's rule maps the persona's
 hook- and clock-based duties onto them, so a Solaris project runs unattended without Claude Code hooks or
 `session_clock`. Outside an autocode session the rule is dormant.
+
+The rule follows autocode 1.1.0-rc1: a recurring pass that mostly finds nothing runs as its wake's check (with
+`check_timeout`, no model call when nothing is due), a background job fires a `fire-only once` wake, digests and
+news to the owner go as reports, an agent changes its ID with `rename`, and no status call is made for the time,
+the context or the spend, which every prompt now carries.
 
 ## Files
 

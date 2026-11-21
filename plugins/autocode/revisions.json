@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/autocode.rule.md": {
-      "rev": 4,
-      "hash": "715e8dd7efd13e33ebb8983cbf35875ecab551ab1a16b1e95d41fc39f2e93915",
+      "rev": 5,
+      "hash": "b224af27c3dcb640672a54eb2cf62405b0e1ebc88cad33903b243f24900494e3",
       "history": [
         {
           "rev": 1,
@@ -21,6 +21,10 @@
         {
           "rev": 4,
           "hash": "715e8dd7efd13e33ebb8983cbf35875ecab551ab1a16b1e95d41fc39f2e93915"
+        },
+        {
+          "rev": 5,
+          "hash": "b224af27c3dcb640672a54eb2cf62405b0e1ebc88cad33903b243f24900494e3"
         }
       ]
     },
