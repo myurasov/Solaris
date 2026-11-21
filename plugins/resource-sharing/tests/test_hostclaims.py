@@ -1,4 +1,4 @@
-# rev. 3
+# rev. 4
 
 """Tests for shared/tools/hostclaims.py (stdlib unittest).
 
@@ -57,6 +57,48 @@ def sim(**kw):
             "disk_free_gb": 1000.0, "gpus": [dict(T4, index=0), dict(T4, index=1)]}
     base.update(kw)
     return base
+
+
+# The machine as if only the test ran on it. A test of the machine's own readings must not depend on what else
+# runs there (a model server, another agent's job, a build): the real readers stay in use, and what they return is
+# cut down to the test process and what it started.
+REAL = {"proc_table": hc.proc_table, "nvidia": hc.nvidia}
+
+
+def own_pids(table):
+    # this process and its descendants (a child in a session of its own keeps its parent)
+    keep, grew = set([os.getpid()]), True
+    while grew:
+        grew = False
+        for pid, info in table.items():
+            if pid not in keep and info[0] in keep:
+                keep.add(pid)
+                grew = True
+    return keep
+
+
+def own_proc_table():
+    table = REAL["proc_table"]()
+    if table is None:
+        return None
+    keep = own_pids(table)
+    return dict((pid, info) for pid, info in table.items() if pid in keep)
+
+
+def own_nvidia():
+    # the machine's GPUs, with only this test's processes on them and only their memory in use
+    gpus, procs, err = REAL["nvidia"]()
+    keep = own_pids(REAL["proc_table"]() or {})
+    mine = [p for p in procs if int(p.get("pid") or 0) in keep]
+    for g in gpus:
+        g["mem_used_gb"] = sum(float(p.get("mem_gb") or 0.0) for p in mine if p.get("gpu") == g["index"])
+        g["util"] = 0.0
+    return gpus, mine, err
+
+
+def no_cpu_load(sample_s):
+    # the machine's CPUs as nobody else uses them: for a test that reads an idle host
+    return {}
 
 
 def wait_for(fn, timeout=20.0, step=0.1):
@@ -1737,13 +1779,17 @@ class TestHostNames(TestDiscovery):
 
 
 class RealBase(Base):
-    # the machine's own readings: no simulate.json in effect (only readers named in a test are patched)
+    # the machine's own readings: no simulate.json in effect (only readers named in a test are patched). The
+    # process table and the GPU readings are the machine's, cut down to this test's own processes, so that a test
+    # does not depend on what else runs there
     def setUp(self):
         Base.setUp(self)
         self.cli("--agent", "own", "install", "--disk-free-pct", "0", "--reserve-ram", "0", "--reserve-cores", "0")
         os.environ.pop("HOSTCLAIMS_SIMULATE")
         os.unlink(os.path.join(self.root, "simulate.json"))
         self.patched = []
+        self.patch("proc_table", own_proc_table)
+        self.patch("nvidia", own_nvidia)
 
     def tearDown(self):
         # undo in reverse, so a reader patched twice ends at its original
@@ -1882,6 +1928,8 @@ class TestRealReadings(RealBase):
 class TestWithdraw(RealBase):
     def setUp(self):
         RealBase.setUp(self)
+        # these tests are about requests: the host is idle, whatever load the machine has
+        self.patch("cpu_busy", no_cpu_load)
         self.cli("--agent", "own", "lease", "--set", "kind=paid", "--set", "planned_end=+1h", "--set", "usd_per_hour=2")
         self.rid = self.cli("--agent", "guest", "extend", "--job", "j", "--hours", "3", "--cores", "1",
                             "--ram", "1G")["request"]["id"]
@@ -2017,20 +2065,29 @@ class TestLinuxReadings(unittest.TestCase):
         return au, hc.audit_recommend(au, hc.AUDIT_DEFAULTS)
 
     def test_real_outside_work_blocks_delete(self):
+        # the real readers, on this test's own processes: what else runs on the machine is not outside work here
+        for name, own in (("proc_table", own_proc_table), ("nvidia", own_nvidia)):
+            patcher = mock.patch.object(hc, name, own)
+            patcher.start()
+            self.addCleanup(patcher.stop)
         self.cli("--agent", "a", "install", "--launcher", "setsid", "--share-with", "*")
         self.cli("--agent", "a", "lease", "--set", "kind=paid", "--set", "planned_end=+5h", "--set", "usd_per_hour=2")
         t = time.time() + 2 * 3600
-        au, rec = self.audit(t)
-        self.assertEqual(rec["action"], "delete", au["outside"])
-        big = subprocess.Popen([sys.executable, "-c", "b = bytearray(int(1.5 * 2 ** 30)); import time; time.sleep(60)"],
-                               start_new_session=True)
-        self.procs.append(big)
-        self.assertTrue(wait_for(lambda: (hc.proc_table().get(big.pid) or (0, 0, 0, 0))[3] > 1.4, 20))
-        au, rec = self.audit(t)
-        self.assertIn(big.pid, au["outside"]["pids"])
-        self.assertEqual(rec["action"], "check")
-        os.killpg(big.pid, signal.SIGKILL)
-        big.wait(5)
+        # an idle host, and one with a large process: the machine's CPU load is left out
+        with mock.patch.object(hc, "cpu_busy", no_cpu_load):
+            au, rec = self.audit(t)
+            self.assertEqual(rec["action"], "delete", au["outside"])
+            big = subprocess.Popen([sys.executable, "-c",
+                                    "b = bytearray(int(1.5 * 2 ** 30)); import time; time.sleep(60)"],
+                                   start_new_session=True)
+            self.procs.append(big)
+            self.assertTrue(wait_for(lambda: (hc.proc_table().get(big.pid) or (0, 0, 0, 0))[3] > 1.4, 20))
+            au, rec = self.audit(t)
+            self.assertIn(big.pid, au["outside"]["pids"])
+            self.assertEqual(rec["action"], "check")
+            os.killpg(big.pid, signal.SIGKILL)
+            big.wait(5)
+        # the machine's real CPU reading: two busy loops are a core or more, whatever else runs
         spin = subprocess.Popen(["sh", "-c", "while :; do :; done & while :; do :; done"], start_new_session=True)
         self.procs.append(spin)
         time.sleep(1)
