@@ -1,4 +1,4 @@
-_Rev. 52_
+_Rev. 53_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -155,8 +155,8 @@ the work resumes from what is on disk:
   clock armed back once, unless a fresh handover note says the project is paused, and logs the problem to
   `{{PACK}}/.memory/alerts.jsonl`; after a compaction the session-start hook reloads `{{PACK}}/card.md` and the
   pack's rules (`{{PACK}}/info/harnesses.md`, Notes). In an autocode session (the `autocode` plugin attached and
-  `AUTOCODE_SESSION` set in the shell), that plugin's rule replaces this clock, the Stop hook, the session-start
-  reload and self-compaction.
+  the session registered as an autocode agent, which has the `autocode_me` tool), that plugin's rule replaces
+  this clock, the Stop hook, the session-start reload and self-compaction.
 - **Keep model text out of the main session:** never print agent prompts, model outputs, trajectories or long
   third-party text into it; workers and counting scripts read them and return counts and neutral summaries. A
   safety classifier can stop the main session in a category with no fallback model, and then every wake-up is
