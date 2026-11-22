@@ -1,4 +1,4 @@
-_Rev. 6_
+_Rev. 7_
 
 # Rule: Resource Sharing (Always-On) <!-- omit in toc -->
 
@@ -33,6 +33,13 @@ hosts. The how-to is in `resource-sharing.skill.md`.
   with their hourly checks) and message guests only its `TRIPPED` or `CLEARED` lines and changes to a shared
   host's availability; guests read the owner's file (`hosthealth.py --shared`) and never ask for, send or
   acknowledge hourly readings.
+- **Hosts served by a fleet agent.** Where the session runs as an autocode agent (the autocode plugin) and a fleet
+  agent serves the project's GPU hosts (the "Autocode" section of `<pack>/instructions.md` names it) and is
+  registered, ask it for GPUs with a message (`subject=request`: gpus, type, hours, start, purpose, priority,
+  preemptible), hold the GPU locks it names (`autocode_lock`, `mode=queue`, in index order, an expiry within the
+  lease, renewed, released when done), answer its yield and copy-off messages by their deadline, and keep filing
+  claims on the host as above. Fleet work (bookings, extensions, repairs, releases, fleet events) is then that
+  agent's, not this project's.
 - **Never delete or stop a shared host blind.** Before deleting, stopping or releasing a host other projects
   may use - including a teardown step of another plugin's flow, such as a cloud run's stop or delete at its
   end - run `audit --host <name>` and go ahead only on a `delete` or `release` advice (no live claims, no work

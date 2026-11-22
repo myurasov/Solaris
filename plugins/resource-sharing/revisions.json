@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/resource-sharing.rule.md": {
-      "rev": 6,
-      "hash": "4c4b4d8019cdde62b53e45bc886923883ca344e72cb8c5e401ba7d7ed9ec2dd7",
+      "rev": 7,
+      "hash": "87f10cc1a3b1ae7dacd19c9256fc292695a00406da21859547e5867d27c6fb1c",
       "history": [
         {
           "rev": 1,
@@ -29,6 +29,10 @@
         {
           "rev": 6,
           "hash": "4c4b4d8019cdde62b53e45bc886923883ca344e72cb8c5e401ba7d7ed9ec2dd7"
+        },
+        {
+          "rev": 7,
+          "hash": "87f10cc1a3b1ae7dacd19c9256fc292695a00406da21859547e5867d27c6fb1c"
         }
       ]
     },
