@@ -18,6 +18,28 @@ per-file (revisions); semantic-version migrations run only for minor/major frame
 the project's `source/` code. `<pack>/` is the project's ai-pack folder (default `aipack/`, `ai/` in projects
 made before 0.39.0, any name).
 
+**Fast path, when no framework migration is needed (a patch release):**
+`uv run -m solaris.tools.version update --dir projects/<slug>` does the routine part in one step: `revs ff`,
+`version set` to the current framework version, `version set-plugin` for each copied plugin behind its source,
+`revs baseline`, then the checks (`version check`, `version check-plugins`, `plugins check`, `revs classify`,
+`agents --check`, and that every shared plugin file `revs` does not track is in the pack as its source has it).
+It does not move `directions.md` or seed `improvements.md` (section 1), apply a plugin migration or re-merge
+`mcps.json` (section 3). It prints the versions before and after, every file it changed (paths from the project
+root, for the project's own session to commit), each plugin migration file on the way
+(`plugins/<name>/migrations/<to_version>.md`: steps for the project's session to apply), and each file that is
+no longer shipped and still in the pack (the project's session removes it). `--dry-run` prints the same report
+from a scratch copy and changes nothing: run it first (it refuses a pack that holds a symlink).
+
+- **Exit 3:** it stopped before any change and names why: a file that needs a merge; an `init` or `refresh`
+  skill that `revs ff` would replace; a master that does not match its ledger (work in progress in the checkout:
+  wait for its release, never rebuild a ledger to get past it); a framework migration to run; a pack newer than
+  the framework; a plugin with no source, or one older than the copy; a `plugins` entry that is not an object
+  with a name; a required plugin dependency not attached. Follow the sections below (`install-plugin` for the
+  plugin ones) and run it again.
+- **Exit 1:** an error (no ai-pack, a manifest it cannot read, a write that failed part way); a check that
+  failed after the update; or a file that changed while the update ran, which needs a merge (the baseline is
+  then not recorded, so the file keeps its verdict). The output names it.
+
 ## 1. Classify + Sync Files by Revision
 
 `uv run -m solaris.tools.revs classify --dir projects/<slug>` gives a per-materialized-file verdict (the

@@ -77,7 +77,10 @@ a cycle, or a required dependency missing from `plugins/`, is an error.
 Then **repair** anything off (this is also the standalone
 "repair a plugin already in `plugins/` but not referenced correctly" path):
 
-- Every `shared/*` file carries a rev marker - else `uv run -m solaris.tools.revs bump <file>`.
+- Every `shared/*` file carries a rev marker - else `uv run -m solaris.tools.revs bump <file>`. `revs` tracks
+  the `.md`, `.py`, `.js`, `.sh` and `.css` files there, and a `.json` file only when it carries the marker (a
+  `"_rev"` field): `revs ff` copies those into a pack. A file of any other kind is copied by hand at attach and
+  at each update.
 - Refresh ledgers: `uv run -m solaris.tools.revs ledger --plugin <name>` rewrites only the plugin's **own** `plugins/<name>/revisions.json` (plain `revs ledger` rewrites every ledger, the framework's included; the framework `solaris/revisions.json` never tracks plugins).
 - Fix missing `manifest.json` fields (ask for `name`/`version` if unknown).
 - Dependencies: `uv run -m solaris.tools.plugins deps <name>` - every required dependency, transitively, must
@@ -211,6 +214,16 @@ For a plugin already attached to a project (driven here or by `update-project`).
   `uv run -m solaris.tools.version set-plugin --dir projects/<slug> --plugin <name>` (the source's version by
   default; give one to record another). It refuses a linked plugin, which records none, and re-renders the pack
   README's plugin list at once (through `revs ff`; a README the project edited is named, never overwritten).
+  **In one step, when no file needs a merge:** `uv run -m solaris.tools.version update --dir projects/<slug>`
+  (`--dry-run` first: the same report, nothing changed) runs `revs ff`, records the framework's and every behind
+  copy's version, re-records the baseline and runs the checks, for the whole pack at once. It lists each
+  `plugins/<name>/migrations/<to>.md` on the way as steps for the project's session, and each file a plugin no
+  longer ships that is still in the pack. It exits 3, changing nothing, when a file needs a merge, an `init` or
+  `refresh` skill would be replaced, a master does not match its ledger (the plugin is being edited: wait for
+  its release), the framework has a migration to run or the pack is newer than the framework
+  (`update-project`), a plugin has no source or an older one, or a required dependency is not attached. A
+  shared file `revs` does not track is not copied by it: its `plugin files` check names the file (exit 1), so
+  copy it by hand. Re-merging `mcps.json` stays a step of its own.
 - **migrate** (plugin minor/major bump with `migrations/`): apply `plugins/<name>/migrations/<to>.md`
   against `<pack>/plugins/<name>/`, then update the recorded version (`version set-plugin`, as above).
 - **repair** (attached but broken): `revs ff` restores missing files, re-merge `mcps.json`, then
