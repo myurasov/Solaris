@@ -1,4 +1,4 @@
-_Rev. 7_
+_Rev. 8_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
@@ -8,7 +8,7 @@ Anywhere else (Claude Code, Cursor, OpenCode without autocode, a session nobody 
 the persona applies as written. In an autocode session it **replaces** what the persona and the
 plugin rules tie to harness hooks and the session clock (the wake-up clock, the Stop-hook guard, the session-start
 reload, self-compaction, Claude Code spend); everything else in the pack applies unchanged. Autocode's own guide
-(`autocode_me action=help`) is the reference for its tools. The rule follows autocode 1.1.0-rc3. `fire-only once`,
+(`autocode_me action=help`) is the reference for its tools. The rule follows autocode 1.1.0-rc4. `fire-only once`,
 a wake's `check_timeout`, `report` and `rename` need 1.1.0-rc1 or later: a server that refuses them is older, so
 tell the owner to upgrade it. The tools are named below where a copied plugin has them,
 `<pack>/plugins/autocode/tools/`; a linked plugin's are in `shared/tools/` under the plugin root its link file names.
@@ -84,8 +84,14 @@ tell the owner to upgrade it. The tools are named below where a copied plugin ha
   beyond the quote, ask the owner. The owner: `to=owner` for digests and news, with `report=true` when the
   message needs no answer (a report does not light the owner's Inbox tab and closes by itself after a week; a
   blocker or a choice is never a report); the question tool for questions; and `autocode_approval action=ask`
-  (with `expires` and what happens on no answer) for a confirm-first action no standing grant covers. Owner
-  directions keep going to `directions.md` the moment they arrive.
+  (with `expires` and what happens on no answer) for a confirm-first action no standing grant covers. Close what
+  no longer needs the owner (autocode 1.1.0-rc4): a message, a report or an approval of this session's that is
+  still open in the owner's Inbox once the owner answered in the session or the matter was overtaken, with
+  `autocode_message action=close id=<its ID> text=<why>` (the reason is required: the owner reads it in History);
+  `autocode_me action=status` lists the messages and reports that are open there. An open approval keeps the
+  session waiting, wakes included, so close one the owner answered in the session at once; closed is not
+  approved. Never close an item only because it is old. Owner directions keep going to `directions.md` the moment
+  they arrive.
 - **Shared hosts:** where a fleet agent serves the project's GPU hosts, `resource-sharing.rule.md` (Hosts served
   by a fleet agent) says how to ask it for GPUs and what to hold.
 - **Logging and spend:** log every meaningful turn by hand (`interactions add`, no prompt hook runs here) with

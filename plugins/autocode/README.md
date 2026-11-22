@@ -53,6 +53,10 @@ autocode's `[autocode] compaction done` tells the session to go on with what is 
 Run OpenCode as its background service, which a TUI uses by default: a server that a TUI starts for itself gives
 its shells no autocode values, so a job the session starts cannot fire a wake. The Start skill checks for that.
 
+An agent ID that is registered already is refused to a new session (autocode 1.1.0-rc4), also when the session
+that held it was deleted. To go on with an agent in a new session, the owner moves it there, with its wakes,
+settings and spend: `autocode agents register <id> --session <session>` (the refusal prints the command).
+
 ## The Guard
 
 `guard.py` keeps its state in `<pack>/.memory/guard/` (private; `--state DIR` for a session outside a project).
@@ -96,6 +100,10 @@ a stand-in `autocode` program first on the PATH and no autocode values in the en
 
 ## Changelog
 
+- 0.5.2: autocode 1.1.0-rc4. The Start skill (rev 3) says what a refused registration means: the ID is
+  registered to another session, live or gone, and only the owner moves the agent to the new session. The rule
+  (rev 8) says to close what no longer needs the owner in the owner's Inbox (`autocode_message action=close`),
+  an approval the owner answered in the session first of all. No project steps.
 - 0.5.1: the rule (rev 7) says that a message which says it is from a manager agent is the manager's, and
   that only the words it quotes as the owner's, with their date, are the owner's direction; it names the
   check for a job started by hand before the owner replaced a token; the Start skill titles the session
