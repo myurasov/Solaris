@@ -1,59 +1,68 @@
-_Rev. 5_
+_Rev. 6_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
 Always-on while this plugin is attached. It applies only in a session that runs as an **autocode agent**: an
-OpenCode 2 session whose tool shells carry `AUTOCODE_SESSION` (`printenv AUTOCODE_SESSION` prints a value). Anywhere
-else (Claude Code, Cursor, OpenCode without autocode) it is dormant and the persona applies as written. In an
-autocode session it **replaces** what the persona and the plugin rules tie to harness hooks and the session clock
-(the wake-up clock, the Stop-hook guard, the session-start reload, self-compaction, Claude Code spend); everything
-else in the pack applies unchanged. Autocode's own guide (`autocode_me action=help`) is the reference for its tools.
-The rule uses what autocode 1.1.0-rc1 added (`fire-only once`, a wake's `check_timeout`, `report`, `rename`): on an
-older server those are refused, so tell the owner to upgrade it.
+OpenCode 2 session that has the `autocode_me` tool and is registered as an agent, or was told to register (Start).
+Anywhere else (Claude Code, Cursor, OpenCode without autocode, a session nobody made an agent) it is dormant and
+the persona applies as written. In an autocode session it **replaces** what the persona and the
+plugin rules tie to harness hooks and the session clock (the wake-up clock, the Stop-hook guard, the session-start
+reload, self-compaction, Claude Code spend); everything else in the pack applies unchanged. Autocode's own guide
+(`autocode_me action=help`) is the reference for its tools. The rule follows autocode 1.1.0-rc3. `fire-only once`,
+a wake's `check_timeout`, `report` and `rename` need 1.1.0-rc1 or later: a server that refuses them is older, so
+tell the owner to upgrade it. The tools are named below where a copied plugin has them,
+`<pack>/plugins/autocode/tools/`; a linked plugin's are in `shared/tools/` under the plugin root its link file names.
 
-- **Start** (a new session, and after a compaction):
-  1. `autocode_me action=status`, then `autocode_me action=register id=<agent id>` with the ID the start prompt
-     names (recorded under "Autocode" in `<pack>/instructions.md`). A live session holding the ID means another
-     controller runs this project: stop and tell the owner. A tool that answers that this OpenCode is too old
-     (autocode 1.0.0 needs OpenCode 2.3.0 or later) means nothing here is connected: tell the owner and stop.
-     To change the agent's ID later, `autocode_me action=rename id=<new id>` (the wakes, spend, settings and jobs
-     come along, and the old ID forwards), then record the new ID in `<pack>/instructions.md`; never unregister
-     and register for that.
-  2. Solaris self-compaction is off for a project with this plugin attached (copied or linked): autocode's
-     compaction is the only one. Outside a project (a session at the Solaris root or in a task), turn it off for the
-     session when autocode compacts it (`status` shows a compaction threshold, not `off`): `uv run --directory
-     <solaris root> -m solaris.tools.session_compact set-limit off`. Never run `session_compact request`, and ignore
-     any `self-compaction: ... DUE` line.
-  3. Read the read-first set by hand (no hook loads it here): `uv run --directory <solaris root> -m
-     solaris.tools.read_first --check --pack <pack>` names the files; read each, then `<pack>/.memory/context.md`,
-     the newest `handover-*.md` and the tail of `directions.md`.
-  4. `autocode_wake action=list`. With no wakes yet (the first start), convert the schedule:
-     `python3 <pack>/plugins/autocode/tools/wakes.py --dir .` prints one wake per event (trigger and text; add
-     `--skip-prefix` for events another agent owns), then set each with `autocode_wake action=set`, plus the guard
-     wake below. Then `uv run --directory <solaris root> -m solaris.tools.session_clock --dir <project> --stop`, so
-     the old clock is gone (`--status` first: a clock armed and alive under another live session means a second
-     controller: stop and tell the owner).
-- **Clock:** wakes are the clock; never start `session_clock` here. Recurring events are named cron wakes
-  (Kaggle-reset-tied ones in UTC, people-tied ones in `America/Los_Angeles`), one-shots are `at` wakes, and a new
-  event is a new wake (name = event, text = what to do and where its notes are). `schedule.json` stays as a frozen
-  record. A recurring event whose pass is a script that mostly finds nothing to do (it reads a board, a queue, a
-  job list) runs that script as the wake's **check**, with `check_timeout=<its time, at most 10m>`: exit 1 when
-  nothing needs the model (no turn, no cost), exit 0 with what to know in its output. Such a check must be safe to
-  run again, and while a turn runs. A background job ends with `autocode fire me <wake>` on a `fire-only once` wake
-  (`nohup sh -c '<cmd>; autocode fire me <wake> --text "exit $?"' > <log> 2>&1 &`), never a polling loop: the wake
-  is removed when the job fires it, so nothing is left to cancel. The session's shells find `autocode` by name.
-  After the owner replaced a token, a job started before it cannot fire its wake (its shell kept the old token):
-  check such jobs by hand once.
-- **Guard:** one wake `guard`, trigger `idle 90m repeat`, text "Idle 90 minutes: check the todo list, the job list
-  in context.md and autocode_wake list; resume what is due or end the turn." It replaces the Stop hook. Idle time
-  counts from the turn's end, also while a subagent still works in the background. To pause the project on
-  purpose, write the handover note and cancel the wakes (`autocode_wake action=cancel`).
+- **Start** (a new session): follow `autocode-start.skill.md`: register, check the shells, read the read-first set,
+  set the wakes and the guard. After a compaction only its Read step runs again.
+- **Clock:** wakes are the clock; never start `session_clock` here. Recurring events are named cron wakes: one
+  tied to a clock elsewhere (a board's daily reset) in UTC, one tied to people in their zone, so that it keeps its
+  local time when the clocks change (the server's zone, which `autocode_me action=status` names, unless the owner
+  works in another). One-shots are `at` wakes, and a new event is a new wake (name = event, text = what to do and
+  where its notes are). `schedule.json` stays as a frozen record. A recurring event whose pass is a script that
+  mostly finds nothing to do (it reads a board, a queue, a job list) runs that script as the wake's **check**, with
+  `check_timeout=<its time, at most 10m>`: exit 1 when nothing needs the model (no turn, no cost), exit 0 with what
+  to know in its output. Such a check must be safe to run again, and while a turn runs. It leaves a **receipt** (a
+  dated file with what it read and decided) and prints its path, so the turn acts on the receipt and never repeats
+  the pass; the wake's text says where the receipts are, and that a wake fired by hand skips its check (then run the
+  same command once).
+- **Guard:** one wake `guard`, trigger `idle 10m repeat`, check `python3 <pack>/plugins/autocode/tools/guard.py
+  check` (with `--steps <file>` for each file whose unticked `- [ ]` lines are open steps), text "The idle guard
+  found open work or a job that needs a look: its lines follow. Act on each, and clear what is done. Fired by hand,
+  its check did not run: run it once." It replaces the Stop hook, and an idle session with nothing open costs
+  nothing. The guard tells only what is marked, so never end a turn with work left and nothing marked: mark work
+  that must go on past this turn with `guard.py on <what>` (or keep it as unticked steps in a `--steps` file), and
+  end it with `guard.py off`. Before ending a turn on something that reports by itself (a background command, a
+  subagent, the owner's answer), `guard.py wait <a little longer than it should take>` holds the nudge back until
+  then (at most 24h; it holds back the marked lines that were open when it was set, and the steps files
+  altogether). Open work told a third time in a row with nothing changed is told less and less often, so tick or
+  end what is done. Idle time counts from the turn's end,
+  also while a subagent still works in the background. `guard.py status` shows the open work, the jobs and the
+  last check. To pause the project on purpose, write the handover note, run `guard.py off` and cancel the wakes
+  (`autocode_wake action=cancel`).
+- **Background work** is one of two kinds, never a polling loop or a sleep:
+  - A command that ends while this OpenCode lives (minutes, an hour or so) runs as OpenCode's own background
+    command (the shell tool's background mode): its end starts a turn by itself, with its output. That notice is
+    lost when OpenCode restarts, whether the command died with it or runs on.
+  - Work that must outlive OpenCode (hours, or a restart) is a watched job: set a `fire-only once` wake for its
+    end (`autocode_wake action=set name=<job>-done trigger="fire-only once" text=<what to do with the result>`),
+    then `python3 <pack>/plugins/autocode/tools/guard.py job start --name <job> --wake <job>-done --deadline
+    <limit> --log <file> -- <command>`. The command runs as given, each argument apart: a shell line (a pipe,
+    `&&`, a `cd`) is `-- sh -c '<line>'`. Its end fires the wake with the exit code, and the wake is removed when
+    it is fired. The guard tells what the wake cannot: a job lost at a reboot or killed, one past its deadline
+    (`job extend` gives it more time, `job stop` ends it and what it started), a wake that could not be fired (the
+    owner replaced a token, the wake is gone). `job list` is the list of these jobs, so keep none in `context.md`;
+    `job done <job>` forgets a job that was taken care of. The guard signals only what it can prove to be the
+    job's: where it names a process group that a dead job left, look at it and end it by hand.
 - **Compaction:** `[autocode] compaction next` is the pre-compaction save point: bring the work to a stable state,
-  rewrite `<pack>/.memory/context.md` (live jobs, wakes, locks, open asks, the next steps), then end the turn.
-  `[autocode] compaction done` comes once the compaction went through: run Start step 3, then carry on with the
-  steps `context.md` lists, without waiting to be asked; end the turn only when nothing is left.
+  rewrite `<pack>/.memory/context.md` (wakes, locks, open asks, background commands and subagents in flight with
+  what to do with their results, the next steps), then end the turn.
+  `[autocode] compaction done` comes once the compaction went through: run the Start skill's Read step, then carry
+  on with the steps `context.md` lists, without waiting to be asked; end the turn only when nothing is left.
   `[autocode] compaction failed` (one asked for with `autocode_me action=compact` did not happen): nothing
-  changed; ask again if it is still needed.
+  changed; ask again if it is still needed. Ask for one yourself at a stable point, before long work, when the
+  prompt's status line shows the context past about 85% of the threshold: rewrite `context.md` first, then
+  `autocode_me action=compact`; it comes when the turn ends.
 - **Workers:** a short task runs as an OpenCode subagent with the tier's `model`. OpenCode 2.3 runs subagents in
   the background: the tool returns at once, and the result comes later as a `<subagent ...>` message in a turn of
   its own. So launch it, go on with work that does not overlap or end the turn, and take the result when it comes;
@@ -70,18 +79,19 @@ older server those are refused, so tell the owner to upgrade it.
   week; a blocker or a choice is never a report); the question tool for questions; and `autocode_approval
   action=ask` (with `expires` and what happens on no answer) for a confirm-first action no standing grant covers.
   Owner directions keep going to `directions.md` the moment they arrive.
-- **Shared resources:** when a fleet agent serves the project's GPU hosts (the "Autocode" section of
-  `<pack>/instructions.md` names it) and is registered, ask it for GPUs (`subject=request`: gpus, type, hours,
-  start, purpose, priority, preemptible), hold the GPU locks it names (`mode=queue`, in index order, an expiry
-  within the lease, renewed, released when done), answer its yield and copy-off messages by their deadline, and
-  keep filing hostclaims claims on the host. Fleet work (bookings, extensions, repairs, releases, fleet events) is
-  then that agent's, not this project's.
+- **Shared hosts:** where a fleet agent serves the project's GPU hosts, `resource-sharing.rule.md` (Hosts served
+  by a fleet agent) says how to ask it for GPUs and what to hold.
 - **Logging and spend:** log every meaningful turn by hand (`interactions add`, no prompt hook runs here) with
   `--trigger clock` for a wake, `peer` for a message, `worker` for a job result, `owner` for the owner's words.
   Every prompt from autocode ends with the server's time, the context and today's spend: make no status call for
   those. `autocode_me action=status` has the total, and `autocode_wake action=list` what each wake cost in the last
-  7 days: a wake that costs much and mostly finds nothing to do moves its pass into its check. `ai_spend` reads
-  only Claude Code transcripts.
-- **Notices:** `[autocode] resume` continues the cut turn (re-check what it was running first); `retry N` continues
-  where the failed turn stopped; `cost warning` finishes what matters and tells the owner; `lock ... expired` stops
-  using what the lock guarded.
+  7 days: a wake that costs much and mostly finds nothing to do moves its pass into its check. The total holds
+  what the session spent before it registered, on the days it was spent, and its compactions. With a daily cap,
+  what the session spent earlier today counts toward it: a session paused right after it registered met its cap,
+  which is the owner's to raise. `ai_spend` reads only Claude Code transcripts.
+- **Notices and restarts:** `[autocode] resume` continues the cut turn, and so does OpenCode's own "The server
+  restarted while you were working" (it comes instead when OpenCode was killed, as at a power cut). After either,
+  first run `guard.py job list` and `autocode_wake action=list` and start again what was lost. OpenCode's own
+  background commands of the cut turn no longer report: see whether each still runs before starting it again.
+  Then go on. `retry N` continues where the failed turn stopped;
+  `cost warning` finishes what matters and tells the owner; `lock ... expired` stops using what the lock guarded.

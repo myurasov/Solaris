@@ -2,9 +2,19 @@
   "_comment": "Managed by solaris.tools.revs; do not edit by hand.",
   "schema_version": 1,
   "files": {
+    "shared/autocode-start.skill.md": {
+      "rev": 1,
+      "hash": "e700794483b7c187901dd8539c7439749d813d7dcbd5cc13807185229d567abd",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "e700794483b7c187901dd8539c7439749d813d7dcbd5cc13807185229d567abd"
+        }
+      ]
+    },
     "shared/autocode.rule.md": {
-      "rev": 5,
-      "hash": "b224af27c3dcb640672a54eb2cf62405b0e1ebc88cad33903b243f24900494e3",
+      "rev": 6,
+      "hash": "9562a984a3838bcf7f0953761748f73ee438b803cf9e1c81cd2c9f206822e6de",
       "history": [
         {
           "rev": 1,
@@ -25,16 +35,34 @@
         {
           "rev": 5,
           "hash": "b224af27c3dcb640672a54eb2cf62405b0e1ebc88cad33903b243f24900494e3"
+        },
+        {
+          "rev": 6,
+          "hash": "9562a984a3838bcf7f0953761748f73ee438b803cf9e1c81cd2c9f206822e6de"
+        }
+      ]
+    },
+    "shared/tools/guard.py": {
+      "rev": 1,
+      "hash": "92c85a2bc5818cd6fa4182f8bc7e64b96a0c4b5162a3ef3eb65f9792849d48fe",
+      "history": [
+        {
+          "rev": 1,
+          "hash": "92c85a2bc5818cd6fa4182f8bc7e64b96a0c4b5162a3ef3eb65f9792849d48fe"
         }
       ]
     },
     "shared/tools/wakes.py": {
-      "rev": 1,
-      "hash": "a2d9e103a71d31cd442b73699aba44ce1e404d9a5a2a4fed8fe011f37e75310e",
+      "rev": 2,
+      "hash": "1413a3e18a47439fab45a1ad4b15b2e56b87de4172af4a0bc64224107b997ee5",
       "history": [
         {
           "rev": 1,
           "hash": "a2d9e103a71d31cd442b73699aba44ce1e404d9a5a2a4fed8fe011f37e75310e"
+        },
+        {
+          "rev": 2,
+          "hash": "1413a3e18a47439fab45a1ad4b15b2e56b87de4172af4a0bc64224107b997ee5"
         }
       ]
     }
