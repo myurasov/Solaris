@@ -1,4 +1,4 @@
-# rev. 3
+# rev. 4
 
 """kaggle_status: the single status page of a Kaggle competition project.
 
@@ -17,11 +17,23 @@ the live figures, raises the JSON's rev, writes the HTML and renders the PDF.
 Run it from the project root (or pass --root), unsandboxed: it reads the Kaggle API through the gateway and renders
 with Chrome (about 10 s). It writes <root>/reports/html/status.html and, when the reporting plugin is attached
 (<pack>/plugins/reporting/assets/render.sh), renders <root>/reports/status.pdf: a living document, so each build
-stops at the render and its layout check. When the check finds a half-empty page (a chart that did not fit moved on),
-the page is rendered once more with shorter charts (reports/status-short.pdf beside it) and the one with fewer such
-pages kept. The page carries private operations data (machines, spend): the project keeps it out of git with
-reports/status*.pdf and reports/html/status*.html in .gitignore, which also cover the shorter-chart try a killed build
-can leave (the next build removes it); it reaches the owner through file sync.
+stops at the render and its layout check. The check can fail from live data alone, as a table grows by a row. When
+it finds a half-empty page (a block that did not fit moved to the next page), the build tries up to five automatic
+fits, one at a time: shorter charts; then a shorter schedule in two steps (the Earlier Plan Items table keeps its
+newest 8, then 4, rows and folds the older ones into one "Before <day>" row, and the Coming Schedule shows the next 6,
+then 4, events); then a shorter Best-Score Lineage in two steps (the newest 7, then 5, steps). Each fit is rendered
+beside the page (reports/status-short.pdf) on top of the fits already kept, and kept only when it leaves fewer
+half-empty pages; a fit that cannot help (its blocks come after the block that moved, or it changes nothing) is not
+rendered. The output names each fit tried, what it trimmed and whether it was kept; after a fit that was not kept
+it repeats the kept page's check as "the page as kept: layout check: ...", so the last layout check in the output is
+always that of the page that stays. The trims show on the page too (the folded row, the "newest N of M steps" note,
+"Coming Schedule (the next N of M events)"), and the status JSON is never changed. When half-empty pages are
+left, the output names the block that moved off each one and the blocks that page holds, so the writer knows what
+to shorten; the check itself is never relaxed, and the exit code stays 0 for a page that rendered. Naming the block
+reads the PDF's text with poppler's pdftotext, which the layout check needs too. The page carries private operations
+data (machines, spend): the project keeps it out of git with reports/status*.pdf and reports/html/status*.html in
+.gitignore, which also cover the fit a killed build can leave (the next build removes it); it reaches the owner
+through file sync.
 
 Found or passed as flags:
   root        --root, else the nearest folder up from the working directory (never the home folder or one above it)
@@ -49,19 +61,40 @@ Found or passed as flags:
               page shows no machine health
   plan days   "kaggle.status_plan_days" in <pack>/.memory/config.json, else <pack>/defaults.json (default 3): plan
               items from the start of the day that many days back are listed in full, older closed ones counted
-  costs       <pack>/.memory/spend.jsonl, one JSON line per cost other than Claude Code:
+  costs       <pack>/.memory/spend.jsonl, one JSON line per cost other than the AI agent's own spend:
               {"day": "YYYY-MM-DD", "category": "cloud GPU", "usd": 1.5, "what": "<what it paid for>"}
-  Claude      the project's Claude Code spend per day from solaris.tools.ai_spend (list-price estimates), run in the
-              Solaris checkout found above the root (the nearest folder holding solaris/tools/ai_spend.py); n/a
-              without one
+  AI agent    the spend of this session's autocode agent, the master, from `autocode me --json` (its
+              agent.cost: today_usd and total_usd, the job runs' share of each in runs_today_usd and
+              runs_total_usd, autocode's own daily cap daily_usd and what is left of it, left_usd). Autocode gives
+              today's spend (its server's day) and the total only, so the agent has a row in the totals with n/a
+              for the last 7 days, and the chart draws the cost ledger alone. Outside an autocode session (no
+              AUTOCODE_SESSION in the environment), when the command does not run or gives no report, for a
+              session that is not registered and for a job's run (not the master), the figure shows n/a with the
+              reason. KAGGLE_HOURLY_AUTOCODE names another command to run in place of `autocode` (the tests; a
+              .py file runs under this Python): the variable kaggle_hourly.py reads, so one setting covers a pass
+              and the page it rebuilds. The command's output is never printed
+  AI budget   "ai.daily_budget_usd" in <pack>/.memory/config.json, else <pack>/defaults.json: the pack's daily
+              limit for the master's autocode spend, named beside the spend when set
   ideas       the newest entries of <pack>/.memory/improvements.md: the bold title of each top-level "- **...**"
 
 Live data is read at build time and shown as n/a when a source fails: the newest full leaderboard snapshot (first a
 fresh read through kaggle_lb.py when the newest saved one is over 30 minutes old), the team's submissions
-(`competitions submissions <slug> --format json`; a description "<id>: <what>" names the submission) and the
-account's GPU week and sessions (`kaggle_share.py status --json`). --offline and a preview (--out) skip all three
+(`competitions submissions <slug> --format json --page-size 100`: the newest 100, since the CLI's default of 20 loses
+the best one once the team has made more; a description "<id>: <what>" names the submission) and the
+account's GPU week and sessions (`kaggle_share.py status --json`). A board snapshot that kaggle_lb.py marked
+unreliable (its pages repeated teams, so its ranks cannot be trusted), or an older one that holds duplicate rows, is
+never drawn: the page shows the newest full snapshot that is reliable, and an unreliable newest read is read again
+at the next build. --offline and a preview (--out) skip all three
 Kaggle reads and draw from the saved snapshots: they never call the gateway (which can create or rebuild the
-project's Kaggle venv).
+project's Kaggle venv). An offline build still shows the submissions and the GPU week when the hourly pass read
+them a short while ago: kaggle_hourly.py keeps each finished pass's reads in its receipt,
+<root>/__data/kaggle/<slug>/hourly/<YYYYMMDDTHH>Z.json, as "raw": {"at": "<ISO time>", "submissions": <the
+document of the gateway's --sdk submissions read>, "account": <what kaggle_share.py status passes on of the --sdk
+account read: {"fetched_at", "quota", "calls", "errors"}>}; a read the pass did not make, or that failed, is left
+out. The newest receipt that has a "raw" is taken when its "at" is under two hours old; its documents go through the
+code that parses the live reads, and each part of the page drawn from them (the day's slots, the latest and the best
+submission, the GPU week) names the read's time. What that receipt does not carry stays n/a: the sessions in use
+always, the submissions or the GPU week when that read is missing.
 
 Status JSON. Every field is optional. Text fields may carry <b>, <i> or <code>; any other markup in them, names
 and live data are escaped.
@@ -123,7 +156,6 @@ import json
 import math
 import os
 import re
-import shutil
 import subprocess
 import sys
 from datetime import date, datetime, time as dtime, timedelta, timezone
@@ -167,6 +199,58 @@ GRID, AXIS = "#e4e3df", "#555555"
 # chart heights in a 760-wide viewBox: the normal layout, and the shorter one tried when a chart that did not fit
 # left a half-empty page
 HEIGHTS = {"score": (236, 176), "rank": (132, 100), "spend": (168, 124)}
+# submissions read: the CLI's default page is the newest 20, which loses the best one after that many
+SUBMISSIONS_PAGE = 100
+# this session's autocode agent is read with `autocode me --json`; AUTOCODE_ENV names another command to run in its
+# place (the tests; a .py file runs under this Python): the variable kaggle_hourly.py reads, so one setting covers a
+# pass and the page it rebuilds. A job's run registers with a description that starts with RUN_PREFIX
+AUTOCODE_ENV, AUTOCODE_SECONDS, RUN_PREFIX = "KAGGLE_HOURLY_AUTOCODE", 20, "run of job "
+# the pack's daily limit for the master's autocode spend (the key kaggle_hourly.py checks it against)
+AI_KEY = "ai.daily_budget_usd"
+# an offline build takes the Kaggle reads the newest hourly receipt carries when they are under this many hours old;
+# a receipt is <root>/__data/kaggle/<slug>/hourly/<YYYYMMDDTHH>Z.json, and only the newest few can be that young
+RECEIPT_HOURS, RECEIPTS_READ = 2, 4
+RECEIPT_RE = re.compile(r"\d{8}T\d{2}Z\.json")
+# events listed under Coming Schedule
+EVENTS = 8
+# the page's blocks in document order: (key, what the output calls it, the block's first line as pdftotext prints it).
+# The page after a half-empty one opens with the block that moved; a chart is known by its caption
+BLOCKS = (
+    ("headline", "the headline table", r"Metric\s+Value\s+Note"),
+    ("outlook", "the Outlook table", r"Outlook( as of .*)?"),
+    ("tracks", "the Work Tracks table", r"Work Tracks"),
+    ("lineage", "the Best-Score Lineage table", r"Best-Score Lineage"),
+    ("board", "the Leaderboard Progress heading", r"\d+\.\s+Leaderboard Progress"),
+    ("score", "the score chart", r"Figure \d+\. Public score of our team\b.*"),
+    ("rank", "the rank chart", r"Figure \d+\. Our place over time\b.*"),
+    ("plan", "the Plan and Timeline heading", r"\d+\.\s+Plan and Timeline"),
+    ("timeline", "the timeline chart", r"Figure \d+\. The next seven days\b.*"),
+    ("items", "the plan table", r"#\s+When \(.*?\)\s+What\s+Status"),
+    ("rollup", "the Earlier Plan Items table", r"Earlier Plan Items"),
+    ("events", "the Coming Schedule table", r"Coming Schedule( \(.*\))?"),
+    ("spending", "the Spending heading", r"\d+\.\s+Spending"),
+    ("totals", "the spend totals table", r"Category\s+Today\s+Last 7 days\b.*"),
+    ("spend", "the spending chart", r"Figure \d+\. Spend per day\b.*"),
+    ("costs", "the Largest Costs table", r"Largest Costs in the Last 7 Days"),
+    ("resources", "the Resources heading", r"\d+\.\s+Resources"),
+    ("machines", "the resources table", r"Name\s+Kind\s+What it is\b.*"),
+    ("health", "the Machine Health table", r"Machine Health"),
+    ("questions", "the Open Questions heading", r"\d+\.\s+Open Questions"),
+    ("suggestions", "the Suggestions heading", r"\d+\.\s+Suggestions"),
+    ("ideas", "the newest improvement entries", r"Newest Entries in .*"),
+)
+# the automatic fits tried in this order after a render that left half-empty pages: (what the output calls it, the
+# blocks it shortens, whether the block that moved may be one of them (a chart shrinks; a table that moved does not
+# fit better with fewer rows), the settings it adds to those of the fits kept before it). "compact" draws the charts
+# at their shorter heights; "rollup", "events" and "lineage" are row limits of the Earlier Plan Items, Coming
+# Schedule and Best-Score Lineage tables
+FITS = (
+    ("shorter charts", ("score", "rank", "spend"), True, {"compact": True}),
+    ("a shorter schedule", ("rollup", "events"), False, {"rollup": 8, "events": 6}),
+    ("a shorter schedule", ("rollup", "events"), False, {"rollup": 4, "events": 4}),
+    ("a shorter lineage", ("lineage",), False, {"lineage": 7}),
+    ("a shorter lineage", ("lineage",), False, {"lineage": 5}),
+)
 
 # used only when the reporting plugin is not attached
 FALLBACK_CSS = """
@@ -379,10 +463,17 @@ def higher_is_better(rows):
     return not (len(vals) > 1 and vals[0] < vals[-1])
 
 
+def board_names(d):
+    """The saved full, reliable snapshots by file name, oldest first: a name starts with the UTC time of its read,
+    and a partial or unreliable read says so in its name."""
+    return sorted(f for f in os.listdir(d) if f.endswith(".json.gz") and "partial" not in f
+                  and "unreliable" not in f)
+
+
 def newest_saved(root, slug):
-    """When the newest full snapshot was saved, by its file name (the UTC time of the read), else None."""
+    """When the newest full, reliable snapshot was saved, by its file name (the UTC time of the read), else None."""
     try:
-        names = sorted(f for f in os.listdir(lb_dir(root, slug)) if f.endswith(".json.gz") and "partial" not in f)
+        names = board_names(lb_dir(root, slug))
         return datetime.strptime(names[-1][:16], "%Y%m%dT%H%M%SZ").replace(tzinfo=timezone.utc) if names else None
     except (OSError, ValueError):
         return None
@@ -405,35 +496,53 @@ def refresh_board(root, slug, gateway, now):
     return None
 
 
+def read_board(d, name):
+    """One saved snapshot as a board {"t", "rows" in rank order, "n"}; None for one that cannot be read, is empty,
+    partial or unreliable: marked so by kaggle_lb.py, or, saved before that flag, holding duplicate rows (its pages
+    repeated teams, so its ranks cannot be trusted)."""
+    try:
+        with gzip.open(os.path.join(d, name), "rt", encoding="utf-8") as f:
+            snap = json.load(f)
+        rows = [r for r in snap["rows"] if isinstance(r, dict)]
+        for i, r in enumerate(rows):
+            r.setdefault("rank", None)
+            r["rank"] = r["rank"] or i + 1
+        rows.sort(key=lambda r: r["rank"])
+        t = iso(snap["fetched_at"])
+    except Exception:
+        return None
+    if not rows or snap.get("partial") or snap.get("unreliable") or snap.get("duplicates"):
+        return None
+    return {"t": t, "rows": rows, "n": len(rows)}
+
+
 def load_boards(root, slug, cap=MAX_BOARDS):
-    """The saved full boards, oldest first: [{"t", "rows" in rank order, "n", "saved"}], at most cap of them spread
-    evenly over the history (the newest always); "saved" counts all of them. [] without any."""
+    """The saved full, reliable boards, oldest first: [{"t", "rows" in rank order, "n", "saved"}], at most cap of
+    them spread evenly over the history (the newest reliable one always); "saved" counts all of them. [] without
+    any."""
     if not slug:
         return []
     d = lb_dir(root, slug)
     try:
-        # a file name starts with the UTC time of its read; a partial read says so in its name
-        names = sorted(f for f in os.listdir(d) if f.endswith(".json.gz") and "partial" not in f)
+        names = board_names(d)
     except OSError:
         return []
     saved = len(names)
+    # the newest board drawn is the newest that reads as a board: an unreliable one saved before the name said so,
+    # an empty or a broken one at the end is passed by, not lost in the spread below
+    read = {}
+    while names:
+        read[names[-1]] = read_board(d, names[-1])
+        if read[names[-1]]:
+            break
+        names.pop()
     if len(names) > cap:
         names = [names[round(i * (len(names) - 1) / (cap - 1))] for i in range(cap)]
     boards = []
     for name in names:
-        try:
-            with gzip.open(os.path.join(d, name), "rt", encoding="utf-8") as f:
-                snap = json.load(f)
-            rows = [r for r in snap["rows"] if isinstance(r, dict)]
-            for i, r in enumerate(rows):
-                r.setdefault("rank", None)
-                r["rank"] = r["rank"] or i + 1
-            rows.sort(key=lambda r: r["rank"])
-            t = iso(snap["fetched_at"])
-        except Exception:
-            continue
-        if rows and not snap.get("partial"):
-            boards.append({"t": t, "rows": rows, "n": len(rows), "saved": saved})
+        b = read[name] if name in read else read_board(d, name)
+        if b:
+            boards.append(dict(b, saved=saved))
     return sorted(boards, key=lambda b: b["t"])
 
 
@@ -495,15 +604,22 @@ def progress(boards, team, top):
 # the Kaggle reads, through the gateway
 
 def submissions(gateway, root, slug):
-    """The team's submissions, newest first; None when the Kaggle API does not answer."""
+    """The team's newest SUBMISSIONS_PAGE submissions, newest first; None when the Kaggle API does not answer."""
     if not slug:
         return None
-    raw = sh([sys.executable, gateway, "competitions", "submissions", slug, "--format", "json"], root)
+    raw = sh([sys.executable, gateway, "competitions", "submissions", slug, "--format", "json", "--page-size",
+              str(SUBMISSIONS_PAGE)], root)
     try:
         rows = json.loads(raw[raw.find("["):raw.rfind("]") + 1])
     except Exception:
         # CLI 2.2.4 prints this instead of an empty JSON list
         return [] if "No submissions found" in raw else None
+    return sub_rows(rows)
+
+
+def sub_rows(rows):
+    """Submission rows as the page reads them, newest first: the rows of `competitions submissions --format json`,
+    or those of the gateway's --sdk submissions document, which carry the same keys."""
     out = []
     for r in rows if isinstance(rows, list) else []:
         try:
@@ -526,9 +642,93 @@ def gpu_week(share, gateway, root):
         v = json.loads(raw[raw.find("{"):raw.rfind("}") + 1])
     except Exception:
         return None
+    return gpu_view(v)
+
+
+def gpu_view(v):
+    """The GPU week and session use in a kaggle_share.py status view, or the GPU week in what an hourly receipt
+    keeps of the --sdk account read: its quota is the same object, its hours left are the quota's "remaining", and
+    it carries no session counts."""
     g = (v.get("quota") or {}).get("gpu") or {}
-    return dict(used=num(g.get("used")), total=num(g.get("total")), left=num(v.get("gpu_hours_left")),
-                refresh=g.get("refresh"), in_use=v.get("in_use") or {}, cap=v.get("cap") or {})
+    left = num(v.get("gpu_hours_left"))
+    return dict(used=num(g.get("used")), total=num(g.get("total")),
+                left=num(g.get("remaining")) if left is None else left, refresh=g.get("refresh"),
+                in_use=v.get("in_use") or {}, cap=v.get("cap") or {})
+
+
+def receipt_reads(root, slug, now):
+    """The Kaggle reads the newest hourly receipt carries, for an offline build: {"at": the reads' time, "subs": the
+    submissions or None, "gpu": the GPU week or None}; None without a receipt that has them under RECEIPT_HOURS old.
+    kaggle_hourly.py keeps a finished pass's reads in its receipt's "raw": {"at", "submissions": the --sdk
+    submissions document, "account": the quota of the --sdk account read, as kaggle_share.py status passes it on},
+    each only when the pass read it. Both go through the code that parses the live reads (sub_rows, gpu_view)."""
+    d = os.path.join(root, "__data", "kaggle", slug, "hourly")
+    try:
+        names = sorted((f for f in os.listdir(d) if RECEIPT_RE.fullmatch(f)), reverse=True)
+    except OSError:
+        return None
+    for name in names[:RECEIPTS_READ]:
+        try:
+            raw = json.loads(read_text(os.path.join(d, name)))["raw"]
+            at = iso(raw["at"])
+        except Exception:
+            continue  # a pass that still runs, a receipt from before the field, or a file that is no receipt
+        if not timedelta(minutes=-5) <= now - at < timedelta(hours=RECEIPT_HOURS):
+            return None
+        doc, account = raw.get("submissions"), raw.get("account")
+        rows = doc.get("submissions") if isinstance(doc, dict) else doc
+        gpu = gpu_view(account) if isinstance(account, dict) else None
+        # a quota without the week's figures is no read of it
+        if gpu and (gpu["used"] is None or gpu["total"] is None):
+            gpu = None
+        return {"at": at, "subs": sub_rows(rows) if isinstance(rows, list) else None, "gpu": gpu}
+    return None
+
+
+def agent_spend(root):
+    """(the spend of this session's autocode agent, None), else (None, why not): {"id", "today", "total",
+    "runs_today", "runs_total" (the job runs' share of each), "cap" (autocode's daily cap, None when it is off),
+    "left"} in US dollars, from `autocode me --json` (the command on PATH, or the one AUTOCODE_ENV names). No
+    figure outside an autocode session, when the command does not run or gives no report, for a session that is
+    not registered, and for a job's run, which is not the master. The command's output is never printed: only its
+    exit code."""
+    if not os.environ.get("AUTOCODE_SESSION"):
+        return None, "not an autocode session: no AUTOCODE_SESSION in the environment"
+    cmd = os.environ.get(AUTOCODE_ENV) or "autocode"
+    argv = ([sys.executable, cmd] if cmd.endswith(".py") else [cmd]) + ["me", "--json"]
+    try:
+        r = subprocess.run(argv, cwd=root, capture_output=True, encoding="utf-8", errors="replace",
+                           timeout=AUTOCODE_SECONDS)
+    except subprocess.TimeoutExpired:
+        return None, f"`autocode me --json` did not answer in {AUTOCODE_SECONDS} s"
+    except OSError as e:
+        return None, f"the autocode command did not run ({e.strerror or type(e).__name__})"
+    try:
+        doc = json.loads(r.stdout[r.stdout.find("{"):r.stdout.rfind("}") + 1]) if r.returncode == 0 else None
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict):
+        return None, f"`autocode me --json` gave no report (exit {r.returncode})"
+    agent = doc.get("agent")
+    if not doc.get("registered") or not isinstance(agent, dict):
+        return None, "this session is not registered as an autocode agent"
+    if str(agent.get("description") or "").startswith(RUN_PREFIX):
+        return None, "this session is an autocode job run, not the master"
+    cost = agent.get("cost") if isinstance(agent.get("cost"), dict) else doc.get("cost")
+    cost = cost if isinstance(cost, dict) else {}
+
+    def dollars(k):
+        # a number of dollars; autocode writes "off" for a cap that is not set
+        v = cost.get(k)
+        v = None if isinstance(v, bool) else num(v)
+        return v if v is not None and v >= 0 else None
+
+    if dollars("today_usd") is None:
+        return None, "`autocode me --json` named no spend for today"
+    return {"id": " ".join(str(agent.get("id") or "").split()), "today": dollars("today_usd"),
+            "total": dollars("total_usd"), "runs_today": dollars("runs_today_usd"),
+            "runs_total": dollars("runs_total_usd"), "cap": dollars("daily_usd") or None,
+            "left": dollars("left_usd")}, None
 
 
 # local sources
@@ -544,7 +744,7 @@ def load_schedule(st, clock):
     return daily + list(sch.get("daily", [])), dated + list(sch.get("dated", []))
 
 
-def upcoming(daily, dated, now, n=8):
+def upcoming(daily, dated, now, n=EVENTS):
     ev = []
     for dd in range(3):
         d = (now + timedelta(days=dd)).astimezone(TZ).date()
@@ -579,50 +779,6 @@ def read_ledger(path):
         out.append((day, " ".join(str(d.get("category") or "other").split()) or "other", cost,
                     " ".join(str(d.get("what") or "").split())))
     return out, bad
-
-
-def solaris_root(root):
-    """The Solaris checkout holding the project: the nearest folder at or above it with solaris/tools/ai_spend.py."""
-    d = os.path.abspath(root)
-    while not home_or_above(d):
-        if os.path.isfile(os.path.join(d, "solaris", "tools", "ai_spend.py")):
-            return d
-        d = os.path.dirname(d)
-    return None
-
-
-def ai_spend(root, args, parse):
-    """parse(the JSON report of solaris.tools.ai_spend --dir <root> <args> --json), run in the Solaris checkout above
-    the root: through uv when it is on PATH, else with this Python. The first run whose report parse takes (parse
-    raises on one it cannot use) gives the result; None without a checkout or when every run fails. kaggle_hourly.py
-    runs ai_spend through this too."""
-    sol = solaris_root(root)
-    if not sol:
-        return None
-    argv = ["-m", "solaris.tools.ai_spend", "--dir", os.path.abspath(root), *args, "--json"]
-    uv = shutil.which("uv")
-    cmds = ([[uv, "run", "--directory", sol, *argv]] if uv else []) + [[sys.executable, *argv]]
-    for cmd in cmds:
-        raw = sh(cmd, sol, timeout=300)
-        try:
-            return parse(json.loads(raw[raw.find("{"):raw.rfind("}") + 1]))
-        except Exception:
-            continue
-    return None
-
-
-def claude_spend(root, since):
-    """{"days": {day: usd}, "limit": the daily limit or None} of the project's Claude Code spend (list-price
-    estimates from solaris.tools.ai_spend); None without a Solaris checkout or when it fails."""
-    def parse(v):
-        days = {}
-        for r in v["rows"]:
-            day = date.fromisoformat(r["day"])
-            days[day] = days.get(day, 0.0) + float(r["usd"])
-        limit = next((num(b.get("daily_budget_usd")) for b in v.get("budgets") or [] if isinstance(b, dict)), None)
-        return {"days": days, "limit": limit}
-
-    return ai_spend(root, ["--since", since.isoformat()], parse)
 
 
 def read_hosts(path):
@@ -695,6 +851,19 @@ def pack_setting(root, pack, key):
         if isinstance(cfg, dict) and key in cfg:
             return cfg[key]
     return None
+
+
+def ai_budget(root, pack):
+    """The pack's daily limit for the master's autocode spend (AI_KEY), a positive number of dollars; None when it
+    is not set or is no such number."""
+    v = pack_setting(root, pack, AI_KEY) if pack else None
+    if v is None:
+        return None
+    limit = None if isinstance(v, bool) else num(v)
+    if limit is None or limit <= 0:
+        warn(f'"{AI_KEY}" must be a positive number of US dollars: not shown')
+        return None
+    return limit
 
 
 def plan_days(root, pack):
@@ -982,12 +1151,12 @@ def rank_chart(pg, H=HEIGHTS["rank"][0]):
     return "".join(out)
 
 
-def spend_chart(days, cats, data, budget, limit, H=HEIGHTS["spend"][0]):
-    """Daily stacked bars, one color per category, each bar's total on top; the budget and the Claude limit dashed."""
+def spend_chart(days, cats, data, budget, H=HEIGHTS["spend"][0]):
+    """Daily stacked bars of the cost ledger, one color per category, each bar's total on top; the budget dashed."""
     W, L, R, T, B = 760, 46, 92, 12, 18
     pw, ph = W - L - R, H - T - B
     totals = [sum(data.get(d, {}).values()) for d in days]
-    ticks, dec = nice_ticks(0, max(totals + [budget or 0, limit or 0, 1.0]), most=5)
+    ticks, dec = nice_ticks(0, max(totals + [budget or 0, 1.0]), most=5)
     ymax = ticks[-1]
 
     def Y(v):
@@ -1014,10 +1183,9 @@ def spend_chart(days, cats, data, budget, limit, H=HEIGHTS["spend"][0]):
         if i % step == 0 or i == len(days) - 1:
             out.append(text(x + bw / 2, H - 5, d.strftime("%b %-d"), "middle"))
     labels = []
-    for v, dash, name in ((budget, "6 3", "budget"), (limit, "2 2", "Claude limit")):
-        if v:
-            out.append(hline(L, L + pw, Y(v), "#333333", 1.1, dash))
-            labels.append((Y(v) + 3, f"{name} {usd(v)}", "#333333", ""))
+    if budget:
+        out.append(hline(L, L + pw, Y(budget), "#333333", 1.1, "6 3"))
+        labels.append((Y(budget) + 3, f"budget {usd(budget)}", "#333333", ""))
     out += right_labels(L + pw + 6, labels, T + 6, T + ph + 3)
     out.append("</svg>")
     return "".join(out)
@@ -1132,17 +1300,15 @@ def kaggle_day(st, now):
 
 
 def spend_view(st, ctx, today):
-    """The spend by day and category: (days drawn, categories, {day: {category: usd}}, the totals rows, the start)."""
-    ledger, claude = ctx["ledger"], ctx["claude"]
+    """The spend by day and category: (days drawn, the cost ledger's categories, the ledger as {day: {category:
+    usd}}, the totals rows, the ledger's total since a day). The AI agent (ctx["agent"]) has a row of its own:
+    autocode gives its spend today and in total only, so it has no last 7 days and no bars."""
+    ledger, agent = ctx["ledger"], ctx["agent"]
     data, cats = {}, {}
-    if claude:
-        for d, v in claude["days"].items():
-            data.setdefault(d, {})["Claude"] = v
     for d, cat, v, _ in ledger or []:
-        name = cat if cat != "Claude" else "Claude (ledger)"
-        data.setdefault(d, {})[name] = data.get(d, {}).get(name, 0.0) + v
-        cats[name] = cats.get(name, 0.0) + v
-    order = (["Claude"] if claude else []) + sorted(cats, key=lambda c: -cats[c])
+        data.setdefault(d, {})[cat] = data.get(d, {}).get(cat, 0.0) + v
+        cats[cat] = cats.get(cat, 0.0) + v
+    order = sorted(cats, key=lambda c: -cats[c])
     start = ctx["start"]
     # the bars start at the first day with a cost, at most SPEND_DAYS back
     first = max(min([d for d, v in data.items() if any(v.values())] or [today]), start,
@@ -1153,24 +1319,35 @@ def spend_view(st, ctx, today):
     def total(c, lo):
         return sum(v.get(c, 0.0) for d, v in data.items() if lo <= d <= today)
 
-    rows = []
-    week = today - timedelta(days=6)
-    for c in order:
-        rows.append([E(c) + (" (list-price estimate)" if c == "Claude" else ""), usd(total(c, today)),
-                     usd(total(c, week)), usd(total(c, start))])
-    if not claude:
-        rows.insert(0, ["Claude (list-price estimate)", NA, NA, NA])
-
     def every(lo):
         return sum(total(c, lo) for c in order)
 
-    rows.append(["<b>Total</b>", usd(every(today)), usd(every(week)), usd(every(start))])
+    week = today - timedelta(days=6)
+    if agent:
+        whole = agent["total"]
+        rows = [[f"AI agent {short(agent['id'], 40)} (autocode)" if agent["id"] else "AI agent (autocode)",
+                 usd(agent["today"]), NA, f"{usd(whole)} in total" if whole is not None else NA]]
+    else:
+        rows = [["AI agent (autocode)", NA, NA, NA]]
+    rows += [[E(c), usd(total(c, today)), usd(total(c, week)), usd(total(c, start))] for c in order]
+    if agent:
+        # the agent's week is not known, and its total is not counted from the page's start day
+        rows.append(["<b>Total</b>", usd(every(today) + agent["today"]), NA,
+                     f"{usd(every(start) + whole)} with the agent's total" if whole is not None else NA])
+    else:
+        rows.append(["<b>Total</b>", usd(every(today)), usd(every(week)), usd(every(start))])
     return days, order, data, rows, every
 
 
 def headline(st, now, ctx):
     b, subs, gq, tzl = ctx["board"], ctx["subs"], ctx["gpu"], ctx["tzl"]
     offline = '<span class="pending">n/a (offline build)</span>' if ctx["offline"] else NA
+
+    def as_of(at):
+        # for a part an offline build drew from the hourly receipt: the time of that read
+        return f"as of the hourly pass's read, {fmt(at)} {tzl}" if at else ""
+
+    subs_at, gpu_at = as_of(ctx.get("subs_at")), as_of(ctx.get("gpu_at"))
     phase = str(st.get("phase") or "")
     head, sep, rest = phase.partition(":")
     phase_val, phase_note = (head.strip(), rest.strip()) if sep and len(head) <= 24 else ("", phase)
@@ -1193,7 +1370,8 @@ def headline(st, now, ctx):
     best = (min if b and not b["high"] else max)(scored, key=lambda s: num(s["score"]), default=None)
     top_note = f"#1 on the board: {E(str(b['top'].get('score')))} ({short(b['top'].get('team_name'), 40)})" if b else NA
     rows.append(["Best public score", E(str(me["score"])) if me else NA,
-                 (f"Best submission {E(best['id'] or best['what'][:24])}; " if best else "") + top_note])
+                 (f"Best submission {E(best['id'] or best['what'][:24])}{f' ({subs_at})' if subs_at else ''}; "
+                  if best else "") + top_note])
     if b:
         (g, gs), (s, ss), (br, bs) = b["lines"]
         zone = ""
@@ -1221,16 +1399,18 @@ def headline(st, now, ctx):
     rows.append(["Kaggle day slots", f"{len(today)} of {rich(st.get('daily_slots', 5))} used"
                  if subs is not None else offline,
                  f"Current Kaggle day: {fmt(kday)} to {fmt(kday + timedelta(days=1))} {tzl}"
-                 + (f"; scoring now: {', '.join(map(E, pending))}" if pending else "")])
+                 + (f"; scoring now: {', '.join(map(E, pending))}" if pending else "")
+                 + (f"; {subs_at}" if subs_at else "")])
     if subs:
         latest = "; ".join(f"{E(x['id'] or x['what'][:24])} {E(x['score']) or E(x['status'].lower())} "
                            f"({fmt(x['t'])})" for x in subs[:3])
         newest = subs[0]
-        rows.append(["Latest submissions", E(newest["score"]) or E(newest["status"].lower()), latest])
+        rows.append(["Latest submissions", E(newest["score"]) or E(newest["status"].lower()),
+                     latest + (f"; {subs_at}" if subs_at else "")])
     else:
         rows.append(["Latest submissions", "none yet" if subs is not None else offline,
-                     "" if subs is not None else "The Kaggle API was not read" if ctx["offline"]
-                     else "The Kaggle API did not answer"])
+                     subs_at[:1].upper() + subs_at[1:] if subs is not None else "The Kaggle API was not read"
+                     if ctx["offline"] else "The Kaggle API did not answer"])
     quota = gq and gq["used"] is not None and gq["total"] is not None
     sess = gq and gq["cap"] and E(f"; sessions in use: GPU {gq['in_use'].get('gpu', 0)}/{gq['cap'].get('gpu', '?')}, "
                                   f"CPU {gq['in_use'].get('cpu', 0)}/{gq['cap'].get('cpu', '?')}")
@@ -1240,25 +1420,33 @@ def headline(st, now, ctx):
             refresh = f", resets {fmt(iso(gq['refresh']), '%a %b %-d %-I:%M %p')}"
         except ValueError:
             pass
+    # the receipt's account read carries no session counts
+    sess = sess or ("; sessions in use: n/a" if gpu_at else "")
     rows.append(["Kaggle GPU week", f"{gq['used']:.1f} of {gq['total']:.0f} h" if quota else
                  (offline if gq is None else NA),
-                 (f"{gq['left']:.1f} h left{refresh}" + (sess or "")) if quota and gq["left"] is not None else
+                 (f"{gq['left']:.1f} h left{refresh}{sess}" + (f"; {gpu_at}" if gpu_at else ""))
+                 if quota and gq["left"] is not None else
+                 (gpu_at[:1].upper() + gpu_at[1:] + sess) if quota and gpu_at else
                  "The Kaggle API was not read" if ctx["offline"] else ""])
 
     sp = ctx["spend"]
     if sp:
-        every, claude, budget = sp["every"], ctx["claude"], num(st.get("daily_budget_usd"))
+        every, agent, budget = sp["every"], ctx["agent"], num(st.get("daily_budget_usd"))
         d0, week = ctx["today"], ctx["today"] - timedelta(days=6)
-        notes = [f"{usd(every(week))} in the last 7 days"]
-        if claude:
-            notes.append(f"Claude {usd(claude['days'].get(d0, 0.0))} of it today (list-price estimate)")
+        if agent:
+            runs = f", {usd(agent['runs_today'])} of that its job runs" if agent["runs_today"] else ""
+            notes = [f"AI agent {usd(agent['today'])} of it (autocode{runs})",
+                     f"cost ledger {usd(every(week))} in the last 7 days"]
         else:
-            notes.append("Claude spend n/a")
+            notes = [f"{usd(every(week))} in the last 7 days", f"AI agent spend n/a ({E(ctx['agent_why'])})"]
         if budget:
             notes.append(f"budget {usd(budget)} a day")
-        if claude and claude["limit"]:
-            notes.append(f"Claude limit {usd(claude['limit'])} a day")
-        rows.append(["Spend today", usd(every(d0)), "; ".join(notes)])
+        if ctx.get("ai_budget"):
+            notes.append(f"AI budget {usd(ctx['ai_budget'])} a day")
+        if agent and agent["cap"]:
+            notes.append(f"autocode's cap {usd(agent['cap'])} a day"
+                         + (f", {usd(agent['left'])} left" if agent["left"] is not None else ""))
+        rows.append(["Spend today", usd(every(d0) + (agent["today"] if agent else 0.0)), "; ".join(notes)])
     else:
         rows.append(["Spend today", NA, NA])
     todo = [rich(x) for x in st.get("owner_actions") or []]
@@ -1337,9 +1525,9 @@ def signed(v):
     return num(str(v).replace("+", "").replace("−", "-")) if v not in (None, "") else None
 
 
-def lineage_part(st):
-    """The chain of new bests, the newest LINEAGE_ROWS of it, and the gains summed for own work and public material
-    over all of it; "" without one."""
+def lineage_part(st, most=LINEAGE_ROWS):
+    """The chain of new bests, the newest `most` of it (LINEAGE_ROWS; fewer in a fit), and the gains summed for own
+    work and public material over all of it; "" without one."""
     chain = [x if isinstance(x, dict) else {"what": x} for x in st.get("lineage") or []]
     if not chain:
         return ""
@@ -1372,10 +1560,10 @@ def lineage_part(st):
             elif k != "other":
                 parts.append(f"{label} none")
         out.append(f"<p><b>Gains{base}:</b> {'; '.join(parts)}.</p>")
-    if len(rows) > LINEAGE_ROWS:
-        out.append(f'<p class="note">The newest {LINEAGE_ROWS} of {len(rows)} steps; the gains above count them '
+    if len(rows) > most:
+        out.append(f'<p class="note">The newest {most} of {len(rows)} steps; the gains above count them '
                    f'all.</p>')
-    out.append(table(["Entry", "Score", "Gain", "Source", "What"], rows[-LINEAGE_ROWS:], [9, 10, 10, 15, 56],
+    out.append(table(["Entry", "Score", "Gain", "Source", "What"], rows[-most:], [9, 10, 10, 15, 56],
                      "split compact", lft=(4,)))
     return "".join(out)
 
@@ -1422,9 +1610,10 @@ def closed(status):
     return bool(CLOSED_RE.match(s)) and not LATER_RE.search(s)
 
 
-def plan_rollup(older, cut):
+def plan_rollup(older, cut, most=None):
     """Rows (day or week, closed items) of the closed plan items before cut, newest first: one per day for the week
-    before cut, then one per week from Monday to Sunday."""
+    before cut, then one per week from Monday to Sunday. With most (a fit), at most that many rows: the newest
+    most - 1, then one "Before <day>" row counting every older item."""
     by_day = cut.date() - timedelta(days=7)
     groups = {}
     for t, _, _, _ in older:
@@ -1432,8 +1621,13 @@ def plan_rollup(older, cut):
         mon = d - timedelta(days=d.weekday())
         span = (d, d) if d >= by_day else (mon, min(mon + timedelta(days=6), by_day - timedelta(days=1)))
         groups[span] = groups.get(span, 0) + 1
-    return [[f'<span class="nw">{a:%a %b %-d}{"" if a == b else f" to {b:%a %b %-d}"}</span>', str(n)]
-            for (a, b), n in sorted(groups.items(), reverse=True)]
+    spans = sorted(groups.items(), reverse=True)
+    fold = spans[most - 1:] if most and most > 1 and len(spans) > most else []
+    rows = [[f'<span class="nw">{a:%a %b %-d}{"" if a == b else f" to {b:%a %b %-d}"}</span>', str(n)]
+            for (a, b), n in spans[:len(spans) - len(fold)]]
+    if fold:
+        rows.append([f'<span class="nw">Before {spans[most - 2][0][0]:%a %b %-d}</span>', str(sum(n for _, n in fold))])
+    return rows
 
 
 def plan_section(st, now, ctx, fig):
@@ -1452,6 +1646,8 @@ def plan_section(st, now, ctx, fig):
     older = [it for it, k in zip(items, keep) if not k]
     parts = []
     tzl = ctx["tzl"]
+    # a fit's row limits, and where it notes what it trimmed (see FITS)
+    fit, trims = ctx.get("fit") or {}, ctx.get("trims", {})
     if shown:
         marks = [(n, t + (timedelta(hours=12) if not has_time else timedelta()), str(x.get("status") or ""))
                  for n, (t, has_time, _, x) in enumerate(shown, 1) if t]
@@ -1473,15 +1669,22 @@ def plan_section(st, now, ctx, fig):
     else:
         parts.append("<p>No plan items yet.</p>")
     if older:
+        every, rolled = plan_rollup(older, cut), plan_rollup(older, cut, fit.get("rollup"))
+        if len(rolled) < len(every):
+            trims["rollup"] = (f"Earlier Plan Items: {len(rolled)} rows, the oldest {len(every) - len(rolled) + 1} "
+                               "folded into one")
         parts.append(f'<h3>Earlier Plan Items</h3><p class="note">The closed items before {cut:%a %b %-d}, counted '
                      f'by day and then by week; the status JSON keeps them in full.</p>'
-                     + table(["Day or week", "Closed items"], plan_rollup(older, cut), [60, 40], "split compact",
-                             lft=(0,)))
+                     + table(["Day or week", "Closed items"], rolled, [60, 40], "split compact", lft=(0,)))
     if ctx["events"]:
         labels = st.get("labels") or {}
-        parts.append("<h3>Coming Schedule</h3>" + table([f"When ({tzl})", "Event"], [
+        events = ctx["events"][:fit["events"]] if fit.get("events") else ctx["events"]
+        cut = f" (the next {len(events)} of {len(ctx['events'])} events)" if len(events) < len(ctx["events"]) else ""
+        if cut:
+            trims["events"] = f"Coming Schedule: the next {len(events)} of {len(ctx['events'])} events"
+        parts.append(f"<h3>Coming Schedule{cut}</h3>" + table([f"When ({tzl})", "Event"], [
             [fmt(t, "%a %b %-d %-I:%M %p"), E(labels.get(g) or str(g).replace("-", " ").capitalize())]
-            for t, g in ctx["events"]], [30, 70], "split compact", lft=(1,)))
+            for t, g in events], [30, 70], "split compact", lft=(1,)))
     elif ctx["events"] is None:
         parts.append(f"<h3>Coming Schedule</h3><p>{NA} (the schedule or its clock file could not be read)</p>")
     return "".join(parts)
@@ -1492,15 +1695,27 @@ def spend_section(st, ctx, fig):
     if not sp:
         return f"<p>{NA}</p>"
     days, cats, data, rows = sp["days"], sp["cats"], sp["data"], sp["rows"]
-    budget, claude = num(st.get("daily_budget_usd")), ctx["claude"]
+    budget, agent = num(st.get("daily_budget_usd")), ctx["agent"]
     start = ctx["start"]
     # the totals first: they read first, and a short table ahead of the chart leaves less of a gap when the chart
     # moves to the next page
     parts = [table(["Category", "Today", "Last 7 days", f"Since {start:%b %-d}"], rows, [40, 20, 20, 20],
                    "split compact", lft=(0,))]
     notes = []
-    if not claude:
-        notes.append("Claude spend: n/a (no Solaris checkout found above the project, or ai_spend failed).")
+    if agent:
+        runs = [f"{usd(v)} of {what}" for v, what in ((agent["runs_today"], "today's spend"),
+                                                      (agent["runs_total"], "the total")) if v is not None]
+        cap = (f"autocode's daily cap is {usd(agent['cap'])}"
+               + (f", {usd(agent['left'])} left" if agent["left"] is not None else "")
+               if agent["cap"] else "autocode sets no daily cap")
+        notes.append("AI agent: the spend of this session's autocode agent"
+                     + (f"; its job runs are {' and '.join(runs)}" if runs else "") + f"; {cap}. Autocode gives "
+                     "today's spend and the total only, so the last 7 days are n/a and the chart shows the cost "
+                     "ledger alone.")
+    else:
+        notes.append(f"AI agent spend: n/a ({E(ctx['agent_why'])}).")
+    if ctx.get("ai_budget"):
+        notes.append(f"The pack's daily AI budget is {usd(ctx['ai_budget'])}.")
     if ctx["ledger"] is None:
         notes.append(f"The cost ledger ({E(ctx['ledger_rel'])}) does not exist yet: other costs show none.")
     if ctx["ledger_bad"]:
@@ -1509,16 +1724,15 @@ def spend_section(st, ctx, fig):
     if notes:
         parts.append(f'<p class="note">{" ".join(notes)}</p>')
     if cats:
-        chart = safe("the spending chart", spend_chart, days, cats, data, budget, claude and claude["limit"],
+        chart = safe("the spending chart", spend_chart, days, cats, data, budget,
                      HEIGHTS["spend"][ctx.get("compact", False)])
         if chart:
-            items = [("box", COLORS[k % len(COLORS)], E(c) + (" (list-price estimate)" if c == "Claude" else ""))
-                     for k, c in enumerate(cats)]
+            items = [("box", COLORS[k % len(COLORS)], E(c)) for k, c in enumerate(cats)]
             items += [("dash", "#333333", f"daily budget {usd(budget)}")] if budget else []
-            parts.append(fig(chart, f"Spend per day by category, {days[0]:%b %-d} to {days[-1]:%b %-d}"
-                                    + ("; the Claude part is a list-price estimate." if claude else "."), key(items)))
+            parts.append(fig(chart, f"Spend per day by category from the cost ledger, {days[0]:%b %-d} to "
+                                    f"{days[-1]:%b %-d}; the AI agent's spend is not drawn.", key(items)))
     else:
-        parts.append("<p>No costs recorded yet.</p>")
+        parts.append("<p>No costs in the cost ledger yet.</p>")
     week = ctx["today"] - timedelta(days=6)
     big = sorted((x for x in ctx["ledger"] or [] if week <= x[0] <= ctx["today"]), key=lambda x: -x[2])[:5]
     if big:
@@ -1662,9 +1876,12 @@ def build(st, now, ctx):
     """The status page as one HTML document."""
     fig = Figures()
     tzl = ctx["tzl"]
+    steps, most = len(st.get("lineage") or []), (ctx.get("fit") or {}).get("lineage") or LINEAGE_ROWS
+    if most < min(steps, LINEAGE_ROWS):
+        ctx.get("trims", {})["lineage"] = f"Best-Score Lineage: the newest {most} of {steps} steps"
     sections = [
         ("state", "Current State", headline(st, now, ctx) + outlook_part(st, now, ctx) + tracks_part(st, now)
-         + lineage_part(st)),
+         + lineage_part(st, most)),
         ("board", "Leaderboard Progress", board_section(ctx, fig)),
         ("plan", "Plan and Timeline", plan_section(st, now, ctx, fig)),
         ("spending", "Spending", spend_section(st, ctx, fig)),
@@ -1680,11 +1897,15 @@ def build(st, now, ctx):
         f"rebuilt at every hourly pass and on every plan change; the revision number rises with each change of the "
         f"status JSON. All times are {tzl} ({E(ctx['tzname'])}).")
     b = ctx["board"]
+    taken = [what for what, at in (("the submissions", ctx.get("subs_at")), ("the GPU week", ctx.get("gpu_at"))) if at]
     sources = [f"{E(ctx['status_rel'])} (kept by the master)",
                f"{b['saved']} saved board snapshots, the newest {fmt(b['when'])}" if b else "no saved board snapshot",
+               f"no Kaggle API reads in this build: {' and '.join(taken)} as the hourly pass read them at "
+               f"{fmt(ctx.get('subs_at') or ctx.get('gpu_at'))}" if ctx["offline"] and taken else
                "no Kaggle API reads (offline build)" if ctx["offline"] else
                f"the submissions and the GPU week read at {fmt(now)}",
-               "the cost ledger and the session records (list-price estimates)",
+               "the cost ledger and autocode's spend report" if ctx.get("agent") else
+               "the cost ledger (no autocode spend report)",
                "the host list, lease ends and host health" if ctx.get("fleet") else "the host list and lease ends",
                "the improvement suggestions"]
     head = f'''<!DOCTYPE html>
@@ -1736,26 +1957,139 @@ def render(root, pack, env_file, tzname, name=NAME):
     return False, "RENDER FAILED: " + (r.stderr or r.stdout)[-1500:], 0
 
 
-def render_shorter(root, pack, env_file, tzname, page, gaps):
-    """After a render that left half-empty pages: render the page with shorter charts beside it and keep that one
-    when it leaves fewer; (kept, message)."""
+def render_fit(root, pack, env_file, tzname, page, gaps, what="shorter charts", before="the first layout"):
+    """After a render that left half-empty pages: render a fit of the page (what: its name in the output) beside it
+    and keep that one when it leaves fewer; (kept, message, half-empty pages it left)."""
     html_alt = os.path.join(root, "reports", "html", SHORT + ".html")
     pdf_alt = os.path.join(root, "reports", SHORT + ".pdf")
     try:
         write_atomic(html_alt, page)
         ok, msg, left = render(root, pack, env_file, tzname, SHORT)
         if not ok:
-            return False, "shorter charts: " + msg
+            return False, f"{what}: " + msg, gaps
         check = msg.splitlines()[1:2] or ["no layout check"]
         if left >= gaps:
-            return False, f"shorter charts: {check[0]}; kept the first layout"
+            return False, f"{what}: {check[0]}; kept {before}", gaps
         os.replace(pdf_alt, os.path.join(root, "reports", NAME + ".pdf"))
         os.replace(html_alt, os.path.join(root, "reports", "html", NAME + ".html"))
-        return True, "kept shorter charts: " + "\n".join(msg.splitlines()[1:])
+        return True, f"kept {what}: " + "\n".join(msg.splitlines()[1:]), left
     finally:
         for f in (html_alt, pdf_alt):
             if os.path.exists(f):
                 os.remove(f)
+
+
+def gap_pages(msg):
+    """The half-empty pages a render's layout check names, in page order."""
+    return sorted({int(n) for n in re.findall(r"^  page (\d+): \d+% empty", msg, re.M)})
+
+
+def pdf_pages(pdf):
+    """The text of each page of a PDF, through poppler's pdftotext (the layout check needs poppler too); raises
+    when it cannot be read."""
+    r = subprocess.run(["pdftotext", "-layout", pdf, "-"], capture_output=True, encoding="utf-8", errors="replace",
+                       timeout=120)
+    if r.returncode != 0:
+        raise RuntimeError("pdftotext: " + (" ".join((r.stderr or "").split())[:120] or f"exit {r.returncode}"))
+    return r.stdout.split("\f")
+
+
+def blocks_on(text):
+    """The page's blocks (key, name) whose first line stands in this page text, in reading order (see BLOCKS)."""
+    found = []
+    for line in text.splitlines():
+        line = line.strip()
+        for key, name, pattern in BLOCKS:
+            if (key, name) not in found and re.fullmatch(pattern, line):
+                found.append((key, name))
+    return found
+
+
+def moved_blocks(pdf, pages):
+    """({half-empty page: (the block the next page opens with or None, the blocks the page itself holds)}, why the
+    PDF's text could not be read or None)."""
+    try:
+        texts = pdf_pages(pdf)
+    except Exception as e:
+        return {}, " ".join(str(e).split())[:160] or type(e).__name__
+    out = {}
+    for n in pages:
+        after = blocks_on(texts[n]) if n < len(texts) else []
+        out[n] = (after[0] if after else None, blocks_on(texts[n - 1]) if 0 < n <= len(texts) else [])
+    return out, None
+
+
+def fit_applies(blocks, own, moved):
+    """Whether shortening these blocks can pull a block back to a half-empty page: one of them stands before the
+    block that moved (or, with own, is that block); always when what moved is not known."""
+    order = [key for key, _name, _pattern in BLOCKS]
+    for after, _holds in moved.values():
+        if after is None:
+            return True
+        last = order.index(after[0])
+        if any(order.index(b) < last or (own and b == after[0]) for b in blocks):
+            return True
+    return not moved
+
+
+def and_list(names):
+    return names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def moved_lines(pages, moved, why):
+    """One output line per half-empty page: the block that moved off it and the blocks it holds."""
+    out = []
+    for n in pages:
+        after, holds = moved.get(n) or (None, [])
+        if why or not after:
+            out.append(f"  page {n}: what moved to page {n + 1} could not be named ("
+                       + (why or f"page {n + 1} opens with no block this tool knows") + ")")
+            continue
+        names = [name for key, name in holds if key != after[0]]
+        out.append(f"  page {n}: {after[1]} did not fit and moved to page {n + 1}. "
+                   + (f"Page {n} holds {and_list(names)}: shorten one of them, or the text between them"
+                      if len(names) > 1 else f"Page {n} holds {names[0]}: shorten it, or the text after it" if names
+                      else f"Shorten what stands before it on page {n}"))
+    return out
+
+
+def fit_page(root, pack, env_file, tzname, st, now, ctx, page, msg, gaps):
+    """After a render that left half-empty pages: try the automatic fits (FITS) one at a time, each on top of those
+    kept, and keep one only when it leaves fewer such pages; then name what still moved off each half-empty page.
+    Returns the output lines: each fit rendered, what it trimmed and whether it was kept; after a fit that was not
+    kept, "the page as kept: <its layout check>", so the last layout check in the output is the kept page's."""
+    pdf = os.path.join(root, "reports", NAME + ".pdf")
+    out, kept = [], {}
+    pages = gap_pages(msg)
+    moved, why = moved_blocks(pdf, pages)
+    # the kept page's layout check, and whether the last one printed is that of a fit that was not kept
+    check, stale = next((x for x in msg.splitlines() if x.startswith("layout check")), None), False
+    for what, blocks, own, more in FITS:
+        if not gaps:
+            break
+        if not fit_applies(blocks, own, moved):
+            continue
+        trial, trims = dict(kept, **more), {}
+        html_ = build(st, now, dict(ctx, fit=trial, compact=bool(trial.get("compact")), trims=trims))
+        if html_ == page:
+            continue  # nothing of it on this page: no table that long, no chart
+        did = "; ".join(trims[b] for b in blocks if b in trims)
+        done, line, gaps = render_fit(root, pack, env_file, tzname, html_, gaps, what + (f" ({did})" if did else ""),
+                                      "the layout before it" if kept else "the first layout")
+        out.append(line)
+        stale = not done
+        if done:
+            kept, page, pages = trial, html_, gap_pages(line)
+            moved, why = moved_blocks(pdf, pages) if gaps else ({}, None)
+            found = re.search(r"layout check: .*", line.splitlines()[0])
+            check = found.group(0) if found else check
+    if stale and check:
+        # whoever quotes the last "layout check" line of this output (kaggle_hourly.py --close) quotes the kept page's
+        out.append(f"the page as kept: {check}")
+    if gaps:
+        out.append("half-empty pages left, and what moved off each:")
+        out += moved_lines(pages, moved, why) or ["  the layout check named no page"]
+    return out
 
 
 def drop_short(root):
@@ -1923,14 +2257,19 @@ def main(argv=None):
     start = date.fromisoformat(str(st["start"])) if st.get("start") else min(
         firsts, default=today - timedelta(days=SPEND_DAYS - 1))
     start = min(start, today)
-    claude = safe("the Claude spend", claude_spend, root, start)
+    agent, agent_why = safe("the AI agent's spend", agent_spend, root, default=(None, "the read failed"))
     ends, lease_read = safe("the lease ends", read_leases, os.path.join(mem, "lease-ends.json"), default=({}, None))
+    # an offline build makes no Kaggle call: it takes what the last hourly pass read, when that is young enough
+    saved = (safe("the hourly receipt", receipt_reads, root, slug, now) if offline and slug else None) or {}
     ctx = dict(
         board=safe("the board", board_now, boards, team),
         progress=safe("the board", progress, boards, team, top) if boards else None,
-        subs=safe("the submissions", submissions, gateway, root, slug) if online else None,
-        gpu=safe("the GPU week", gpu_week, share, gateway, root) if not offline else None,
-        offline=offline, slug=slug, team=team, ledger=ledger, ledger_bad=ledger_bad, claude=claude, start=start,
+        subs=safe("the submissions", submissions, gateway, root, slug) if online else saved.get("subs"),
+        gpu=safe("the GPU week", gpu_week, share, gateway, root) if not offline else saved.get("gpu"),
+        subs_at=saved["at"] if saved.get("subs") is not None else None,
+        gpu_at=saved["at"] if saved.get("gpu") is not None else None,
+        offline=offline, slug=slug, team=team, ledger=ledger, ledger_bad=ledger_bad, agent=agent,
+        agent_why=agent_why, ai_budget=safe("the AI budget", ai_budget, root, pack), start=start,
         today=today, hosts=safe("the host list", read_hosts, os.path.join(mem, "hosts.json")), ends=ends,
         lease_read=lease_read, ideas=safe("the improvements", read_ideas, os.path.join(mem, "improvements.md")),
         events=events, project=project_name(root, pack) if pack else os.path.basename(root), tzname=tzname,
@@ -1965,11 +2304,11 @@ def main(argv=None):
     ok, msg, gaps = render(root, pack, env_file, tzname)
     print(msg)
     if ok and gaps:
-        # a chart that did not fit left a gap: the same page with shorter charts often fits
+        # a block that did not fit left a gap: the same page with shorter charts or tables often fits
         try:
-            print(render_shorter(root, pack, env_file, tzname, build(st, now, dict(ctx, compact=True)), gaps)[1])
+            print("\n".join(fit_page(root, pack, env_file, tzname, st, now, ctx, page, msg, gaps)))
         except Exception as e:
-            print(f"shorter charts: not tried ({type(e).__name__}: {e})")
+            print(f"automatic fits: stopped ({type(e).__name__}: {e})")
     return 0 if ok else 1
 
 

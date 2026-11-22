@@ -183,13 +183,15 @@ class SubmitTests(Submit):
             got, out, _ = self.submit(path, "--go", "--review", "keep")
             self.assertEqual(got, 4, out)
             self.assertIn(f"UNCLEAR (exit {code}): the submission may or may not have landed", out)
-            self.assertIn(f"competitions submissions {SLUG}` and", out)
+            # the read it names lists 100 rows: the default page of 20 loses an older submission
+            self.assertIn(f"competitions submissions {SLUG} --page-size 100` and", out)
             self.assertIn(f"competitions submission-limits {SLUG}`", out)
             self.assertEqual(json.loads(path.read_text())["attempts"][0]["result"], "unclear")
         before = len(self.submits())
         code, out, _ = self.submit(path, "--go", "--review", "keep")
         self.assertEqual(code, 3)
         self.assertIn("ended 'unclear', so it may have landed", out)
+        self.assertIn(f"read `competitions submissions {SLUG} --page-size 100` and", out)
         self.assertEqual(len(self.submits()), before)
         # after reading the submissions and the limits: --checked lets one more attempt through
         self.answer(f"competitions submit {SLUG}", SUCCESS)
@@ -263,6 +265,84 @@ class SubmitTests(Submit):
         self.assertIn("ended 'submitting', so it may have landed", out)
         self.assertEqual(self.submits(), [])
 
+    def test_landed_marks_the_unclear_attempt_as_submitted_so_no_second_submit_follows(self):
+        self.reviewed()
+        path = self.record()
+        self.answer(f"competitions submit {SLUG}", out="", err="Read timed out\n", code=1)
+        self.assertEqual(self.submit(path, "--go", "--review", "keep")[0], 4)
+        calls = len(self.calls())
+        # the submissions read lists it: record its ref
+        code, out, err = self.submit(path, "--landed", "57824036")
+        self.assertEqual((code, err), (0, ""))
+        (attempt,) = json.loads(path.read_text())["attempts"]
+        self.assertEqual(out.splitlines(), [
+            "record     submissions/s1/record.json",
+            f"MARKED LANDED: the attempt at {attempt['at']} (it ended 'unclear') now reads 'submitted', ref 57824036; "
+            "recorded in submissions/s1/record.json. A new submission needs its own record"])
+        self.assertEqual((attempt["result"], attempt["was"], attempt["ref"], attempt["exit"]),
+                         ("submitted", "unclear", 57824036, 1))
+        self.assertRegex(attempt["marked"], r"^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$")
+        self.assertEqual(json.loads(path.read_text())["notes"], "kept as it is")
+        # no Kaggle call, and no leftover temp file beside the record
+        self.assertEqual(len(self.calls()), calls)
+        self.assertEqual(sorted(p.name for p in path.parent.iterdir()), ["record.json", "record.json.lock"])
+        # the record now blocks a second submit, even with --checked
+        self.answer(f"competitions submit {SLUG}", SUCCESS)
+        before = len(self.submits())
+        for more in ([], ["--checked"]):
+            code, out, _ = self.submit(path, "--go", "--review", "again", *more)
+            self.assertEqual(code, 3)
+            self.assertIn(f"already submitted at {attempt['at']}", out)
+        self.assertEqual(len(self.submits()), before)
+        # and a second --landed has nothing to mark
+        code, out, _ = self.submit(path, "--landed", "57824099")
+        self.assertEqual(code, 3)
+        self.assertIn(f"the record already holds a submitted attempt (at {attempt['at']}, ref 57824036): nothing to "
+                      "mark", out)
+        self.assertEqual(json.loads(path.read_text())["attempts"][0]["ref"], 57824036)
+
+    def test_landed_takes_the_last_attempt_that_may_have_landed(self):
+        # an unclear attempt read as not listed, then a refusal: the unclear one is found landed after all
+        attempts = [{"at": "2026-10-01T10:00:00Z", "result": "unclear"},
+                    {"at": "2026-10-01T11:00:00Z", "result": "refused", "reason": "400: pending"}]
+        path = self.record(attempts=attempts)
+        self.assertEqual(self.submit(path, "--landed", "7")[0], 0)
+        got = json.loads(path.read_text())["attempts"]
+        self.assertEqual([(a["result"], a.get("ref"), a.get("was")) for a in got],
+                         [("submitted", 7, "unclear"), ("refused", None, None)])
+        # a run cut off while submitting may have landed too
+        path = self.record(name="s2", attempts=[{"at": "2026-10-01T10:00:00Z", "result": "submitting"}])
+        code, out, _ = self.submit(path, "--landed", "8")
+        self.assertEqual(code, 0)
+        self.assertIn("(it ended 'submitting') now reads 'submitted', ref 8", out)
+        # it needs no gateway and no pre-submit check, and makes no call
+        self.assertEqual(self.tool("kaggle_submit.py", str(self.record(name="s3", attempts=attempts)), "--landed",
+                                   "9", "--gateway", str(self.tmp / "none.py"))[0], 0)
+        self.assertEqual(self.calls(), [])
+
+    def test_landed_refuses_a_record_without_an_attempt_that_may_have_landed(self):
+        cases = {"no-attempts": None, "refused": [{"at": "2026-10-01T10:00:00Z", "result": "refused"}],
+                 "not-a-list": {"at": "x"}}
+        for name, attempts in cases.items():
+            path = self.record(name=name, attempts=attempts)
+            before = path.read_text()
+            code, out, _ = self.submit(path, "--landed", "7")
+            self.assertEqual(code, 3, name)
+            self.assertIn("REFUSED:\n  - ", out)
+            self.assertIn('"attempts" is not a list' if name == "not-a-list" else
+                          "no attempt in the record may have landed", out)
+            self.assertEqual(path.read_text(), before)
+        path = self.record(name="usage", attempts=[{"at": "2026-10-01T10:00:00Z", "result": "unclear"}])
+        before = path.read_text()
+        for bad in (["--landed", "abc"], ["--landed", "0"], ["--landed", "-5"], ["--landed"],
+                    ["--landed", "7", "--go"], ["--landed", "7", "--review", "x"], ["--landed", "7", "--checked"],
+                    ["--landed", "7", "--fresh", "10"]):
+            code, out, err = self.submit(path, *bad)
+            self.assertEqual((code, out), (2, ""), bad)
+        self.assertIn("--landed only records an attempt as landed", err)
+        self.assertEqual(path.read_text(), before)
+        self.assertEqual(self.submits(), [])
+
     def test_a_file_competition_uploads_the_file_beside_the_record(self):
         self.reviewed()
         path = self.record(kernel=None, version=None, file="preds.csv")
@@ -331,6 +411,10 @@ class SubmitTests(Submit):
         doc = " ".join(mod.__doc__.split())
         for code in ("0 submitted", "3 refused by the checks", "4 unclear result", "5 refused by Kaggle"):
             self.assertIn(code, doc)
+        # what decides between --landed and --checked after an unclear attempt
+        self.assertIn("--landed <ref>", doc)
+        self.assertIn('A read that failed (an error, HTTP 429, a timeout) or came back empty is not "not listed"', doc)
+        self.assertIn("a clean read shows no row with the exact message in that time window", doc)
 
 
 if __name__ == "__main__":

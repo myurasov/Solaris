@@ -427,6 +427,83 @@ class FrameworkRootTests(Env):
         self.assertEqual(self.stamps(), [])
 
 
+# stands in for uv: logs each call in its own file, and for `uv run ... kaggle <args>` prints what it was run with
+LOG_UV = """\
+#!{python}
+import json, sys
+with open({log!r}, "a") as f:
+    f.write(json.dumps(sys.argv[1:]) + "\\n")
+if sys.argv[1] == "run":
+    print("{name} ran " + " ".join(sys.argv[sys.argv.index("kaggle"):]))
+"""
+
+
+class InstallTests(Env):
+    def setUp(self):
+        super().setUp()
+        self.uv_log = self.tmp / "uv.jsonl"
+
+    def uv(self, folder, name="uv"):
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / "uv").write_text(LOG_UV.format(python=sys.executable, log=str(self.uv_log), name=name))
+        (folder / "uv").chmod(0o755)
+        return folder
+
+    def uv_calls(self):
+        return [json.loads(x) for x in self.uv_log.read_text().splitlines()] if self.uv_log.exists() else []
+
+    def test_the_environment_holds_six_beside_the_pinned_cli(self):
+        # the pinned CLI imports six and does not name it as a dependency
+        self.assertEqual(GW.REQS[:2], [f"kaggle=={GW.PIN}", f"kagglesdk=={GW.SDK_PIN}"])
+        # pinned like the CLI and the SDK: every requirement names one version
+        self.assertEqual(GW.REQS[2:], [f"six=={GW.SIX_PIN}"])
+        self.assertTrue(all(r.count("==") == 1 and ">" not in r and "<" not in r for r in GW.REQS), GW.REQS)
+        self.assertIn("six", GW.__doc__)
+
+    def test_a_venv_built_before_six_was_added_is_rebuilt_once(self):
+        root = self.project()
+        env = root / GW.ENV_DIR
+        old = "\n".join([f"kaggle=={GW.PIN}", f"kagglesdk=={GW.SDK_PIN}", str(env.resolve())]) + "\n"
+        (env / GW.STAMP).write_text(old)
+        path = {"PATH": f"{self.uv(self.tmp / 'bin')}{os.pathsep}{os.environ.get('PATH', '')}"}
+        code, out, err = self.run_gw(["competitions", "list"], root, **path)
+        self.assertEqual(code, 0, err)
+        self.assertIn(f"kaggle gateway: installing {' '.join(GW.REQS)} into ", err)
+        venv, pip = self.uv_calls()
+        self.assertEqual((venv[0], venv[-1]), ("venv", str(env)))
+        self.assertEqual((pip[:2], pip[-len(GW.REQS):]), (["pip", "install"], GW.REQS))
+        self.assertEqual((env / GW.STAMP).read_text(), "\n".join([*GW.REQS, str(env.resolve())]) + "\n")
+        # the next call finds it ready
+        code, _, err = self.run_gw(["competitions", "list"], root, **path)
+        self.assertEqual((code, len(self.uv_calls())), (0, 2))
+        self.assertNotIn("installing", err)
+
+    def test_uv_is_found_where_its_installer_puts_it_when_path_lacks_it(self):
+        bare, home, empty = self.tmp / "bare", self.tmp / "home", self.tmp / "empty"
+        for d in (bare, home, empty):
+            d.mkdir()
+        env = {"PATH": str(empty), "HOME": str(home)}
+        # a shell without uv anywhere: the gateway stops and names the places it looked in
+        code, out, err = self.run_gw(["--version"], bare, **env)
+        self.assertEqual((code, out), (1, ""))
+        self.assertIn("kaggle gateway: uv not found on PATH, in ~/.local/bin or in ~/.cargo/bin - install it first",
+                      err)
+        # a non-login ssh shell: uv sits in ~/.cargo/bin or ~/.local/bin, off PATH; the first of UV_HOMES wins
+        self.uv(home / ".cargo" / "bin", "cargo")
+        self.assertEqual(self.run_gw(["--version"], bare, **env)[:2], (0, "cargo ran kaggle --version\n"))
+        self.uv(home / ".local" / "bin", "local")
+        self.assertEqual(self.run_gw(["--version"], bare, **env)[:2], (0, "local ran kaggle --version\n"))
+        run = self.uv_calls()[-1]
+        self.assertEqual([run[i + 1] for i, a in enumerate(run) if a == "--with"], GW.REQS)
+        # uv on PATH comes first
+        env["PATH"] = str(self.uv(self.tmp / "bin", "path"))
+        self.assertEqual(self.run_gw(["--version"], bare, **env)[:2], (0, "path ran kaggle --version\n"))
+        # a file there that cannot be run is passed by
+        env["PATH"] = str(empty)
+        (home / ".local" / "bin" / "uv").chmod(0o644)
+        self.assertEqual(self.run_gw(["--version"], bare, **env)[:2], (0, "cargo ran kaggle --version\n"))
+
+
 class LeaseGateTests(Env):
     REF = "alice/demo-kernel"
 
@@ -716,7 +793,7 @@ class SdkTests(Env):
         sdk = load(TOOLS / "kaggle_sdk.py")
         for read in sdk.READS:
             self.assertIn(f"--sdk {read} ", GW.__doc__)
-        self.assertEqual(set(sdk.READS), {"topic", "notebooks", "account", "submissions", "dataset"})
+        self.assertEqual(set(sdk.READS), {"topic", "notebooks", "account", "submissions", "dataset", "kernel"})
 
     def test_framework_root_uses_the_same_pins(self):
         bindir = self.tmp / "bin"

@@ -1,9 +1,9 @@
 ---
 name: kaggle-kernels
 triggers: ["kaggle kernel", "kaggle notebook", "kernel push", "push the kernel", "kernel-metadata", "faithful fork", "fork a public notebook", "notebook submission", "commit run", "offline wheels", "build a submission"]
-summary: Kernel engineering for Kaggle code submissions, read before building one - faithful forks, private datasets and offline inputs, clean packages, runtime and memory budgets, replays and commit-run checks, kernel-metadata.json, and submitting a saved version.
+summary: Kernel engineering for Kaggle code submissions, read before building one - faithful forks pinned to the version that was vetted, private datasets and offline inputs, clean packages, runtime and memory budgets, replays and commit-run checks, kernel-metadata.json, and submitting a saved version.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-kernels - Kernel Engineering <!-- omit in toc -->
 
@@ -34,6 +34,14 @@ Which public notebook to build on, and moving pending changes onto a stronger on
 - **Pull one version** with `kernels pull <owner>/<kernel>/<version> -m` (CLI 2.2.4 takes the version in the ref).
   Take the version number from the notebook's version list in the browser, read-only (neither the CLI nor the SDK
   lists versions), and check that the pulled code is that version's.
+- **Pin a fork to the version that was vetted:** `<gateway> --sdk kernel <owner>/<kernel> [--json]` prints a
+  kernel's current version number and the md5 of its source, the same bytes `kernels pull` writes to the code
+  file. It works for any kernel the account may read, a public one of another user included, in one call, and
+  keeps no source text. When the review of a public notebook ends, record its `currentVersion` and `sourceMd5`
+  with the fork, and check `md5sum` of the pulled code file against that md5. Read it again before each push of
+  the fork: a new version number or md5 means the author saved a new version since, so the fork still holds
+  the vetted one, and the new one needs its own review before anything of it is taken. The read names only the
+  current version: an older one's number still comes from the version list in the browser.
 - **Rebuild a public notebook's private inputs:** arrays it reads from someone's private dataset can often be rebuilt
   from public sources (per-candidate counts from a public database, say), aligned row for row with its own tables.
   Check the alignment at the notebook's own indexing, diff your run against the author's visible commit output (it

@@ -3,7 +3,7 @@ name: kaggle-cli
 triggers: ["kaggle"]
 summary: Gateway to Kaggle for Solaris agents - runs the pinned Kaggle CLI (installed per project or task, never globally) and routes to Kaggle's own agent skill (vendored kaggle-cli/SKILL.md + command references) for commands, flags and metadata files. Covers the first-run install, OAuth sign-in, Solaris conventions, and 401/403 triage.
 ---
-_Rev. 11_
+_Rev. 12_
 
 # Skill: kaggle-cli - Kaggle Through the Pinned CLI <!-- omit in toc -->
 
@@ -25,7 +25,8 @@ fallback, a forum listing saved from a browser page where the CLI cannot list a 
 discussions, is optional and read-only: the `kaggle-discussions` skill). For how to run a
 competition (setup, validation, daily submissions, agent organization), follow the
 `how-to-kaggle` skill (`how-to-kaggle.skill.md` next to this file); for watching its
-discussions, the `kaggle-discussions` skill.
+discussions, the `kaggle-discussions` skill; for which competitions are open and a first look at
+one, `tools/kaggle_scout.py` and the `kaggle-scout` skill.
 
 ## Calling the Gateway
 
@@ -44,8 +45,12 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
 `python3 ../../../plugins/kaggle/shared/tools/kaggle.py <args>`.
 
 - **Where the CLI lives.** The first call installs `kaggle==2.2.4` (with `kagglesdk==0.1.37`,
-  the SDK it was tested with) into `<context>/.venv-kaggle/` (about a second on a warm uv
-  cache; the venv git-ignores itself); later calls run it directly. The context is the nearest
+  the SDK it was tested with, and `six==1.17.0`, which the CLI imports without naming it as a
+  dependency: without it every CLI call fails with `ModuleNotFoundError`) into
+  `<context>/.venv-kaggle/` (about a second on a warm uv cache; the venv git-ignores itself);
+  later calls run it directly. The gateway needs uv, which it finds on PATH, else at
+  `~/.local/bin/uv` or `~/.cargo/bin/uv` (where its installer puts it: a non-login ssh shell
+  often has neither on PATH). The context is the nearest
   project root above the working directory (a folder with exactly one child folder holding an
   ai-pack `manifest.json`: its `<pack>`), else the nearest task folder (its `notes.md` header
   names the ad-hoc-task skill) - so `cd` there first. The search never reads the home folder
@@ -54,21 +59,29 @@ Run every Kaggle command through `tools/kaggle.py` from this plugin, arguments u
   `<solaris>/plugins/` goes by the working directory only.
   With neither (the framework root, or an old task without that header) the gateway runs the
   same pinned CLI from a throwaway uv environment and says so on stderr.
-- **Self-healing.** A changed pin (plugin update), a moved folder, or a removed base Python
+- **Self-healing.** A changed pin or package list (a plugin update: a venv built before `six`
+  was added is rebuilt once, at the next call), a moved folder, or a removed base Python
   triggers a clean reinstall on the next call; parallel first calls wait for a single install;
   deleting `.venv-kaggle/` is a safe reset. Never `pip install kaggle`, `uv tool install
   kaggle`, or call a bare `kaggle` from PATH.
 - **SDK reads.** `<gateway> --sdk <read> <args>` runs one of the plugin's fixed, read-only SDK
   reads (`tools/kaggle_sdk.py`: `topic <id>`, `notebooks <slug>`, `account`, `submissions <slug>`,
-  `dataset <owner/slug>`) with the same pins and sign-in as the CLI. The plugin's tools use it, and
+  `dataset <owner/slug>`, `kernel <owner/slug>`) with the same pins and sign-in as the CLI. The
+  plugin's tools use it, and
   an agent may run a read directly (say, `--sdk topic <id>` to read one topic in full). No writes,
   and no SDK code of your own.
 - **Submission errors.** `competitions submissions` drops Kaggle's error text. `<gateway> --sdk
-  submissions <slug> [--page-size N] [--json]` lists the latest N (default 20) with ref, date,
-  status, public score and the error description.
+  submissions <slug> [--page-size N] [--json]` lists the latest N (default 20, at most 100) with
+  ref, date, status, public score and the error description. Pass `--page-size 100` to look up a
+  past submission, or one whose submit ended unclear: a busy team's older rows are not among the
+  newest 20.
 - **Dataset versions.** The CLI shows no version numbers. `<gateway> --sdk dataset <owner/slug>
   [--json]` prints the current version number and every version (number, date, notes), so you can
   pin one by number.
+- **Kernel versions.** `<gateway> --sdk kernel <owner/slug> [--json]` prints a kernel's current
+  version number and the md5 of its source, the same bytes `kernels pull` writes: use it to pin a
+  fork to the version that was vetted (the `kaggle-kernels` skill). One call; it works for another
+  user's public kernel, and prints no source text.
 - **Refused submits.** When Kaggle refuses a submit with HTTP 400, 401, 403, 404 or 429 (for example "Your team already has 1
   pending submissions"), the CLI prints only "400 Client Error: Bad Request". The gateway adds
   `kaggle gateway: Kaggle refused the submit (<status> <kind>): <message>` from the response body
@@ -170,8 +183,11 @@ Corrections to it, verified against 2.2.4:
   `competitions submit` unless the owner sets `KAGGLE_SUBMIT_WITHOUT_GATE=1`. Check
   `competitions submission-limits <slug>` first. A code competition submits a saved kernel
   version: `competitions submit <slug> -k <owner>/<kernel> -v <N> -f <output file> -m <message>`
-  (2.2.4 refuses `-k` without `-v`, which Kaggle's reference calls optional). Afterwards read the
-  score with `competitions submissions <slug>` (2.2.4 has no `submit --wait`; poll sparingly).
+  (2.2.4 refuses `-k` without `-v`, which Kaggle's reference calls optional). Afterwards wait for
+  the score with `tools/kaggle_watch.py`, run as a watched background job (the `kaggle-checks`
+  skill, Waiting for a Score): 2.2.4 has no `submit --wait`, and a turn never sleeps or polls.
+  After a submit whose result is unclear, read `competitions submissions <slug> --page-size 100`
+  before anything else (the same skill, Gated Submit).
 - **Kernel images stay pinned:** never drop `docker_image` from `kernel-metadata.json`, in our
   kernels or in forks. Kaggle's latest image moves (a new Python version breaks wheels built for
   the old one). `kernels pull -m` shows only the latest version's image, often a quick save, so read

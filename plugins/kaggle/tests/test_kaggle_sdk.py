@@ -529,6 +529,75 @@ class DatasetTests(unittest.TestCase):
         self.assertEqual((code, out.splitlines()[0][:43]), (0, "ann/priors: no current version given; 0 ver"))
 
 
+class KernelApi:
+    """A signed-in KaggleApi whose client answers get_kernel."""
+
+    def __init__(self, kernel=None, fail=False):
+        self.kernel, self.fail, self.asked = kernel, fail, []
+
+    def get_kernel(self, req):
+        self.asked.append((req.user_name, req.kernel_slug))
+        if self.fail:
+            raise http_error(403, "Permission denied")
+        return self.kernel
+
+    def build_kaggle_client(self):
+        return contextlib.nullcontext(NS(kernels=NS(kernels_api_client=self)))
+
+
+class KernelTests(unittest.TestCase):
+    SOURCE = '{"cells": [{"source": "print(\\"naïve\\")"}]}\n'
+    KERNEL = NS(metadata=NS(id=77, ref="ann/fast-start", title="Fast start", author="Ann", slug="fast-start",
+                            last_run_time=datetime(2026, 10, 5, 10, 9), language="python", kernel_type="notebook",
+                            is_private=False, current_version_number=12),
+                blob=NS(source=SOURCE, language="python", kernel_type="notebook", slug="fast-start"))
+
+    def setUp(self):
+        p = mock.patch.dict(sys.modules, {"kagglesdk.kernels.types.kernels_api_service":
+                                          module("kernels_api_service", ApiGetKernelRequest=Bag)})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def test_the_current_version_and_the_md5_of_the_source(self):
+        api = KernelApi(self.KERNEL)
+        code, out, err = run(["kernel", "ann/fast-start", "--json"], api)
+        self.assertEqual((code, err, api.asked), (0, "", [("ann", "fast-start")]))
+        res = json.loads(out)
+        # the md5 and size of the bytes `kernels pull` writes: the source as UTF-8
+        data = self.SOURCE.encode("utf-8")
+        md5 = __import__("hashlib").md5(data).hexdigest()
+        self.assertEqual({k: v for k, v in res.items() if k != "fetched_at"},
+                         {"ref": "ann/fast-start", "title": "Fast start", "currentVersion": 12,
+                          "lastRunTime": "2026-10-05T10:09:00", "language": "python", "kernelType": "notebook",
+                          "sourceMd5": md5, "sourceBytes": len(data)})
+        self.assertNotEqual(len(data), len(self.SOURCE))
+        # the source text itself is never printed
+        self.assertNotIn("cells", out)
+        code, out, _ = run(["kernel", "ann/fast-start"], KernelApi(self.KERNEL))
+        lines = out.splitlines()
+        self.assertRegex(lines[0], r"^ann/fast-start: version 12 is current; last run 2026-10-05 10:09 "
+                                   r"\(read .*Z\)$")
+        self.assertEqual(lines[1:], [f"  source md5 {md5} ({len(data)} bytes, python notebook)"])
+
+    def test_a_failed_read_bad_refs_and_fields_kaggle_does_not_send(self):
+        self.assertEqual(run(["kernel", "ann/private"], KernelApi(fail=True)),
+                         (1, "", "kaggle_sdk: 403 Forbidden: Permission denied\n"))
+        for argv in (["kernel"], ["kernel", "fast-start"], ["kernel", "a/b/c"], ["kernel", "../x"], ["kernel", "a/"]):
+            code, out, err = run(argv)
+            self.assertEqual((code, out), (2, ""), argv)
+            self.assertIn("usage:", err)
+        # an answer without a version or a source: null, never 0 or the md5 of nothing
+        empty = NS(metadata=NS(title=None, current_version_number=0, last_run_time=None, language="",
+                               kernel_type=""), blob=None)
+        code, out, _ = run(["kernel", "ann/new", "--json"], KernelApi(empty))
+        res = json.loads(out)
+        self.assertEqual([res[k] for k in ("currentVersion", "lastRunTime", "language", "kernelType", "sourceMd5",
+                                           "sourceBytes")], [None] * 6)
+        code, out, _ = run(["kernel", "ann/new"], KernelApi(NS(metadata=None, blob=NS(source=""))))
+        self.assertEqual((code, out.splitlines()[0][:39], out.splitlines()[1]),
+                         (0, "ann/new: no current version given; last", "  no source given"))
+
+
 class ErrorTests(unittest.TestCase):
     def test_error_lines(self):
         self.assertEqual(S.error_text(http_error(429, "too\nmany")), "429 Too Many Requests: too many")

@@ -203,9 +203,136 @@ class SnapshotTests(Tmp):
     def test_board_moving_between_pages_drops_the_duplicate(self):
         pages = {None: cli_json([team(1, "A", "0.5"), team(2, "B", "0.4")], "T1"),
                  "T1": cli_json([team(2, "B", "0.4"), team(3, "C", "0.3")])}
-        _, snap = self.snap(run=FakeGateway(pages))
+        path, snap = self.snap(run=FakeGateway(pages))
         self.assertEqual([(r["team_id"], r["rank"]) for r in snap["rows"]], [(1, 1), (2, 2), (3, 4)])
-        self.assertEqual(snap["duplicates"], 1)
+        # one row that came twice is the board moving: the read stays a board, with the count in "moved" and the note
+        self.assertEqual((snap["moved"], snap["partial"], snap["unreliable"]), (1, False, False))
+        self.assertNotIn("duplicates", snap)
+        self.assertEqual(snap["note"], "1 duplicate row as the board moved during the read (ranks off by at most "
+                                       "that many)")
+        self.assertTrue(path.name.endswith("Z.json.gz"), path.name)
+        self.assertEqual([e["unreliable"] for e in L.load_index(self.d)], [False])
+        self.assertFalse(L.unreliable(L.read_snapshot(path)))
+
+    def test_rows_that_came_twice_make_a_read_unreliable_from_three_or_a_whole_page(self):
+        def read(*pages):
+            snap = L.build_snapshot(SLUG, [[L.normalize(team(n, f"T{n}", "0.5")) for n in page] for page in pages],
+                                    fetched_at="2026-09-28T10:00:00Z", source="snapshot", fmt="json")
+            return snap["unreliable"], snap.get("duplicates"), snap.get("moved")
+
+        # under the limit: the board moved
+        self.assertEqual(read([1, 2, 3], [3, 4, 5], [5, 6]), (False, None, 2))
+        # three rows on a small board
+        self.assertEqual(read([1, 2, 3, 4], [2, 3, 4, 5]), (True, 3, None))
+        # a whole page of teams read before is Kaggle serving a page again, however few rows it holds
+        self.assertEqual(read([1, 2], [1, 2], [3]), (True, 2, None))
+        self.assertEqual(read([1], [1]), (True, 1, None))
+        # on a larger board the limit is one row in a thousand: 5 of 5,752 pass, 6 do not
+        big = list(range(1, 5001))
+        self.assertEqual(read(big, list(range(4996, 5753))), (False, None, 5))
+        self.assertEqual(read(big, list(range(4995, 5753))), (True, 6, None))
+        # "duplicates" above 0 means unreliable to every reader: a count under the limit is never saved there
+        snap = L.build_snapshot(SLUG, [[L.normalize(team(1, "A", "0.5"))], [L.normalize(team(1, "A", "0.5"))]],
+                                fetched_at="2026-09-28T10:00:00Z", source="snapshot", fmt="json")
+        self.assertEqual(snap["note"], "unreliable: 1 duplicate row, 2 pages for 1 teams (ranks not trusted)")
+        self.assertEqual((L.DUP_LIMIT, L.DUP_PER), (3, 1000))
+
+    def test_a_board_that_moved_says_so_after_the_snapshot_line(self):
+        pages = {None: cli_json([team(1, "A", "0.5"), team(2, "B", "0.4")], "T1"),
+                 "T1": cli_json([team(2, "B", "0.4"), team(3, "C", "0.3")])}
+        fixtures = self.tmp / "pages.json"
+        fixtures.write_text(json.dumps({"": pages[None], "T1": pages["T1"]}))
+        self.gateway.write_text(textwrap.dedent(f"""\
+            import json, sys
+            a = sys.argv[1:]
+            t = a[a.index("--page-token") + 1] if "--page-token" in a else ""
+            sys.stdout.write(json.load(open({str(fixtures)!r}))[t])
+        """))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(L.main(["snapshot", SLUG, "--dir", str(self.base), "--gateway", str(self.gateway)]), 0)
+        line = out.getvalue().strip()
+        self.assertIn("3 rows, 2 pages (full), ", line)
+        self.assertTrue(line.endswith("; note: 1 duplicate row as the board moved during the read (ranks off by at "
+                                      "most that many)"), line)
+
+    def test_a_clean_walk_is_reliable(self):
+        path, snap = self.snap(run=FakeGateway(PAGES))
+        self.assertEqual((snap["partial"], snap["unreliable"]), (False, False))
+        self.assertNotIn("note", snap)
+        self.assertNotIn("unreliable", path.name)
+        # the flag sits beside "partial" in the saved file
+        keys = list(L.read_snapshot(path))
+        self.assertEqual(keys[keys.index("partial") + 1], "unreliable")
+        self.assertEqual([e["unreliable"] for e in L.load_index(self.d)], [False])
+
+    def test_a_page_with_no_new_team_stops_the_walk(self):
+        # Kaggle serves the first page again under ever new tokens: the walk must not go on to the page cap
+        first = [team(1, "A", "0.5"), team(2, "B", "0.4")]
+        pages = {None: cli_json(first, "T1"), "T1": cli_json([team(3, "C", "0.3"), team(4, "D", "0.2")], "T2"),
+                 **{f"T{n}": cli_json(first, f"T{n + 1}") for n in range(2, 40)}}
+        fake = FakeGateway(pages)
+        path, snap = self.snap(run=fake)
+        self.assertEqual(len(fake.calls), 3)
+        self.assertEqual((snap["pages"], snap["row_count"], snap["duplicates"]), (3, 4, 2))
+        self.assertEqual((snap["partial"], snap["unreliable"]), (True, True))
+        self.assertEqual(snap["note"], "page 3 brought no new team: Kaggle is serving pages again; unreliable: "
+                                       "2 duplicate rows, 3 pages for 4 teams (ranks not trusted)")
+        self.assertTrue(path.name.endswith("Z-partial-unreliable.json.gz"), path.name)
+
+    def endless(self, per_page=2):
+        """A board whose every page brings new teams and one more token: only a page cap ends its walk."""
+        class Endless(dict):
+            def __missing__(self, token):
+                n = int(token[1:])
+                return cli_json([team(n * per_page + i + 1, f"T{n}-{i}", "0.5") for i in range(per_page)],
+                                f"T{n + 1}")
+        pages = Endless()
+        pages[None] = pages["T0"]
+        return FakeGateway(pages)
+
+    def test_the_page_cap_comes_from_the_most_teams_a_saved_snapshot_holds(self):
+        # 7 teams known, 2 rows a page: 4 pages hold them, and 5 more are allowed
+        self.snap(run=FakeGateway(PAGES))
+        fake = self.endless()
+        _, snap = self.snap(run=fake)
+        self.assertEqual((len(fake.calls), snap["pages"], snap["row_count"]), (9, 9, 18))
+        self.assertEqual((snap["partial"], snap["unreliable"]), (True, False))
+        self.assertEqual(snap["note"], "stopped after 9 pages, the cap for the 7 teams known (--max-pages raises it)")
+        # the cap rises with what was read, so a board that grew is read whole a walk or two later
+        fake = self.endless()
+        self.assertEqual(self.snap(run=fake)[1]["pages"], 9 + L.PAGE_MARGIN)
+        # --max-pages replaces the automatic cap, upward as well as downward
+        for given in (3, 20):
+            fake = self.endless()
+            _, snap = self.snap(run=fake, max_pages=given)
+            self.assertEqual((len(fake.calls), snap["note"]), (given, f"stopped after {given} pages"))
+
+    def test_without_a_saved_snapshot_the_cap_is_the_fixed_one(self):
+        self.assertEqual([L.page_cap(*a) for a in ((0, 200), (4958, 0), (4958, 200), (1, 200), (10 ** 6, 20))],
+                         [L.MAX_PAGES, L.MAX_PAGES, 25 + L.PAGE_MARGIN, 1 + L.PAGE_MARGIN, L.MAX_PAGES])
+        with mock.patch.object(L, "MAX_PAGES", 4):
+            fake = self.endless()
+            _, snap = self.snap(run=fake)
+        self.assertEqual((len(fake.calls), snap["note"]),
+                         (4, "stopped after 4 pages, the cap for the 0 teams known (--max-pages raises it)"))
+
+    def test_far_more_pages_than_the_rows_fill_is_unreliable(self):
+        # one full page, then pages of one row each: 8 pages where 3 rows a page would need 4
+        rows = [[L.normalize(team(n, f"T{n}", "0.5")) for n in (1, 2, 3)]]
+        rows += [[L.normalize(team(n, f"T{n}", "0.5"))] for n in range(4, 4 + L.PAGE_MARGIN + 2)]
+        snap = L.build_snapshot(SLUG, rows, fetched_at="2026-09-28T10:00:00Z", source="snapshot", fmt="json")
+        self.assertEqual((snap["pages"], snap["row_count"], snap["unreliable"]), (8, 10, False))
+        rows += [[L.normalize(team(n, f"T{n}", "0.5"))] for n in (98, 99)]
+        snap = L.build_snapshot(SLUG, rows, fetched_at="2026-09-28T10:00:00Z", source="snapshot", fmt="json")
+        self.assertEqual((snap["pages"], snap["row_count"], snap["unreliable"]), (10, 12, True))
+        self.assertEqual(snap["note"], "unreliable: 10 pages for 12 teams (ranks not trusted)")
+        self.assertNotIn("duplicates", snap)
+
+    def test_max_pages_must_be_a_page_count(self):
+        for bad in ("0", "-1", "many"):
+            with self.assertRaises(SystemExit), contextlib.redirect_stderr(io.StringIO()):
+                L.main(["snapshot", SLUG, "--max-pages", bad, "--dir", str(self.base)])
 
     def test_reads_are_marked_as_monitoring(self):
         # kaggle_share's activity stamp skips calls carrying KAGGLE_SHARE_QUIET=1
@@ -402,6 +529,89 @@ class ProgressTests(Tmp):
                      ["new-teams", SLUG, "--since", "12"]):
             with contextlib.redirect_stdout(io.StringIO()):
                 self.assertEqual(L.main(argv + ["--dir", str(self.base)]), 0, argv)
+
+    def garbled(self, hours, old_file=False):
+        """A newer whole-board read whose pages repeated a team, so its ranks are off: Gamma Ray shows as #5.
+        With old_file, saved as a tool without the unreliable flag saved it: duplicates in the file, nothing else."""
+        at = (self.now - timedelta(hours=hours)).strftime(L.ISO)
+        pages = [board((101, "Alpha Team", "0.41"), (102, "Beta", "0.30")),
+                 board((101, "Alpha Team", "0.41"), (102, "Beta", "0.30")), board((103, "Gamma Ray", "0.45"))]
+        snap = L.build_snapshot(SLUG, pages, fetched_at=at, source="snapshot", fmt="json")
+        self.assertEqual((snap["duplicates"], snap["unreliable"], snap["partial"]), (2, True, False))
+        if not old_file:
+            return L.save_snapshot(self.d, snap)
+        del snap["unreliable"], snap["note"]
+        path = self.d / (at.replace("-", "").replace(":", "") + ".json.gz")
+        with gzip.open(path, "wt", encoding="utf-8") as f:
+            json.dump(snap, f)
+        return path
+
+    def test_readers_pass_by_an_unreliable_snapshot(self):
+        before = L.movers(self.d, 12, now=self.now)
+        self.garbled(0.2)
+        res = L.movers(self.d, 12, now=self.now)
+        # the newest reliable board stays the one compared, not the garbled read after it
+        self.assertEqual(res["last"]["fetched_at"], "2026-09-28T11:00:00Z")
+        self.assertEqual([m["team_id"] for m in res["climbs"]], [m["team_id"] for m in before["climbs"]])
+        self.assertEqual(L.new_teams(self.d, 12, now=self.now)["last"]["fetched_at"], "2026-09-28T11:00:00Z")
+        self.assertEqual(L.summarize(self.d)["cols"][-1]["fetched_at"], "2026-09-28T11:00:00Z")
+        self.assertEqual(L.resolve_team(self.d, L.load_index(self.d), "gamma"), (103, "Gamma Ray"))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(L.main(["summary", SLUG, "--dir", str(self.base)]), 0)
+            self.assertEqual(L.main(["history", SLUG, "--team", "gamma", "--dir", str(self.base)]), 0)
+        text = out.getvalue()
+        self.assertIn("5 snapshots (3 full, 1 partial, 1 unreliable; 0 imported)", text)
+        # the history keeps the read's score and hides its rank
+        last = text.splitlines()[-1].split()
+        self.assertEqual((last[-5], last[-4], last[-1]), ("?", "0.45", "unreliable"))
+
+    def test_a_snapshot_saved_before_the_flag_is_unreliable_by_its_duplicates(self):
+        # an index without the flag, as an earlier version wrote it, and one such file with duplicate rows
+        lines = [json.loads(x) for x in (self.d / L.INDEX).read_text().splitlines()]
+        for e in lines:
+            del e["unreliable"]
+        (self.d / L.INDEX).write_text("".join(json.dumps(e) + "\n" for e in lines))
+        path = self.garbled(0.2, old_file=True)
+        entries = L.load_index(self.d)
+        self.assertEqual([e["unreliable"] for e in entries], [False, False, False, False, True])
+        self.assertEqual(entries[-1]["file"], path.name)
+        # the index was rewritten once with the flag: every line carries it, none came twice
+        lines = [json.loads(x) for x in (self.d / L.INDEX).read_text().splitlines()]
+        self.assertEqual(sorted(e["file"] for e in lines), sorted(e["file"] for e in entries))
+        self.assertTrue(all(isinstance(e["unreliable"], bool) for e in lines))
+        self.assertEqual(sorted(p.name for p in self.d.iterdir() if p.name.startswith(".")), [".lock"])
+        self.assertEqual(L.movers(self.d, 12, now=self.now)["last"]["fetched_at"], "2026-09-28T11:00:00Z")
+
+    def test_show_falls_back_to_the_newest_reliable_snapshot(self):
+        # the walk meets the first page again: this read is unreliable, so show prints the board before it
+        first = [team(103, "Gamma Ray", "0.46"), team(101, "Alpha Team", "0.41")]
+        fixtures = self.tmp / "pages.json"
+        fixtures.write_text(json.dumps({"": cli_json(first, "T1"), "T1": cli_json(first, "T2")}))
+        # an executable stand-in for kaggle.py, run the way the tool runs the real one
+        self.gateway.write_text(textwrap.dedent(f"""\
+            import json, sys
+            a = sys.argv[1:]
+            t = a[a.index("--page-token") + 1] if "--page-token" in a else ""
+            sys.stdout.write(json.load(open({str(fixtures)!r}))[t])
+        """))
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(L.main(["show", SLUG, "--dir", str(self.base), "--gateway", str(self.gateway)]), 0)
+        lines = out.getvalue().splitlines()
+        self.assertIn("2 rows, 2 pages (partial: page 2 brought no new team: Kaggle is serving pages again; "
+                      "unreliable: 2 duplicate rows, 2 pages for 2 teams (ranks not trusted))", lines[0])
+        self.assertTrue(lines[1].startswith("this read is unreliable: showing the newest reliable snapshot instead, "))
+        # the reliable board of an hour ago, with its moves since the one before
+        self.assertEqual([x.split()[:3] for x in lines[4:7]], [["1", "+1", "0.45"], ["2", "-1", "0.41"],
+                                                               ["3", "=", "0.30"]])
+        # with no reliable snapshot saved, the read is shown with a warning
+        out = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            self.assertEqual(L.main(["show", SLUG, "--dir", str(self.tmp / "empty"), "--gateway",
+                                     str(self.gateway)]), 0)
+        self.assertIn("this read is unreliable and no reliable snapshot is saved: the ranks below cannot be trusted",
+                      out.getvalue())
 
 
 class RecordRawTests(Tmp):

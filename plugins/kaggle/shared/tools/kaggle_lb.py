@@ -1,4 +1,4 @@
-# rev. 4
+# rev. 5
 
 """kaggle_lb: leaderboard history for any Kaggle competition.
 
@@ -7,8 +7,8 @@ progress can be followed over time. A snapshot keeps only what the leaderboard
 returns: per row the rank (the row's position in Kaggle's order), team id, team
 name, score and submission date - no profile lookups, nothing else scraped.
 
-    python3 <plugin-dir>/tools/kaggle_lb.py snapshot <slug>
-    python3 <plugin-dir>/tools/kaggle_lb.py show <slug> [--top N]
+    python3 <plugin-dir>/tools/kaggle_lb.py snapshot <slug> [--max-pages N] [--page-size N]
+    python3 <plugin-dir>/tools/kaggle_lb.py show <slug> [--top N] [--max-pages N] [--page-size N]
     python3 <plugin-dir>/tools/kaggle_lb.py history <slug> --team <name or id>
     python3 <plugin-dir>/tools/kaggle_lb.py movers <slug> --since <hours>
     python3 <plugin-dir>/tools/kaggle_lb.py new-teams <slug> --since <hours>
@@ -23,7 +23,35 @@ kaggle.py beside this file); the other commands read saved snapshots. Snapshots
 live in <context>/__data/kaggle/<slug>/leaderboard/ - one gzip JSON file each
 plus index.jsonl - or in <base>/<slug>/ with --dir <base> or
 KAGGLE_LB_DIR=<base>. They are never overwritten; an incomplete read is kept,
-flagged "partial". `notebooks` saves the competition's public notebooks the
+flagged "partial".
+
+`snapshot` and `show` walk the board page by page (--page-size rows a page,
+default 200). The walk ends at the page with no next-page token. It stops
+early, and the read is partial, when a page fails, a token repeats, a page
+brings no team that was not read before (Kaggle is serving pages again), or
+the page cap is reached. The cap is --max-pages when given. Without it the cap
+is the pages that hold the most teams any saved snapshot of this board has, at
+the first page's row count, plus 5; 500 for a board with no snapshot yet. The
+CLI's leaderboard pages carry no team count, so the saved snapshots give it.
+
+A team can come twice in a read. A few such rows are the board moving while
+it is walked: a team that climbs past the page being read pushes one row onto
+the next page. The read then lacks that team and its ranks are off by at most
+that many places. It is kept as a board, with the count in "moved" and in its
+"note". A read is unreliable, and its ranks cannot be trusted, when a whole
+page brought only teams read before (Kaggle served a page again), when 3 or
+more rows came twice (on a board of over 3,000 teams: 0.1% of its rows or
+more), or when it took over 5 pages more than its rows fill. It is saved with
+a top-level "unreliable": true beside "partial" and the count in "duplicates",
+says so in its "note" and in its file name, and is never used as a board:
+`show`, `movers`, `new-teams` and `summary` read the newest full snapshot that
+is not unreliable, and `history` prints such a read's score with rank ?. So
+"duplicates" above 0 always means unreliable, also in a snapshot saved before
+this flag, where any row that came twice was counted there. The first read of
+an older store checks each snapshot once and rewrites index.jsonl with the
+flag.
+
+`notebooks` saves the competition's public notebooks the
 same way, from the gateway's `--sdk notebooks` read: per notebook its ref
 (owner/slug), title, last run time, votes and best public score (null when
 unknown), in Kaggle's score order. Each list is one gzip JSON file in the
@@ -51,6 +79,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 import time
 import zipfile
 from contextlib import contextmanager
@@ -65,6 +94,11 @@ except ImportError:  # no flock on this platform: writes go unlocked
 SCHEMA = 1
 PAGE_SIZE = 200
 MAX_PAGES = 500
+# pages a walk may take beyond those its teams fill: the automatic cap, and the limit past which a read is unreliable
+PAGE_MARGIN = 5
+# rows that came twice make a read unreliable from this many, or from one in this many of its rows on a larger board;
+# fewer are the board moving during the walk
+DUP_LIMIT, DUP_PER = 3, 1000
 PAGE_PAUSE = 0.5
 INDEX = "index.jsonl"
 ENV_DIR = "KAGGLE_LB_DIR"
@@ -107,6 +141,12 @@ def when(iso):
 def local(iso, fmt="%b %d %H:%M %Z"):
     # shown in this machine's time zone
     return when(iso).astimezone().strftime(fmt)
+
+
+def pages_arg(text):
+    if not text.isdigit() or int(text) < 1:
+        raise argparse.ArgumentTypeError(f"not a number of pages, 1 or more: {text!r}")
+    return int(text)
 
 
 def iso_arg(text):
@@ -214,16 +254,36 @@ def read_snapshot(path):
         return json.load(f)
 
 
+def unreliable(snap):
+    """Whether a snapshot's ranks cannot be trusted: it says so, or, saved before the flag, it holds duplicate rows."""
+    return bool(snap.get("unreliable") or snap.get("duplicates"))
+
+
 def index_entry(name, snap):
     rows = snap["rows"]
     top = rows[0]["score"] if rows and rows[0].get("rank") == 1 else None
     return {"file": name, "fetched_at": snap["fetched_at"], "rows": snap["row_count"], "pages": snap["pages"],
-            "partial": snap["partial"], "imported": snap["imported"], "source": snap["source"], "top_score": top}
+            "partial": snap["partial"], "unreliable": unreliable(snap), "imported": snap["imported"],
+            "source": snap["source"], "top_score": top}
 
 
 def _append_index(d, entry):
     with open(Path(d) / INDEX, "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+
+
+def _rewrite_index(d, entries):
+    # atomic replace: a reader never sees half an index; called holding the lock
+    path = Path(d) / INDEX
+    fd, tmp = tempfile.mkstemp(dir=d, prefix=f".{INDEX}.")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.writelines(json.dumps(e, ensure_ascii=False) + "\n" for e in entries)
+        os.replace(tmp, path)
+    except BaseException:
+        if os.path.exists(tmp):
+            os.unlink(tmp)
+        raise
 
 
 def _write_new(d, stem, obj):
@@ -249,6 +309,8 @@ def save_snapshot(directory, snap):
         tags.append("imported")
     if snap["partial"]:
         tags.append("partial")
+    if snap.get("unreliable"):
+        tags.append("unreliable")
     with locked(d):
         path = _write_new(d, "-".join(tags), snap)
         _append_index(d, index_entry(path.name, snap))
@@ -256,7 +318,11 @@ def save_snapshot(directory, snap):
 
 
 def load_index(directory):
-    """Index entries sorted by fetch time; snapshot files the index lacks are read and added to it."""
+    """Index entries sorted by fetch time; snapshot files the index lacks are read and added to it.
+
+    Every entry carries "unreliable". An index written before that flag is upgraded once: each such snapshot is
+    read for it (duplicate rows mean unreliable; so does a snapshot that cannot be read) and the index rewritten.
+    """
     d = Path(directory)
     if not d.is_dir():
         return []
@@ -271,6 +337,14 @@ def load_index(directory):
                 if isinstance(e, dict) and e.get("file") not in seen and (d / str(e.get("file"))).is_file():
                     seen.add(e["file"])
                     entries.append(e)
+        old = [e for e in entries if not isinstance(e.get("unreliable"), bool)]
+        for e in old:
+            try:
+                e["unreliable"] = unreliable(read_snapshot(d / e["file"]))
+            except (OSError, ValueError, EOFError, AttributeError):
+                e["unreliable"] = True
+        if old:
+            _rewrite_index(d, entries)
         for p in sorted(d.glob("*.json.gz")):
             if p.name in seen:
                 continue
@@ -358,19 +432,42 @@ def parse_output(text):
 
 def build_snapshot(slug, pages, *, fetched_at, source, fmt, partial=False, first_rank=1, imported=False,
                    note=None, source_file=None, seconds=None):
-    """A snapshot from pages of parsed rows in board order; rank is the 1-based position (None if unknown)."""
-    rows, seen, pos, dupes = [], set(), 0, 0
+    """A snapshot from pages of parsed rows in board order; rank is the 1-based position (None if unknown).
+
+    A team that came twice is kept once. A few such rows are the board moving between page reads: the count goes
+    to "moved" and the note. The snapshot is unreliable, its note says so and the count goes to "duplicates", when
+    a whole page brought only teams read before (Kaggle served a page again), when DUP_LIMIT rows or one row in
+    DUP_PER came twice, or when it took over PAGE_MARGIN pages more than its rows fill at its widest page.
+    """
+    rows, seen, pos, dupes, again = [], set(), 0, 0, False
     for page in pages:
+        fresh = 0
         for r in page:
             pos += 1
             if r["team_id"] in seen:
-                dupes += 1  # the board moved between page reads
+                dupes += 1  # the board moved between page reads, or a page came again
                 continue
+            fresh += 1
             seen.add(r["team_id"])
             rows.append(dict(r, rank=first_rank + pos - 1 if first_rank else None))
+        again = again or bool(page) and not fresh
+    widest = max((len(page) for page in pages), default=0)
+    sparse = widest > 0 and len(pages) > -(-len(rows) // widest) + PAGE_MARGIN
+    many = again or dupes >= max(DUP_LIMIT, -(-len(rows) // DUP_PER))
+    counted = f"{dupes} duplicate row{'s' if dupes != 1 else ''}"
+    if many or sparse:
+        why = ([counted] if dupes else []) + [f"{len(pages)} pages for {len(rows)} teams"]
+        note = "; ".join(x for x in (note, "unreliable: " + ", ".join(why) + " (ranks not trusted)") if x)
+    elif dupes:
+        note = "; ".join(x for x in (note, f"{counted} as the board moved during the read (ranks off by at most "
+                                           "that many)") if x)
     snap = {"schema": SCHEMA, "slug": slug, "fetched_at": fetched_at, "source": source, "format": fmt,
-            "pages": len(pages), "row_count": len(rows), "partial": bool(partial), "imported": bool(imported)}
-    extras = {"note": note, "source_file": source_file, "seconds": seconds, "duplicates": dupes or None}
+            "pages": len(pages), "row_count": len(rows), "partial": bool(partial), "unreliable": bool(many or sparse),
+            "imported": bool(imported)}
+    # "duplicates" above 0 means unreliable to every reader, in old files too: a count under the limit is "moved"
+    bad = many or sparse
+    extras = {"note": note, "source_file": source_file, "seconds": seconds,
+              "duplicates": (dupes or None) if bad else None, "moved": None if bad else dupes or None}
     snap.update({k: v for k, v in extras.items() if v is not None})
     snap["rows"] = rows
     return snap
@@ -390,9 +487,23 @@ def _run(cmd, cwd):
     return p.returncode, p.stdout
 
 
-def fetch_board(slug, gateway, root, *, page_size=PAGE_SIZE, max_pages=MAX_PAGES, run=_run, pause=PAGE_PAUSE):
-    """Every page of the leaderboard through the gateway: (pages, partial, note)."""
-    pages, token, tokens, notes = [], None, set(), []
+def page_cap(known, page_rows):
+    """The pages a walk may take without --max-pages: those that hold known teams at page_rows rows a page, plus
+    PAGE_MARGIN; MAX_PAGES when either is unknown, and never more."""
+    if known < 1 or page_rows < 1:
+        return MAX_PAGES
+    return min(MAX_PAGES, -(-known // page_rows) + PAGE_MARGIN)
+
+
+def fetch_board(slug, gateway, root, *, page_size=PAGE_SIZE, max_pages=None, known=0, run=_run, pause=PAGE_PAUSE):
+    """Every page of the leaderboard through the gateway: (pages, partial, note).
+
+    The walk ends at the page with no next-page token. It stops early, partial, when a page fails, a token
+    repeats, a page brings no team that was not read before, or the page cap is reached: max_pages when given,
+    else page_cap() of known (the most teams a saved snapshot of the board holds) at the first page's row count.
+    """
+    pages, token, tokens, notes, seen = [], None, set(), [], set()
+    cap = MAX_PAGES if max_pages is None else max(1, max_pages)
     while True:
         args = ["competitions", "leaderboard", slug, "--show", "--format", "json", "--page-size", str(page_size)]
         if token:
@@ -408,31 +519,42 @@ def fetch_board(slug, gateway, root, *, page_size=PAGE_SIZE, max_pages=MAX_PAGES
             notes.append(f"page {len(pages) + 1} failed ({str(e).splitlines()[0][:80]})")
             break
         pages.append(rows)
+        fresh = {r["team_id"] for r in rows} - seen
+        seen |= fresh
         if dropped:
             notes.append(f"page {len(pages)}: {dropped} rows without a team id")
+        if len(pages) == 1 and max_pages is None:
+            cap = page_cap(known, len(rows) + dropped)
         if not token:
             return pages, bool(notes), "; ".join(notes) or None
         if token in tokens or not rows:
             notes.append("pagination stalled")
             break
-        if len(pages) >= max_pages:
-            notes.append(f"stopped after {max_pages} pages")
+        if not fresh:
+            notes.append(f"page {len(pages)} brought no new team: Kaggle is serving pages again")
+            break
+        if len(pages) >= cap:
+            notes.append(f"stopped after {len(pages)} pages" if max_pages is not None else
+                         f"stopped after {len(pages)} pages, the cap for the {known} teams known (--max-pages "
+                         "raises it)")
             break
         tokens.add(token)
         time.sleep(pause)
     return pages, True, "; ".join(notes)
 
 
-def take_snapshot(slug, *, gateway=None, directory=None, root=None, page_size=PAGE_SIZE, max_pages=MAX_PAGES,
+def take_snapshot(slug, *, gateway=None, directory=None, root=None, page_size=PAGE_SIZE, max_pages=None,
                   run=_run, pause=PAGE_PAUSE):
-    """Read the whole leaderboard and save it; returns (path, snapshot)."""
+    """Read the whole leaderboard and save it; returns (path, snapshot). max_pages None: the automatic page cap."""
     check_slug(slug)
     root = Path(root) if root else find_root()
     d = store_dir(slug, directory, root)
     gw = find_gateway(gateway)
+    # each saved row is a real team, so the largest saved read is the least the board holds
+    known = max((e.get("rows") or 0 for e in load_index(d)), default=0)
     t0, fetched_at = time.time(), utc_now()
     pages, partial, note = fetch_board(slug, gw, root or Path.cwd(), page_size=page_size, max_pages=max_pages,
-                                       run=run, pause=pause)
+                                       known=known, run=run, pause=pause)
     snap = build_snapshot(slug, pages, fetched_at=fetched_at, source="snapshot", fmt="json", partial=partial,
                           note=note, seconds=round(time.time() - t0, 1))
     return save_snapshot(d, snap), snap
@@ -755,11 +877,12 @@ def import_files(slug, files, *, fetched_at=None, directory=None, root=None):
 # ---- reading progress
 
 def _full(entries):
-    return [e for e in entries if not e["partial"]]
+    # the whole boards whose ranks can be trusted
+    return [e for e in entries if not e["partial"] and not e.get("unreliable")]
 
 
 def _baseline(full, cutoff):
-    """The newest full snapshot at or before cutoff, else the oldest; and whether it fell back."""
+    """The newest full, reliable snapshot at or before cutoff, else the oldest; and whether it fell back."""
     before = [e for e in full if when(e["fetched_at"]) <= cutoff]
     return (before[-1], False) if before else (full[0], True)
 
@@ -771,7 +894,8 @@ def direction(rows):
 
 
 def movers(d, since_hours, top=10, now=None):
-    """Largest score improvements and rank climbs from the board since_hours ago to the latest full one."""
+    """Largest score improvements and rank climbs from the board since_hours ago to the latest full, reliable
+    one."""
     full = _full(load_index(d))
     if len(full) < 2:
         return None
@@ -800,7 +924,8 @@ def movers(d, since_hours, top=10, now=None):
 
 
 def new_teams(d, since_hours, now=None):
-    """Teams on the latest full board that the board since_hours ago lacked, with when each first showed."""
+    """Teams on the latest full, reliable board that the board since_hours ago lacked, with when each first
+    showed."""
     full = _full(load_index(d))
     if not full:
         return None
@@ -819,7 +944,8 @@ def new_teams(d, since_hours, now=None):
 
 
 def resolve_team(d, entries, query):
-    """(team id, current name) for a team name, part of one, or id; the newest full board is searched first."""
+    """(team id, current name) for a team name, part of one, or id; the newest full, reliable board is searched
+    first."""
     q = query.strip()
     ordered = list(reversed(entries))
     full = _full(ordered)
@@ -841,7 +967,8 @@ def resolve_team(d, entries, query):
 
 
 def team_history(d, query):
-    """(team id, name, [(entry, row or None)]); a partial snapshot without the team is left out."""
+    """(team id, name, [(entry, row or None)]); a partial snapshot without the team is left out. An unreliable
+    snapshot stays in: its score is right, its rank is not (cmd_history prints ?)."""
     entries = load_index(d)
     if not entries:
         return None
@@ -898,16 +1025,27 @@ def _rel(p):
 def cmd_snapshot(a):
     path, snap = take_snapshot(a.slug, gateway=a.gateway, directory=a.dir, page_size=a.page_size,
                                max_pages=a.max_pages)
-    state = f"partial: {snap.get('note')}" if snap["partial"] else "full"
+    # the note of an unreliable read opens with that word, or carries it after a partial read's own notes
+    state = f"partial: {snap.get('note')}" if snap["partial"] else snap.get("note") if snap["unreliable"] else "full"
+    # a full read that met a few moved rows says so after its line
+    moved = f"; note: {snap['note']}" if state == "full" and snap.get("note") else ""
     print(f"{a.slug}: {snap['row_count']} rows, {snap['pages']} pages ({state}), {local(snap['fetched_at'])}; "
-          f"saved {_rel(path)}")
+          f"saved {_rel(path)}{moved}")
     return path, snap
 
 
 def cmd_show(a):
     path, snap = cmd_snapshot(a)
-    prev = [e for e in _full(load_index(path.parent)) if e["file"] != path.name
-            and e["fetched_at"] <= snap["fetched_at"]]
+    full = _full(load_index(path.parent))
+    if snap["unreliable"]:
+        older = [e for e in full if e["fetched_at"] <= snap["fetched_at"]]
+        if older:
+            path = path.parent / older[-1]["file"]
+            snap = read_snapshot(path)
+            print(f"this read is unreliable: showing the newest reliable snapshot instead, {local(snap['fetched_at'])}")
+        else:
+            print("this read is unreliable and no reliable snapshot is saved: the ranks below cannot be trusted")
+    prev = [e for e in full if e["file"] != path.name and e["fetched_at"] <= snap["fetched_at"]]
     before = {}
     if prev:
         before = {r["team_id"]: r["rank"] for r in read_snapshot(path.parent / prev[-1]["file"])["rows"]}
@@ -933,10 +1071,12 @@ def cmd_history(a):
     print(f"{name} (team {tid}) on {a.slug}: {sum(1 for _, r in rows if r)} of {len(rows)} snapshots")
     print(f"{'fetched':<17} {'rank':>5}  {'score':<9} {'submitted (UTC)':<17} flags")
     for e, r in rows:
-        flags = " ".join(f for f in ("partial", "imported") if e[f])
+        flags = " ".join(f for f in ("partial", "unreliable", "imported") if e.get(f))
         if r:
             renamed = f" (as {r['team_name']})" if r["team_name"] != name else ""
-            print(f"{local(e['fetched_at']):<17} {r['rank'] or '?':>5}  {str(r['score']):<9} "
+            # an unreliable read keeps the score; its rank is not shown
+            rank = "?" if e.get("unreliable") else r["rank"] or "?"
+            print(f"{local(e['fetched_at']):<17} {rank:>5}  {str(r['score']):<9} "
                   f"{_date(r['submission_date']):<17} {flags}{renamed}")
         else:
             print(f"{local(e['fetched_at']):<17} {'-':>5}  {'-':<9} {'(not on the board)':<17} {flags}")
@@ -947,7 +1087,7 @@ def cmd_movers(a):
     d = store_dir(a.slug, a.dir)
     res = movers(d, a.since, a.top)
     if res is None:
-        print(f"movers need two full snapshots; see summary for {_rel(d)}")
+        print(f"movers need two full, reliable snapshots; see summary for {_rel(d)}")
         return 1
     base, last = res["base"], res["last"]
     hours = (when(last["fetched_at"]) - when(base["fetched_at"])).total_seconds() / 3600
@@ -956,7 +1096,7 @@ def cmd_movers(a):
     print(f"{a.slug}: {local(base['fetched_at'])} -> {local(last['fetched_at'])} ({hours:.1f} h){note}; "
           f"{order} scores rank better; {res['improved']} teams improved")
     if base["file"] == last["file"]:
-        print("no full snapshot newer than the window start")
+        print("no full, reliable snapshot newer than the window start")
         return 0
     print("Score improvements:" if res["gains"] else "Score improvements: none")
     for m in res["gains"]:
@@ -974,7 +1114,7 @@ def cmd_new_teams(a):
     d = store_dir(a.slug, a.dir)
     res = new_teams(d, a.since)
     if res is None:
-        print(f"no full snapshots yet in {_rel(d)}")
+        print(f"no full, reliable snapshots yet in {_rel(d)}")
         return 1
     base, last = res["base"], res["last"]
     note = " (history is shorter than the window)" if res["fallback"] else ""
@@ -994,13 +1134,16 @@ def cmd_summary(a):
         return 1
     ents, full, cols, snaps = res["entries"], res["full"], res["cols"], res["snaps"]
     span = (when(ents[-1]["fetched_at"]) - when(ents[0]["fetched_at"])).total_seconds() / 3600
-    print(f"{a.slug}: {len(ents)} snapshots ({len(full)} full, {len(ents) - len(full)} partial; "
-          f"{sum(1 for e in ents if e['imported'])} imported) from {local(ents[0]['fetched_at'])} "
+    partial = sum(1 for e in ents if e["partial"])
+    odd = len(ents) - len(full) - partial
+    print(f"{a.slug}: {len(ents)} snapshots ({len(full)} full, {partial} partial"
+          + (f", {odd} unreliable" if odd else "") + f"; {sum(1 for e in ents if e['imported'])} imported) "
+          f"from {local(ents[0]['fetched_at'])} "
           f"to {local(ents[-1]['fetched_at'])} ({span:.1f} h) in {_rel(d)}")
     if not cols:
         return 0
     tz = when(cols[-1]["fetched_at"]).astimezone().strftime("%Z")
-    print(f"Top {len(res['leaders'])} of the latest full snapshot: rank and score over time ({tz})")
+    print(f"Top {len(res['leaders'])} of the latest full, reliable snapshot: rank and score over time ({tz})")
     print(f"  {'team':<28}" + "".join(f"{local(e['fetched_at'], '%m-%d %H:%M'):>14}" for e in cols))
     maps = [{r["team_id"]: r for r in rows} for rows in snaps]
     for lead in res["leaders"]:
@@ -1027,7 +1170,7 @@ def cmd_import(a):
     saved = import_files(a.slug, a.files, fetched_at=a.fetched_at, directory=a.dir)
     for p in saved:
         s = read_snapshot(p)
-        state = "partial" if s["partial"] else "full"
+        state = "partial" if s["partial"] else "unreliable" if s["unreliable"] else "full"
         print(f"imported {s['row_count']} rows ({state}) as of {local(s['fetched_at'])}: {_rel(p)}")
     if not saved:
         print("nothing new to import")
@@ -1069,8 +1212,10 @@ def main(argv=None):
     gw = argparse.ArgumentParser(add_help=False)
     gw.add_argument("--gateway", help="the kaggle.py gateway to call (default: the one beside this file)")
     fetch = argparse.ArgumentParser(add_help=False, parents=[gw])
-    fetch.add_argument("--page-size", type=int, default=PAGE_SIZE)
-    fetch.add_argument("--max-pages", type=int, default=MAX_PAGES)
+    fetch.add_argument("--page-size", type=int, default=PAGE_SIZE, help=f"rows a page (default {PAGE_SIZE})")
+    fetch.add_argument("--max-pages", type=pages_arg, help="stop the walk after this many pages (default: the pages "
+                       f"the most teams of any saved snapshot fill, plus {PAGE_MARGIN}; {MAX_PAGES} with no snapshot "
+                       "yet)")
     since = argparse.ArgumentParser(add_help=False)
     since.add_argument("--since", type=float, required=True, help="hours back")
     sub.add_parser("snapshot", parents=[common, fetch], help="read the whole leaderboard and save it")

@@ -1,4 +1,4 @@
-# rev. 6
+# rev. 7
 
 """kaggle_forum: watch a Kaggle competition's discussions.
 
@@ -24,7 +24,12 @@ page count and the files hold pages 1 to N. `diff` finds new, changed and
 missing topics; `fetch` reads each once through the gateway, read-only:
 `kaggle.py --sdk topic <id>` gives the opening post and every comment in
 full, replies nested, and marks an author the forum badges as a competition
-host (the read's host flag) with [host]. `show` records what it printed, and
+host (the read's host flag) with [host]. Under its first line `show` prints a
+"host mark:" line for the topics it shows: how many of their posts are marked
+[host], or "host mark: unknown" when none of them carries an author type at
+all (the pinned SDK's topic read gives none). Unknown is not zero: no [host]
+then does not mean that no host posted, so judge host posts by content and by
+the competition's host list. `show` records what it printed, and
 `commit` records exactly that as read, so a check that runs in between cannot
 count unseen topics or comments as read. Without topic ids, `show` prints the
 topics the last diff left pending, so it also says when they may miss newer
@@ -603,6 +608,26 @@ def badge(message):
     return " [host]" if message.get("host") is True else ""
 
 
+def host_mark(docs):
+    """The "host mark:" line for the topics shown (their stored JSON): how many of their posts the forum marks as
+    a host's, or unknown when no post carries an author type at all (no mark then proves nothing); None without
+    posts."""
+    posts = known = hosts = 0
+    for data in docs:
+        for m in [data.get("topic"), *(c for _d, c, _p in walk(data.get("comments")))]:
+            if isinstance(m, dict):
+                posts += 1
+                known += isinstance(m.get("host"), bool)
+                hosts += m.get("host") is True
+    if not posts:
+        return None
+    if not known:
+        return ("host mark: unknown (these topic reads carry no author type, so no [host] shows; that does not mean "
+                "no host posted: judge by content and the competition's host list)")
+    return (f"host mark: {hosts} of {posts} post{'s' if posts != 1 else ''} below marked [host]"
+            + (f"; unknown for {posts - known} read without an author type" if known < posts else ""))
+
+
 def render_topic(d, tid, slug, entry=None, new_only=False):
     """A topic as text: header, opening post, and the comments in thread order (new ones marked)."""
     return _render(d, tid, slug, entry, new_only)[0]
@@ -672,7 +697,8 @@ def load_shown(d):
 def show_topics(d, slug, ids=None, new_only=False, now=None):
     """The text of the given topics, or of the pending ones followed by the pending missing ones; None if
     there is nothing to show. What it printed goes to shown.json: each topic with its comment count and newest
-    comment as printed, and the missing topics listed, which is all that a plain commit records.
+    comment as printed, and the missing topics listed, which is all that a plain commit records. The second line
+    is the host mark of the topics shown (host_mark).
     """
     now = now or utc_now()
     pending, state = load_pending(d), load_state(d)
@@ -680,12 +706,16 @@ def show_topics(d, slug, ids=None, new_only=False, now=None):
     ids = list(ids) if ids else [*pending["new"], *pending["changed"]]
     if not ids and not missing:
         return None
-    parts, printed = [DISCLAIMER], {}
+    parts, printed, docs = [DISCLAIMER], {}, []
     for tid in ids:
         text, data = _render(d, tid, slug, state.get(str(tid)), new_only)
         parts += ["", text]
         if data is not None:
             printed[str(tid)] = read_entry(data, now)
+            docs.append(data)
+    mark = host_mark(docs)
+    if mark:
+        parts.insert(1, mark)
     if missing:
         parts += ["", "-- missing: read before, not in the last complete listing (deleted, moved, or skipped "
                       "while paging) --"]

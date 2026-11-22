@@ -1,4 +1,4 @@
-_Rev. 11_
+_Rev. 12_
 
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
@@ -8,6 +8,13 @@ when no skill was triggered. The how-to lives in `kaggle-cli.skill.md`.
 In a competition, read the playbook core (`how-to-kaggle.skill.md`) at every session start and
 after a compaction, the kind skill (`kaggle-kind-*.skill.md`) once the facts sheet records the
 kind, and `kaggle-kernels.skill.md` before building a submission.
+
+A Kaggle project's master runs only as an autocode agent (the `autocode` plugin, which this plugin requires). Its
+rule `autocode.rule.md` and its Start skill `autocode-start.skill.md` hold the wakes and their checks, the guard,
+watched background jobs, workers, compaction and reports to the owner: this rule does not repeat them. No
+session clock runs, and no turn is owed by the hour: the hourly reads below run as the check of the `hourly` wake
+(`sh tools/kaggle_hourly_check.sh <slug>`, which runs `tools/kaggle_hourly.py <slug> --check`), so a quiet hour
+takes no turn. A woken hour ends with `tools/kaggle_hourly.py <slug> --close`.
 
 - **Gateway only.** Every Kaggle command runs through this plugin's `tools/kaggle.py`, started from
   the project root or task folder - never a bare `kaggle`, `pip install kaggle`, or
@@ -78,6 +85,9 @@ kind, and `kaggle-kernels.skill.md` before building a submission.
 ## Owner Directives for Kaggle Work
 
 The owner's standing directions for every Kaggle project. The pack holds the owner's grants, limits and values.
+The tags on these lines and in the playbook (`ODnn`, `Cn`, `Dn`) are this plugin's registry of directions: a
+number is never used twice, and a project never mints an `ODnn`. A project numbers its own directions with an `L`
+prefix (`L01`, `L02`, ...) in its own files, so a later plugin release cannot give its number to something else.
 
 - Decide on your best judgement and report; ask the owner only about what this rule or the pack reserves for
   the owner. <!-- OD01 -->
@@ -85,8 +95,6 @@ The owner's standing directions for every Kaggle project. The pack holds the own
   confirm list still apply. <!-- OD52 -->
 - Answer the owner first, in about 100 words unless the owner asks for more, in plain words; details only on
   request. This applies to the master's messages to the owner. <!-- OD54 -->
-- Keep the master's prompt cache warm: a master turn at least every 55 minutes (the session clock wakes it at each
-  schedule event and at its cap: `--cap 55` in a Claude Code interactive session, 25 by default). <!-- OD03 -->
 - Never probe hidden scorers or hidden test data. <!-- OD04 -->
 - Never hide our real score with 1-p (inverted) submissions. <!-- OD05 -->
 - The control machine stays light: agents, git, light scripts and small reads only; no heavy compute and no
@@ -98,13 +106,21 @@ The owner's standing directions for every Kaggle project. The pack holds the own
   model that actually ran; the playbook's cross-family review adds another vendor's model. <!-- OD07 -->
 - This model list replaces the older line that put every worker on the frontier tier, and for Kaggle work it
   overrides the tier defaults of `info/model-tiers.md` and the subagents rule. <!-- C1 -->
-- Workers inherit the master's effort, which the owner chooses per session; no file fixes the level. <!-- C6 -->
+- Workers run at the master's effort, never above it; the owner chooses that effort per session, and no file
+  fixes the level. <!-- C6 -->
 - Run browsers headless by default, and close every browser you start. <!-- OD09 -->
-- Track spend (AI, cloud GPUs, other paid services) and report it with each status: each cost other than
-  Claude Code is one line in `<pack>/.memory/spend.jsonl`. Check the daily AI budget when the pack sets
-  `ai.daily_budget_usd`. <!-- OD11 -->
+- Track spend (AI, cloud GPUs, other paid services) and report it with each status: autocode counts the session's
+  own AI spend, its subagents and jobs included, and each cost it does not count is one line in
+  `<pack>/.memory/spend.jsonl`. Check the daily AI budget when the pack sets `ai.daily_budget_usd`. <!-- OD11 -->
 - One status page per project, `reports/status.pdf`, built by this plugin's `tools/kaggle_status.py` from
   `reports/status.json`, replaces every live PDF (live plan, phase progress reports): current state, our and
   the top teams' leaderboard progress, plan and timeline, spending, resources and their use, open questions and
-  suggestions. Rebuild it at every hourly pass and on every plan change (render plus layout check only); keep
-  it out of git. <!-- OD41 -->
+  suggestions. The hour-close (`tools/kaggle_hourly.py <slug> --close`) rebuilds it at each woken hour; rebuild
+  it on every plan change too (render plus layout check only). A quiet hour brings no turn and no rebuild, and a
+  page that is only old does not wake the master. Keep it out of git. <!-- OD41 -->
+
+Retired directions, their numbers never used again:
+
+- OD03 (a master turn at least every 55 minutes, to keep the prompt cache warm): retired by the owner on
+  2026-11-22. Measured on two masters, the cache lived 5 minutes through the model hub, so an hourly turn wrote
+  the whole context again whatever the rule said; a wake check that skips quiet hours saves more.

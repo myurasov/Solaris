@@ -1,9 +1,9 @@
 ---
 name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
-summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the storage, listing without the CLI, logging insights with topic ids, and privacy.
+summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the host mark (and what an unknown host mark means), the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 6_
+_Rev. 7_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -32,17 +32,34 @@ the web.
    `show <slug>` prints changed topics whole. Either way it records what it printed. Without ids, `show` also
    says when its pending topics may miss newer posts: the listing is over 10 minutes old (`listing N min old: run
    check ...`), a newer listing is not diffed yet, or there is none. Only `check` sees posts made since. `[host]`
-   marks an author the forum badges as a host. In a master session, leave long or code-heavy posts (agent prompts,
-   model output) to a worker that returns a short neutral summary (the kaggle rule).
+   marks an author the forum badges as a host, and a `host mark:` line under the first line says how far to
+   trust that (The host mark, below). In a master session, leave long or code-heavy posts (agent prompts, model
+   output) to a worker that returns a short neutral summary (the kaggle rule).
 3. **Log what matters** (below) with topic ids and actions. Act at once on rule, eligibility or data-bug
    findings.
 4. **`commit <slug>`** records as read exactly what `show` printed since the last commit: each topic up to the
    newest comment it showed, and the missing topics it listed (as gone). A check that runs between `show` and
    `commit` cannot make unseen topics or comments count as read: they stay pending for the next `show`.
 
-Run `check` at the agent's hourly pass, inside the session, never from a daemon, cron job or other watcher. The
-OAuth login expires after about 12 hours, so a long unattended session needs the long-lived API token (the
-`kaggle-cli` skill's Signing In).
+**The host mark.** Under its first line `show` prints one of:
+
+- `host mark: H of P posts below marked [host]`: the topic reads carry an author type, so a post without
+  `[host]` is not a host's. `; unknown for K read without an author type` is added when some posts carry none.
+- `host mark: unknown (...)`: none of the topics shown carries an author type, so no `[host]` shows. That does
+  not mean that no host posted. The pinned SDK's topic read gives no author type, so the mark is unknown today.
+
+While the mark is unknown, judge host posts by content and by the competition's host list, and name the hosts
+in the pre-submit check's `config.json` (`<context>/__data/kaggle/<slug>/presubmit/config.json`, `"hosts":
+["<display name>", ...]`: the `kaggle-checks` skill), which finds their posts by name.
+
+The check of the master's `hourly` autocode wake runs `check` among its reads (the wake calls `sh
+<pack>/plugins/kaggle/tools/kaggle_hourly_check.sh <slug>`: the `kaggle-checks` skill). A new topic or a host
+post wakes the master. New comments in known topics wake too, until that `config.json` names the hosts: any
+of them may be a host's. With hosts named, a named host's comment wakes and the others are held, printed at
+the next wake and at the hour-close (`"kaggle.wake_on"` with `"comments"` wakes for them as well). The `forum`
+line of the pass names the topics still to `show` and `commit`. No daemon, system cron job or other watcher
+outside the session. The OAuth login expires after about 12 hours, so a long unattended session
+needs the long-lived API token (the `kaggle-cli` skill's Signing In).
 
 ## Commands
 
@@ -61,7 +78,7 @@ Run from the project root or task folder:
 | `list <slug>` | Reads the topic list through the gateway (`competitions topics list <slug> --sort-by recent --format json -p <N>`, 20 topics a page, every page up to `--max-pages`, default 50) and saves it. `--from <page.json>... --pages <N>` takes pages a browser saved instead (below). |
 | `diff <slug>` | Compares the newest listing (or `--listing <file>`) with what was read: NEW topics, CHANGED ones (the comment count moved), BACK (a missing topic listed again) and MISSING ones (read before, not listed now; reported once, and only from a complete listing). Saves their ids to `pending.json`. |
 | `fetch <slug> [<id>...]` | Reads each topic (default: the pending new and changed ones) once, through the gateway's SDK read (`kaggle.py --sdk topic <id>`): the opening post and every comment in full, as HTML, each reply nested under the comment it answers. A failed read keeps the earlier file; after a 429 the rest waits for the next check. |
-| `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones, then the pending missing ones): title, author, date, link, the opening post, and the reply tree, each reply indented under its comment, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. Records what it printed in `shown.json`. |
+| `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones, then the pending missing ones): title, author, date, link, the opening post, and the reply tree, each reply indented under its comment, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. Its second line is the `host mark:` line. Records what it printed in `shown.json`. |
 | `commit <slug> [<id>...]` | Records as read what `show` printed since the last commit (each topic up to the newest comment it showed; the missing topics it listed, as gone). A topic whose listing showed more comments than were read stays pending. With ids: those topics as shown, or else as fetched. |
 
 `check`, `list` and `fetch` take `--gateway <path>` (default: the `kaggle.py` beside the tool) and `--pause

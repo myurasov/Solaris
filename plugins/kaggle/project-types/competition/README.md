@@ -24,7 +24,7 @@ only the steps Kaggle reserves for a person and reads one status page.
 | **Best** | none yet |
 | **Updated** | {{DATE}} |
 
-The live state is the status page, `reports/status.pdf`, rebuilt at every hourly pass and plan change. It and its
+The live state is the status page, `reports/status.pdf`, rebuilt at each hour-close and plan change. It and its
 source, `reports/status.json`, carry private operations data (machines, spend), so they stay out of git and reach
 the owner through file sync.
 
@@ -33,7 +33,7 @@ the owner through file sync.
 Newest first, one line per push.
 
 - **{{DATE}}:** the project was created with Solaris (type `{{TYPE}}`): the ai-pack with a master, a worker and a
-  reviewer, the kaggle and reporting plugins, and the day-0 setup.
+  reviewer, the kaggle, autocode and reporting plugins, and the day-0 setup.
 
 ## The Competition
 
@@ -55,9 +55,10 @@ The short form of the facts sheet in `{{PACK}}/instructions.md` (Competition Fac
   attacks every result and kernel before it counts.
 - **Know-how:** the kaggle plugin's playbook and skills (`{{PACK}}/plugins/kaggle/`), plus this project's
   `{{PACK}}/instructions.md`: the facts sheet, the owner's standing grant and rules, the process, the lessons.
-- **Rhythm:** an in-session clock wakes the master for each scheduled event (the hourly pass, the reset, the next
-  day's plan); an hourly read-only pass (board, public notebooks, forum, submissions, compute, spend) flags what
-  needs a decision; no daemon or outside watcher.
+- **Rhythm:** the master runs as an autocode agent, and its wakes bring it a turn for each scheduled event (the
+  reset, the next day's plan, a deadline); an hourly read-only pass (board, public notebooks, forum, submissions,
+  compute, spend) runs as a wake's check and wakes it only when something needs a decision, and the master
+  closes each woken hour; no daemon or outside watcher.
 - **Kaggle:** every command goes through the plugin's pinned CLI gateway; each submission passes the pre-submit
   check and the gated submit.
 - **Compute:** {{ANSWER_COMPUTE}}.
@@ -66,7 +67,8 @@ The short form of the facts sheet in `{{PACK}}/instructions.md` (Competition Fac
 
 - **Web-only steps** stay with the owner, asked with the exact URL: accepting the rules, phone verification, teams and
   merges, the final picks, anything public, and model licence consent.
-- **The master session:** the owner starts it and resumes it after a pause, at the effort the owner chooses.
+- **The master session:** an OpenCode 2 session that runs as an autocode agent. The owner starts it, at the
+  effort the owner chooses, and opens it again after a reboot where autocode cannot start it by itself.
 - **Standing grant and limits:** the grant is in `{{PACK}}/instructions.md` (Owner's Standing Grant; the answer at
   creation: {{ANSWER_UNATTENDED}}); the daily limits are in the private `{{PACK}}/.memory/config.json`. Any change is
   the owner's.

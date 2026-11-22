@@ -3,7 +3,7 @@ name: kaggle-kind-llm-agents
 triggers: ["agent competition", "llm competition", "llm-judged competition", "llm judge", "sampled scorer"]
 summary: Kind notes for Kaggle competitions whose scorer runs a model or an agent - score bands, agent families, repeats, new evaluation hosts and GPU types, zero-weight adapter controls, local judges, per-run time limits, a one-pending-entry limit, structural fixes, model text kept out of the master. Read once the facts sheet records this kind.
 ---
-_Rev. 3_
+_Rev. 4_
 
 # Skill: kaggle-kind-llm-agents - Agent and LLM Scorers <!-- omit in toc -->
 
@@ -63,11 +63,15 @@ practice for the kind, without evidence of our own yet.
 - For agent competitions judged under a per-run time limit, microbenchmarks misjudged the scorer's speed: measure the
   local-to-scorer time factor from real traces under realistic load, time the finalist on a twin of the scoring
   machine, and plan for the worst case (every task at its cap). An overrun can score nothing.
+- **A per-task time limit may not stop a blocking tool call:** an asyncio timeout fired only after a synchronous tool
+  call on the event loop returned, so one code search on a large repository ran about 55 minutes past a 1- or 2-minute
+  limit. Before trusting a limit as a timing bound, check how each tool runs (event loop, thread or process) and
+  whether it can be cancelled; time long tool calls at full length; avoid blocking tools when an overrun scores nothing.
 - **Under a one-pending-entry limit with long scorer queues, plan the day's entry early:** when scoring takes many
   hours and Kaggle refuses a new entry while one is pending, an entry left for late in the day can find the slot
   blocked until the reset (two of ten slots were lost so). Have the day's entry built and checked a day ahead,
-  submit it early in the Kaggle day, and retry each refusal at every check until the reset (the playbook core,
-  Daily Submission Discipline).
+  submit it early in the Kaggle day, and retry each refusal until the reset, at the times the playbook core
+  gives (Daily Submission Discipline).
 
 ## Pitfalls
 

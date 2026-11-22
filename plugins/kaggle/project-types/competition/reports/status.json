@@ -5,7 +5,7 @@
   "timezone": "{{ANSWER_TIMEZONE}}",
   "start": "{{DATE}}",
   "phase": "Phase 0: the whole path in one day (an own baseline, a faithful fork, one-change probes); then {{ANSWER_GOAL}}",
-  "summary": "Created {{DATE}}. Day-0 setup: the Kaggle sign-in, the competition facts sheet and its kind, the first board snapshot and public-notebook survey, the session clock, then the first plan.",
+  "summary": "Created {{DATE}}. Day-0 setup: the Kaggle sign-in, the competition facts sheet and its kind, the first board snapshot and public-notebook survey, the schedule of wakes, then the first plan.",
   "outlook": {"at": "", "lines": []},
   "lineage": [],
   "tracks": [],
@@ -15,7 +15,7 @@
     "Join or form the team and check its name: https://www.kaggle.com/competitions/{{ANSWER_COMPETITION}}/team"
   ],
   "plan": [
-    {"when": "{{DATE}}", "what": "Day-0 setup: sign-in, facts sheet and kind, forum, board snapshot, notebook survey, status page, session clock", "status": "in progress"},
+    {"when": "{{DATE}}", "what": "Day-0 setup: sign-in, facts sheet and kind, forum, board snapshot, notebook survey, status page, schedule of wakes", "status": "in progress"},
     {"when": "{{DATE}}", "what": "First plan: Phase 0's slots in submissions/PLAN.md, the ideas backlog, the first research jobs", "status": "pending"}
   ],
   "resources": [

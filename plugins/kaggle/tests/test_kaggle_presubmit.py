@@ -5,10 +5,12 @@
 The check runs for real, with kaggle_forum.py and kaggle_lb.py reading through the stand-in gateway (kaggle_standin).
 """
 
+import gzip
 import json
 import subprocess
 import sys
 import unittest
+import zlib
 from datetime import timedelta
 from pathlib import Path
 
@@ -231,6 +233,9 @@ class HostBadgeTests(Check):
         # a read without the badge flag (an SDK without the author type): host posts are not told apart
         out = self.check()[1]
         self.assertIn('HOST POSTS: no hosts named (config.json "hosts", "host_topics")', out)
+        # no post carries an author type: the mark is unknown, which is not "no host posted"
+        self.assertIn('HOST POSTS: no hosts named (config.json "hosts", "host_topics") and host mark: unknown (the '
+                      "forum read gives no author type): host posts are not told apart. Judge them by content\n", out)
         self.assertNotIn("[host post]", out)
         # the topics are still pending, so the next check reads them again, now with the badge
         for tid in (4, 5):
@@ -240,6 +245,119 @@ class HostBadgeTests(Check):
         self.assertIn("(add them): Hana\n", out)
         self.assertNotIn("no hosts named", out)
         self.assertIn('[host post] 4 "Ruling"\n', out)
+
+
+    def host_line(self, out):
+        (line,) = [x for x in out.splitlines() if x.startswith("HOST POSTS")]
+        return line
+
+    def test_without_an_author_type_the_mark_is_unknown_never_none(self):
+        self.forum([{"id": 1, "title": "Welcome", "posted": 72, "author": "Pat"}])
+        self.reviewed()
+        self.config(hosts=["Host Hana"])
+        topics = [{"id": 1, "title": "Welcome", "posted": 72, "author": "Pat",
+                   "comments": [("Quinn", 0.5, "Is this allowed?")]}]
+        self.forum(topics)
+        # hosts are named, none of them posted, and the read gives no author type: not "none new"
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        self.assertEqual(self.host_line(out), "HOST POSTS: host mark: unknown (the forum read gives no author type); "
+                                              "none new by the hosts config.json names. A host it does not name is "
+                                              "not told apart: judge by content")
+        self.assertNotIn("HOST POSTS: none new", out)
+        mod = self.module("kaggle_presubmit")
+        self.assertEqual(mod.check(SLUG, self.root, gateway=self.gateway, save=False)["host_mark"], "unknown")
+        # a named host found by name still counts, mark or no mark
+        topics[0]["comments"].append(("Host Hana", 0.2, "Yes."))
+        self.forum(topics)
+        self.assertEqual(self.host_line(self.check()[1]), "HOST POSTS: 1")
+        # once the read carries author types, a count of none is a real none
+        self.forum([dict(topics[0], comments=topics[0]["comments"][:1])])
+        self.badge(1, set())
+        code, out, _ = self.check()
+        self.assertEqual(self.host_line(out), "HOST POSTS: none new")
+        self.assertEqual(mod.check(SLUG, self.root, gateway=self.gateway, save=False)["host_mark"], "known")
+
+    def test_a_forum_without_posts_has_no_mark_to_miss(self):
+        mod = self.module("kaggle_presubmit")
+        res = mod.check(SLUG, self.root, gateway=self.gateway, save=False)
+        self.assertIsNone(res["host_mark"])
+        self.assertEqual(self.host_line("\n".join(mod.report(res, SLUG, res["cfg"]))),
+                         'HOST POSTS: no hosts named (config.json "hosts", "host_topics"): host posts are not told '
+                         "apart")
+
+
+class BoardWalkTests(Check):
+    KEY = f"competitions leaderboard {SLUG} --show --format json --page-size 200"
+
+    def rows(self, teams):
+        return json.dumps([{"teamId": zlib.crc32(name.encode()) % 10 ** 6 + 1, "teamName": name,
+                            "submissionDate": "2026-09-30T00:00:00", "score": str(score)} for name, score in teams])
+
+    def two_pages(self, first, second):
+        """A board the CLI serves on two pages: the first names the token of the second."""
+        self.answer(self.KEY, "Next Page Token = T1\n" + self.rows(first))
+        self.answer(self.KEY + " --page-token T1", self.rows(second))
+
+    def board_line(self, out):
+        lines = out.splitlines()
+        i = next(n for n, x in enumerate(lines) if x.startswith("BOARD"))
+        return lines[i], lines[i + 1] if lines[i + 1].startswith("  note:") else None
+
+    def test_max_pages_is_passed_on_to_the_board_walk(self):
+        self.two_pages([("Alpha", 0.90), ("Beta", 0.85)], [("Gamma", 0.80), ("Delta", 0.75)])
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        self.assertTrue(self.board_line(out)[0].startswith("BOARD: 4 teams, "), out)
+        whole = sorted(p.name for p in self.store("leaderboard").glob("*.json.gz"))
+        # the walk stops after one page: the read is partial, and the check goes by the whole board before it
+        code, out, err = self.check("--max-pages", "1")
+        line, note = self.board_line(out)
+        self.assertTrue(line.startswith("BOARD: 4 teams, "), out)
+        self.assertEqual(note, f"  note: this read was partial: the newest full snapshot is {whole[-1]}")
+        calls = [" ".join(c["args"]) for c in self.calls() if c["args"][:2] == ["competitions", "leaderboard"]]
+        self.assertEqual(calls, [self.KEY, self.KEY + " --page-token T1", self.KEY])
+        partial = [p.name for p in self.store("leaderboard").glob("*partial*")]
+        self.assertEqual(len(partial), 1)
+        for bad in (["--max-pages", "0"], ["--max-pages", "x"], ["--ack", "--max-pages", "3"]):
+            self.assertEqual(self.tool("kaggle_presubmit.py", SLUG, *bad)[0], 2, bad)
+
+    def test_an_unreliable_read_is_passed_by_for_the_newest_reliable_snapshot(self):
+        # Kaggle serves the first page again as the second: a whole read, with duplicates, so its ranks are off
+        garbled = [("Gamma", 0.97), ("Alpha", 0.90)]
+        self.two_pages(garbled, garbled)
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        self.assertEqual(self.board_line(out)[0],
+                         "BOARD: not read (no full snapshot to compare: the read was unreliable)")
+        self.assertIn("[read failed] board", out)
+        # a clean read, reviewed
+        self.board([("Alpha", 0.90), ("Beta", 0.85)])
+        self.reviewed()
+        clean = sorted(p.name for p in self.store("leaderboard").glob("*.json.gz") if "unreliable" not in p.name)
+        # the next garbled read changes nothing: the board is the reliable one, and the check says why
+        self.two_pages(garbled, garbled)
+        code, out, err = self.check()
+        line, note = self.board_line(out)
+        self.assertIn("#1 Alpha 0.9", line)
+        self.assertEqual(note, "  note: this read was unreliable (its pages repeated teams, so its ranks cannot be "
+                               f"trusted): the newest reliable snapshot is {clean[-1]}")
+        self.assertNotIn("[board move]", out)
+        self.assertNotIn("Gamma", out)
+
+    def test_a_snapshot_saved_before_the_flag_is_unreliable_by_its_duplicates(self):
+        d = self.store("leaderboard")
+        d.mkdir(parents=True)
+        rows = [{"rank": 1, "team_id": 1, "team_name": "Alpha", "score": "0.9"}]
+        for name, extra in (("20260928T100000Z.json.gz", {}), ("20260928T110000Z.json.gz", {"duplicates": 3}),
+                            ("20260928T120000Z.json.gz", {"unreliable": True})):
+            with gzip.open(d / name, "wt", encoding="utf-8") as f:
+                json.dump({"fetched_at": "2026-09-28T10:00:00Z", "partial": False, "rows": rows, **extra}, f)
+        self.assertEqual([bool(P.board_view(d, n)) for n in sorted(p.name for p in d.iterdir())],
+                         [True, False, False])
+        self.assertEqual([P.unreliable(x) for x in ({}, {"duplicates": None}, {"unreliable": False, "duplicates": 0},
+                                                    {"duplicates": 1}, {"unreliable": True})],
+                         [False, False, False, True, True])
 
 
 class RateLimitTests(Check):

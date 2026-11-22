@@ -1,4 +1,4 @@
-# rev. 7
+# rev. 8
 
 """kaggle gateway: the pinned Kaggle CLI, installed per project or task.
 
@@ -35,6 +35,8 @@ code pass through. The reads (`--sdk <read> --help` for each one's options):
                                              score and the error text the CLI drops
     --sdk dataset <owner/slug> [--json]      a dataset's current version number and its versions
                                              (number, date, notes)
+    --sdk kernel <owner/slug> [--json]       a kernel's current version number and the md5 of its
+                                             source, to pin a fork to a vetted version
 
 Inside a project or task, two hooks from the tools beside this file run first,
 and neither can block or change a Kaggle command: an activity stamp for account
@@ -73,8 +75,16 @@ Kaggle refused the submit (<status> <kind>): <message>`. Any other status
 reads the body's error message and kind only, never a header or the request,
 so no token reaches the output; the CLI's output and exit code are unchanged.
 
-Stdlib only; needs uv on PATH. Gateway messages go to stderr, so stdout stays
-exactly what the Kaggle CLI (or kaggle_sdk.py) printed.
+The environment holds the pinned CLI, the pinned kagglesdk and a pinned six.
+The CLI imports six (kaggle/models/upload_file.py) without naming it as a
+dependency, and it used to arrive with python-dateutil, which no longer needs
+it; without six every CLI call fails with ModuleNotFoundError. A venv built
+before six was added is rebuilt once, at the next call.
+
+Stdlib only; needs uv, found on PATH or else at ~/.local/bin/uv or
+~/.cargo/bin/uv (where its installer puts it: a non-login ssh shell often has
+neither on PATH). Gateway messages go to stderr, so stdout stays exactly what
+the Kaggle CLI (or kaggle_sdk.py) printed.
 """
 
 import argparse
@@ -88,12 +98,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-# Latest release of the newest minor line (2.2), plus the kagglesdk it was tested
-# with (the SDK holds the auth/HTTP/API code and would otherwise float). Move both
-# together with the vendored kaggle-cli/ skill from the same tag - see the README.
+# The CLI release the plugin's tools were tested with and the vendored kaggle-cli/ skill was taken from (the tag of
+# the same number), plus the kagglesdk it was tested with (the SDK holds the auth/HTTP/API code and would otherwise
+# float). It is not the newest release: a later one is taken only by a decided bump, which moves both pins together
+# with the vendored kaggle-cli/ skill from the new tag - see the README.
 PIN = "2.2.4"
 SDK_PIN = "0.1.37"
-REQS = [f"kaggle=={PIN}", f"kagglesdk=={SDK_PIN}"]
+# six: the pinned CLI imports it and does not declare it (python-dateutil 2.x pulled it in; 4.0 does not). Pinned
+# like the other two: this environment holds named versions only
+SIX_PIN = "1.17.0"
+REQS = [f"kaggle=={PIN}", f"kagglesdk=={SDK_PIN}", f"six=={SIX_PIN}"]
+# where uv's installer puts it, for a shell whose PATH lacks them (a non-login ssh shell, a cron job)
+UV_HOMES = ("~/.local/bin/uv", "~/.cargo/bin/uv")
 ENV_DIR = ".venv-kaggle"
 STAMP = ".solaris-kaggle-pin"
 # hook switches: monitoring calls leave no activity stamp; 0 stops saving leaderboard reads
@@ -188,9 +204,15 @@ def rel(p):
 
 
 def find_uv():
+    """uv on PATH, else where its installer puts it (UV_HOMES); exits with a message when there is none."""
     uv = shutil.which("uv")
+    for path in () if uv else UV_HOMES:
+        path = os.path.expanduser(path)
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
     if not uv:
-        sys.exit("kaggle gateway: uv not found on PATH - install it first (https://docs.astral.sh/uv/)")
+        sys.exit("kaggle gateway: uv not found on PATH, in ~/.local/bin or in ~/.cargo/bin - install it first "
+                 "(https://docs.astral.sh/uv/)")
     return uv
 
 

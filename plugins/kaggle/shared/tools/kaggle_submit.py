@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle_submit: one gated competition submission, from a submission record.
 
@@ -9,6 +9,8 @@ with a one-line heads-up).
 
     python3 <plugin-dir>/tools/kaggle_submit.py <record.json>                             checks; prints the command
     python3 <plugin-dir>/tools/kaggle_submit.py <record.json> --go --review "<one line>"  checks, then one submit
+    python3 <plugin-dir>/tools/kaggle_submit.py <record.json> --landed <ref>              records an unclear attempt
+                                                                                          as landed; no Kaggle call
 
 The record is a JSON file kept with each submission; fields other than these
 are left as they are:
@@ -24,9 +26,10 @@ relative to the record's folder. It refuses (exit 3) unless:
 - the record is complete: competition, file and a one-line message, and with
   kernel a version;
 - no earlier attempt in the record landed or may have landed: after an unclear
-  one, read `competitions submissions <slug>` and `competitions
+  one, read `competitions submissions <slug> --page-size 100` and `competitions
   submission-limits <slug>` first, and pass --checked only when it is not listed
-  (an attempt Kaggle refused did not land, so it blocks nothing);
+  (an attempt Kaggle refused did not land, so it blocks nothing); when it is
+  listed, record that with --landed (below);
 - the pre-submit check (kaggle_presubmit.py) ran at most --fresh minutes ago
   (default 30) and a review recorded whatever it found (--ack after its last
   change);
@@ -46,11 +49,30 @@ reads the body's message, never a header), with that reason in the attempt's
 outcome that may have landed (a timeout, a 5xx, a failed upload, any other
 4xx such as 408, 409 or 499, or one of those five without Kaggle's message).
 It never retries: after
-an unclear result read `competitions submissions` and `competitions
-submission-limits` before anything else; after a refusal nothing landed, so a
+an unclear result read `competitions submissions <slug> --page-size 100` and
+`competitions submission-limits <slug>` before anything else; after a refusal nothing landed, so a
 later --go may follow once its reason is gone (a pending submission scored,
 say). The gateway refuses a `competitions submit` unless the call carries
 KAGGLE_SUBMIT_GATED=1, which this tool sets on its own submit call only.
+
+After an unclear attempt, the submissions read decides between two flags:
+
+- Listed: a row carries the record's exact message and is dated inside the
+  attempt's time window (from the attempt's "at" to a few minutes after its
+  "ended"). Run --landed <ref> with that row's ref (the submission's number).
+  It rewrites the record's last attempt that may have landed (result "unclear",
+  or "submitting" when the run was cut off) to "submitted", with the ref in
+  "ref", the result it had in "was" and the time of the change in "marked". The
+  record then reads as submitted, so a later --go on it is refused, as after
+  any submit. --landed makes no Kaggle call and runs none of the other checks;
+  it takes no --go, --review, --checked or --fresh. It refuses (exit 3) when the
+  record already holds a submitted attempt or holds none that may have landed.
+- Not listed: a clean read shows no row with the exact message in that time
+  window. Only then pass --checked with the next --go. A read that failed (an
+  error, HTTP 429, a timeout) or came back empty is not "not listed": it says
+  nothing about the attempt, so read again before either flag. A team with more
+  than 20 submissions reads with `--page-size 100`, the CLI's default being the
+  newest 20 rows.
 
 One run at a time per record: a run takes a non-blocking flock on
 <record>.lock before it reads the record and holds it to the end, so a second
@@ -60,9 +82,11 @@ stays beside the record.
 
 Run it from the project root or task folder; the gateway is --gateway, default
 the kaggle.py beside this file. Exit codes: 0 submitted (without --go: every
-check passed), 1 error, 2 bad usage, 3 refused by the checks (nothing sent), 4
-unclear result (may have landed), 5 refused by Kaggle (nothing landed; the
-reason is printed and recorded). Stdlib only.
+check passed; with --landed: the attempt is recorded as landed), 1 error, 2 bad
+usage, 3 refused by the checks (nothing sent; with --landed: nothing changed),
+4 unclear result (may have landed), 5 refused by Kaggle (nothing landed; the
+reason is printed and recorded). The only file written is the record itself,
+through a temp file and a rename. Stdlib only.
 """
 
 import argparse
@@ -92,6 +116,10 @@ REFUSED_RE = re.compile(r"^kaggle gateway: Kaggle refused the submit \((%s)(?: (
                         % "|".join(map(str, REFUSED_STATUSES)), re.M)
 STATUS_RE = re.compile(r'has status "(?:KernelWorkerStatus\.)?(\w+)"')
 EXIT_REFUSED, EXIT_UNCLEAR, EXIT_KAGGLE_REFUSED = 3, 4, 5
+# the results of an attempt that may have landed: --landed rewrites the last such attempt to "submitted"
+MAY_HAVE_LANDED = ("unclear", "submitting")
+# the submissions read the messages name: the CLI's default page is the newest 20 rows
+SUBMISSIONS_PAGE = 100
 REVIEW_MAX = 500
 TOOLS = Path(__file__).resolve().parent
 # the gateway passes a `competitions submit` only with this mark, which this tool sets on its own submit call
@@ -230,9 +258,30 @@ def attempt_problem(rec, slug, checked):
     if attempts and not checked and attempts[-1].get("result") != "refused":
         last = attempts[-1]
         return (f"the attempt at {last.get('at')} ended {last.get('result')!r}, so it may have landed: read "
-                f"`competitions submissions {slug}` and `competitions submission-limits {slug}` first, and pass "
-                "--checked only when it is not listed")
+                f"`competitions submissions {slug} --page-size {SUBMISSIONS_PAGE}` and `competitions "
+                f"submission-limits {slug}` first, and pass --checked only when it is not listed (a failed or empty "
+                "read is not that); when it is listed, record it with --landed <ref>")
     return None
+
+
+def mark_landed(rec, ref, now):
+    """Rewrite the record's last attempt that may have landed (MAY_HAVE_LANDED) to "submitted" with the submission's
+    ref: (that attempt, None), or (None, why not) with the record unchanged."""
+    attempts = rec.get("attempts", [])
+    if not isinstance(attempts, list):
+        return None, '"attempts" is not a list (this tool writes it)'
+    attempts = [x for x in attempts if isinstance(x, dict)]
+    done = [x for x in attempts if x.get("result") == "submitted"]
+    if done:
+        return None, (f"the record already holds a submitted attempt (at {done[-1].get('at')}"
+                      + (f", ref {done[-1]['ref']}" if done[-1].get("ref") else "") + "): nothing to mark")
+    open_ = [x for x in attempts if x.get("result") in MAY_HAVE_LANDED]
+    if not open_:
+        return None, ("no attempt in the record may have landed (none ended 'unclear' or was cut off while "
+                      "'submitting'): nothing to mark")
+    attempt = open_[-1]
+    attempt.update(was=attempt["result"], result="submitted", ref=ref, marked=iso(now))
+    return attempt, None
 
 
 def review_problem(review, go):
@@ -285,6 +334,13 @@ def minutes_arg(text):
     return v
 
 
+def ref_arg(text):
+    # a submission's ref, as `competitions submissions` lists it: its number
+    if not text.isdigit() or int(text) < 1:
+        raise argparse.ArgumentTypeError(f"not a submission ref (its number in `competitions submissions`): {text!r}")
+    return int(text)
+
+
 def main(argv=None, now=None):
     p = argparse.ArgumentParser(prog="kaggle_submit.py", description="One gated Kaggle submission from a submission "
                                 "record (a Kaggle write: --go only with the owner's approval or standing grant).")
@@ -293,10 +349,16 @@ def main(argv=None, now=None):
     p.add_argument("--review", help="one line: what was new in the pre-submit check, and the decision (for --go)")
     p.add_argument("--checked", action="store_true", help="the earlier unclear attempt is not listed in `competitions "
                    "submissions` (read it and `competitions submission-limits` first)")
-    p.add_argument("--fresh", type=minutes_arg, default=30.0, help="the pre-submit check may be at most this many "
-                   "minutes old (default 30)")
+    p.add_argument("--landed", type=ref_arg, metavar="REF", help="no submit: record the last unclear attempt as "
+                   "landed, with the ref `competitions submissions` lists for it (a clean read that shows the exact "
+                   "message in the attempt's time window)")
+    p.add_argument("--fresh", type=minutes_arg, help="the pre-submit check may be at most this many minutes old "
+                   "(default 30)")
     p.add_argument("--gateway", help="the kaggle.py gateway to call (default: the one beside this file)")
     a = p.parse_args(argv)
+    if a.landed is not None and (a.go or a.review is not None or a.checked or a.fresh is not None):
+        p.error("--landed only records an attempt as landed: it takes no --go, --review, --checked or --fresh")
+    a.fresh = 30.0 if a.fresh is None else a.fresh
     try:
         presubmit = load_tool("kaggle_presubmit")
     except SubmitError as e:
@@ -307,7 +369,7 @@ def main(argv=None, now=None):
         if root is None:
             raise SubmitError("no project or task folder here: run from one")
         gw = Path(a.gateway).resolve() if a.gateway else TOOLS / "kaggle.py"
-        if not gw.is_file():
+        if a.landed is None and not gw.is_file():
             raise SubmitError(f"gateway not found: {gw} (pass --gateway)")
         path = Path(a.record).resolve()
         if not path.is_file():
@@ -322,9 +384,33 @@ def main(argv=None, now=None):
               "record now: let it end, then read the record before running again")
         return EXIT_REFUSED
     try:
+        if a.landed is not None:
+            return landed_locked(a.landed, root, path, now or utc_now())
         return run_locked(a, presubmit, root, gw, path, now or utc_now())
     finally:
         os.close(lock)
+
+
+def landed_locked(ref, root, path, now):
+    """--landed under the record's lock: mark the last attempt that may have landed as submitted; no Kaggle call."""
+    try:
+        rec = read_record(path)
+    except SubmitError as e:
+        print(f"kaggle_submit: {e}", file=sys.stderr)
+        return 1
+    print(f"record     {_shown(path, root)}")
+    attempt, why = mark_landed(rec, ref, now)
+    if why:
+        print(f"REFUSED:\n  - {why}")
+        return EXIT_REFUSED
+    try:
+        write_record(path, rec)
+    except OSError as e:
+        print(f"kaggle_submit: cannot write the record {path}: {e}; nothing changed", file=sys.stderr)
+        return 1
+    print(f"MARKED LANDED: the attempt at {attempt.get('at')} (it ended {attempt['was']!r}) now reads 'submitted', "
+          f"ref {ref}; recorded in {_shown(path, root)}. A new submission needs its own record")
+    return 0
 
 
 def run_locked(a, presubmit, root, gw, path, now):
@@ -404,8 +490,10 @@ def run_locked(a, presubmit, root, gw, path, now):
         return EXIT_KAGGLE_REFUSED
     gw_shown = shlex.quote(_shown(gw, root))
     print(f"UNCLEAR (exit {code}): the submission may or may not have landed. Do not submit again: first read "
-          f"`python3 {gw_shown} competitions submissions {slug}` and `python3 {gw_shown} competitions "
-          f"submission-limits {slug}`; recorded in {_shown(path, root)}")
+          f"`python3 {gw_shown} competitions submissions {slug} --page-size {SUBMISSIONS_PAGE}` and `python3 "
+          f"{gw_shown} competitions submission-limits {slug}`; recorded in {_shown(path, root)}. Listed there (the "
+          f"exact message, in this attempt's time window): run again with --landed <ref>. Not listed in a clean "
+          f"read: --checked with the next --go. A failed or empty read decides nothing")
     return EXIT_UNCLEAR
 
 

@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Core of the playbook for competing on Kaggle with an autonomous agent team, read at every session start and after every compaction - the first hour and the competition facts sheet, Kaggle access, the kinds of contest and their skills, compute, phases, honest validation, daily submission discipline, agent organization, research, the base to stack changes on, a pitfalls log, and the settled decisions, each rule with the evidence behind it told as a generic example. The kind skills (kaggle-kind-*), kaggle-kernels (read before building a submission) and the tool skills hold the rest; Kaggle commands go through the kaggle-cli skill's gateway.
 ---
-_Rev. 29_
+_Rev. 30_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -38,7 +38,8 @@ evidence from the project's own competition) live in the project, not here.
 **What to read when:** this core at every session start and after every compaction; the skill for the competition's
 kind ([Kinds of Contest](#kinds-of-contest)) once the kind is known and recorded in the facts sheet;
 `kaggle-kernels.skill.md` before building a submission; the tool skills when using their tools (`kaggle-cli`,
-`kaggle-leaderboard`, `kaggle-discussions`, `kaggle-sharing`, `kaggle-checks`).
+`kaggle-leaderboard`, `kaggle-discussions`, `kaggle-sharing`, `kaggle-checks`, `kaggle-reviews`), and
+`kaggle-scout` when choosing the next competition (`tools/kaggle_scout.py` lists the open ones, read-only).
 
 ## Quick Start for a New Competition
 
@@ -79,9 +80,11 @@ Follow this sequence from minute one; each step's lead links the section with it
    workers on free compute, never idle; exploration phases until the owner calls the clean phase
    ([Phases](#phases)).
 9. **[Agents](#agent-organization):**
-   - the master plans, decides and reviews; workers do one bounded job each; adversarial review before every
-     Kaggle push;
-   - one scripted read-only hourly pass (`tools/kaggle_hourly.py <slug>`), acting on its flags;
+   - the master runs as an autocode agent (the autocode plugin's rule and Start skill); it plans, decides and
+     reviews; workers do one bounded job each; adversarial review before every Kaggle push;
+   - one scripted read-only hourly pass, run as the check of the `hourly` wake (`sh tools/kaggle_hourly_check.sh
+     <slug>`): a quiet hour takes no turn, and a woken hour acts on the check's receipt and ends with
+     `tools/kaggle_hourly.py <slug> --close`;
    - work with the harness's safety checks, never around them.
 10. **[Feed the playbook](#maintaining-this-playbook):** in the same turn, each owner direction or change in
     approach it should carry becomes a dated suggestion in `<pack>/.memory/improvements.md`.
@@ -98,7 +101,8 @@ Follow this sequence from minute one; each step's lead links the section with it
   (`GH_TOKEN=$(gh auth token --user <account>)`), and check the author/committer/tagger emails before pushing.
 - **Standing files** the agent keeps current:
   - `.memory/directions.md`: every owner direction, dated, written on arrival (private; survives compaction and
-    restarts); fold long-standing ones into `instructions.md`;
+    restarts); fold long-standing ones into `instructions.md`; a project numbers its own directions `L01`,
+    `L02`, ... and never mints an `ODnn`, which is the plugin's (`kaggle.rule.md`);
   - `.memory/improvements.md`: suggested changes ([Maintaining This Playbook](#maintaining-this-playbook));
   - `instructions.md`, shared by every persona: how-to, conventions, gotchas, lessons, the competition facts sheet;
   - `submissions/PLAN.md`: today's and tomorrow's slots with purposes;
@@ -106,11 +110,11 @@ Follow this sequence from minute one; each step's lead links the section with it
     data in `research/assets/`);
   - `reports/status.pdf`, the status page (`kaggle.rule.md`, OD41): `tools/kaggle_status.py` renders the master's
     `reports/status.json` plus live data, with board progress as score and rank over time and the resources each
-    suggestion needs. Rebuild it in the same turn as any plan change, submission, score, verdict or launch, with
-    `--keep-rev` at the hourly pass; `.gitignore` keeps its private operations data out of git. Keep the JSON's
-    `outlook` (daily and after each new best), `lineage` (each new best, `own` or `public`, with its `date`) and
-    `tracks` (when a track starts, gains, stalls or stops) current, and close finished plan items so they roll up
-    (fields: the `kaggle-checks` skill).
+    suggestion needs. Rebuild it in the same turn as any plan change, submission, score, verdict or launch; the
+    hour-close rebuilds it at each woken hour; `.gitignore` keeps its private operations data out of git. Keep
+    the JSON's `outlook` (daily and after each new best), `lineage` (each new best, `own` or `public`, with its
+    `date`) and `tracks` (when a track starts, gains, stalls or stops) current, and close finished plan items so
+    they roll up (fields: the `kaggle-checks` skill).
 - **One folder per tool:** each project tool gets its own subfolder of the tools folder and a line in its README. <!-- OD15 -->
 - **Owner-facing times in the owner's timezone** (convert UTC deadlines and resets); machine logs stay UTC. Every
   written time comes from a real clock, never an estimate.
@@ -229,11 +233,12 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   another; hosts without DNS records have only the IP). Resolve the hosts' names on the connected control machine
   and compare them with the inventory; recheck when a lease changes. Authorize every control machine's key on every
   host, copy the pinned host keys (one known_hosts file) along, and test the list from each control machine.
-- **Moving the control point between machines or harnesses** (say, a laptop under one harness to a GPU workstation
-  under another, and back): sync the working tree (Syncthing) but not `.git` (each machine keeps its own clone,
-  aligned with `git fetch` and `git reset origin/main`); copy the service logins without printing them (pipe the
-  files or tokens straight across); keep one control session at a time, switching after the sync finishes; keep
-  the pack harness-agnostic (`AGENTS.md` as the entry point; briefs, notes and the runbook as plain files).
+- **Moving the control point between machines** (say, a laptop to a GPU workstation, and back): sync the working
+  tree (Syncthing) but not `.git` (each machine keeps its own clone, aligned with `git fetch` and `git reset
+  origin/main`); copy the service logins without printing them (pipe the files or tokens straight across); keep
+  one control session at a time, switching after the sync finishes (the autocode Start skill stops when a live
+  session holds the agent ID, and says where a session comes back by itself after a reboot); keep the pack
+  harness-agnostic (`AGENTS.md` as the entry point; briefs, notes and the runbook as plain files).
 - **Disk hygiene:** prune as you go, not at the end. What can go: dataset staging copies once uploaded, outputs of
   scored and superseded submissions, superseded checkpoints, rebuildable caches, downloads nothing uses. Keep the
   competition data, holdout definitions, current and fallback weights, anything a running job reads, and the
@@ -405,19 +410,30 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   hardware that will run it, and log how often it triggers.
 - **Parallel submissions are fine** (Kaggle scores each independently; leave a few minutes between submits).
 - **Never lose a day's slot because an earlier entry is still scoring:** submit the day's best anyway; if Kaggle
-  refuses (`kaggle_submit.py` exit 5), retry at every hourly and last-call check until the reset and report each
-  refusal; under a one-pending-entry limit, submit early in the Kaggle day. <!-- OD46 -->
+  refuses (`kaggle_submit.py` exit 5), retry until the reset and report each refusal. A quiet hour brings no turn,
+  so set the retries: when the pending entry lands (its score wakes the master, and a watch on it is surer), and
+  at a wake set for a last call before the reset. Under a one-pending-entry limit, submit early in the Kaggle
+  day. <!-- OD46 -->
 - **No blind resubmit:** after a submit errored, timed out or lost its output, read `competitions submissions
   <slug>` and `competitions submission-limits <slug>` before asking again: the first may have landed and spent its
   slot.
-- **Watch runs and scores from inside the session:** the session clock and the harness's own background commands (a
-  background poll that exits when the event lands, which wakes the session); no daemon, cron job or other
-  watcher outside the session. <!-- C2 -->
+- **Watch runs and scores from inside the session:** a wait that must outlive a turn runs as a watched job of the
+  autocode plugin, which fires a one-shot wake when it ends. Set the wake first (`fire-only once`: the autocode
+  rule, Background work), then start the watch:
+  `python3 <pack>/plugins/autocode/tools/guard.py job start --name <n> --wake <w> --deadline <d> --
+  python3 <pack>/plugins/kaggle/tools/kaggle_watch.py <slug> --ref <ref>`. The watch reads the submission list
+  until the entry lands (`--message <text>` names it where no ref is known yet, by a message that no older
+  submission carries; `--every <seconds>` and `--limit <minutes>` set its pace and its limit, and the job's
+  deadline goes a little past that limit) and exits 0 when it scored, 3 when it errored, 4 when it is still
+  pending at the limit and 5 when the listing does not hold it; the wake brings that exit code. Never a sleep or
+  a poll inside a turn, and no daemon, system cron job or other watcher outside the session's own watched jobs.
+  <!-- C2 -->
   When a score lands, update the submission's README, the plan and the status page in the same turn, and add its
   lesson to the ideas backlog. The status page goes stale fast: at every push, check it is newer than the newest
   result.
-- **Timers can miss:** session crons fire only when the session is idle (a one-shot "submit at 5:02 PM" reminder can
-  pass unnoticed): check the submission list right after each reset.
+- **Wakes can come late:** a wake reaches the session only while it is idle, so one that falls due during a long
+  turn waits for the turn's end (a one-shot "submit at 5:02 PM" wake can pass its minute): end long turns before
+  a timed event, and check the submission list right after each reset.
 - **GPU queues can stall** for hours while CPU sessions start at once: default kernels to CPU when no GPU is needed.
 - **Design submissions as paired reads:** one change against a scored base, so the difference reads one effect
   (say, add one component to measure it alone, or retrain the base's model on all the data to test why it lost).
@@ -426,44 +442,63 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
 
 - **Team:** the master plans, decides and delegates; workers run one brief each, each in its own scratch subfolder,
   and a read-only reviewer attacks every result and kernel before it counts (the pack's `worker.agent.md` and
-  `reviewer.agent.md`, `rules/subagents.rule.md`; harness moves and take-overs: the `handover` skill).
+  `reviewer.agent.md`, `rules/subagents.rule.md`; take-overs: the `handover` skill).
+- **The master is an autocode agent,** and only that: its wakes and their checks, the idle guard, watched jobs,
+  compaction and reports to the owner follow the autocode plugin's `autocode.rule.md`, and a new session starts
+  with its `autocode-start.skill.md`. No session clock runs, and no turn is owed by the hour.
 - **Worker briefs** follow the subagents rule's task contract and ask for a "New ideas" block and a "for
   instructions.md" block. Each launch passes the model (below); a brief keeps each wait to about 270 seconds a
   call, hands longer waits to a background script, and never starts a command with `sleep`.
 - **Calls the owner has not reserved** are stated as "doing X at T unless you object", never asked as a question.
 - **Adversarial review before every push to Kaggle** caught real problems every time (a missing image pin,
   uncalibrated thresholds, uncoupled fallbacks, duplicate training rows, a two-factor change that needed isolating).
-- **Cross-family review:** a model from another vendor reviews the daily plan and each pre-submit pick, read-only,
-  on copies outside the repo; each project uses its own key. <!-- OD08 -->
-- **Outside reviews run through OpenCode:** its config is the truth for model features, verified with a real call;
-  reviewers run with `yolo` and `permission: allow` inside a throwaway folder; OpenCode's own cost figure is the
-  spend of record for those calls. <!-- OD19 -->
+- **Cross-family review:** models from other vendors review the daily plan and each pre-submit pick, read-only,
+  on copies outside the repo. A pool of reviewers from other model families reads the same package, and the
+  master weighs the union of their findings. <!-- OD08 -->
+- **Outside reviews run through the plugin's runner:** `tools/kaggle_review.py` runs each reviewer through
+  OpenCode, sandboxed and read-only, on the master session's own hub key, read at run time and never printed.
+  The daily plan review is a set of autocode jobs, one per reviewer (`review-<name>`), each with its own cron
+  trigger, kept as files in `<pack>/jobs/` with `tools/kaggle_jobs.py`. The master's `plan-review` wake is only
+  its turn to write the day's review package and `READY` before the jobs' hour.
+  OpenCode's config is the truth for model features, verified with a real call, and its own cost figure is the
+  spend of record for those calls. The how-to is the `kaggle-reviews` skill. <!-- OD19 -->
 - **Each worker runs on the model `kaggle.rule.md` sets for its kind of job,** passed on every launch, at the
-  effort the owner chose (per launch where the harness takes one; else the master's session's, which Claude Code
-  workers inherit): no file fixes a level, and the master does not ask for another.
+  master's effort and never above it: the owner chooses that effort per session, no file fixes a level, and the
+  master does not ask for another. A worker is an OpenCode subagent: it runs in the background and its result
+  comes later, in a turn of its own, so launch it and go on with other work or end the turn, and never sleep or
+  poll for it. Long work, or work that must outlive a restart, runs as an autocode job (the autocode rule,
+  Workers).
 - **After a stretch on a fallback model** (the usual one refused or unavailable), keep the schedule and the outside
   reviews, and recheck that stretch's decisions when the usual model returns.
-- **Never idle:** an hourly check starts research on the next idea, launches experiments on free compute, keeps
-  leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog, and rebuilds the
-  status page.
+- **Never idle:** each turn the hourly wake brings starts research on the next idea, launches experiments on free
+  compute, keeps leases alive, reads the new forum posts and public notebooks, folds new ideas into the backlog,
+  and ends with the hour-close, which rebuilds the status page. A quiet hour brings no turn, so mark work that
+  must go on past a turn for the idle guard (the autocode rule, Guard).
 - **Script the hourly check:** `tools/kaggle_hourly.py <slug>` is one read-only pass over the board, the public
   notebooks, the forum, the compute (hosts, leases, jobs, queues) and the Kaggle account (sessions, quota) that
-  prints a few lines of flags; the agent acts on the flags. Run the project's own host and queue checks beside it
-  where it does not reach them, and script run-watching and result collection the same way (token-economy rule,
-  Pacing).
+  prints a few lines of flags; the agent acts on the flags. It runs as the check of the `hourly` wake, `sh
+  tools/kaggle_hourly_check.sh <slug>` with a check time limit of 5 minutes: the wrapper runs the pass with
+  `--check` and lets exit 1 through only for a verified quiet pass, so a crashed interpreter never reads as a
+  quiet hour. A quiet hour ends there and costs no turn. An hour with news wakes the master with its reasons and
+  a receipt: act from the receipt, make no second pass, and end the hour with `tools/kaggle_hourly.py <slug>
+  --close`, which prints what the check found and held, rebuilds the status page and marks the hour handled. A
+  wake that is not closed wakes again the next hour (the `kaggle-checks` skill). A project with host and queue
+  checks of its own wraps both in one check script, which wakes the master when either finds something; script
+  run-watching and result collection the same way (token-economy rule, Pacing).
 - **Daily AI spending limit** (owner decision): check it at each hourly pass, per the token-economy rule (Pacing)
   and `kaggle.rule.md`.
 - **Interruption tolerance** (owner direction): the primary persona's Long-Running Work, the `handover` skill and
-  the subagents rule apply. Kaggle runs and scores server-side; the recovery runbook also checks Kaggle and the
+  the subagents rule apply; after a restart, the autocode rule's Notices and restarts come first (the wakes and
+  the watched jobs). Kaggle runs and scores server-side; the recovery runbook also checks Kaggle and the
   dashboard.
 - **Keep every queue deeper than the next check can drain:** an autopilot that tops lanes up only while run targets
   are unmet lets every lane go idle once the targets are reached. Set each target above what the lanes can run before
   the next check, keep a minimum queue depth per lane, and stage each new candidate on every host of its lane group
   before adding it to the plan: an autopilot queues only staged copies, so a host without one silently gets nothing
   and the gap shows only as uneven queue depth.
-- **Unattended loops:** paused versus dead queues, autonomy in the actual harness, compaction budgets, errors that
-  must not acknowledge work and live todos follow the primary persona's Long-Running Work and Memory sections and
-  the subagents rule.
+- **Unattended loops:** paused versus dead queues, autonomy in the actual harness, errors that must not
+  acknowledge work and live todos follow the primary persona's Long-Running Work and Memory sections and the
+  subagents rule; compaction follows the autocode rule.
 - **Work with the harness's safety checks, never around them:** the primary persona's Sandboxed Harnesses and
   Safety Policy, and the subagents rule (What Stays Inline: deletions).
 - **When the owner approves commands by hand** (auto mode off): the routine commands to propose for the owner's

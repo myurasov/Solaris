@@ -395,6 +395,35 @@ class FetchShowTests(Tmp):
             self.assertIn(f"\n{line}\n", text + "\n")
         self.assertEqual(text.count("[host]"), 2)
 
+    def test_show_says_whether_the_host_mark_is_known(self):
+        F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
+        # no post of these reads carries an author type: unknown, never a count of 0
+        lines = F.show_topics(self.d, SLUG, [7, 8]).splitlines()
+        self.assertEqual(lines[:2], [F.DISCLAIMER, "host mark: unknown (these topic reads carry no author type, so "
+                                                   "no [host] shows; that does not mean no host posted: judge by "
+                                                   "content and the competition's host list)"])
+        self.assertNotIn("[host]", "\n".join(lines[2:]))
+        # a read with author types: the count, 0 included, is a real one
+        ruling = dict(comment(21, "Hana", "2026-09-20T01:00:00.100000", "<p>Allowed.</p>"), host=True)
+        thanks = dict(comment(22, "Pat", "2026-09-21T01:00:00.100000", "<p>Thanks.</p>"), host=False)
+        doc = json.loads(sdk_topic(9, "Ruling", [ruling, thanks]))
+        doc["topic"]["host"] = False
+        (self.d / "topics" / "9.json").write_text(json.dumps(doc))
+        lines = F.show_topics(self.d, SLUG, [9]).splitlines()
+        self.assertEqual(lines[1], "host mark: 1 of 3 posts below marked [host]")
+        self.assertEqual("\n".join(lines).count("[host]"), 2)
+        doc["comments"] = [thanks]
+        (self.d / "topics" / "9.json").write_text(json.dumps(doc))
+        self.assertEqual(F.show_topics(self.d, SLUG, [9]).splitlines()[1],
+                         "host mark: 0 of 2 posts below marked [host]")
+        # topics read with and without author types: the count, and how many posts it cannot speak for
+        self.assertEqual(F.show_topics(self.d, SLUG, [9, 8]).splitlines()[1],
+                         "host mark: 0 of 3 posts below marked [host]; unknown for 1 read without an author type")
+        # nothing rendered, nothing to mark
+        self.assertEqual(F.show_topics(self.d, SLUG, [404]).splitlines()[:3],
+                         [F.DISCLAIMER, "", "==== 404: not fetched yet (run fetch)"])
+        self.assertIsNone(F.host_mark([]))
+
     def test_commit_of_given_ids_uses_the_shown_read_else_the_fetched_one(self):
         F.fetch_topics([7, 8], self.d, self.gateway, self.tmp, run=FakeGateway(topics=fake_topics()), pause=0)
         F.show_topics(self.d, SLUG, [8])

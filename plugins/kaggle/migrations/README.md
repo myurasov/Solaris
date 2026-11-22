@@ -9,4 +9,7 @@ Migrations: `0.2.0.md` (the gateway moved to `tools/kaggle.py`, the gateway skil
 the leaderboard history and account sharing tools added); `0.7.0.md` (from the live plan and the phase progress
 reports to the single status page, `reports/status.pdf`); `0.8.0.md` (the playbook split into a core, kind skills and
 a kernel skill; the hourly STATUS block and its flags); `0.10.0.md` (held hourly flags, submits refused by Kaggle
-as exit 5, the status JSON's outlook, lineage and tracks, the hard-rules card).
+as exit 5, the status JSON's outlook, lineage and tracks, the hard-rules card); `0.11.0.md` (the master as an
+autocode agent, with the autocode plugin now required; the hourly pass as the hourly wake's check, called through
+`kaggle_hourly_check.sh`, and the hour-close; the hosts named for that check; outside reviews through
+`kaggle_review.py` and review jobs kept in `<pack>/jobs/`; waits for scores as watched jobs).

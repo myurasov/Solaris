@@ -1,4 +1,4 @@
-# rev. 2
+# rev. 3
 
 """kaggle_sdk: reads through Kaggle's Python SDK, of data the Kaggle CLI drops or reads one process per call.
 
@@ -12,10 +12,11 @@ a plain python3:
     python3 <plugin-dir>/tools/kaggle.py --sdk account [--hours H] [--page-size N] [--done REF=TIME ...]
     python3 <plugin-dir>/tools/kaggle.py --sdk submissions <competition-slug> [--page-size N] [--json]
     python3 <plugin-dir>/tools/kaggle.py --sdk dataset <owner/slug> [--json]
+    python3 <plugin-dir>/tools/kaggle.py --sdk kernel <owner/slug> [--json]
 
 It signs in as the CLI does (OAuth, access token or kaggle.json). topic,
-notebooks and account print one JSON document on stdout; submissions and
-dataset print a few lines of text, or that one JSON document with --json:
+notebooks and account print one JSON document on stdout; submissions, dataset
+and kernel print a few lines of text, or that one JSON document with --json:
 
 topic <id>: the topic with its opening post, and every comment with its
 replies nested: {"topic": {...}, "comments": [{..., "replies": [...]}]}.
@@ -65,12 +66,23 @@ version, newest first: {"ref", "title", "fetched_at", "currentVersion",
 "lastUpdated", "versions": [{"number", "date", "notes"}]}. The text form names
 the current version, then one line per version (number, date, notes).
 
+kernel <owner/slug>: a kernel's current version number and the md5 of its
+source, so a fork can be pinned to the exact version that was vetted. It works
+for any kernel the account may read, a public one of another user included:
+{"ref", "title", "fetched_at", "currentVersion", "lastRunTime", "language",
+"kernelType", "sourceMd5", "sourceBytes"}. currentVersion is the number of
+the newest saved version (the one `kernels pull <owner/slug>` gives). sourceMd5
+and sourceBytes are of the source text as UTF-8, the bytes `kernels pull`
+writes to the code file, so `md5sum` of a pulled file compares with it. A
+field Kaggle does not send is null. The read keeps no source text. The text
+form is one line for the version and one for the source.
+
 Call budget, on top of signing in: topic makes 2 calls plus one per further
 page of comments, as the CLI does; notebooks makes one call per 100 notebooks
 listed, at most 3 search pages and at most 20 single lookups (at most 24 calls
 at the default N, 33 at N=1000), and makes no more calls after a failed one;
-account makes 2 calls plus one per status read (at most 27); submissions and
-dataset make one call each.
+account makes 2 calls plus one per status read (at most 27); submissions,
+dataset and kernel make one call each.
 
 A failure exits 1 with one stderr line, `kaggle_sdk: <status> <reason>:
 <message>` when Kaggle answered with an HTTP error, else `kaggle_sdk:
@@ -80,6 +92,7 @@ call in errors); bad arguments exit 2 with a usage line.
 
 import argparse
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -168,6 +181,13 @@ def dataset_ref(text):
     parts = text.split("/")
     if len(parts) != 2 or not all(SLUG_RE.fullmatch(p) for p in parts):
         raise argparse.ArgumentTypeError(f"not a dataset ref owner/slug: {text!r}")
+    return parts[0], parts[1]
+
+
+def kernel_ref(text):
+    parts = text.split("/")
+    if len(parts) != 2 or not all(SLUG_RE.fullmatch(p) for p in parts):
+        raise argparse.ArgumentTypeError(f"not a kernel ref owner/slug: {text!r}")
     return parts[0], parts[1]
 
 
@@ -437,10 +457,40 @@ def text_dataset(doc):
     return "\n".join(out)
 
 
+def read_kernel(api, a):
+    """The kernel's current version number and the md5 of its source text (GetKernel, the call `kernels pull`
+    makes); the source itself is not kept."""
+    from kagglesdk.kernels.types.kernels_api_service import ApiGetKernelRequest
+    fetched_at = datetime.now(timezone.utc).strftime(ISO)
+    req = ApiGetKernelRequest()
+    req.user_name, req.kernel_slug = a.ref
+    with api.build_kaggle_client() as client:
+        res = client.kernels.kernels_api_client.get_kernel(req)
+    meta, blob = res.metadata, res.blob
+    source = getattr(blob, "source", None)
+    # the bytes `kernels pull` writes to the code file
+    data = source.encode("utf-8") if isinstance(source, str) and source else None
+    return {"ref": "/".join(a.ref), "title": getattr(meta, "title", None), "fetched_at": fetched_at,
+            "currentVersion": getattr(meta, "current_version_number", None) or None,
+            "lastRunTime": when(getattr(meta, "last_run_time", None)),
+            "language": getattr(meta, "language", None) or getattr(blob, "language", None) or None,
+            "kernelType": getattr(meta, "kernel_type", None) or getattr(blob, "kernel_type", None) or None,
+            "sourceMd5": hashlib.md5(data).hexdigest() if data else None, "sourceBytes": len(data) if data else None}
+
+
+def text_kernel(doc):
+    current = f"version {doc['currentVersion']} is current" if doc["currentVersion"] else "no current version given"
+    ran = str(doc["lastRunTime"] or "?").replace("T", " ")[:16]
+    kind = " ".join(one_line(x) for x in (doc["language"], doc["kernelType"]) if x)
+    source = (f"source md5 {doc['sourceMd5']} ({doc['sourceBytes']:,} bytes{', ' + kind if kind else ''})"
+              if doc["sourceMd5"] else "no source given")
+    return f"{doc['ref']}: {current}; last run {ran} (read {doc['fetched_at']})\n  {source}"
+
+
 READS = {"topic": read_topic, "notebooks": read_notebooks, "account": read_account,
-         "submissions": read_submissions, "dataset": read_dataset}
+         "submissions": read_submissions, "dataset": read_dataset, "kernel": read_kernel}
 # the reads that print text unless --json asks for the JSON document
-TEXT = {"submissions": text_submissions, "dataset": text_dataset}
+TEXT = {"submissions": text_submissions, "dataset": text_dataset, "kernel": text_kernel}
 
 
 def parse(argv):
@@ -470,6 +520,9 @@ def parse(argv):
     s.add_argument("--json", action="store_true", help="print the JSON document instead of text")
     s = sub.add_parser("dataset", help="a dataset's current version number and its versions")
     s.add_argument("ref", type=dataset_ref, help="dataset ref owner/slug")
+    s.add_argument("--json", action="store_true", help="print the JSON document instead of text")
+    s = sub.add_parser("kernel", help="a kernel's current version number and the md5 of its source")
+    s.add_argument("ref", type=kernel_ref, help="kernel ref owner/slug")
     s.add_argument("--json", action="store_true", help="print the JSON document instead of text")
     return p.parse_args(argv)
 
