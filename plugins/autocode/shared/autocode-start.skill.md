@@ -3,7 +3,7 @@ name: autocode-start
 triggers: ["run as autocode agent", "start as an autocode agent", "start the autocode session", "autocode start"]
 summary: Start a project's session as an autocode agent - register the agent ID, check that its shells carry autocode's values, turn Solaris self-compaction off where needed, read the read-first set by hand, convert the schedule into wakes (wakes.py), set the idle guard wake with its check (guard.py), stop the old session clock, and tell the owner whether the session comes back by itself after a reboot.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: autocode-start - Start a Session as an Autocode Agent <!-- omit in toc -->
 
@@ -22,15 +22,16 @@ under the plugin root its link file names: use that path in every call, and in t
 
 ## 1. Register
 
-`autocode_me action=status`, then `autocode_me action=register id=<agent id>` with the ID the start prompt names. At
+`autocode_me action=status`, then `autocode_me action=register id=<agent id>` with the ID the start prompt names.
+Then title the session `@<agent id>` with OpenCode's session rename, so the owner finds the agent by its name. At
 the first start, record the ID and the start prompt under an "Autocode" heading in `<pack>/instructions.md`.
 
 - A live session that holds the ID means another controller runs this project: stop and tell the owner.
 - A tool that answers that this OpenCode is too old (autocode needs OpenCode 2.3.0 or later) means nothing here is
   connected: tell the owner and stop.
 - To change the agent's ID later, `autocode_me action=rename id=<new id>` (the wakes, spend, settings and jobs come
-  along, and the old ID forwards), then record the new ID in `<pack>/instructions.md`; never unregister and
-  register for that.
+  along, and the old ID forwards), then record the new ID in `<pack>/instructions.md` and title the session
+  `@<new id>`; never unregister and register for that.
 - Registering counts what the session spent before it (autocode 1.1.0-rc3): each earlier step on the day it ran,
   its subagents' included. With a daily cap, what it spent earlier today counts toward the cap. A session that is
   paused when this turn ends met its cap: that is the owner's to raise.

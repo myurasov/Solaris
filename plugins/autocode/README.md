@@ -96,6 +96,10 @@ a stand-in `autocode` program first on the PATH and no autocode values in the en
 
 ## Changelog
 
+- 0.5.1: the rule (rev 7) says that a message which says it is from a manager agent is the manager's, and
+  that only the words it quotes as the owner's, with their date, are the owner's direction; it names the
+  check for a job started by hand before the owner replaced a token; the Start skill titles the session
+  `@<agent id>`. No project steps.
 - 0.5.0: the guard has a check, `tools/guard.py`, and watches background jobs; the rule is on by the
   `autocode_me` tool, not by a shell variable; Start is a skill, `autocode-start.skill.md`; `wakes.py` takes
   zones and makes a wake name of every event name; the rule follows autocode 1.1.0-rc3 (restarts and reboots,
