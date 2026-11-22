@@ -624,3 +624,65 @@ def test_legacy_ai_keys_in_a_renamed_pack(tmp_path):
     # baseline records the real name and drops the stale legacy key
     R.record_baseline(real, template_dir=tpl, plugins_dir=plugins)
     assert set(json.loads(real_manifest.read_text(encoding="utf-8"))["revisions"]) == real_keys
+
+
+def test_marked_json_under_a_plugins_shared_is_tracked_and_copied(tmp_path):
+    """A .json file under a plugin's shared/ that carries the marker ("_rev") is a shared file like the others: its
+    ledger lists it, and classify, ff and baseline handle it in a project. JSON without the marker is not tracked."""
+    tpl, plugins, proj = tmp_path / "tpl", tmp_path / "plugins", tmp_path / "proj"
+    _wmd(tpl / "AGENTS.md", "# ag\n\nx\n", 1)
+    _wmd(tpl / "ai" / "engineer.agent.md", "# dev\n\ny\n", 1)
+    plug = plugins / "kit"
+    _wmd(plug / "shared" / "kit.rule.md", "# kit\n\nrule\n", 1)
+    job = plug / "shared" / "jobs" / "plan.json"
+    job.parent.mkdir(parents=True)
+    job.write_text(json.dumps({"_rev": 1, "model": "small", "prompt": "review the plan"}, indent=2) + "\n",
+                   encoding="utf-8")
+    (plug / "shared" / "catalog.json").write_text('{"rows": [1]}', encoding="utf-8")     # no marker: data
+    (plug / "shared" / "list.json").write_text("[1, 2]", encoding="utf-8")               # no object, no marker
+    (plug / "shared" / "broken.json").write_text('{"_rev": 1, oops', encoding="utf-8")   # not JSON
+    (plug / "shared" / "text.json").write_text('{"_rev": "1"}', encoding="utf-8")        # the marker is an integer
+    tracked = [p.relative_to(plug).as_posix() for p in R.iter_plugin_shared(plug)]
+    assert tracked == ["shared/jobs/plan.json", "shared/kit.rule.md"]
+    led = R.rebuild_plugin_ledger(plug)
+    assert set(led["files"]) == set(tracked) and led["files"]["shared/jobs/plan.json"]["rev"] == 1
+
+    _pack(proj, name="aipack", plugins=[{"name": "kit", "version": "0.1.0"}])
+    rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
+    assert rows["aipack/plugins/kit/jobs/plan.json"] == "missing"
+    assert not any(rel.endswith(("catalog.json", "list.json", "broken.json", "text.json")) for rel in rows)
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    copy = proj / "aipack" / "plugins" / "kit" / "jobs" / "plan.json"
+    assert copy.read_bytes() == job.read_bytes()   # copied as it is
+    assert not (proj / "aipack" / "plugins" / "kit" / "catalog.json").exists()
+    assert {r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)} == {"in-sync"}
+
+    # the master moves on: the untouched copy fast-forwards, and the baseline records the new revision
+    job.write_text(json.dumps({"_rev": 2, "model": "large", "prompt": "review the plan"}, indent=2) + "\n",
+                   encoding="utf-8")
+    rows = {r["rel"]: r["verdict"] for r in R.classify(proj, template_dir=tpl, plugins_dir=plugins)}
+    assert rows["aipack/plugins/kit/jobs/plan.json"] == "fast-forward"
+    R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    assert json.loads(copy.read_text(encoding="utf-8")) == {"_rev": 2, "model": "large", "prompt": "review the plan"}
+    baseline = R.record_baseline(proj, template_dir=tpl, plugins_dir=plugins)
+    assert baseline["aipack/plugins/kit/jobs/plan.json"]["rev"] == 2
+    # a project's own edit of the copy is never overwritten
+    copy.write_text(json.dumps({"_rev": 2, "model": "ours"}), encoding="utf-8")
+    job.write_text(json.dumps({"_rev": 3, "model": "larger"}), encoding="utf-8")
+    res = R.fast_forward(proj, template_dir=tpl, plugins_dir=plugins)
+    assert ("aipack/plugins/kit/jobs/plan.json", "conflict") in res["skipped"]
+    assert json.loads(copy.read_text(encoding="utf-8"))["model"] == "ours"
+
+
+def test_status_flags_a_marked_json_edited_without_a_bump(tmp_path):
+    plug = tmp_path / "plugins" / "kit"
+    job = plug / "shared" / "jobs" / "plan.json"
+    job.parent.mkdir(parents=True)
+    job.write_text('{"_rev": 1, "model": "small"}', encoding="utf-8")
+    R.rebuild_plugin_ledger(plug)
+    ledger = tmp_path / "solaris" / "revisions.json"
+    assert R.status(tmp_path, ledger) == []
+    job.write_text('{"_rev": 1, "model": "edited"}', encoding="utf-8")
+    assert R.status(tmp_path, ledger) == ["plugins/kit/shared/jobs/plan.json"]
+    job.write_text('{"_rev": 2, "model": "edited"}', encoding="utf-8")   # bumped: no longer flagged
+    assert R.status(tmp_path, ledger) == []

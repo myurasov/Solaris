@@ -18,7 +18,9 @@ Marker by file type (placed at the top of the file):
 
 Framework ledger: ``solaris/revisions.json`` (current rev+hash + short history per tracked framework file).
 Each **plugin keeps its own** ledger at ``plugins/<name>/revisions.json`` (keys relative to the plugin) so the
-rev history travels inside the plugin's own git repo - it is never recorded in the framework ledger.
+rev history travels inside the plugin's own git repo - it is never recorded in the framework ledger. It tracks the
+plugin's ``shared/`` files of the types .md, .py, .js, .sh and .css, and a .json file there only when it carries
+the marker (JSON without one may be data a project edits, and is left alone).
 ai-pack baseline: the ``revisions`` map in a project's ``<pack>/manifest.json`` ({rel: {rev, hash}} recorded
 at last materialization) - the merge base for detecting external user edits. ``<pack>`` is the project's
 ai-pack folder, whatever its name (pack.py finds it); rel keys carry that name (``aipack/README.md``), and
@@ -73,6 +75,9 @@ FRAMEWORK_GLOBS = [
 PLUGIN_SHARED_GLOBS = [
     "shared/**/*.md", "shared/**/*.py", "shared/**/*.js", "shared/**/*.sh", "shared/**/*.css",
 ]
+# A .json file under shared/ is tracked too, but only when it carries the marker (an integer "_rev" field): a
+# template or a config the plugin ships. JSON without it stays untracked: it may be data a project edits.
+PLUGIN_SHARED_JSON_GLOB = "shared/**/*.json"
 
 _MD_RE = re.compile(r"^_Rev\.\s+(\d+)_\s*$")
 _PY_RE = re.compile(r"^#\s*rev\.\s+(\d+)\s*$")
@@ -203,13 +208,26 @@ def plugin_dirs(repo_root: Path = REPO_ROOT) -> list[Path]:
     return sorted(d for d in base.iterdir() if d.is_dir() and (d / "shared").is_dir())
 
 
+def _json_marked(path: Path) -> bool:
+    """True when a .json file carries the rev marker (an integer ``"_rev"`` field)."""
+    try:
+        return read_rev(path.read_text(encoding="utf-8"), ".json") is not None
+    except (OSError, ValueError, AttributeError):   # unreadable, not UTF-8, or valid JSON that is no object
+        return False
+
+
 def iter_plugin_shared(plugin_dir: Path) -> list[Path]:
+    """A plugin's revision-tracked shared files: PLUGIN_SHARED_GLOBS, plus each .json file that carries the
+    marker. These are the files its ledger lists and the ones classify, ff and baseline handle in a project."""
     root = Path(plugin_dir)
     seen: set = set()
     for g in PLUGIN_SHARED_GLOBS:
         for p in root.glob(g):
             if "__pycache__" not in p.parts:
                 seen.add(p)
+    for p in root.glob(PLUGIN_SHARED_JSON_GLOB):
+        if "__pycache__" not in p.parts and _json_marked(p):
+            seen.add(p)
     return sorted(seen)
 
 
