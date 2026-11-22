@@ -182,14 +182,17 @@ servers, optional project types - so any project can opt into it.
   browser skill for the flows the API cannot reach, build archive + upload skill, always-on
   rule), `gmail` (Gmail through `gws`, the Google Workspace CLI: install + sign-in skill for
   macOS/Linux, read + send skill, always-on send-confirmation rule), `kaggle` (Kaggle through
-  the official Kaggle CLI and three read-only SDK reads for what the CLI drops: a gateway that
+  the official Kaggle CLI and six read-only SDK reads for what the CLI drops, with the master of a
+  Kaggle project run only as an autocode agent (it requires the `autocode` plugin): a gateway that
   pins the CLI and installs it per project or task, Kaggle's own agent skill vendored at the same
   version, always-on rule confirming every write; plus a generic competition playbook, a saved
   leaderboard history for following every team's progress, public notebooks saved with their
   scores, one Kaggle account's sessions and GPU hours shared between projects (kernel pushes need a
   sharing lease), an hourly competition-forum watch, a single status page for the owner, a pre-submit
-  check of what is new, a gated submit, a one-call hourly pass, and a fetch of named files from
-  huge kernel outputs), `docker-home` (a per-project Linux container that runs the coding harness itself with
+  check of what is new, a gated submit, a watch that waits for a score as a background job, an hourly
+  pass that is the check of the master's hourly wake (a quiet hour takes no turn), a sandboxed runner
+  for reviews by other model families with the review jobs kept as files, a scan of the open
+  competitions, and a fetch of named files from huge kernel outputs), `docker-home` (a per-project Linux container that runs the coding harness itself with
   only the project folder and the container's home mounted, so nothing above the project exists
   for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
   strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
@@ -216,6 +219,11 @@ work together:
   versioned by git + semver.
 - **Migrations** (`solaris/migrations/<version>.md`) carry a pack across framework releases
   without touching your code; plugins carry their own.
+
+For a release that carries no migration (a patch), one command does the whole update:
+`uv run -m solaris.tools.version update --dir projects/<slug>` (`--dry-run` first shows what it would
+change). It stops without changing anything when a file needs a merge, when a master is still being
+edited, or while a migration is on the way.
 
 Memory stays scoped while all this happens: the framework's `.memory/` (operating lessons,
 inventory, logs) and each project's `<pack>/.memory/` are the only stores, and packs never read the
@@ -249,5 +257,5 @@ types plugins provide, such as `kaggle:competition`), plus `uv run pytest` for t
 ## 11. Specification
 
 Full conventions, plugin contract, migration engine, project modes, and safety/commit policies:
-[`solaris/spec/spec-v0.48.0.md`](solaris/spec/spec-v0.48.0.md). [Apache 2.0](LICENSE); Copyright 2026
+[`solaris/spec/spec-v0.49.0.md`](solaris/spec/spec-v0.49.0.md). [Apache 2.0](LICENSE); Copyright 2026
 Mikhail Yurasov <me@yurasov.me>.

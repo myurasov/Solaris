@@ -29,7 +29,7 @@ Ad-hoc engineering / system-setup / research work that isn't a project lives und
 [`solaris/info/`](info/) - rules reference it abstractly and never inline it; each ai-pack carries
 adapted copies in `<pack>/info/` that sync to projects via revisions (a test keeps the framework and
 pack "as of" dates matched). Full specification:
-[`spec/spec-v0.48.0.md`](spec/spec-v0.48.0.md).
+[`spec/spec-v0.49.0.md`](spec/spec-v0.49.0.md).
 
 ## Persona Model
 
@@ -118,7 +118,11 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.interactions <add|show|who|machine> [...]` (the interaction log, one file per machine:
   `add` logs a turn, `show` prints the merged log, `who` shows each machine's last entry - exit 3 when another
   machine logged within `--minutes`, default 60)
-- `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump> [...]`
+- `uv run -m solaris.tools.version <current|aipack|check|chain|set|plugin|check-plugins|project|project-set|project-bump|update> [...]`
+  (`update --dir PATH [--dry-run]` brings a pack to the current release in one step when no framework migration
+  is needed: `revs ff`, the framework and plugin versions, `revs baseline`, then its checks; exit 3 when it
+  stopped before any change, with the reasons, a master that does not match its ledger among them; exit 1 on
+  an error, a failed check, or a file that changed under it and now needs a merge)
 - `uv run -m solaris.tools.revs <bump|hash|status|ledger|classify> [...]` (per-file revisions + content hashes)
 - `uv run -m solaris.tools.mcp_sync [--dir PATH] [--check|--sync]`
 - `uv run -m solaris.tools.agents --dir PATH [--check|--rename-primary ROLE|--rename-pack NAME]` (personas:
@@ -136,7 +140,8 @@ There is one running agent. It adopts a persona by reading the active context:
 - `uv run -m solaris.tools.toc [--check|--write] <file>... | --all` (maintain Markdown tables of contents)
 - `uv run -m solaris.tools.ai_spend [--dir PATH] [--today|--since ISO] [--json]` (estimated AI spend per project
   and day from this machine's Claude Code transcripts, usage fields only; exit 3 when today is over the
-  project's `ai.daily_budget_usd`)
+  project's `ai.daily_budget_usd`; a figure that leaves out requests on a model with no price row is a lower
+  bound and says so, `at least $X`, with the exit code unchanged)
 - `uv run -m solaris.tools.session_clock --dir PATH|--schedule FILE [--after TIME] [--cap MINUTES, 0 none]
   [--check|--status|--stop]` (run as the harness's own background command, alone in its call; prints the due
   event from `<pack>/.memory/schedule.json`, or `re-arm` at the cap, and ends with `next: <exact command>`;
@@ -156,7 +161,10 @@ There is one running agent. It adopts a persona by reading the active context:
   `prune` deletes only by the rules in `<pack>/housekeeping.json` and `.disposable` or `.recreatable` markers -
   re-creatable data (`"recreatable": true` with a one-line `"how"`) without asking, logged with its how - never
   submissions, raw traces, the pack or `.git`, and raw data and run logs only when the project's `protect_names`
-  allows; `tidy` and `prune` hold what live jobs' scripts or running processes still use; both print their plan unless `--apply`; exit 3 when something needs attention)
+  allows; `tidy` and `prune` hold what live jobs' scripts or running processes still use; a top-level `__data` or
+  `__out` that is a symlink to a folder on another drive counts as part of the project (measured, budgeted,
+  pruned) only when `<pack>/housekeeping.json` lists it under `linked_roots`, and a listed link whose target is
+  missing is an error; both print their plan unless `--apply`; exit 3 when something needs attention)
 
 ## Versioning and Sync
 
@@ -172,7 +180,9 @@ Three independent mechanisms:
   advanced -> fast-forward; user rev higher -> merge **up** into the master on the owner's yes (via
   `import-plugin` for plugins); both changed -> smart merge, asking the user per conflict. This is how master copies and
   ai-packs stay in sync - not version numbers. Plugin revs live in the plugin's own
-  `plugins/<name>/revisions.json`, not the framework ledger. After editing a revisioned file,
+  `plugins/<name>/revisions.json`, not the framework ledger; a plugin's ledger tracks its `shared/` files of
+  the types `.md`, `.py`, `.js`, `.sh` and `.css`, and a `.json` file only when it carries the marker (a
+  `"_rev"` field). After editing a revisioned file,
   `revs bump <file>` it and `revs ledger`. **Scope:** rev markers belong ONLY on files that materialize
   into ai-packs - `templates/ai-pack/**`, `templates/workspace/**`, and plugin `shared/**`. Everything
   else (README, AGENTS.md, this file, skills, rules, spec, migrations, tools) carries no marker - git +
@@ -291,10 +301,13 @@ destructive / remote-mutating / outward actions applies unchanged on top.
   `project` = the project, the ad-hoc task, or `solaris` for framework work (an empty or `-` project is
   refused); `prompt` = the raw user prompt, `request` = your interpretation of it, `outcome` = what happened;
   `trigger` = what started the turn - `owner`, `clock` (a scheduled wake), `worker` (a subagent's report) or
-  `peer` (another session's message) - shown by `interactions show --json`. It stamps `ts` and writes the
-  framework master log, the record of **all** work including handed-off project turns; with `--dir
-  <project>` it writes the **same** line to that project's log too. Each log is a folder with one file per
-  machine (`.memory/interactions/<machine>.jsonl`, `<pack>/.memory/interactions/<machine>.jsonl`), so no
+  `peer` (another session's message) - shown by `interactions show --json`. A session that manages a project
+  from outside adds `--manager` when it logs its own action about the project with `--dir <project>`: the line
+  is marked, and `interactions who --dir <project>` does not count it as work on the project; a change it
+  makes to the project's own files (`version update` is one) is work, logged without `--manager`. `add` stamps
+  `ts` and writes the framework master log, the record of **all** work including handed-off project turns;
+  with `--dir <project>` it writes the **same** line to that project's log too. Each log is a folder with one
+  file per machine (`.memory/interactions/<machine>.jsonl`, `<pack>/.memory/interactions/<machine>.jsonl`), so no
   two machines ever write one file; the older single `interactions.jsonl` beside it is read-only history.
   Read the merged log with `interactions show` (never page through the files by hand). The prompt-submit
   hook also appends a raw-prompt backstop line to this machine's master file as a fail-safe.
