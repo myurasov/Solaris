@@ -104,7 +104,8 @@ correctness and data integrity win over speed - when in doubt, slow down rather 
 **Daily spend:** a project may set an approximate daily AI spending limit, `"ai.daily_budget_usd"`
 in its `<pack>/.memory/config.json` (or `<pack>/defaults.json`); check it at each periodic pass with
 `uv run -m solaris.tools.ai_spend --dir <project> --today` (exit 3 = over), and when over,
-economize and tell the owner.
+economize and tell the owner. Exit 0 with a daily limit line that reads `at least` is not a pass: some
+requests have no list price, so the day may be over the limit.
 
 ## Hard Floors (Never Trimmed)
 

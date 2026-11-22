@@ -120,7 +120,8 @@ def test_all_projects_json(world, capsys):
     assert rows["2026-10-01", None]["usd"] == 0 and rep["unpriced_models"] == {"claude-mystery-9": 1}
     budgets = {b["project"]: b for b in rep["budgets"]}
     assert budgets["projects/my/alpha"] == {"project": "projects/my/alpha", "daily_budget_usd": 10.0,
-                                            "today_usd": pytest.approx(10.02), "over": True}
+                                            "today_usd": pytest.approx(10.02), "over": True,
+                                            "today_unpriced_requests": 0, "lower_bound": False}
     assert budgets["projects/my/beta"]["daily_budget_usd"] == 100.0 and not budgets["projects/my/beta"]["over"]
 
 
@@ -141,9 +142,9 @@ def test_table_has_day_totals_and_flags_unpriced_models(world, capsys):
     lines = out.splitlines()
     assert any(line.startswith("2026-10-01") and "(unattributed)" in line for line in lines)
     total = next(line for line in lines if line.startswith("2026-10-01") and " total " in line)
-    assert total.split()[-1] == "30.27"   # 10.02 + 20.25 + 0 unpriced
+    assert total.split()[-1] == ">=30.27"   # 10.02 + 20.25 + 0 unpriced: the day's total is a lower bound
     assert not any(line.startswith("2026-09-30") for line in lines)
-    assert "not priced: claude-mystery-9 (1 requests; tokens counted)" in out
+    assert "not priced: claude-mystery-9 (1 request; tokens counted)" in out
 
 
 def test_days_follow_the_owner_timezone(world, capsys, monkeypatch):
@@ -288,9 +289,10 @@ def test_detail_reports_who_answered(crew, capsys):
     assert d["main"] == {"turns": 4, "models": {"claude-opus-5-5": 4}, "effort": {"max": 2, "high": 1}}
     assert d["workers"] == [
         {"session": "5e55a0b1", "agent": "a1", "first": "2026-10-01T11:41:00-07:00", "model": "claude-sonnet-5-5",
-         "effort": "max", "usd": pytest.approx(20.00)},
+         "effort": "max", "usd": pytest.approx(20.00), "unpriced_requests": 0, "lower_bound": False},
         {"session": "5e55a0b1", "agent": "b2", "first": "2026-10-01T11:43:00-07:00",
-         "model": "claude-haiku-4-5-20251001", "effort": None, "usd": pytest.approx(5.00)}]
+         "model": "claude-haiku-4-5-20251001", "effort": None, "usd": pytest.approx(5.00), "unpriced_requests": 0,
+         "lower_bound": False}]
     hooks = d["hooks"]
     assert (hooks["runs"], hooks["failed"]) == (3, 1)
     assert hooks["failures"] == [{"ts": "2026-10-01T11:46:00-07:00", "event": "UserPromptSubmit",
@@ -320,3 +322,99 @@ def test_detail_as_a_table(crew, capsys):
     assert "  5e55a0b1 a1  from 2026-10-01T11:41:00-07:00  claude-sonnet-5-5  effort max  $20.00" in out
     assert "  5e55a0b1 b2  from 2026-10-01T11:43:00-07:00  claude-haiku-4-5-20251001  effort -  $5.00" in out
     assert "hooks: 3 runs, 1 failed" in out and "11:46:00-07:00 UserPromptSubmit: Traceback: hook failed" in out
+
+
+# ----------------------------------------------------------------- lower bounds (requests with no list price)
+
+def test_price_rows_read_from_a_model_catalog():
+    assert A.cost("claude-fable-5-2", (M, 0, 0, M, M)) == pytest.approx(8.00 + 0.20 + 40.00)
+    assert A.cost("claude-fable-5-2", (0, M, M, 0, 0)) == pytest.approx(10.00 + 16.00)   # 1.25x and 2x input
+    assert A.price_key("claude-haiku-5-5-20261101") == "claude-haiku-5-5"
+    # a prompt of up to 100,000 tokens at the base price, a longer one priced as a whole at the long-prompt price
+    assert A.cost("claude-haiku-5-5", (40_000, 0, 0, 60_000, M)) == pytest.approx(0.004 + 0.0006 + 0.50)
+    assert A.cost("claude-haiku-5-5", (40_000, 1, 0, 60_000, M)) == pytest.approx(0.02 + 0.000000625 + 0.003 + 2.50)
+    assert A.cost("claude-haiku-5-5", (0, 0, 0, 200_000, 0)) == pytest.approx(0.01)
+    assert A.cost("claude-opus-5-5", (0, 0, 0, 200_000, 0)) == pytest.approx(0.04)   # no long-prompt price: flat
+    assert A.cost("claude-sonnet-5-5", (M, 0, 0, M, M)) == pytest.approx(2.00 + 0.10 + 10.00)   # cache reads at 0.10
+    assert A.PRICES_AS_OF == "2026-11-17"   # the date of the list prices the rows were checked against
+    assert set(A.LONG_PROMPT) <= set(A.PRICES) and all(len(p) == 3 for _n, p in A.LONG_PROMPT.values())
+
+
+def test_json_says_which_figures_are_lower_bounds(world, capsys):
+    rep = json.loads(_run(capsys, "--json")[1])
+    assert rep["lower_bound"] is True and rep["unpriced_requests"] == 1
+    rows = {(r["day"], r["project"]): r for r in rep["rows"]}
+    loose = rows["2026-10-01", None]   # the framework session's response, on a model with no price
+    assert (loose["usd"], loose["unpriced_requests"], loose["lower_bound"]) == (0, 1, True)
+    alpha = rows["2026-10-01", "projects/my/alpha"]
+    assert (alpha["unpriced_requests"], alpha["lower_bound"]) == (0, False)
+    assert rep["budgets"] and all(not b["lower_bound"] for b in rep["budgets"])
+    # one project whose requests all have a price: no lower bound anywhere
+    rep = json.loads(_run(capsys, "--dir", world["beta"], "--today", "--json")[1])
+    assert rep["lower_bound"] is False and rep["unpriced_requests"] == 0 and rep["unpriced_models"] == {}
+    assert [r["lower_bound"] for r in rep["rows"]] == [False]
+
+
+def test_a_daily_limit_under_a_lower_bound_does_not_pass_silently(world, capsys):
+    _write(world["tx"] / "s5.jsonl", [
+        _line("u1", "2026-10-01T19:40:00.000Z", world["beta"], "s5", model="claude-mystery-9", inp=5 * M),
+        _line("u2", "2026-10-01T19:41:00.000Z", world["beta"], "s5", model="claude-mystery-9", out=M)])
+    code, out = _run(capsys, "--dir", world["beta"], "--today")
+    assert code == 0   # the priced part is under the limit: the exit code stays, the line says what is missing
+    assert ("daily limit projects/my/beta: at least $20.25 today of about $100.00 (20% or more); 2 requests "
+            "unpriced, so this is a lower bound and the limit may be passed") in out
+    row = next(line for line in out.splitlines() if line.startswith("2026-10-01"))
+    assert row.split()[-1] == ">=20.25" and row.split()[2] == "3"   # the requests and their tokens still count
+    assert "lower bound: at least $20.25; 2 requests unpriced in this window" in out
+    assert "not priced: claude-mystery-9 (2 requests; tokens counted)" in out
+    rep = json.loads(_run(capsys, "--dir", world["beta"], "--today", "--json")[1])
+    assert rep["lower_bound"] is True and rep["unpriced_requests"] == 2
+    assert rep["budgets"] == [{"project": "projects/my/beta", "daily_budget_usd": 100.0,
+                               "today_usd": pytest.approx(20.25), "over": False, "today_unpriced_requests": 2,
+                               "lower_bound": True}]
+    assert rep["rows"][0]["usd"] == pytest.approx(20.25) and rep["rows"][0]["unpriced_requests"] == 2
+
+
+def test_an_over_limit_lower_bound_is_still_over(world, capsys):
+    _write(world["tx"] / "s6.jsonl", [
+        _line("u3", "2026-10-01T19:45:00.000Z", world["alpha"], "s6", model="claude-mystery-9", inp=M)])
+    code, out = _run(capsys, "--dir", world["alpha"], "--today")
+    assert code == A.OVER
+    assert ("daily limit projects/my/alpha: at least $10.02 today of about $10.00 (100% or more), OVER; 1 request "
+            "unpriced, so this is a lower bound") in out
+    assert "the limit may be passed" not in out
+
+
+def test_figures_without_unpriced_requests_read_as_before(world, capsys):
+    code, out = _run(capsys, "--dir", world["beta"], "--today")
+    assert code == 0 and "$20.25 today of about $100.00 (20%)" in out
+    assert "at least" not in out and ">=" not in out and "lower bound" not in out and "not priced" not in out
+
+
+def test_a_day_total_is_a_lower_bound_when_a_row_is(world, capsys):
+    code, out = _run(capsys, "--since", "2026-10-01")
+    lines = out.splitlines()
+    loose = next(line for line in lines if "(unattributed)" in line)
+    assert loose.split()[-1] == ">=0.00"
+    assert next(line for line in lines if "projects/my/alpha" in line).split()[-1] == "10.02"   # priced in full
+    assert "lower bound: at least $30.27; 1 request unpriced in this window (>= marks" in out
+
+
+def test_detail_marks_a_worker_whose_spend_is_a_lower_bound(crew, capsys):
+    tx, alpha = crew["tx"], crew["alpha"]
+    _write(tx / MAIN / "subagents" / "agent-c3.jsonl", [
+        _turn("x1", "2026-10-01T18:44:00.000Z", alpha, model="claude-sonnet-5-5", agent="c3", side=True),
+        _turn("x2", "2026-10-01T18:45:00.000Z", alpha, model="claude-mystery-9", agent="c3", side=True)])
+    _write(tx / MAIN / "subagents" / "agent-d4.jsonl", [
+        _turn("x3", "2026-10-01T18:48:00.000Z", alpha, model="claude-mystery-9", agent="d4", side=True)])
+    workers = {w["agent"]: w for w in json.loads(
+        _run(capsys, "--dir", alpha, *WINDOW, "--json", "--detail")[1])["detail"]["workers"]}
+    assert (workers["a1"]["usd"], workers["a1"]["unpriced_requests"], workers["a1"]["lower_bound"]) == (
+        pytest.approx(20.00), 0, False)
+    assert (workers["c3"]["usd"], workers["c3"]["unpriced_requests"], workers["c3"]["lower_bound"]) == (
+        pytest.approx(10.00), 1, True)
+    assert (workers["d4"]["usd"], workers["d4"]["unpriced_requests"], workers["d4"]["lower_bound"]) == (None, 1, True)
+    out = _run(capsys, "--dir", alpha, *WINDOW, "--detail")[1]
+    assert "claude-sonnet-5-5  effort -  at least $10.00; 1 request unpriced" in out
+    assert "claude-mystery-9  effort -  n/a" in out
+    assert "claude-sonnet-5-5  effort max  $20.00" in out

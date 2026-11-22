@@ -13,8 +13,16 @@ per content block, or copied into a resumed session) counts once. Calls Claude C
 web page summaries) are not in the transcripts, so they are not counted.
 
 Spend is an estimate at list prices (PRICES), not a bill: uncached input, cache writes (1.25x input for 5-minute
-entries, 2x for 1-hour ones), cache reads and output, per model. A model missing from PRICES is counted in tokens
-and named in the output, never priced.
+entries, 2x for 1-hour ones), cache reads and output, per model; a model with a long-prompt price (LONG_PROMPT)
+has a whole response priced at it when the prompt (input, cache writes and cache reads) is over its size. A model
+missing from PRICES is counted in tokens and named in the output, never priced. Its requests are left out of the
+dollars, so every figure they belong to is a lower bound and says so: a table row and a day's total show ``>=``
+before the figure, the table ends with "lower bound: at least $X; N requests unpriced in this window", a daily
+limit line reads "at least $X today of about $Y", and a worker in --detail reads "at least $X". In JSON each row,
+each ``budgets`` entry, each worker and the report itself carry ``lower_bound`` (true or false) and the number of
+unpriced requests (``unpriced_requests``; ``today_unpriced_requests`` in ``budgets``). The report's own two fields
+cover the window and today together, so they can be set when no row's are (an unpriced request made today, before
+a later ``--since``): the ``budgets`` entry then says it.
 
 A response belongs to the project holding its working directory: the nearest folder at or above it with an ai-pack
 (solaris.tools.pack; the home folder and above are never searched). A response made outside every project (at the
@@ -40,7 +48,8 @@ Run::
     uv run -m solaris.tools.ai_spend --dir projects/<slug> --since 2026-10-07T18:00-07:00 --json --detail
 
 Exit codes: 0 fine; 3 a reported project's estimate for today is over its daily limit; 1 a bad --dir or config
-(the report still prints when only a limit is bad); 2 bad arguments.
+(the report still prints when only a limit is bad); 2 bad arguments. A lower bound does not change the exit code:
+under the limit it still exits 0, and the daily limit line says that the limit may be passed.
 """
 
 from __future__ import annotations
@@ -68,17 +77,27 @@ UNATTRIBUTED = "(unattributed)"
 # List prices in US dollars per million tokens: (input, output, cache read). A cache write costs 1.25x input for a
 # 5-minute entry and 2x for a 1-hour one. Update from Anthropic's pricing page together with
 # solaris/info/model-tiers.md, which quotes the prices of the tier models.
-PRICES_AS_OF = "2026-10-01"
+PRICES_AS_OF = "2026-11-17"
 PRICES = {
+    "claude-fable-5-2": (8.00, 40.00, 0.20),
     "claude-fable-5-1": (10.00, 50.00, 0.25),
     "claude-fable-5": (10.00, 50.00, 1.00),
     "claude-opus-5-5": (4.00, 20.00, 0.20),
     "claude-opus-5": (5.00, 25.00, 0.50),
     "claude-opus-4-8": (5.00, 25.00, 0.50),
-    "claude-sonnet-5-5": (2.00, 10.00, 0.20),
+    "claude-sonnet-5-5": (2.00, 10.00, 0.10),
     "claude-sonnet-5": (2.00, 10.00, 0.20),
+    "claude-haiku-5-5": (0.10, 0.50, 0.01),
     "claude-haiku-4-5": (1.00, 5.00, 0.10),
 }
+# A model that costs more for a long prompt: (prompt tokens, prices). A response whose prompt (input, cache writes
+# and cache reads together) is over that many tokens is priced at these rates as a whole.
+LONG_PROMPT = {"claude-haiku-5-5": (100_000, (0.50, 2.50, 0.05))}
+# Every row was checked on 2026-11-22 against OpenCode's model catalog (`opencode api GET /api/model`, the
+# claude-agent provider), which holds Anthropic's API list prices as models.dev gave them on 2026-11-17: hence
+# PRICES_AS_OF. The claude-fable-5-2 and claude-haiku-5-5 rows were added from it, and the cache read price of
+# claude-sonnet-5-5 was set to its 0.10 (it was 0.20; another provider's entry in the catalog says
+# 0.10 too). Add or change a row only from such a source, never from a guess.
 WRITE_5M, WRITE_1H = 1.25, 2.0
 # a model id's family and version, without a date or [1m] suffix or a cloud prefix: claude-haiku-4-5-20251001
 _MODEL_RE = re.compile(r"claude-[a-z]+-\d{1,2}(?:-\d{1,2})?(?!\d)")
@@ -101,11 +120,15 @@ def price_key(model: str) -> "str | None":
 def cost(model: str, tokens: "tuple[int, ...]") -> "float | None":
     """Estimated US dollars for one response's (input, 5-minute writes, 1-hour writes, cache reads, output)
     tokens; None for a model missing from PRICES."""
-    price = PRICES.get(price_key(model))
+    key = price_key(model)
+    price = PRICES.get(key)
     if price is None:
         return None
-    inp, out, read = price
     i, w5, w1, r, o = tokens
+    long_prompt = LONG_PROMPT.get(key)
+    if long_prompt is not None and i + w5 + w1 + r > long_prompt[0]:
+        price = long_prompt[1]
+    inp, out, read = price
     return (i * inp + w5 * inp * WRITE_5M + w1 * inp * WRITE_1H + r * read + o * out) / 1e6
 
 
@@ -371,11 +394,13 @@ def attribution(found: dict) -> tuple:
 
 def report(found: dict, tz: "ZoneInfo | None", start: float, now: float, only: "Path | None" = None) -> dict:
     """Per (day, project) rows from ``start`` on, today's spend against each reported project's daily limit, the
-    unpriced models and any limit that could not be read. ``only`` keeps one project."""
+    unpriced models and any limit that could not be read. ``only`` keeps one project. A figure that leaves out
+    unpriced requests is a lower bound: its row or budget says so (``lower_bound``) and counts them."""
     projects, lead = attribution(found)
     today0 = day_start(now, tz)
-    sums: dict = {}   # (day, root) -> [requests, input, cache writes, cache reads, output, usd]
+    sums: dict = {}   # (day, root) -> [requests, input, cache writes, cache reads, output, usd, unpriced requests]
     today: dict = defaultdict(float)
+    today_unpriced: Counter = Counter()
     unpriced: Counter = Counter()
     for ts, session, cwd, model, tokens in found.values():
         if ts < min(start, today0):
@@ -388,13 +413,15 @@ def report(found: dict, tz: "ZoneInfo | None", start: float, now: float, only: "
             unpriced[model] += 1
         if ts >= today0:
             today[root] += usd or 0.0
+            today_unpriced[root] += usd is None
         if ts < start:
             continue
-        row = sums.setdefault((day_of(ts, tz), root), [0, 0, 0, 0, 0, 0.0])
-        for i, n in enumerate((1, tokens[0], tokens[1] + tokens[2], tokens[3], tokens[4], usd or 0.0)):
+        row = sums.setdefault((day_of(ts, tz), root), [0, 0, 0, 0, 0, 0.0, 0])
+        for i, n in enumerate((1, tokens[0], tokens[1] + tokens[2], tokens[3], tokens[4], usd or 0.0, usd is None)):
             row[i] += n
     rows = [{"day": day, "project": label(root), "requests": s[0], "input_tokens": s[1], "cache_write_tokens": s[2],
-             "cache_read_tokens": s[3], "output_tokens": s[4], "usd": round(s[5], 4)}
+             "cache_read_tokens": s[3], "output_tokens": s[4], "usd": round(s[5], 4), "unpriced_requests": s[6],
+             "lower_bound": s[6] > 0}
             for (day, root), s in sorted(sums.items(), key=lambda kv: (kv[0][0], label(kv[0][1]) or "~"))]
     budgets, problems = [], []
     roots = [only] if only is not None else sorted({r for _d, r in sums} | set(today), key=lambda r: label(r) or "")
@@ -409,8 +436,10 @@ def report(found: dict, tz: "ZoneInfo | None", start: float, now: float, only: "
         if limit is not None:
             spent = round(today.get(root, 0.0), 4)
             budgets.append({"project": label(root), "daily_budget_usd": limit, "today_usd": spent,
-                            "over": spent > limit})
-    return {"rows": rows, "budgets": budgets, "unpriced_models": dict(unpriced.most_common()),
+                            "over": spent > limit, "today_unpriced_requests": today_unpriced[root],
+                            "lower_bound": today_unpriced[root] > 0})
+    return {"rows": rows, "budgets": budgets, "lower_bound": bool(unpriced),
+            "unpriced_requests": sum(unpriced.values()), "unpriced_models": dict(unpriced.most_common()),
             "problems": problems}
 
 
@@ -440,7 +469,7 @@ def detail(found: dict, extra: dict, tz: "ZoneInfo | None", start: float, only: 
                 efforts[effort] += 1
             continue
         w = workers.setdefault(key, {"session": session[:SESSION_CHARS], "agent": agent, "first": ts,
-                                     "models": Counter(), "efforts": Counter(), "usd": None})
+                                     "models": Counter(), "efforts": Counter(), "usd": None, "unpriced": 0})
         w["first"] = min(w["first"], ts)
         w["models"][model] += 1
         if effort:
@@ -448,10 +477,13 @@ def detail(found: dict, extra: dict, tz: "ZoneInfo | None", start: float, only: 
         usd = cost(model, tokens)
         if usd is not None:
             w["usd"] = (w["usd"] or 0.0) + usd
+        else:
+            w["unpriced"] += 1
     rows = [{"session": w["session"], "agent": w["agent"], "first": _when(w["first"], tz),
              "model": w["models"].most_common(1)[0][0],
              "effort": w["efforts"].most_common(1)[0][0] if w["efforts"] else None,
-             "usd": None if w["usd"] is None else round(w["usd"], 4)}
+             "usd": None if w["usd"] is None else round(w["usd"], 4), "unpriced_requests": w["unpriced"],
+             "lower_bound": w["unpriced"] > 0}
             for w in sorted(workers.values(), key=lambda w: (w["first"], w["session"], w["agent"] or ""))]
     runs, failures = 0, []
     for ts, session, cwd, event, failed, text in hooks.values():
@@ -476,7 +508,7 @@ def print_detail(d: dict) -> None:
     print(f"main thread: {main['turns']:,} responses; models {counts(main['models'])}; effort {counts(main['effort'])}")
     print(f"workers: {len(d['workers'])}")
     for w in d["workers"]:
-        usd = "n/a" if w["usd"] is None else f"${w['usd']:,.2f}"
+        usd = "n/a" if w["usd"] is None else _dollars(w["usd"], w["unpriced_requests"])
         print(f"  {w['session']} {w['agent'] or '-'}  from {w['first']}  {w['model']}  effort {w['effort'] or '-'}  "
               f"{usd}")
     print(f"hooks: {hooks['runs']:,} runs, {hooks['failed']:,} failed")
@@ -495,6 +527,15 @@ def _short(name: str, width: int = 40) -> str:
     return name if len(name) <= width else "..." + name[3 - width:]   # the tail names the project
 
 
+def _dollars(usd: float, unpriced: int) -> str:
+    """A figure for a sentence: "$10.02", or "at least $10.02; 3 requests unpriced" when it leaves requests out."""
+    return f"at least ${usd:,.2f}; {_requests(unpriced)} unpriced" if unpriced else f"${usd:,.2f}"
+
+
+def _requests(n: int) -> str:
+    return f"{n:,} request" + ("" if n == 1 else "s")
+
+
 def print_table(rep: dict, header: str, per_day_totals: bool) -> None:
     print(header)
     rows = rep["rows"]
@@ -506,21 +547,32 @@ def print_table(rep: dict, header: str, per_day_totals: bool) -> None:
             group = [r for r in rows if r["day"] == day]
             lines += [(day, _short(r["project"] or UNATTRIBUTED), r) for r in group]
             if per_day_totals and len(group) > 1:
-                total = {k: sum(r[k] for r in group) for k in group[0] if k not in ("day", "project")}
+                total = {k: sum(r[k] for r in group) for k in group[0] if k not in ("day", "project", "lower_bound")}
                 lines.append((day, "total", total))
         w = max(len("project"), *(len(name) for _d, name, _r in lines))
         print(f"{'day':<10}  {'project':<{w}}  {'requests':>8}  {'input':>7}  {'c.write':>7}  {'c.read':>7}  "
               f"{'output':>7}  {'est. $':>10}")
         for day, name, r in lines:
+            usd = (">=" if r["unpriced_requests"] else "") + f"{r['usd']:,.2f}"   # a lower bound says so
             print(f"{day:<10}  {name:<{w}}  {r['requests']:>8,}  {_tokens(r['input_tokens']):>7}  "
                   f"{_tokens(r['cache_write_tokens']):>7}  {_tokens(r['cache_read_tokens']):>7}  "
-                  f"{_tokens(r['output_tokens']):>7}  {r['usd']:>10,.2f}")
+                  f"{_tokens(r['output_tokens']):>7}  {usd:>10}")
+        left_out = sum(r["unpriced_requests"] for r in rows)
+        if left_out:
+            print(f"lower bound: {_dollars(sum(r['usd'] for r in rows), left_out)} in this window "
+                  "(>= marks the figures that leave them out)")
     for b in rep["budgets"]:
         pct = 100 * b["today_usd"] / b["daily_budget_usd"]
-        print(f"daily limit {b['project']}: ${b['today_usd']:,.2f} today of about ${b['daily_budget_usd']:,.2f} "
-              f"({pct:.0f}%)" + (", OVER" if b["over"] else ""))
+        if not b["lower_bound"]:
+            print(f"daily limit {b['project']}: ${b['today_usd']:,.2f} today of about "
+                  f"${b['daily_budget_usd']:,.2f} ({pct:.0f}%)" + (", OVER" if b["over"] else ""))
+            continue
+        print(f"daily limit {b['project']}: at least ${b['today_usd']:,.2f} today of about "
+              f"${b['daily_budget_usd']:,.2f} ({pct:.0f}% or more)" + (", OVER" if b["over"] else "")
+              + f"; {_requests(b['today_unpriced_requests'])} unpriced, so this is a lower bound"
+              + ("" if b["over"] else " and the limit may be passed"))
     for model, n in rep["unpriced_models"].items():
-        print(f"not priced: {model} ({n:,} requests; tokens counted) - add it to PRICES in solaris/tools/ai_spend.py")
+        print(f"not priced: {model} ({_requests(n)}; tokens counted) - add it to PRICES in solaris/tools/ai_spend.py")
     for problem in rep["problems"]:
         print(f"ai_spend: {problem}")
 
