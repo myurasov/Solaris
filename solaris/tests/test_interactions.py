@@ -206,3 +206,152 @@ def test_last_entry_reads_the_tail_and_skips_a_broken_last_line(tmp_path):
     log.write_text('{"ts": "only"}\n', encoding="utf-8")
     assert I.last_entry(log) == {"ts": "only"}
     assert I.last_entry(tmp_path / "missing.jsonl") is None
+
+
+# --------------------------------------------------------------------------- a manager's lines (add --manager)
+
+def test_add_manager_marks_the_line_in_both_logs(repo, monkeypatch, capsys):
+    project = repo / "projects" / "my" / "demo"
+    base = ["add", "--project", "demo", "--prompt", "p", "--request", "r", "--outcome", "o", "--dir", str(project)]
+    assert I.main(base + ["--manager"]) == 0
+    assert I.main(base) == 0  # no flag: no key, the line is as it always was
+    _stdin(monkeypatch, project="demo", manager=True, prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin", "--dir", str(project)]) == 0  # --stdin carries the mark too
+    _stdin(monkeypatch, project="demo", manager=False, prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin", "--dir", str(project), "--manager"]) == 0  # the flag wins
+    _stdin(monkeypatch, project="demo", manager=False, trigger="peer", prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin", "--dir", str(project)]) == 0
+    framework = _lines(repo / ".memory" / "interactions" / "box1.jsonl")
+    pack_log = _lines(project / "aipack" / ".memory" / "interactions" / "box1.jsonl")
+    assert framework == pack_log  # the same line, mark included, in both logs
+    assert [line.get("manager") for line in framework] == [True, None, True, True, None]
+    assert framework[0] == {"ts": "2026-10-02T12:00:00Z", "project": "demo", "prompt": "p", "request": "r",
+                            "outcome": "o", "manager": True}
+    assert framework[4]["trigger"] == "peer" and "manager" not in framework[4]
+    capsys.readouterr()
+    assert I.main(["show", "--dir", str(project), "--last", "0"]) == 0
+    shown = capsys.readouterr().out.splitlines()
+    assert ["(manager)" in line for line in shown] == [True, False, True, True, False]
+    assert "[demo] (manager) r" in shown[0] and "[demo] r" in shown[1]
+    assert I.main(["show", "--dir", str(project), "--last", "1", "--json"]) == 0
+    assert "manager" not in json.loads(capsys.readouterr().out)
+
+
+def test_add_refuses_a_manager_mark_that_is_not_true_or_false(repo, monkeypatch, capsys):
+    for bad in ("yes", 1, 0, "true", ["x"]):
+        _stdin(monkeypatch, project="demo", manager=bad, prompt="p", request="r", outcome="o")
+        assert I.main(["add", "--stdin"]) == 2, bad
+        assert "manager must be true or false" in capsys.readouterr().err
+    assert not (repo / ".memory" / "interactions").exists()
+
+
+def _project_logs(repo, **files):
+    logs = repo / "projects" / "my" / "demo" / "aipack" / ".memory" / "interactions"
+    logs.mkdir(exist_ok=True)
+    for machine, lines in files.items():
+        (logs / f"{machine}.jsonl").write_text("".join(json.dumps(line) + "\n" for line in lines), encoding="utf-8")
+    return str(repo / "projects" / "my" / "demo")
+
+
+def test_who_does_not_count_a_managers_line_as_work_on_the_project(repo, capsys):
+    # box2 is where a manager session runs: it only logs its own actions about the project
+    project = _project_logs(
+        repo, box1=[{"ts": "2026-10-02T11:58:00Z", "project": "demo"}],
+        box2=[{"ts": "2026-10-02T08:00:00Z", "project": "demo"},
+              {"ts": "2026-10-02T11:50:00Z", "project": "demo", "manager": True}])
+    assert I.main(["who", "--dir", project]) == 0
+    out = capsys.readouterr().out
+    assert "may be in use" not in out
+    line = next(row for row in out.splitlines() if row.startswith("box2"))
+    assert "2026-10-02T11:50:00Z" in line and line.endswith("(manager)")   # still listed, labelled
+    assert "(manager)" not in next(row for row in out.splitlines() if row.startswith("box1"))
+
+
+def test_who_still_flags_work_logged_before_a_managers_line(repo, capsys):
+    # real work on box2 ten minutes ago, then the manager there logged a line of its own
+    project = _project_logs(
+        repo, box1=[{"ts": "2026-10-02T11:58:00Z", "project": "demo"}],
+        box2=[{"ts": "2026-10-02T11:50:00Z", "project": "demo"},
+              {"ts": "2026-10-02T11:55:00Z", "project": "demo", "manager": True}])
+    assert I.main(["who", "--dir", project]) == 3
+    out = capsys.readouterr().out
+    assert "box2 logged 10 min ago: this project may be in use there" in out   # the work line's age
+    assert I.main(["who", "--dir", project, "--minutes", "8"]) == 0   # the work is outside the window
+    capsys.readouterr()
+    # a file that holds only a manager's lines never makes the project look in use
+    project = _project_logs(repo, box2=[{"ts": "2026-10-02T11:59:00Z", "project": "demo", "manager": True}])
+    assert I.main(["who", "--dir", project]) == 0
+
+
+def test_who_treats_unmarked_and_oddly_marked_lines_as_work(repo, capsys):
+    # old lines carry no mark; a mark that is not the JSON true is not one
+    for mark in ({}, {"manager": False}, {"manager": "true"}, {"manager": 1}):
+        project = _project_logs(repo, box2=[{"ts": "2026-10-02T11:50:00Z", "project": "demo", **mark}])
+        assert I.main(["who", "--dir", project]) == 3, mark
+        assert "(manager)" not in capsys.readouterr().out
+
+
+def test_who_on_the_framework_log_counts_a_manager_on_another_machine(repo, capsys):
+    logs = repo / ".memory" / "interactions"
+    logs.mkdir()
+    (logs / "box2.jsonl").write_text('{"ts": "2026-10-02T11:50:00Z", "project": "demo", "manager": true}\n',
+                                     encoding="utf-8")
+    assert I.main(["who"]) == 3   # that session does use this checkout
+    out = capsys.readouterr().out
+    assert "(manager)" in out and "box2 logged 10 min ago: this checkout may be in use there" in out
+
+
+def test_last_entry_can_leave_out_a_managers_lines(tmp_path):
+    log = tmp_path / "box2.jsonl"
+    filler = "".join(json.dumps({"ts": "2026-10-02T10:00:00Z", "manager": True, "i": i}) + "\n" for i in range(3000))
+    log.write_text('{"ts": "2026-10-01T09:00:00Z", "i": "work"}\n' + filler, encoding="utf-8")
+    assert I.last_entry(log)["i"] == 2999
+    # the work line is far before the tail: the whole file is read to find it
+    assert I.last_entry(log, work_only=True) == {"ts": "2026-10-01T09:00:00Z", "i": "work"}
+    log.write_text(filler, encoding="utf-8")
+    assert I.last_entry(log, work_only=True) is None
+    logs = tmp_path / "interactions"
+    logs.mkdir()
+    (logs / "box2.jsonl").write_text(
+        '{"ts": "2026-10-02T11:00:00Z"}\n{"ts": "2026-10-02T11:30:00Z", "manager": true}\n', encoding="utf-8")
+    [row] = I.activity(tmp_path)
+    assert row["manager"] and row["ts"].hour == 11 and row["ts"].minute == 30 and row["work_ts"].minute == 0
+
+
+def test_a_managers_line_never_checks_the_projects_compaction_checkpoint(repo, monkeypatch):
+    project = str(repo / "projects" / "my" / "demo")
+    seen = []
+    monkeypatch.setattr(I, "_compaction_note", lambda project_dir, name: seen.append(project_dir))
+    base = ["add", "--project", "demo", "--prompt", "p", "--request", "r", "--outcome", "o", "--dir", project]
+    assert I.main(base) == 0 and I.main(base + ["--manager"]) == 0
+    assert seen == [project, None]   # the manager is not the project's session: its checkpoint is its own
+
+
+def test_add_manager_needs_a_project_dir(repo, monkeypatch, capsys):
+    """Review B, finding 16: without --dir the mark would change nothing, so it is refused before any write."""
+    base = ["add", "--project", "demo", "--prompt", "p", "--request", "r", "--outcome", "o"]
+    assert I.main(base + ["--manager"]) == 2
+    err = capsys.readouterr().err
+    assert err.count("\n") == 1 and "--manager marks a line about a project: give --dir <project>" in err
+    _stdin(monkeypatch, project="demo", manager=True, prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin"]) == 2
+    assert not (repo / ".memory" / "interactions").exists()
+    _stdin(monkeypatch, project="demo", manager=False, prompt="p", request="r", outcome="o")
+    assert I.main(["add", "--stdin"]) == 0   # no mark asked for: a plain line, as ever
+    assert "manager" not in _lines(repo / ".memory" / "interactions" / "box1.jsonl")[0]
+
+
+def test_who_counts_a_work_line_with_no_readable_time_before_a_managers_line(repo, capsys):
+    """Review B, finding 15: a hand-made work line with no ts used to count as of the file's latest line. A
+    manager's line after it must not hide it."""
+    project = _project_logs(
+        repo, box2=[{"project": "demo", "request": "work, no ts"},
+                    {"ts": "2026-10-02T11:50:00Z", "project": "demo", "manager": True}])
+    assert I.main(["who", "--dir", project]) == 3
+    assert "box2 logged 10 min ago: this project may be in use there" in capsys.readouterr().out
+    # with a readable work line too, that one decides: the newest work is an hour and a half old
+    project = _project_logs(
+        repo, box2=[{"project": "demo", "request": "work, no ts"},
+                    {"ts": "2026-10-02T10:30:00Z", "project": "demo"},
+                    {"ts": "2026-10-02T11:50:00Z", "project": "demo", "manager": True}])
+    assert I.main(["who", "--dir", project]) == 0

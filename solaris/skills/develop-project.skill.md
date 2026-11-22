@@ -67,10 +67,12 @@ operate over Remote-SSH against `remote.json` (remote-code).
 
 **One machine at a time:** run `uv run -m solaris.tools.interactions who --dir projects/<slug>`. Exit 3 means
 another machine logged work on this project within the last hour (it names the machine and when; the
-reading is as of the last Syncthing sync). Then tell the owner and ask before writing anything under
-`<pack>/.memory/` (`context.md`, schedules, job notes): two machines rewriting one file is what Syncthing
-turns into conflict copies. Offer a handover (the session there saves its context and stops, following the
-pack's `handover` skill) over running both; reading the project meanwhile is fine.
+reading is as of the last Syncthing sync). Lines a manager session logged about the project
+(`interactions add --manager`) are listed, labelled, and never count as work. On exit 3, tell the owner and
+ask before writing anything under `<pack>/.memory/` (`context.md`, schedules, job notes): two machines
+rewriting one file is what Syncthing turns into conflict copies. Offer a handover (the session there saves
+its context and stops, following the pack's `handover` skill) over running both; reading the project
+meanwhile is fine.
 
 **Workspaces:** when the project has more than one workspace (manifest `project.workspaces`, or the
 workspace table in `<pack>/instructions.md`), determine which one the request targets - from the

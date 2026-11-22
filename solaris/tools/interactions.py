@@ -14,8 +14,8 @@ folder stays as read-only history and is read together with the per-machine file
 
 Run::
 
-    uv run -m solaris.tools.interactions add --project <name> [--trigger WHO] --prompt TEXT --request TEXT --outcome TEXT [--dir <project>]
-    uv run -m solaris.tools.interactions add --stdin [--dir <project>] <<'EOF'
+    uv run -m solaris.tools.interactions add --project <name> [--trigger WHO] --prompt TEXT --request TEXT --outcome TEXT [--dir <project> [--manager]]
+    uv run -m solaris.tools.interactions add --stdin [--dir <project> [--manager]] <<'EOF'
     {"project": "<name>", "trigger": "owner", "prompt": "...", "request": "...", "outcome": "..."}
     EOF
     uv run -m solaris.tools.interactions show [--dir <project>] [--last N] [--since ISO] [--project NAME] [--machine NAME] [--json]
@@ -26,12 +26,22 @@ Run::
 with ``--dir``, the identical line to the project's file (``--stdin`` reads the fields from a JSON object, which
 avoids shell quoting; flags win). ``--trigger`` (or a ``trigger`` key on stdin) takes ``owner``, ``clock``,
 ``worker`` or ``peer``. It refuses an empty ``project`` or ``-``: name the project, the ad-hoc task, or
-``solaris`` for framework work. In an OpenCode 2 session ``add`` also prints one line when the session should
-compact itself (solaris.tools.session_compact; the project's checkpoint only when ``--project`` names the project
-at ``--dir``), which never changes its exit code. ``show`` merges the history file and every machine's file by
-``ts`` (``--last 0`` prints everything; ``--json`` prints whole lines, ``trigger`` included). ``who`` lists each
-log file's latest entry. ``machine`` prints this machine's name: ``SOLARIS_MACHINE`` when set, else the macOS
-LocalHostName or the short host name, lowercased, with anything outside ``[a-z0-9-]`` turned into ``-``.
+``solaris`` for framework work. ``--manager`` (or ``"manager": true`` on stdin) marks the line as a manager's: a
+session that runs or watches the project from outside logs what it did about the project, and does not work in the
+project's pack. It needs ``--dir``, and the line carries ``"manager": true`` in the framework file and in the
+project's file. A change such a session makes to the project's own files (``version update`` is one) is work on
+the project: log it without ``--manager``, so that ``who`` counts it. In an
+OpenCode 2 session ``add`` also prints one line when the session should compact itself
+(solaris.tools.session_compact; the project's checkpoint only when ``--project`` names the project at ``--dir`` and
+the line is not a manager's), which never changes its exit code. ``show`` merges the history file and every
+machine's file by ``ts`` (``--last 0`` prints everything; ``--json`` prints whole lines, ``trigger`` and ``manager``
+included; the short form labels a manager's line). ``who`` lists each log file's latest entry, a manager's
+labelled. With ``--dir`` it decides by each file's latest line that is not a manager's, so a manager on another
+machine never makes the project look in use there; without ``--dir`` (the framework log) every line counts, since
+that manager does use the checkout. A line without the mark counts as before, and so does a work line with no
+readable ``ts`` that a manager's line follows (as of the file's latest line). ``machine`` prints this machine's
+name: ``SOLARIS_MACHINE`` when set, else the macOS LocalHostName or the short host name, lowercased, with anything
+outside ``[a-z0-9-]`` turned into ``-``.
 
 Exit codes: 0 ok; 1 an error (no ai-pack, an unwritable log); 2 bad arguments; 3 (``who`` only) another machine
 logged within ``--minutes`` (default 60), so the log's project may be in use there - as of the last sync.
@@ -130,11 +140,18 @@ def utc_stamp(t: "float | None" = None) -> str:
 
 
 def build_entry(project: str, prompt: str, request: str, outcome: str, t: "float | None" = None,
-                trigger: "str | None" = None) -> dict:
+                trigger: "str | None" = None, manager: bool = False) -> dict:
     entry = {"ts": utc_stamp(t), "project": project, "prompt": prompt, "request": request, "outcome": outcome}
     if trigger:
         entry["trigger"] = trigger
+    if manager:
+        entry["manager"] = True
     return entry
+
+
+def is_manager(entry: dict) -> bool:
+    """True for a line a manager session logged about a project (``add --manager``): no work in the project's pack."""
+    return entry.get("manager") is True
 
 
 def append_line(path, entry: dict) -> None:
@@ -181,10 +198,10 @@ def read_entries(memory) -> "tuple[list[dict], int]":
     return [r[2] for r in rows], bad
 
 
-def last_entry(path) -> "dict | None":
+def last_entry(path, work_only: bool = False) -> "dict | None":
     """The newest JSON object (by ts) in a log file's tail, else its last one; the whole file only when the
     tail holds none. A merged conflict copy appends older lines after newer ones, so the last line is not
-    always the newest."""
+    always the newest. ``work_only`` leaves out the lines a manager logged (is_manager)."""
     try:
         with open(path, "rb") as fh:
             size = fh.seek(0, os.SEEK_END)
@@ -198,7 +215,7 @@ def last_entry(path) -> "dict | None":
                         entry = json.loads(line)
                     except ValueError:
                         continue
-                    if not isinstance(entry, dict):
+                    if not isinstance(entry, dict) or (work_only and is_manager(entry)):
                         continue
                     last = entry
                     ts = parse_ts(entry.get("ts"))
@@ -214,7 +231,9 @@ def last_entry(path) -> "dict | None":
 
 
 def activity(memory) -> "list[dict]":
-    """Each log file's latest entry, newest first: [{machine, path, ts, project}] (ts falls back to the mtime)."""
+    """Each log file's latest entry, newest first: [{machine, path, ts, project, manager, work_ts}] (ts falls back
+    to the mtime). ``manager`` says that entry is a manager's; ``work_ts`` is the time of the file's latest entry
+    that is not a manager's (ts itself when the latest is not one, None when the file holds no other)."""
     out = []
     for machine, path in log_files(memory):
         entry = last_entry(path) or {}
@@ -224,7 +243,14 @@ def activity(memory) -> "list[dict]":
                 ts = datetime.fromtimestamp(path.stat().st_mtime, timezone.utc)
             except OSError:
                 ts = None
-        out.append({"machine": machine, "path": path, "ts": ts, "project": entry.get("project")})
+        manager = is_manager(entry)
+        work_ts = ts
+        if manager:
+            work = last_entry(path, work_only=True)
+            # a work line with no readable ts counts as of the file's latest line, as it did before the mark
+            work_ts = None if work is None else parse_ts(work.get("ts")) or ts
+        out.append({"machine": machine, "path": path, "ts": ts, "project": entry.get("project"),
+                    "manager": manager, "work_ts": work_ts})
     out.sort(key=lambda r: r["ts"] or _EPOCH, reverse=True)
     return out
 
@@ -253,7 +279,8 @@ def _brief(entry: dict) -> str:
     if len(text) > 160:
         text = text[:157] + "..."
     project = entry.get("project") or entry.get("cwd") or "-"
-    return f"{entry.get('ts', '-')}  {entry['machine']:<10} [{project}] {text}"
+    who = " (manager)" if is_manager(entry) else ""
+    return f"{entry.get('ts', '-')}  {entry['machine']:<10} [{project}]{who} {text}"
 
 
 def _usage(msg: str) -> int:
@@ -267,7 +294,7 @@ def _memory_for(a) -> Path:
 
 def cmd_add(a) -> int:
     fields = {}
-    trigger = None
+    trigger = manager = None
     if a.stdin:
         if sys.stdin is None or sys.stdin.isatty():
             return _usage("--stdin needs a JSON object piped in (a heredoc works)")
@@ -278,12 +305,14 @@ def cmd_add(a) -> int:
         if not isinstance(data, dict):
             return _usage("--stdin needs a JSON object")
         fields.update({k: data[k] for k in FIELDS if k in data})
-        trigger = data.get("trigger")
+        trigger, manager = data.get("trigger"), data.get("manager")
     for k in FIELDS:
         if getattr(a, k) is not None:
             fields[k] = getattr(a, k)
     if a.trigger is not None:
         trigger = a.trigger
+    if a.manager:
+        manager = True
     missing = [k for k in FIELDS if not isinstance(fields.get(k), str)]
     if missing:
         return _usage("missing " + ", ".join("--" + k for k in missing))
@@ -297,11 +326,15 @@ def cmd_add(a) -> int:
         if not isinstance(trigger, str) or trigger.strip().lower() not in TRIGGERS:
             return _usage(f"--trigger must be one of {', '.join(TRIGGERS)} (got {trigger!r})")
         trigger = trigger.strip().lower()
+    if manager is not None and not isinstance(manager, bool):
+        return _usage(f"manager must be true or false (got {manager!r})")
+    if manager and not a.dir:
+        return _usage("--manager marks a line about a project: give --dir <project> with it")
     machine = machine_name()
     targets = [machine_log(framework_memory(), machine)]
     if a.dir:
         targets.append(machine_log(project_memory(a.dir), machine))
-    entry = build_entry(**fields, trigger=trigger)
+    entry = build_entry(**fields, trigger=trigger, manager=bool(manager))
     for path in targets:
         try:
             append_line(path, entry)
@@ -309,7 +342,7 @@ def cmd_add(a) -> int:
             print(f"interactions: cannot write {path}: {e}", file=sys.stderr)
             return 1
     print(f"logged {entry['ts']} ({machine}) -> " + ", ".join(_rel(p) for p in targets))
-    note = _compaction_note(a.dir, fields["project"])
+    note = _compaction_note(None if manager else a.dir, fields["project"])   # a manager's checkpoint is its own
     if note:
         print(note)
     return 0
@@ -362,11 +395,14 @@ def cmd_who(a) -> int:
             label = r["machine"] + (" (this machine)" if r["machine"] == me else "")
         stamp = r["ts"].strftime("%Y-%m-%dT%H:%M:%SZ") if r["ts"] else "-"
         project = f"  [{r['project']}]" if r["project"] else ""
-        print(f"{label:<24} {stamp}  {_age(r['ts'], now)}{project}")
+        print(f"{label:<24} {stamp}  {_age(r['ts'], now)}{project}" + ("  (manager)" if r["manager"] else ""))
         # The history file is read-only now, so a recent line there means a session still on older
         # instructions, on a machine we cannot name: count it as activity too.
-        if r["machine"] != me and r["ts"] and now - r["ts"].timestamp() <= a.minutes * 60:
-            busy.append(r)
+        # A project's log (--dir): a manager's line is no work in the project, so the file's latest other line
+        # decides. The framework log: every line counts, a manager on another machine does use this checkout.
+        ts = r["work_ts"] if a.dir else r["ts"]
+        if r["machine"] != me and ts and now - ts.timestamp() <= a.minutes * 60:
+            busy.append({**r, "ts": ts})
     scope = "this project" if a.dir else "this checkout"
     for r in busy:
         if r["machine"] == "-":
@@ -390,6 +426,11 @@ def main(argv: "list[str] | None" = None) -> int:
         add.add_argument("--" + k)
     add.add_argument("--trigger", metavar="|".join(TRIGGERS),
                      help="what started the turn: the owner, a clock wake, a worker's report or a peer session")
+    add.add_argument("--manager", action="store_true",
+                     help="with --dir: mark the line as a manager's. A session that runs the project from outside "
+                          "logs its own action about it, and who --dir does not count such a line as work on the "
+                          "project. A change to the project's own files (version update is one) is work: log it "
+                          "without this flag")
     add.add_argument("--stdin", action="store_true", help="read the fields from a JSON object on stdin")
     add.add_argument("--dir", help="project folder: also log the line in its ai-pack")
     show = sub.add_parser("show", help="print the merged log, oldest first")
