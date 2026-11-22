@@ -1,4 +1,4 @@
-_Rev. 53_
+_Rev. 54_
 
 # {{NAME}} - {{PRIMARY_TITLE}} Agent <!-- omit in toc -->
 
@@ -168,7 +168,10 @@ the work resumes from what is on disk:
   what the project's `{{PACK}}/housekeeping.json` rules and `.disposable` or `.recreatable` markers name, never
   submissions, raw traces, the pack or `.git`; raw data and run logs are protected by default (`protect_names` in
   `{{PACK}}/housekeeping.json`, which the project may change), and it holds anything a live job's scripts or a
-  running process still use. Deleting anything else needs the owner's yes. <!-- OD42 -->
+  running process still use. A top-level `__data` or `__out` that is a symlink to a folder on another drive
+  counts as part of the project (measured, budgeted, pruned) only when `{{PACK}}/housekeeping.json` lists it
+  under `linked_roots`; a listed link whose target is missing is an error. Deleting anything else needs the
+  owner's yes. <!-- OD42 -->
 - Delete re-creatable data that is unlikely to be needed as you go, without asking: name it with a housekeeping
   rule carrying `"recreatable": true` and a one-line `"how"` (how to get it back), or a `.recreatable` marker
   whose first line is the how, and run `prune --apply` at each housekeeping pass; every deletion is logged with
