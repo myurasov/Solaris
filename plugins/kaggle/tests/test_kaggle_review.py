@@ -1012,6 +1012,232 @@ class PoolTests(Review):
         self.assert_nothing_left()
 
 
+class LinkedRootTests(Review):
+    """A project that keeps __out on another drive and links it into its root, as the housekeeping tool allows
+    when <pack>/housekeeping.json lists the name under "linked_roots"."""
+
+    def setUp(self):
+        super().setUp()
+        self.drive = self.tmp / "drive"
+        (self.drive / "out").mkdir(parents=True)
+        (self.root / "__out").symlink_to(self.drive / "out")
+        self.listed(["__data", "__out"])
+        (self.tmp / "outside.md").write_text("not the project's\n")
+
+    def listed(self, names):
+        path = self.root / "aipack" / "housekeeping.json"
+        if names is None:
+            path.unlink(missing_ok=True)
+        else:
+            path.write_text(json.dumps({"budget_gb": {"__out": 5}, "linked_roots": names}))
+
+    def test_a_package_under_a_linked_root_runs(self):
+        self.package()
+        code, out, err = self.review("--package", "__out/review/1122-plan-review", "--day", "2026-11-22")
+        self.assertEqual(code, 0, out + err)
+        # the result names the review by its project path; the file itself is on the other drive
+        self.assertTrue(out.strip().endswith("-> __out/review/1122-plan-review/review.md"), out)
+        self.assertTrue((self.drive / "out" / "review" / "1122-plan-review" / "review.md").is_file())
+        self.assertEqual(self.real_runs()[0]["files"], ["STATE.md", "research/plan.md", "source/train.py"])
+        rec = json.loads(self.out("1122-plan-review", "run.json").read_text())
+        self.assertEqual((rec["package"], rec["review"], rec["ready"]),
+                         ("__out/review/1122-plan-review", "__out/review/1122-plan-review/review.md", "2026-11-22"))
+        self.assert_nothing_left()
+
+    def test_the_days_link_inside_the_linked_root_names_the_package(self):
+        self.package()
+        (self.drive / "out" / "review" / "current").symlink_to("1122-plan-review")
+        code, out, err = self.review("--package", "__out/review/current", "--day", "2026-11-22", "--tag", "two")
+        self.assertEqual(code, 0, out + err)
+        self.assertIn("kaggle_review 1122-plan-review-two: review written", out)
+        self.assertTrue(self.out("1122-plan-review-two").is_file())
+
+    def test_a_file_under_a_linked_root_is_copied_with_its_project_path(self):
+        self.write("__out/runs/j1/result.md", "# Result\n0.84\n")
+        self.write("__out/runs/j1/log/train.txt", "epoch 1\n")
+        self.write("__out/review/r1/STATE.md", "# State\n")
+        self.write("__out/review/r1/prompt.md", "Attack the result.\n")
+        code, out, err = self.review("r1", "__out/review/r1/prompt.md", "__out/review/r1/STATE.md",
+                                     "__out/runs/j1/result.md", "__out/runs/j1/log", "research/plan.md")
+        self.assertEqual(code, 0, out + err)
+        run = self.real_runs()[0]
+        # the review's own file at the top, every other file where the project has it
+        self.assertEqual(run["files"], ["STATE.md", "__out/runs/j1/log/train.txt", "__out/runs/j1/result.md",
+                                        "research/plan.md"])
+        self.assertEqual(run["prompt"], "Attack the result.\n")
+        # the same files by their real paths are the same files
+        real = self.drive / "out"
+        code, out, err = self.review("r2", "prompt.md", str(real / "runs" / "j1" / "result.md"),
+                                     str(real / "review" / "r1" / "STATE.md"), "--out",
+                                     str(real / "review" / "r1" / "second.md"))
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.real_runs()[1]["files"], ["STATE.md", "__out/runs/j1/result.md"])
+        self.assertTrue(out.strip().endswith("-> __out/review/r1/second.md"), out)
+        # also where the review's folder is named through the link and its file by the real path
+        code, out, err = self.review("r1", "prompt.md", str(real / "review" / "r1" / "STATE.md"), "--force")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.real_runs()[2]["files"], ["STATE.md"])
+
+    def test_the_same_link_not_listed_is_refused_as_before(self):
+        self.package()
+        self.write("__out/runs/j1/result.md", "# Result\n")
+        cases = {"no file": None, "no list": [], "only the other": ["__data"],
+                 "a name that is no data folder": ["__out", "research"], "not a list": "__out"}
+        for name, names in cases.items():
+            with self.subTest(name):
+                self.listed(names)
+                code, out, err = self.review("r1", "prompt.md", "__out/runs/j1/result.md")
+                self.assertEqual(code, 2, out + err)
+                self.assertIn("__out/runs/j1/result.md is not a file or folder inside the project: the reviewer "
+                              "gets copies of project files only", out)
+                code, out, err = self.review("--package", "__out/review/1122-plan-review")
+                self.assertEqual(code, 2, out + err)
+                self.assertIn("the package folder __out/review/1122-plan-review is not inside the project", out)
+                # and the line says what would make it part of the project
+                self.assertIn('(__out is a link to a folder outside the project; it counts as part of the project '
+                              'once "linked_roots" in the pack\'s housekeeping.json lists it)', out)
+        (self.root / "aipack" / "housekeeping.json").write_text("{not json")
+        self.assertEqual(self.review("r1", "prompt.md", "__out/runs/j1/result.md")[0], 2)
+        self.assertEqual(self.fake_calls(), [])
+
+    def test_a_listed_name_that_fails_the_rule_is_a_plain_link(self):
+        self.write("__out/runs/j1/result.md", "# Result\n")
+        m = self.module("kaggle_review")
+        pack = self.root / "aipack"
+        self.assertEqual(m.linked_roots(self.root, pack), {"__out": self.drive / "out"})
+        # a real folder that is listed needs nothing
+        (self.root / "__data").mkdir()
+        self.assertEqual(m.linked_roots(self.root, pack), {"__out": self.drive / "out"})
+        # two links whose targets overlap: neither counts
+        (self.root / "__data").rmdir()
+        (self.root / "__data").symlink_to(self.drive)
+        self.assertEqual(m.linked_roots(self.root, pack), {})
+        code, out, _err = self.review("r1", "prompt.md", "__out/runs/j1/result.md")
+        self.assertEqual(code, 2)
+        self.assertIn("(__out is listed as a linked root, but its link does not lead to a folder outside the "
+                      "project and apart from the other linked root's)", out)
+        (self.root / "__data").unlink()
+        for target in (self.root / "research",   # into the project
+                       self.tmp,                  # a folder that holds the project
+                       self.tmp / "not-mounted",  # a drive that is not there
+                       self.tmp / "outside.md"):  # a file
+            with self.subTest(target.name):
+                (self.root / "__out").unlink()
+                (self.root / "__out").symlink_to(target)
+                self.assertEqual(m.linked_roots(self.root, pack), {})
+        self.assertEqual(self.fake_calls(), [])
+
+    def test_a_path_that_leaves_the_linked_root_is_refused(self):
+        real = self.drive / "out"
+        (self.drive / "beside.md").write_text("on the drive, not in the linked folder\n")
+        (self.tmp / "elsewhere").mkdir()
+        (self.tmp / "elsewhere" / "STATE.md").write_text("# State\n")
+        (real / "escape.md").symlink_to(self.tmp / "outside.md")
+        (real / "elsewhere").symlink_to(self.tmp / "elsewhere")
+        (real / "beside-link.md").symlink_to(self.drive / "beside.md")
+        self.write("__out/runs/j1/result.md", "# Result\n")
+        (real / "runs" / "j1" / "inner.md").symlink_to(self.tmp / "outside.md")
+        outside = "not a file or folder inside the project"
+        cases = {"__out/escape.md": outside, "__out/beside-link.md": outside, "__out/elsewhere/STATE.md": outside,
+                 str(real / "escape.md"): outside, "__out/../../outside.md": outside,
+                 str(real / ".." / "beside.md"): outside, str(self.drive / "beside.md"): outside,
+                 str(self.drive): outside}
+        for name, words in cases.items():
+            with self.subTest(name):
+                code, out, err = self.review("r1", "prompt.md", name)
+                self.assertEqual(code, 2, out + err)
+                self.assertIn(words, out)
+        code, out, _err = self.review("--package", "__out/elsewhere")
+        self.assertEqual(code, 2)
+        self.assertIn("the package folder __out/elsewhere is not inside the project", out)
+        self.assertEqual(self.fake_calls(), [])
+        # a link inside a folder that is copied is left out, as anywhere
+        code, out, err = self.review("r1", "prompt.md", "__out/runs/j1")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.real_runs()[0]["files"], ["__out/runs/j1/result.md"])
+        self.assertIn("__out/runs/j1/inner.md (a symbolic link)", err)
+
+    def test_private_names_under_a_linked_root_are_refused(self):
+        self.write("__out/credentials.md", "a credentials file\n")
+        self.write("__out/runs/.memory/notes.md", "private\n")
+        self.write("__out/runs/AGENTS.md", "rules\n")
+        self.write("__out/runs/kaggle.json", "{}\n")
+        self.write("__out/runs/result.md", "# Result\n")
+        real = self.drive / "out"
+        # a plain name that leads to a private file, inside the linked root and from it into the project
+        (real / "innocent.md").symlink_to(real / "credentials.md")
+        self.write("aipack/.memory/config.json", "{}\n")
+        (real / "settings.json").symlink_to(self.root / "aipack" / ".memory" / "config.json")
+        cases = {"__out/innocent.md": "it is named like a credentials file",
+                 "__out/settings.json": "it is inside a .memory folder",
+                 "__out/credentials.md": "it is named like a credentials file",
+                 str(real / "credentials.md"): "it is named like a credentials file",
+                 "__out/runs/.memory/notes.md": "it is inside a .memory folder",
+                 "__out/runs/.memory": "a private or tool folder",
+                 "__out/runs/AGENTS.md": "OpenCode would load it"}
+        for name, words in cases.items():
+            with self.subTest(name):
+                code, out, err = self.review("r1", "prompt.md", name)
+                self.assertEqual(code, 2, out + err)
+                self.assertIn(f"is never given to a reviewer: {words}", out)
+        self.assertEqual(self.fake_calls(), [])
+        code, out, err = self.review("r1", "prompt.md", "__out/runs")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(self.real_runs()[0]["files"], ["__out/runs/result.md"])
+        self.assertEqual(len(json.loads(self.out("r1", "run.json").read_text())["left_out"]), 3)
+
+    def test_the_size_cap_holds_under_a_linked_root(self):
+        self.settings(**{"kaggle.review.max_mb": 0.001})
+        self.write("__out/big.bin", "x" * 5000)
+        code, out, _err = self.review("r1", "prompt.md", "__out/big.bin")
+        self.assertEqual(code, 2)
+        self.assertIn("hold more than 0.001 MB (kaggle.review.max_mb)", out)
+        self.assertEqual(self.real_runs(), [])
+
+    def test_a_second_days_package_under_the_link_runs_again_and_keeps_the_first_days_review(self):
+        self.package("plan", ready="2026-11-22")
+        real = str(self.drive / "out" / "review" / "plan")
+        code, out, err = self.review("--package", "__out/review/plan", "--day", "2026-11-22")
+        self.assertEqual(code, 0, out + err)
+        # the same package through the link and by its real path is the same package: its review is there
+        for name in ("__out/review/plan", real):
+            code, out, _err = self.review("--package", name, "--day", "2026-11-22")
+            self.assertEqual(code, 0)
+            self.assertIn("kaggle_review plan: __out/review/plan/review.md exists already; not run again (it "
+                          "reviewed the package of 2026-11-22; --force runs it again)", out)
+        # and so is the review file named by its real path
+        code, out, _err = self.review("--package", "__out/review/plan", "--out", real + "/review.md")
+        self.assertIn("__out/review/plan/review.md exists already; not run again", out)
+        self.assertEqual(len(self.real_runs()), 1)
+        # the next day, named by the real path this time
+        self.package("plan", ready="2026-11-23")
+        self.control(events=[text("p1", "VERDICT: REJECT (day two)")])
+        code, out, err = self.review("--package", real, "--day", "2026-11-23")
+        self.assertEqual(code, 0, out + err)
+        self.assertEqual(len(self.real_runs()), 2)
+        self.assertEqual(self.real_runs()[1]["files"], ["STATE.md", "research/plan.md", "source/train.py"])
+        self.assertEqual(self.out("plan").read_text(), "VERDICT: REJECT (day two)\n")
+        self.assertTrue(self.out("plan", "review-2026-11-22.md").read_text().startswith("VERDICT: TAKE WITH FIXES"))
+        self.assertIn("the earlier review is kept as __out/review/plan/review-2026-11-22.md", err)
+        kept = json.loads(self.out("plan", "run-2026-11-22.json").read_text())
+        self.assertEqual((kept["ready"], kept["review"]), ("2026-11-22", "__out/review/plan/review-2026-11-22.md"))
+        now = json.loads(self.out("plan", "run.json").read_text())
+        self.assertEqual((now["ready"], now["package"], now["review"]),
+                         ("2026-11-23", "__out/review/plan", "__out/review/plan/review.md"))
+        # day two is there, through the link
+        code, out, _err = self.review("--package", "__out/review/plan", "--day", "2026-11-23")
+        self.assertIn("exists already; not run again", out)
+        self.assertEqual(len(self.real_runs()), 2)
+        self.assert_nothing_left()
+
+    def test_the_key_is_nowhere_on_the_other_drive_either(self):
+        self.control(leak=True, leak_home=True)
+        code, out, err = self.review("r1", "prompt.md", "research/plan.md")
+        self.assertEqual(code, 0, out + err)
+        self.assertTrue((self.drive / "out" / "review" / "r1" / "events.jsonl").is_file())
+        self.assert_key_nowhere(out, err)
+
+
 class UnitTests(Review):
     def test_jsonc_is_read_as_json(self):
         m = self.module("kaggle_review")

@@ -737,8 +737,8 @@
       ]
     },
     "shared/tools/kaggle_review.py": {
-      "rev": 1,
-      "hash": "fc28e3b1396568c0021866e77c56e90364dcaccd578d286ba2bfbb6822e7dde6",
+      "rev": 2,
+      "hash": "83dfe5d3691824ba0ca7447f999e1ddc397040c46c9ce7e6b85e6be68c361e71",
       "history": [
         {
           "rev": 1,
@@ -747,6 +747,10 @@
         {
           "rev": 1,
           "hash": "fc28e3b1396568c0021866e77c56e90364dcaccd578d286ba2bfbb6822e7dde6"
+        },
+        {
+          "rev": 2,
+          "hash": "83dfe5d3691824ba0ca7447f999e1ddc397040c46c9ce7e6b85e6be68c361e71"
         }
       ]
     },

@@ -179,6 +179,10 @@ kernel versions sent as `v<N>` by `kernels pull` and `kernels status`. Weigh tho
 
 ## Changelog
 
+- 0.11.1: `kaggle_review.py` takes a package folder or a file under a `__data` or `__out` that the project keeps
+  on another drive and links into its root, when `<pack>/housekeeping.json` lists the name under `linked_roots`
+  (the housekeeping tool's rule); a link that is not listed is refused as before, and the refusal says what to
+  list. No project steps beyond listing the links.
 - 0.11.0: a Kaggle project's master runs only as an autocode agent, and the plugin now requires the `autocode`
   plugin (`dependencies.required`; the `kaggle:competition` type attaches kaggle, autocode and reporting). The
   hourly pass is the check of the master's `hourly` wake, given to the wake as the guard `sh

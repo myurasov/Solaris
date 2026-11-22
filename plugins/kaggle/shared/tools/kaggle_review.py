@@ -1,4 +1,4 @@
-# rev. 1
+# rev. 2
 
 """kaggle_review: one sandboxed outside review through OpenCode.
 
@@ -78,8 +78,15 @@ The sandbox:
   or __pycache__ folder; AGENTS.md, CLAUDE.md, opencode.json(c); and files named like credentials (credentials*,
   kaggle.json, auth.json, secrets*, *.secret, *.token, .env, .env.*, .netrc, .npmrc, .pypirc, *.pem, *.key,
   id_rsa*, id_ed25519*). Named on the command line or in files.txt, such a file stops the run (exit 2); inside a
-  folder it is left out and named on stderr. A file outside the project stops the run. The check goes by names:
-  a secret in a file with an ordinary name is copied like any other file.
+  folder it is left out and named on stderr. The check goes by names: a secret in a file with an ordinary name
+  is copied like any other file.
+- A package folder or a file outside the project stops the run (exit 2). Inside the project is what lies below
+  its root, and what lies below the target of a linked root: a top-level __data or __out that is a symbolic link
+  to a folder outside the project and that <pack>/housekeeping.json lists under "linked_roots" (the rule of the
+  framework's housekeeping tool, for a project that keeps those folders on another drive). Such a file keeps its
+  project path in the copy (__out/...), and it is the same file named through the link or by its real path. A
+  top-level link that is not listed is not followed, and no path may leave the project or a linked root through
+  .. or through another link. The prompt file and --out may be anywhere.
 - OpenCode gets a home of its own for the run: a second temporary folder (mode 700) that is its HOME, its XDG
   config, data, state and cache folders and its TMPDIR. So the owner's OpenCode config, stored credentials and
   sessions are never loaded or touched, and what OpenCode writes of its own (its log, its session database) is
@@ -221,6 +228,13 @@ K_CONFIG, K_BASE, K_CATEGORY, K_MAX_MB, K_ZONE = ("kaggle.review.session_config"
                                                   "kaggle.review.category", "kaggle.review.max_mb",
                                                   "owner.timezone")
 K_MAX_STEPS = "kaggle.review.max_steps"
+# the top-level data folders a project may keep on another drive and link into its root; the framework's
+# housekeeping tool counts such a link's target as part of the project when this file of the pack lists its name
+DATA_ROOTS = ("__data", "__out")
+HOUSEKEEPING = "housekeeping.json"
+# set once per run: the names that file lists, and of those the links that count now, each with its real target
+LISTED = []
+LINKED = {}
 # the signal that is stopping this run, once one came
 STOPPING = []
 
@@ -312,11 +326,77 @@ def owner_today(settings):
     return (datetime.now(tz) if tz else datetime.now().astimezone()).date()
 
 
-def rel(path, root):
+def below(path, base):
+    """Whether a path is the base or below it; both as written, no link is followed."""
+    path, base = Path(path), Path(base)
+    return path == base or base in path.parents
+
+
+def listed_roots(pack):
+    """The names <pack>/housekeeping.json lists under "linked_roots", as the housekeeping tool takes them: a list
+    of names, each __data or __out. A missing or unreadable file, or any other value, lists none."""
     try:
-        return str(Path(path).relative_to(root))
-    except ValueError:
-        return str(path)
+        data = json.loads((pack / HOUSEKEEPING).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return []
+    names = data.get("linked_roots") if isinstance(data, dict) else None
+    if not isinstance(names, list) or not all(isinstance(n, str) and n in DATA_ROOTS for n in names):
+        return []
+    return list(dict.fromkeys(names))
+
+
+def linked_roots(root, pack):
+    """{name: real target} of the project's linked roots, by the housekeeping tool's rule: a top-level __data or
+    __out that <pack>/housekeeping.json lists under "linked_roots", that is a symbolic link right now, and that
+    leads to a folder outside the project which does not hold the project either. Two links whose targets
+    overlap both fail the rule. The target of such a link counts as part of the project; every other link is a
+    plain link."""
+    found = {}
+    for name in listed_roots(pack):
+        link = os.path.join(root, name)
+        if not os.path.islink(link):
+            continue  # a real folder, or absent: nothing to follow
+        real = Path(os.path.realpath(link))
+        if real.is_dir() and not below(real, root) and not below(root, real):
+            found[name] = real
+    return {name: real for name, real in found.items()
+            if not any(other != name and (below(real, base) or below(base, real)) for other, base in found.items())}
+
+
+def project_path(path, root):
+    """The path a file has in the project, relative to its root: for a path below the root as it is, for a path
+    below a linked root's target under the link's name (__out/...). None for a path that is neither. The path
+    is taken as written: no link in it is followed here."""
+    path = Path(path)
+    if below(path, root):
+        return path.relative_to(root)
+    for name, real in LINKED.items():
+        if below(path, real):
+            return Path(name) / path.relative_to(real)
+    return None
+
+
+def unlisted_link(path, root):
+    """A word for a path refused as outside the project, when it is below a top-level data link that does not
+    count as part of the project; else nothing."""
+    links = [(os.path.realpath(Path(root) / name), name) for name in DATA_ROOTS
+             if name not in LINKED and (Path(root) / name).is_symlink()]
+    # where two links hold the path, the one that leads to the nearer folder is the one it is below
+    for real, name in sorted(links, key=lambda x: len(x[0]), reverse=True):
+        if not below(path, real):
+            continue
+        if name in LISTED:
+            return (f" ({name} is listed as a linked root, but its link does not lead to a folder outside the "
+                    "project and apart from the other linked root's)")
+        return (f" ({name} is a link to a folder outside the project; it counts as part of the project once "
+                f"\"linked_roots\" in the pack's {HOUSEKEEPING} lists it)")
+    return ""
+
+
+def rel(path, root):
+    """A path as the project names it (see project_path), else as it is."""
+    inside = project_path(path, root)
+    return str(path) if inside is None else str(inside)
 
 
 def write_atomic(path, text):
@@ -625,24 +705,28 @@ def copy_tree(src, dst, shown, budget, left_out):
 
 
 def place(root, named, tops):
-    """(the file to copy, where it goes in the reviewer's folder) for one path named by the caller."""
+    """(the file to copy, where it goes in the reviewer's folder) for one path named by the caller. The path as
+    it is named and the file it leads to must both be inside the project: below its root, or below the target of
+    a linked root."""
     text = str(named).strip()
     path = Path(text) if os.path.isabs(text) else root / text
     path = Path(os.path.normpath(path))
     if not path.exists():
         raise Stop(EXIT_USAGE, f"no such file: {text}")
     src = path.resolve()
-    inside = [p for p in (path, src) if p == root or root in p.parents]
-    if len(inside) < 2 or src == root:
+    as_named, as_real = project_path(path, root), project_path(src, root)
+    if as_named is None or as_real is None or src == root:
         raise Stop(EXIT_USAGE, f"{text} is not a file or folder inside the project: the reviewer gets copies of "
-                   "project files only")
-    for p in (path, src):
-        why = unfit(p.relative_to(root).parts)
+                   f"project files only{unlisted_link(src, root)}")
+    for inside in (as_named, as_real):
+        why = unfit(inside.parts)
         if why:
             raise Stop(EXIT_USAGE, f"{text} is never given to a reviewer: {why}")
-    # a file from the review's own folder or the package goes to the top; the rest keep their project paths
-    top = any(src.parent == t or path.parent == t for t in tops)
-    return src, Path(src.name) if top else path.relative_to(root)
+    # a file from the review's own folder or the package goes to the top; the rest keep their project paths.
+    # The folders are compared as they really are, so a file is the same file through a link and by its real path
+    spots = {Path(os.path.realpath(t)) for t in tops}
+    top = src.parent in spots or Path(os.path.realpath(path.parent)) in spots
+    return src, Path(src.name) if top else as_named
 
 
 def long_lines(paths, cap=MAX_LINE):
@@ -993,8 +1077,9 @@ def package_input(a, root, settings, tag):
         raise Stop(EXIT_NOT_READY, f"inputs not ready: no package folder {a.package}", tagged(a.id or named.name))
     folder = named.resolve()
     label = tagged(a.id or folder.name)
-    if folder != root and root not in folder.parents:
-        raise Stop(EXIT_USAGE, f"the package folder {a.package} is not inside the project")
+    if project_path(folder, root) is None:
+        raise Stop(EXIT_USAGE, f"the package folder {a.package} is not inside the project"
+                   f"{unlisted_link(folder, root)}")
     shown = rel(folder, root)
     for name in ("prompt.md", "STATE.md", "files.txt"):
         f = folder / name
@@ -1190,6 +1275,9 @@ def run(a, argv):
     settings = Settings(pack)
     if a.pool:
         return run_pool(a, argv, settings)
+    LISTED[:] = listed_roots(pack)
+    LINKED.clear()
+    LINKED.update(linked_roots(root, pack))
     model, variant, tag = reviewer(a, settings)
     pid, _, mid = model.partition("/")
     timeout = a.timeout if a.timeout is not None else settings.get(K_TIMEOUT, TIMEOUT)
