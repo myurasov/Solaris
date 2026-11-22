@@ -116,6 +116,10 @@ The plain pass (neither flag) prints every line, then the status block:
              kaggle_lb.py marked unreliable ("unreliable": true, or duplicate
              rows) is never the rank source: the line says "snapshot
              unreliable; ranks from HH:MM" and reads the newest reliable one.
+             A clean read without a row, with no snapshot saved before it,
+             is an empty board ("empty: no team has a score yet"), not an
+             unreliable one; once a board had teams, a read without a row
+             counts as unreliable.
              FLAG: a jump since the snapshot the last pass saw (else the
              reliable one before): a team in the top 10 improved by at least
              --jump (default 2% of its earlier score; a plain number is in
@@ -1746,7 +1750,8 @@ def unreliable(P, snap):
 
 def board_read(P, root, slug, had):
     """What the board read of this pass saved, from the snapshot files that are new since `had`: "full", "partial"
-    (its name says so), "unreliable" (see unreliable), or None when it saved nothing; and that file's name."""
+    (its name says so), "unreliable" (see unreliable), "empty" (a clean read without a row: no team has a score
+    yet), or None when it saved nothing; and that file's name."""
     d = P.lb_dir(root, slug)
     made = P.by_time(d, P._files(d, "*.json.gz") - had)
     if not made:
@@ -1754,7 +1759,9 @@ def board_read(P, root, slug, had):
     if "partial" in made[-1]:
         return "partial", made[-1]
     snap, rows = P.board_rows(d / made[-1])
-    return ("unreliable" if not rows or unreliable(P, snap) else "full"), made[-1]
+    if unreliable(P, snap):
+        return "unreliable", made[-1]
+    return ("full" if rows else "empty"), made[-1]
 
 
 def reliable_board(P, root, slug, before=None):
@@ -2059,6 +2066,9 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
     # board read saved
     board = reliable_board(P, root, slug)
     kind, fresh = board_read(P, root, slug, had)
+    if kind == "empty" and board[0] is not None:
+        # a board that had teams does not lose them all: such a read is no rank source, like an unreliable one
+        kind = "unreliable"
     ours, nb, nb_flag = None, None, None
     if res:
         view, hits = res["view"], res["hits"]
@@ -2072,14 +2082,15 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
         b = view["board"]
         for src in P.SOURCES:
             # a read the rate limit stopped is named once, in the rate-limited line; a board read that came back
-            # unreliable is no failed read: the board line says it
+            # unreliable, or clean without a row, is no failed read: the board line says it
             if (not view[src].get("ok") and src != reads.hit and src not in reads.skipped
-                    and not (src == "board" and kind == "unreliable")):
+                    and not (src == "board" and kind in ("unreliable", "empty"))):
                 add(src, "not read", f"the read failed: {view[src].get('error')}")
-        if b.get("ok") or kind == "unreliable":
+        if b.get("ok") or kind in ("unreliable", "empty"):
             name, snap, rows = board
             if name is None:
-                add("board", "snapshot unreliable; no reliable snapshot saved: no ranks")
+                add("board", "empty: no team has a score yet; no ranks" if kind == "empty"
+                    else "snapshot unreliable; no reliable snapshot saved: no ranks")
             else:
                 line = (f"{len(rows):,} teams, snapshot {P.local(snap.get('fetched_at'))}; #1 "
                         f"{P.one_line(rows[0].get('team_name'), 30)} {rows[0].get('score')}")
@@ -2099,6 +2110,8 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
                     add("snapshot", f"unreliable at {keep['unreliable']} passes in a row", UNRELIABLE_FLAG)
             elif kind == "partial":
                 incomplete.append("the board read was partial: the newest full snapshot is an earlier one")
+            elif kind == "empty":
+                keep.pop("unreliable", None)
             elif kind == "full":
                 keep.pop("unreliable", None)
                 # a read of this pass's own, for kaggle_presubmit.py to reuse while it is young

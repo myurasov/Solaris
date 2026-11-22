@@ -1894,7 +1894,7 @@ def build(st, now, ctx):
     subtitle = str(st.get("subtitle") or "Project Status")
     intro = rich(st["intro"]) if st.get("intro") else (
         f"The single status page of {E(project)}: its state, board, plan, spending and resources in one place. It is "
-        f"rebuilt at every hourly pass and on every plan change; the revision number rises with each change of the "
+        f"rebuilt at every hour-close and on every plan change; the revision number rises with each change of the "
         f"status JSON. All times are {tzl} ({E(ctx['tzname'])}).")
     b = ctx["board"]
     taken = [what for what, at in (("the submissions", ctx.get("subs_at")), ("the GPU week", ctx.get("gpu_at"))) if at]
@@ -1921,7 +1921,7 @@ def build(st, now, ctx):
 
 <h1>{E(title)}<br><span class="h1-subtitle">{E(subtitle)} — Rev. {rev}</span></h1>
 
-<p class="updated">Updated {fmt(now, "%Y-%m-%d %-I:%M %p %Z")} — rebuilt at every hourly pass and on every plan
+<p class="updated">Updated {fmt(now, "%Y-%m-%d %-I:%M %p %Z")} — rebuilt at every hour-close and on every plan
 change</p>
 
 <p class="sub">{intro}</p>

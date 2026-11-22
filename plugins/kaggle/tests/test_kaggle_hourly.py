@@ -2533,6 +2533,30 @@ class UnreliableTests(Checked):
         self.assertEqual(block_of(out)["rank"], "n/a (no full board snapshot saved)")
         self.assertEqual(json.loads(self.store("hourly", "last.json").read_text())["unreliable"], 1)
 
+    def test_an_empty_board_is_not_unreliable_until_it_had_teams(self):
+        # the real kaggle_lb.py: a board nobody has scored on yet reads clean, without a row
+        (self.tools / "kaggle_lb.py").unlink()
+        (self.tools / "kaggle_lb_real.py").rename(self.tools / "kaggle_lb.py")
+        self.team()
+        self.board([])
+        for _ in range(4):
+            code, out, _ = self.hourly()
+            self.assertEqual(code, 0, out)
+            self.assertEqual(self.line(out, "board"), "board      empty: no team has a score yet; no ranks")
+            self.assertNotIn("\nsnapshot ", out)
+            self.assertNotIn("unreliable", json.loads(self.store("hourly", "last.json").read_text()))
+        # teams arrive: an ordinary board; then a read without a row is not trusted
+        self.board(spread())
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(self.line(out, "board"), r"^board      12 teams, snapshot .+; #1 T01 0\.8$")
+        self.board([])
+        code, out, _ = self.hourly()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(self.line(out, "board"), r"^board      12 teams, snapshot .+; #1 T01 0\.8; snapshot "
+                                                  r"unreliable; ranks from \d\d:\d\d$")
+        self.assertEqual(json.loads(self.store("hourly", "last.json").read_text())["unreliable"], 1)
+
     def test_a_walk_that_repeats_teams_is_unreliable_as_kaggle_lb_saves_it(self):
         # the real kaggle_lb.py, no stand-in: a page of teams served again, which it marks unreliable
         (self.tools / "kaggle_lb.py").unlink()

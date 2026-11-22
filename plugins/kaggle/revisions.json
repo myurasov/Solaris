@@ -600,7 +600,7 @@
     },
     "shared/tools/kaggle_hourly.py": {
       "rev": 7,
-      "hash": "5124f1bba451fb95412712c75eefbd9acf71f3dc9e03a0d9cd5e7d32aa503463",
+      "hash": "bcaeed082ab66442465b2fb332455a2d6d781766b3f1f41a65d682edbc58f18a",
       "history": [
         {
           "rev": 1,
@@ -629,6 +629,10 @@
         {
           "rev": 7,
           "hash": "5124f1bba451fb95412712c75eefbd9acf71f3dc9e03a0d9cd5e7d32aa503463"
+        },
+        {
+          "rev": 7,
+          "hash": "bcaeed082ab66442465b2fb332455a2d6d781766b3f1f41a65d682edbc58f18a"
         }
       ]
     },
@@ -806,7 +810,7 @@
     },
     "shared/tools/kaggle_status.py": {
       "rev": 4,
-      "hash": "ab998119ed682f8fd2e8d90134a68ddf0aa7bb57f4e4aa9f3ba29802f58a385c",
+      "hash": "d546d999e322966b4c0a99fde4f81e2232ef2ccdf7ab37d554400bc92df285fc",
       "history": [
         {
           "rev": 1,
@@ -823,6 +827,10 @@
         {
           "rev": 4,
           "hash": "ab998119ed682f8fd2e8d90134a68ddf0aa7bb57f4e4aa9f3ba29802f58a385c"
+        },
+        {
+          "rev": 4,
+          "hash": "d546d999e322966b4c0a99fde4f81e2232ef2ccdf7ab37d554400bc92df285fc"
         }
       ]
     },

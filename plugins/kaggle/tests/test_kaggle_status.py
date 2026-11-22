@@ -526,7 +526,9 @@ class FieldTests(Tmp):
                     ("Claude spend: n/a (no Solaris checkout found above the project, or ai_spend failed).",
                      "AI agent spend: n/a (not an autocode session: no AUTOCODE_SESSION in the environment)."),
                     ("the cost ledger and the session records (list-price estimates)",
-                     "the cost ledger (no autocode spend report)")):
+                     "the cost ledger (no autocode spend report)"),
+                    # a quiet hour takes no turn, so the page is rebuilt at each hour-close, not at each pass
+                    ("rebuilt at every hourly pass and on every plan", "rebuilt at every hour-close and on every plan")):
                 page = page.replace(old, new)
             return re.sub(r"(Spend per day by category), ([A-Z][a-z]{2} \d+ to [A-Z][a-z]{2} \d+)\.",
                           r"\1 from the cost ledger, \2; the AI agent's spend is not drawn.", page)
