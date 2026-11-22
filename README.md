@@ -193,7 +193,7 @@ servers, optional project types - so any project can opt into it.
   only the project folder and the container's home mounted, so nothing above the project exists
   for the agent; `dh-*.sh` shortcut scripts manage it from any terminal, the skill drives them
   strictly on request; meant for long-lived sessions on Linux hosts holding a synced Solaris
-  tree), `autocode` (runs a project's primary session as an agent of autocode, the owner's agent server, under OpenCode 2.3 or later: an always-on rule that maps the wake-up clock, the guard, the session-start reload and self-compaction onto autocode's wakes and compaction, plus a tool that turns the project's schedule into wakes; attaching it turns Solaris self-compaction off for the project), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
+  tree), `autocode` (runs a project's primary session as an agent of autocode, the owner's agent server, under OpenCode 2.3 or later: an always-on rule that maps the wake-up clock, the guard, the session-start reload and self-compaction onto autocode's wakes, checks and compaction, a start skill, a guard tool that is the idle guard's check and watches background jobs, and a tool that turns the project's schedule into wakes; attaching it turns Solaris self-compaction off for the project), `nvidia-isaac-lab` (NVBugs + Isaac workflow), `visual-qa` (VLM-based visual E2E
   testing), `aisee` (AISee eyes and ears: visual QA and transcription; rule + skill + MCP servers), `nvidia-brev` (autonomous
   Brev cloud-GPU run lifecycle), `reporting` (findings-report authoring + zero-npm-dep PDF
   rendering via installed Chrome and Node 22+, also on Linux hosts that block Chrome's sandbox,
