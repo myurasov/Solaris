@@ -367,8 +367,8 @@
       ]
     },
     "solaris/templates/ai-pack/ai/info/harnesses.md": {
-      "rev": 8,
-      "hash": "ded57f1b56731b086bf4db268f494ce02b2a8719a1e680abc534e38f9b2691b3",
+      "rev": 9,
+      "hash": "4836cdb706ab3b9745f49a076c193e9b81c5241bba7c1e9db52d7af410ca52b6",
       "history": [
         {
           "rev": 1,
@@ -401,17 +401,17 @@
         {
           "rev": 8,
           "hash": "ded57f1b56731b086bf4db268f494ce02b2a8719a1e680abc534e38f9b2691b3"
+        },
+        {
+          "rev": 9,
+          "hash": "4836cdb706ab3b9745f49a076c193e9b81c5241bba7c1e9db52d7af410ca52b6"
         }
       ]
     },
     "solaris/templates/ai-pack/ai/info/model-tiers.md": {
-      "rev": 11,
-      "hash": "dd8f9587c885f79def2ed4ff8213c7cf44f538105c4724dafcf42d397a087f9f",
+      "rev": 12,
+      "hash": "e18dffddb2cfdf2b5ae2ad2bf2c041242aa99fbe5aeba253194d2fe0a8e34349",
       "history": [
-        {
-          "rev": 1,
-          "hash": "ec220938cb68c0b41b3b7fe3057aabe8fadb77d2032e0f0a3c94e0c663952bd1"
-        },
         {
           "rev": 2,
           "hash": "f4f33c3d379f8ad1ccc6d9a0cd6f836eee9d5cb5c3af43cda60831c3bb80ca50"
@@ -447,6 +447,10 @@
         {
           "rev": 11,
           "hash": "dd8f9587c885f79def2ed4ff8213c7cf44f538105c4724dafcf42d397a087f9f"
+        },
+        {
+          "rev": 12,
+          "hash": "e18dffddb2cfdf2b5ae2ad2bf2c041242aa99fbe5aeba253194d2fe0a8e34349"
         }
       ]
     }
