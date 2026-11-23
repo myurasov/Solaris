@@ -1,4 +1,4 @@
-_Rev. 10_
+_Rev. 11_
 
 # Rule: Subagents (Bulk-Read Floor + Leveled Delegation) <!-- omit in toc -->
 
@@ -133,9 +133,9 @@ Roles are harness-agnostic briefs (`{{PACK}}/<role>.agent.md`); never create har
 rule files (`.claude/agents/`, `.cursor/rules/`, `.opencode/agents/`), but a harness's mechanisms
 (hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`:
 pass the tier's model on every launch, never the default. The effort is the owner's choice: where the
-harness takes it per launch (Cursor: an `[effort=...]` model suffix), pass the effort the owner chose; where
-it is session-wide (Claude Code: `--effort`, `/effort` or the `effortLevel` setting), the session runs at the
-effort the owner chose; never ask for another. Verify model and effort on the worker's recorded messages.
+harness takes it per launch (how: `{{PACK}}/info/harnesses.md`), pass the effort the owner chose; otherwise
+the session runs at the effort the owner chose; never ask for another. Verify model and effort on the
+worker's recorded messages.
 
 ## Stopped or Failed Subagents (Always-On)
 

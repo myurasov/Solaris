@@ -111,8 +111,8 @@ Roles are harness-agnostic briefs (`<pack>/<role>.agent.md`); never create harne
 rule files (`.claude/agents/`, `.cursor/rules/`, `.opencode/agents/`), but a harness's mechanisms
 (hooks, scheduling, messaging, per-launch model or effort options) are fine. A brief may declare `tier`:
 pass its model on every launch, never the default. Effort is the owner's choice: pass it where the
-harness takes it per launch (Cursor: an `[effort=...]` suffix); session-wide (Claude Code: `--effort`,
-`/effort` or `effortLevel`), the session runs at it; never ask for another.
+harness takes it per launch (how: `solaris/info/harnesses.md`); otherwise the session runs at the
+effort the owner set; never ask for another.
 
 ## Stopped or Failed Subagents (Always-On)
 

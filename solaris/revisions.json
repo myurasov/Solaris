@@ -163,13 +163,9 @@
       ]
     },
     "solaris/templates/ai-pack/ai/rules/subagents.rule.md": {
-      "rev": 10,
-      "hash": "a892875dcf1aca0fbf71c171850ef4848b0e145d8c3d30593b24a6716b97257e",
+      "rev": 11,
+      "hash": "16a9409b6b4b88b28cbc4cb4e5ca6fcac2d01048103ca1d9d87a432ea4073c6c",
       "history": [
-        {
-          "rev": 2,
-          "hash": "75e6a4242713cbe9a88f603fbf51aeadf889adbbc04335254b79bc5385ddf5fd"
-        },
         {
           "rev": 3,
           "hash": "38a7e07a2fae9d7ed111f6911f66e145618342cd32554ed8736f5844d087a337"
@@ -205,6 +201,10 @@
         {
           "rev": 10,
           "hash": "a892875dcf1aca0fbf71c171850ef4848b0e145d8c3d30593b24a6716b97257e"
+        },
+        {
+          "rev": 11,
+          "hash": "16a9409b6b4b88b28cbc4cb4e5ca6fcac2d01048103ca1d9d87a432ea4073c6c"
         }
       ]
     },
