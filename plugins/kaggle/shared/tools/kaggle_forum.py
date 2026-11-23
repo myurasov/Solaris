@@ -1,4 +1,4 @@
-# rev. 7
+# rev. 8
 
 """kaggle_forum: watch a Kaggle competition's discussions.
 
@@ -15,9 +15,17 @@ comments added since the last read marked.
     python3 <plugin-dir>/tools/kaggle_forum.py commit <slug> [<topic id> ...]
 
 Run it from the project root or task folder. `check` is list, diff and fetch
-in one. `list` reads the topic list through the gateway (--gateway; default
-the kaggle.py beside this file): `competitions topics list <slug> --sort-by
-recent`, 20 topics a page. Where the CLI cannot list a forum, --from takes the
+in one, and it reads a pending topic through the gateway only when that topic
+needs a read: it has no usable saved copy (none, an unreadable one, or one
+without the opening post), or its saved copy holds another comment count than
+the listing shows now. The other pending topics keep their saved copy and cost
+no call ("N pending topics not read again: ..."), so a check over a forum that
+did not move makes the listing calls only; a topic whose read failed, or that
+a rate limit left unread, is read at the next check. A `fetch` without topic
+ids still reads every pending topic. `list` reads the topic list through the
+gateway (--gateway; default the kaggle.py beside this file): `competitions
+topics list <slug> --sort-by recent`, 20 topics a page. Where the CLI cannot
+list a forum, --from takes the
 pages a browser saved instead (the extractor is kaggle_forum_list.js beside
 this file); such a listing is complete only when --pages N gives the forum's
 page count and the files hold pages 1 to N. `diff` finds new, changed and
@@ -879,11 +887,44 @@ def cmd_commit(a, d):
     return 0
 
 
+def saved_comments(d, tid):
+    """The comment count of the copy of a topic saved in topics/<id>.json, as read_entry counts it; None without a
+    usable copy: no file, an unreadable one, not a topic, or a copy an earlier version saved without the opening
+    post."""
+    data = read_json(Path(d) / "topics" / f"{tid}.json", None)
+    topic = data.get("topic") if isinstance(data, dict) else None
+    if not isinstance(topic, dict) or "content" not in topic:
+        return None
+    return read_entry(data, None)["comments"]
+
+
+def needs_read(d, ids):
+    """The topics among ids that a check reads through the gateway: one without a usable saved copy (see
+    saved_comments), and one whose saved copy holds another comment count than the listing showed for it
+    (pending.json "listed", written by the last diff). Where the listing gave no count, a usable copy stands."""
+    listed = load_pending(d).get("listed")
+    listed = listed if isinstance(listed, dict) else {}
+    out = []
+    for tid in ids:
+        row = listed.get(str(tid))
+        shown = _int(row.get("comments")) if isinstance(row, dict) else None
+        have = saved_comments(d, tid)
+        if have is None or (shown is not None and have != shown):
+            out.append(tid)
+    return out
+
+
 def cmd_check(a, d):
     path = cmd_list(a, d)
     cmd_diff(a, d, path)
     ids = _pending_ids(d)
-    code = cmd_fetch(a, d, ids) if ids else 0
+    # a topic stays pending until it is shown and committed: it is read again only when its saved copy is behind
+    todo = needs_read(d, ids)
+    kept = len(ids) - len(todo)
+    if kept:
+        print(f"{kept} pending topic{'' if kept == 1 else 's'} not read again: "
+              f"{'its saved copy has' if kept == 1 else 'each saved copy has'} the comment count the listing shows")
+    code = cmd_fetch(a, d, todo) if todo else 0
     if ids or load_pending(d)["missing"]:
         print(f"next: python3 {_tool()} show {a.slug} [--new], log what matters, then: "
               f"python3 {_tool()} commit {a.slug} (it records what show printed)")

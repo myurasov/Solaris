@@ -116,6 +116,12 @@ class Tmp(unittest.TestCase):
         self.d.mkdir(parents=True, exist_ok=True)
         (self.d / F.STATE).write_text(json.dumps(entries))
 
+    def run_main(self, *argv):
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = F.main([*argv, "--dir", str(self.tmp / "store")])
+        return code, out.getvalue(), err.getvalue()
+
 
 PAGES = {1: cli_list([row(i, f"Topic {i}", i % 3) for i in range(100, 120)], 2,
                      notice="Warning: Looks like you're using an outdated `kaggle` version"),
@@ -447,12 +453,6 @@ else:
 
 
 class CommandTests(Tmp):
-    def run_main(self, *argv):
-        out, err = io.StringIO(), io.StringIO()
-        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-            code = F.main([*argv, "--dir", str(self.tmp / "store")])
-        return code, out.getvalue(), err.getvalue()
-
     def test_check_show_and_commit_with_a_subprocess_gateway(self):
         fixtures = self.tmp / "fixtures.json"
         pages = {"1": cli_list([row(7, "A question", 4), row(8, "Quiet", 0)])}
@@ -553,6 +553,172 @@ class CommandTests(Tmp):
         code, _, err = self.run_main("list", SLUG, "--gateway", str(self.gateway), "--pause", "0")
         self.assertEqual(code, 1)
         self.assertIn("could not list the forum", err)
+
+
+NOT_AGAIN = "the comment count the listing shows\n"
+
+
+class CheckReadTests(Tmp):
+    """`check` as the command runs it, with the fake gateway in place of the subprocess: its topic calls are counted."""
+
+    def setUp(self):
+        super().setUp()
+        self.fake = FakeGateway()
+
+        def run(cmd, **kw):
+            code, out = self.fake(cmd, kw.get("cwd"))
+            return mock.Mock(returncode=code, stdout="" if code else out, stderr=out if code else "")
+
+        patcher = mock.patch.object(F.subprocess, "run", side_effect=run)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def forum(self, topics, listed=None):
+        """What the gateway answers: topics {id: its comments}; listed {id: the comment count the listing shows for
+        it, where that is not the count of its comments}."""
+        listed = listed or {}
+        self.fake.pages = {1: cli_list([row(t, f"Topic {t}", listed.get(t, count(cs))) for t, cs in topics.items()])}
+        self.fake.topics = {t: sdk_topic(t, f"Topic {t}", cs) for t, cs in topics.items()}
+
+    def command(self, name):
+        """(exit code, stdout, stderr, the topic ids read through the gateway, in order) of one `check` or `fetch`."""
+        self.fake.calls.clear()
+        code, out, err = self.run_main(name, SLUG, "--gateway", str(self.gateway), "--pause", "0")
+        return code, out, err, [int(c[2]) for c in self.fake.calls if c[:2] == ["--sdk", "topic"]]
+
+    def check(self):
+        return self.command("check")
+
+    def test_a_second_check_over_an_unchanged_forum_reads_no_topic(self):
+        self.forum({7: [C1, C3], 8: []})
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (0, [7, 8]), err)
+        self.assertIn("2 of 2 topics saved in ", out)
+        self.assertNotIn("not read again", out)
+        # nothing was shown or committed, so both stay pending; their saved copies stand
+        code, out, err, read = self.check()
+        self.assertEqual((code, read, err), (0, [], ""))
+        self.assertEqual(len(self.fake.calls), 1)  # the listing page, and no topic
+        self.assertIn(f"\n2 pending topics not read again: each saved copy has {NOT_AGAIN}", out)
+        for gone in ("nothing to fetch", "topics saved in", "fetched "):
+            self.assertNotIn(gone, out)
+        # the pending topics still wait for show and commit
+        self.assertRegex(out, rf"\nnext: python3 \S+ show {SLUG} \[--new\], log what matters, then: python3 \S+ "
+                              rf"commit {SLUG} \(it records what show printed\)\n$")
+        self.assertEqual(F.load_pending(self.d)["new"], [7, 8])
+
+    def test_only_the_topic_whose_listed_comment_count_moved_is_read_again(self):
+        late = comment(31, "Late", "2026-09-23T04:00:00.500000", "<p>One more.</p>")
+        self.forum({7: [C1, C3], 8: [], 9: [C3]})
+        self.assertEqual(self.check()[3], [7, 8, 9])
+        # a comment lands on a pending topic that nobody has read yet
+        self.forum({7: [C1, C3], 8: [late], 9: [C3]})
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (0, [8]), err)
+        self.assertIn(f"\n2 pending topics not read again: each saved copy has {NOT_AGAIN}fetched 8 (1 comments)\n"
+                      "1 of 1 topics saved in ", out)
+        self.assertEqual(self.check()[3], [])
+        # the same for a topic read and committed before: its new comment makes it pending, and it is read once
+        self.run_main("show", SLUG)
+        self.assertEqual(self.run_main("commit", SLUG)[1].split(" in ")[0], "read: 3 topics recorded")
+        self.forum({7: [C1, C3], 8: [late], 9: [C3, late]})
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (0, [9]), err)
+        self.assertIn("CHANGED  9 ", out)
+        self.assertNotIn("not read again", out)
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (0, []), err)
+        self.assertIn(f"\n1 pending topic not read again: its saved copy has {NOT_AGAIN}", out)
+
+    def test_a_pending_topic_without_a_usable_saved_copy_is_read(self):
+        # 7: a copy an earlier version saved, without the opening post, holding the comment count the listing shows
+        flat = [{k: v for k, v in c.items() if k != "replies"} for c in (C1, C2, C4, C3)]
+        self.forum({7: [C1, C3], 8: [], 9: [C3], 10: [], 11: [C3]})
+        (self.d / "topics").mkdir(parents=True)
+        for tid, text in ((7, old_topic_json(7, "Topic 7", flat)), (8, sdk_topic(8, "Topic 8", [])),
+                          (9, "not JSON"), (10, json.dumps({"comments": []}))):
+            (self.d / "topics" / f"{tid}.json").write_text(text)
+        code, out, err, read = self.check()
+        # 8 holds a whole copy with the listed count; 9 is unreadable, 10 is not a topic, 11 has no file
+        self.assertEqual((code, read), (0, [7, 9, 10, 11]), err)
+        self.assertIn(f"\n1 pending topic not read again: its saved copy has {NOT_AGAIN}", out)
+        self.assertIn("4 of 4 topics saved in ", out)
+        self.assertEqual(json.loads((self.d / "topics" / "7.json").read_text())["topic"]["content"],
+                         "<p>Is X allowed?</p>")
+        self.assertEqual(self.check()[3], [])
+
+    def test_the_saved_copy_is_counted_as_a_read_counts_it(self):
+        (self.d / "topics").mkdir(parents=True)
+        doc = json.loads(sdk_topic(7, "Topic 7", [C1, C3]))
+        (self.d / "topics" / "7.json").write_text(json.dumps(doc))
+        self.assertEqual((F.saved_comments(self.d, 7), F.read_entry(doc, "now")["comments"]), (4, 4))
+        # the topic's own count wins over the comments saved; without one, the comments walked, replies included
+        doc["topic"]["commentCount"] = 6
+        (self.d / "topics" / "7.json").write_text(json.dumps(doc))
+        self.assertEqual(F.saved_comments(self.d, 7), 6)
+        del doc["topic"]["commentCount"]
+        (self.d / "topics" / "7.json").write_text(json.dumps(doc))
+        self.assertEqual(F.saved_comments(self.d, 7), 4)
+        self.assertIsNone(F.saved_comments(self.d, 8))
+        for listed, todo in (({"7": {"comments": 4}}, []), ({"7": {"comments": 5}}, [7]),
+                             ({"7": {"comments": 3}}, [7]),
+                             # no count from the listing: a usable copy stands, and a topic without one is read
+                             ({}, []), ({"7": {"title": "Topic 7"}}, []), ({"7": None}, []), (None, [])):
+            F.write_json(self.d / F.PENDING, {"new": [7], "changed": [], "missing": [], "listed": listed})
+            self.assertEqual(F.needs_read(self.d, [7]), todo, listed)
+            self.assertEqual(F.needs_read(self.d, [7, 8]), [*todo, 8], listed)
+
+    def test_a_failed_read_is_tried_again_at_the_next_check_and_the_saved_topics_are_not(self):
+        self.forum({7: [C1, C3], 8: [], 9: [C3]})
+        self.fake.fail = {"topic 8": (1, "kaggle_sdk: 404 Not Found: no topic")}
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (1, [7, 8, 9]))
+        self.assertIn("FAILED  8: exit 1: kaggle_sdk: 404 Not Found: no topic\n", err)
+        self.assertIn("2 of 3 topics saved in ", out)
+        # it fails again: tried alone, and the check still exits 1 and points to show and commit
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (1, [8]))
+        self.assertIn(f"\n2 pending topics not read again: each saved copy has {NOT_AGAIN}0 of 1 topics saved in ",
+                      out)
+        self.assertIn("FAILED  8: ", err)
+        self.assertIn("\nnext: python3 ", out)
+        self.fake.fail = {}
+        code, out, err, read = self.check()
+        self.assertEqual((code, read, err), (0, [8], ""))
+        self.assertIn("1 of 1 topics saved in ", out)
+        self.assertEqual(self.check()[3], [])
+
+    def test_after_a_rate_limit_the_next_check_reads_what_was_left(self):
+        self.forum({7: [C1, C3], 8: [], 9: [C3], 10: []})
+        self.fake.fail = {"topic 8": (1, "kaggle_sdk: 429 Too Many Requests: slow down")}
+        code, out, err, read = self.check()
+        self.assertEqual((code, read), (1, [7, 8]))
+        self.assertIn("rate limited: 2 topics left for the next check (9 10)\n", err)
+        self.assertIn("1 of 4 topics saved in ", out)
+        self.fake.fail = {}
+        # the topic the limit met and the two left after it; not the one saved before it
+        code, out, err, read = self.check()
+        self.assertEqual((code, read, err), (0, [8, 9, 10], ""))
+        self.assertIn(f"\n1 pending topic not read again: its saved copy has {NOT_AGAIN}", out)
+        self.assertIn("3 of 3 topics saved in ", out)
+        self.assertEqual(self.check()[3], [])
+
+    def test_fetch_without_ids_still_reads_every_pending_topic(self):
+        self.forum({7: [C1, C3], 8: []})
+        self.assertEqual(self.check()[3], [7, 8])
+        code, out, err, read = self.command("fetch")
+        self.assertEqual((code, read, err), (0, [7, 8], ""))
+        self.assertEqual(len(self.fake.calls), 2)  # no listing: fetch reads the topics only
+        self.assertIn("2 of 2 topics saved in ", out)
+        self.assertNotIn("not read again", out)
+        # with nothing pending, fetch says so; a check with nothing pending says neither that nor what is next
+        self.run_main("show", SLUG)
+        self.run_main("commit", SLUG)
+        self.assertEqual(self.command("fetch")[1:], ("nothing to fetch: no pending topics (pass topic ids)\n", "", []))
+        code, out, err, read = self.check()
+        self.assertEqual((code, read, err), (0, [], ""))
+        for gone in ("nothing to fetch", "not read again", "next: "):
+            self.assertNotIn(gone, out)
 
 
 if __name__ == "__main__":

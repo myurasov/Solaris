@@ -1,4 +1,4 @@
-_Rev. 12_
+_Rev. 13_
 
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
@@ -100,8 +100,7 @@ prefix (`L01`, `L02`, ...) in its own files, so a later plugin release cannot gi
 - The control machine stays light: agents, git, light scripts and small reads only; no heavy compute and no
   bulk data. <!-- OD06 -->
 - Models by job: the master and every decision, research, analysis or review job on Opus 5.5; technical-only
-  jobs (builds, bring-up, cleanup, file edits) on Sonnet 5.5; read-only mechanical sweeps may use Haiku. Never
-  Fable 5 or 5.1 unless the owner asks.
+  jobs (builds, bring-up, cleanup, file edits) on Sonnet 5.5; read-only mechanical sweeps may use Haiku.
   Newest and strongest variant first, cost only breaks ties. Pass the model on every launch and check the
   model that actually ran; the playbook's cross-family review adds another vendor's model. <!-- OD07 -->
 - This model list replaces the older line that put every worker on the frontier tier, and for Kaggle work it

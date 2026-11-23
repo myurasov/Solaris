@@ -59,8 +59,8 @@
       ]
     },
     "shared/kaggle-checks.skill.md": {
-      "rev": 7,
-      "hash": "1ba734e5ed2fd6d01bfe0a0ec30941dfb12c5bd4dad606f14dcf9b2c0fdaf965",
+      "rev": 8,
+      "hash": "ba68691a6ccf5732e49e53e6f73a6e77fc13846f45a5ed387d8a11fff0a5ba5c",
       "history": [
         {
           "rev": 1,
@@ -93,6 +93,10 @@
         {
           "rev": 7,
           "hash": "1ba734e5ed2fd6d01bfe0a0ec30941dfb12c5bd4dad606f14dcf9b2c0fdaf965"
+        },
+        {
+          "rev": 8,
+          "hash": "ba68691a6ccf5732e49e53e6f73a6e77fc13846f45a5ed387d8a11fff0a5ba5c"
         }
       ]
     },
@@ -291,8 +295,8 @@
       ]
     },
     "shared/kaggle-discussions.skill.md": {
-      "rev": 7,
-      "hash": "18e5add91a961f981fc702c534fc0f6a6cb9ac0ba9519f536040e532755941bc",
+      "rev": 8,
+      "hash": "9a1e824ab4e5e0a99a7679fc7b5ea1cf3ee228144100a42a9a5a68d343130aea",
       "history": [
         {
           "rev": 1,
@@ -321,6 +325,10 @@
         {
           "rev": 7,
           "hash": "18e5add91a961f981fc702c534fc0f6a6cb9ac0ba9519f536040e532755941bc"
+        },
+        {
+          "rev": 8,
+          "hash": "9a1e824ab4e5e0a99a7679fc7b5ea1cf3ee228144100a42a9a5a68d343130aea"
         }
       ]
     },
@@ -471,13 +479,9 @@
       ]
     },
     "shared/kaggle.rule.md": {
-      "rev": 12,
-      "hash": "17e9e5f7d1a3711a4afd39cfb3089aacf0eb8d3fcbcc489ccb530129c5834c90",
+      "rev": 13,
+      "hash": "3ed93c56532e2576083938863df41c1e80b88c261e048256eacfbde8d0f3067c",
       "history": [
-        {
-          "rev": 3,
-          "hash": "30476da679a4e375e42f0c90902c5dc6c1eee1a1496bb19bd3c7e95c0f36f845"
-        },
         {
           "rev": 4,
           "hash": "01a43f8747b8229d10a64a747bd65cf5f0ce26825500f62336753a74659f5928"
@@ -513,6 +517,10 @@
         {
           "rev": 12,
           "hash": "17e9e5f7d1a3711a4afd39cfb3089aacf0eb8d3fcbcc489ccb530129c5834c90"
+        },
+        {
+          "rev": 13,
+          "hash": "3ed93c56532e2576083938863df41c1e80b88c261e048256eacfbde8d0f3067c"
         }
       ]
     },
@@ -555,8 +563,8 @@
       ]
     },
     "shared/tools/kaggle_forum.py": {
-      "rev": 7,
-      "hash": "9fe157c5b41419fcdfe6b119cfda4f181b8daa805d91a3317c91eab241f9e363",
+      "rev": 8,
+      "hash": "ec732e46f860a45479d370ae151afb7400a320eb6d73b6df20076263afd9e82f",
       "history": [
         {
           "rev": 1,
@@ -585,6 +593,10 @@
         {
           "rev": 7,
           "hash": "9fe157c5b41419fcdfe6b119cfda4f181b8daa805d91a3317c91eab241f9e363"
+        },
+        {
+          "rev": 8,
+          "hash": "ec732e46f860a45479d370ae151afb7400a320eb6d73b6df20076263afd9e82f"
         }
       ]
     },
@@ -715,8 +727,8 @@
       ]
     },
     "shared/tools/kaggle_presubmit.py": {
-      "rev": 4,
-      "hash": "aef01375de5bc4ee942775eb618199b049792125520c625112fd48aeaada2a80",
+      "rev": 5,
+      "hash": "85b5cec4df0c4d57d689873f0d5e96e80cb92d6ecce208070b79702d5ba8698c",
       "history": [
         {
           "rev": 1,
@@ -733,6 +745,10 @@
         {
           "rev": 4,
           "hash": "aef01375de5bc4ee942775eb618199b049792125520c625112fd48aeaada2a80"
+        },
+        {
+          "rev": 5,
+          "hash": "85b5cec4df0c4d57d689873f0d5e96e80cb92d6ecce208070b79702d5ba8698c"
         }
       ]
     },

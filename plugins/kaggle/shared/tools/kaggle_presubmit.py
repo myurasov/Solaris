@@ -1,4 +1,4 @@
-# rev. 4
+# rev. 5
 
 """kaggle_presubmit: what is new on Kaggle since the last pre-submit review.
 
@@ -15,9 +15,11 @@ as reviewed.
 Run it from the project root or task folder. The reads go through the tools
 beside this file and the gateway (--gateway; default the kaggle.py beside this
 file), read-only and unstamped (KAGGLE_SHARE_QUIET=1): `kaggle_forum.py check`
-(the forum's new and changed topics, fetched in full), `competitions pages
-<slug> list <slug> --content` (the competition pages), `kaggle_lb.py notebooks`
-(the public notebooks with their best public scores) and `kaggle_lb.py
+(the forum's new and changed topics, in full; a topic still pending from an
+earlier check is read again only when its listed comment count moved or it
+has no usable saved copy), `competitions pages <slug> list <slug> --content`
+(the competition pages), `kaggle_lb.py notebooks` (the public notebooks with
+their best public scores) and `kaggle_lb.py
 snapshot` (the whole board; --max-pages N is passed on to it and stops its walk
 after N pages, else that tool sets its own page cap). Their stores are read
 where those tools keep them
@@ -53,7 +55,14 @@ so. New since the review:
              newest full snapshot that is not unreliable (kaggle_lb.py marks
              a read whose pages repeated teams "unreliable": its ranks cannot
              be trusted, so the check falls back to the snapshot before it
-             and says so)
+             and says so). A clean read without a row, with no reliable
+             snapshot of teams saved before it, is an empty board: the line
+             reads "BOARD: empty: no team has a score yet; no ranks", no
+             trigger matches for it (it is no failed read and no first one),
+             and --ack records no board, so the first board with teams
+             shows as a first read. Once the board had teams, a read without
+             a row is passed by for the newest reliable snapshot, and the
+             check says so
 
 TRIGGERS names each class that matched: host post, rules or scorer, reported
 results, failure report (these three by keywords in the new forum text), forum
@@ -420,7 +429,8 @@ def by_time(d, names):
     return sorted(names, key=key)
 
 
-# ---- reads: each returns its source's view, or {"ok": False, "error": ...} when the read failed
+# ---- reads: each returns its source's view, or {"ok": False, "error": ...} when the read failed (the board's also
+# for a board without a team yet, which is no failure: that one carries "empty": True)
 
 def walk(comments):
     """Every comment of a topic in reading order, replies flattened."""
@@ -563,7 +573,9 @@ def board_view(d, name, note=None):
 
 def read_board(slug, root, gateway, run, max_pages=None):
     """Run kaggle_lb.py snapshot (its walk stopped after max_pages pages when given), then take the size, direction
-    and top rows of the newest full snapshot that is not unreliable."""
+    and top rows of the newest full snapshot that is not unreliable. A read that came back clean and without a row,
+    with no such snapshot saved before it, is an empty board, which is no failed read: {"ok": False, "empty": True}
+    (nothing to compare, as "ok" says, and no team has a score yet)."""
     d = lb_dir(root, slug)
     before = _files(d, "*.json.gz")
     cmd = [sys.executable, str(TOOLS / "kaggle_lb.py"), "snapshot", slug, "--gateway", str(gateway)]
@@ -573,16 +585,27 @@ def read_board(slug, root, gateway, run, max_pages=None):
     fresh = by_time(d, _files(d, "*.json.gz") - before)
     if code != 0 or not fresh:
         return {"ok": False, "error": f"kaggle_lb.py snapshot failed (exit {code}): {tail(err or out)}"}
-    # a partial read says so in its name; an unreliable one says so in the snapshot, and board_view passes it by
-    kind = "partial" if "partial" in fresh[-1] else "unreliable"
+    # a partial read says so in its name and an unreliable one in the snapshot; a clean one may hold no row. None of
+    # the three is a board to compare (board_view passes them by), and each says why an earlier snapshot is used. A
+    # whole read with teams is returned below before its kind is asked; a snapshot that cannot be read is passed by
+    # as an unreliable one
+    if "partial" in fresh[-1]:
+        kind = "partial"
+    else:
+        snap, rows = board_rows(d / fresh[-1])
+        kind = "rowless" if snap is not None and not rows and not unreliable(snap) else "unreliable"
+    why = {"partial": "this read was partial: the newest full snapshot is {}",
+           "unreliable": "this read was unreliable (its pages repeated teams, so its ranks cannot be trusted): the "
+                         "newest reliable snapshot is {}",
+           "rowless": "this read came back without a row, though the board had teams before, so it is not used: the "
+                      "newest reliable snapshot is {}"}[kind]
     for name in reversed(by_time(d, (n for n in _files(d, "*.json.gz") if "partial" not in n))):
-        note = None if name in fresh else (f"this read was partial: the newest full snapshot is {name}"
-                                           if kind == "partial" else
-                                           f"this read was unreliable (its pages repeated teams, so its ranks cannot "
-                                           f"be trusted): the newest reliable snapshot is {name}")
-        view = board_view(d, name, note)
+        view = board_view(d, name, None if name in fresh else why.format(name))
         if view:
             return view
+    if kind == "rowless":
+        # a clean read without a row, and no reliable snapshot ever held a team: the board was read, and it is empty
+        return {"ok": False, "empty": True, "error": "the board is empty: no team has a score yet"}
     return {"ok": False, "error": f"no full snapshot to compare: the read was {kind}"}
 
 
@@ -790,6 +813,9 @@ def compare(view, base, cfg, *, root, slug, now, hours=HOURS, vs=None):
            "forum": None, "pages": None, "notebooks": None, "board": None, "badges": False, "unlisted_hosts": [],
            "host_mark": None}
     for src in SOURCES:
+        if view[src].get("empty"):
+            # a board without a team yet was read, and holds nothing to review: no failed read and no first one
+            continue
         if not view[src].get("ok"):
             res["errors"].append(f"{src}: {view[src].get('error')}")
             hits["failed"].append(src)
@@ -945,7 +971,9 @@ def report(res, slug, cfg, *, vs=None, hours=HOURS, tool="kaggle_presubmit.py", 
                 out.append(f"  RESCORED  {fmt_score(was)} -> {fmt_score(x['score'])}  {x['ref']}  "
                            f"\"{one_line(x['title'], 50)}\"{mark(x['score'])}")
     b = view["board"]
-    if not b.get("ok"):
+    if b.get("empty"):
+        out.append("BOARD: empty: no team has a score yet; no ranks")
+    elif not b.get("ok"):
         out.append(f"BOARD: not read ({b.get('error')})")
     else:
         lead = b["top"][0] if b["top"] else {}
@@ -1005,8 +1033,9 @@ def check(slug, root, *, gateway=None, run=_run, now=None, hours=HOURS, vs=None,
 
 
 def ack(slug, root, now=None):
-    """Record the last check's view as reviewed: (that check, the sources that kept the earlier view), or None
-    when that check is recorded already."""
+    """Record the last check's view as reviewed: (that check, the sources that kept the earlier view because their
+    read failed), or None when that check is recorded already. A board that read empty records no board, so the
+    first board with teams shows as a first read; it is not among the sources returned."""
     d = state_dir(root, slug)
     with locked(d):
         seen = read_json(d / SEEN, None)
@@ -1024,10 +1053,12 @@ def ack(slug, root, now=None):
             if isinstance(v, dict) and v.get("ok"):
                 out[src] = v
             else:
-                # a source whose read failed keeps the view an earlier review recorded
+                # a source whose read failed keeps the view an earlier review recorded, and is named as kept. A board
+                # that read empty was read: it is not named (a board an earlier review recorded stays as well)
                 if base.get(src) is not None:
                     out[src] = base[src]
-                kept.append(src)
+                if not (isinstance(v, dict) and v.get("empty")):
+                    kept.append(src)
         write_json(d / ACKED, out)
     return seen, kept
 

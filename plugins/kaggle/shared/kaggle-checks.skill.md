@@ -3,7 +3,7 @@ name: kaggle-checks
 triggers: ["presubmit", "pre-submit check", "pre-submit review", "hourly check", "hourly pass", "gated submit"]
 summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads and passes by a board read marked unreliable) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; a submit Kaggle refuses is recorded with Kaggle's reason; never retried blindly; --landed records an unclear attempt that the submissions list shows); kaggle_watch.py waits for one score as a watched background job; kaggle_hourly.py is the hourly pass of the read-only checks, run as the check of the hourly autocode wake through its guard kaggle_hourly_check.sh (--check, one pass per hour with a receipt, a quiet hour takes no turn, a wake that is not closed wakes again), as the hour-close of the turn it woke (--close, the status page rebuilt offline, every receipt since the last close marked handled, their reasons and held news printed in full, the status block) and as a plain pass by hand, with a line per check, flagging what needs a decision (board jumps, errored submissions with Kaggle's error text, unpushed commits, a master off its allowed models or at another effort than the pack sets, spend limits, a stopped peer master, an older plugin copy, a stalled own line, HTTP 429 as one line; an unchanged flag held back for hours), then a status block to paste into the status message (outlook, progress, tracks, machine health).
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: kaggle-checks - Pre-Submit Check, Gated Submit, Hourly Pass <!-- omit in toc -->
 
@@ -96,7 +96,13 @@ Every tool exits 2 on bad usage and 1 on an error of its own, with one exception
    page repeated, 3 or more rows came twice or it took far too many pages (the `kaggle-leaderboard`
    skill); its ranks cannot be trusted, and the check then compares the
    snapshot before it and says so (`this read was unreliable ...: the newest reliable snapshot is
-   <file>`). A young hourly read that is unreliable is never reused. `--max-pages N` is passed on to
+   <file>`). A young hourly read that is unreliable is never reused. A clean read without a row is an
+   empty board when no reliable snapshot with teams was saved before it: the line reads `BOARD: empty:
+   no team has a score yet; no ranks`, the board matches no trigger (it was read, and nothing failed),
+   and `--ack` records no board, so the first board with teams shows as a first read (`no review
+   yet`). Once the board had teams, a read without a row is not used, and the note says so (`this read
+   came back without a row, though the board had teams before, so it is not used: the newest reliable
+   snapshot is <file>`). `--max-pages N` is passed on to
    the board walk and stops it after N pages; without it the walk sets its own cap (the
    `kaggle-leaderboard` skill).
 3. **Read the TRIGGERS block:** host post, rules or scorer, reported results and failure report (the

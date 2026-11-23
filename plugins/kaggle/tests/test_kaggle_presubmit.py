@@ -237,9 +237,12 @@ class HostBadgeTests(Check):
         self.assertIn('HOST POSTS: no hosts named (config.json "hosts", "host_topics") and host mark: unknown (the '
                       "forum read gives no author type): host posts are not told apart. Judge them by content\n", out)
         self.assertNotIn("[host post]", out)
-        # the topics are still pending, so the next check reads them again, now with the badge
+        # the topics are still pending, but their comment counts stand, so a check does not read them again; a fetch
+        # does, now with the badge
         for tid in (4, 5):
             self.badge(tid, {"Hana"})
+        self.assertNotIn("[host post]", self.check()[1])
+        self.assertEqual(self.tool("kaggle_forum.py", "fetch", SLUG, "--gateway", str(self.gateway))[0], 0)
         out = self.check()[1]
         self.assertIn("HOST POSTS: 1\n", out)
         self.assertIn("(add them): Hana\n", out)
@@ -358,6 +361,146 @@ class BoardWalkTests(Check):
         self.assertEqual([P.unreliable(x) for x in ({}, {"duplicates": None}, {"unreliable": False, "duplicates": 0},
                                                     {"duplicates": 1}, {"unreliable": True})],
                          [False, False, False, True, True])
+
+    EMPTY = "BOARD: empty: no team has a score yet; no ranks"
+
+    def board_calls(self):
+        return [c for c in self.calls() if c["args"][:2] == ["competitions", "leaderboard"]]
+
+    def test_an_empty_board_is_read_and_asks_for_no_review(self):
+        # a competition nobody has a score on yet: a clean, whole read without a row, and no snapshot before it
+        self.board([])
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        self.assertEqual(self.board_line(out), (self.EMPTY, None))
+        # the board was read, nothing failed, and an empty board is nothing to review: the other three are first reads
+        self.assertIn("\n  [no review yet] forum; pages; notebooks\n", out)
+        self.assertIn("TRIGGERS: 1 of 10 matched\n", out)
+        for gone in ("[read failed]", "READ FAILED", "BOARD: not read", "unreliable"):
+            self.assertNotIn(gone, out)
+        seen = self.state("seen.json")
+        self.assertEqual(seen["view"]["board"], {"ok": False, "empty": True,
+                                                 "error": "the board is empty: no team has a score yet"})
+        self.assertEqual(seen["triggers"], {"first": 3})
+        # the ack keeps nothing for the board and says nothing of it: the review base holds no board
+        recorded = (f"review recorded: the check of {P.local(seen['at'])}, in __data/kaggle/{SLUG}/presubmit/"
+                    "acked.json\n")
+        self.assertEqual(self.ack(), (0, recorded, ""))
+        self.assertNotIn("board", self.state("acked.json"))
+        # the other sources reviewed and unchanged: the empty board alone asks for nothing, also after another ack
+        for _ in range(2):
+            code, out, err = self.check()
+            self.assertEqual(code, 0, out)
+            self.assertEqual(self.board_line(out), (self.EMPTY, None))
+            self.assertIn("TRIGGERS: none of 10 matched: nothing new since the review\n", out)
+            self.assertNotIn("Next: re-decide", out)
+            self.assertFalse(self.state("seen.json")["changes"])
+            self.assertIsNone(P.review_status(SLUG, self.root)[0])
+            self.assertNotIn("kept the earlier view", self.ack()[1])
+            self.assertNotIn("board", self.state("acked.json"))
+
+    def test_the_first_teams_after_an_empty_board_show_as_a_first_board_read(self):
+        self.board([])
+        self.reviewed()
+        self.assertEqual(self.check()[0], 0)
+        self.board([("Alpha", 0.90), ("Beta", 0.85)])
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        line, note = self.board_line(out)
+        self.assertRegex(line, r"^BOARD: 2 teams, snapshot .+; #1 Alpha 0\.9 \(no review yet\)$")
+        self.assertIsNone(note)
+        self.assertIn("TRIGGERS: 1 of 10 matched\n  [no review yet] board\n", out)
+        self.assertNotIn("[board move]", out)
+        # reviewed, it is the board the next checks compare with
+        self.assertEqual(self.ack()[0], 0)
+        self.assertEqual([r["team_name"] for r in self.state("acked.json")["board"]["top"]], ["Alpha", "Beta"])
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertRegex(self.board_line(out)[0], r"^BOARD: 2 teams, snapshot .+; #1 Alpha 0\.9$")
+
+    def test_a_read_without_a_row_after_a_board_with_teams_is_passed_by(self):
+        self.reviewed()
+        (clean,) = [p.name for p in self.store("leaderboard").glob("*.json.gz")]
+        # a board that had teams does not lose them all: the read is not used, and the note gives that reason
+        self.board([])
+        for _ in range(2):
+            code, out, err = self.check()
+            self.assertEqual(code, 0, out)
+            line, note = self.board_line(out)
+            self.assertRegex(line, r"^BOARD: 2 teams, snapshot .+; #1 Alpha 0\.9$")
+            self.assertEqual(note, "  note: this read came back without a row, though the board had teams before, so "
+                                   f"it is not used: the newest reliable snapshot is {clean}")
+            self.assertIn("TRIGGERS: none of 10 matched", out)
+            for gone in ("[board move]", "[read failed]", "empty", "unreliable"):
+                self.assertNotIn(gone, out)
+        self.assertEqual(self.state("seen.json")["view"]["board"]["file"], clean)
+
+    def test_a_partial_or_unreliable_read_with_no_snapshot_before_it_is_still_a_failed_read(self):
+        # partial: the walk stopped after the first of two pages, and no whole board was saved before
+        self.two_pages([("Alpha", 0.90), ("Beta", 0.85)], [("Gamma", 0.80), ("Delta", 0.75)])
+        code, out, err = self.check("--max-pages", "1")
+        self.assertEqual(code, 10, err)
+        self.assertEqual(self.board_line(out)[0], "BOARD: not read (no full snapshot to compare: the read was partial)")
+        self.assertIn("[read failed] board\n", out)
+        self.assertIn("  READ FAILED: board: no full snapshot to compare: the read was partial\n", out)
+        self.assertIn("; kept the earlier view of board (not read in that check)\n", self.ack()[1])
+        self.assertNotIn("board", self.state("acked.json"))
+
+    def test_what_a_fresh_board_read_is_taken_for(self):
+        d = self.store("leaderboard")
+        d.mkdir(parents=True)
+        teams = [{"rank": 1, "team_id": 1, "team_name": "Alpha", "score": "0.9"}]
+
+        def read(name, **snap):
+            def run(cmd, cwd):
+                with gzip.open(d / name, "wt", encoding="utf-8") as f:
+                    json.dump({"fetched_at": "2026-09-28T10:00:00Z", **snap}, f)
+                return 0, "", ""
+            return P.read_board(SLUG, self.root, self.gateway, run)
+
+        empty = {"ok": False, "empty": True, "error": "the board is empty: no team has a score yet"}
+        # no snapshot with teams yet: a clean read without a row is an empty board; a marked or a partial one is not
+        self.assertEqual(read("20260928T100000Z.json.gz", rows=[]), empty)
+        for name, snap, kind in (("20260928T110000Z.json.gz", {"rows": [], "unreliable": True}, "unreliable"),
+                                 ("20260928T120000Z.json.gz", {"rows": teams * 2, "duplicates": 1}, "unreliable"),
+                                 ("20260928T130000Z-partial.json.gz", {"rows": teams}, "partial"),
+                                 ("20260928T140000Z-partial.json.gz", {"rows": []}, "partial")):
+            self.assertEqual(read(name, **snap), {"ok": False, "error": f"no full snapshot to compare: the read was "
+                                                                         f"{kind}"}, name)
+        # the earlier reads without a row, marked or partial are no board with teams: still empty
+        self.assertEqual(read("20260928T150000Z.json.gz", rows=[]), empty)
+        # the first teams, with no note; from then on each kind of read falls back to them and gives its own reason
+        full = "20260928T160000Z.json.gz"
+        view = read(full, rows=teams)
+        self.assertEqual((view["ok"], view["file"], view["teams"], view["note"]), (True, full, 1, None))
+        for name, snap, note in (
+                ("20260928T170000Z.json.gz", {"rows": []},
+                 "this read came back without a row, though the board had teams before, so it is not used: the "
+                 f"newest reliable snapshot is {full}"),
+                ("20260928T180000Z.json.gz", {"rows": teams * 2, "unreliable": True},
+                 "this read was unreliable (its pages repeated teams, so its ranks cannot be trusted): the newest "
+                 f"reliable snapshot is {full}"),
+                ("20260928T190000Z-partial.json.gz", {"rows": teams},
+                 f"this read was partial: the newest full snapshot is {full}")):
+            view = read(name, **snap)
+            self.assertEqual((view["ok"], view["file"], view["note"]), (True, full, note), name)
+            self.assertNotIn("empty", view)
+
+    def test_an_empty_board_is_never_reused_from_the_hourly_pass(self):
+        self.board([])
+        self.assertEqual(self.check()[0], 10)
+        (name,) = [p.name for p in self.store("leaderboard").glob("*.json.gz")]
+        # the hourly pass records no empty board among its reads; were one named there, it is no view to reuse
+        self.store("hourly").mkdir(parents=True)
+        self.store("hourly", "last.json").write_text(json.dumps({"at": P.iso(P.utc_now()), "reads": {"board": name}}))
+        self.assertIsNone(P.board_view(self.store("leaderboard"), name))
+        self.assertEqual(P.hourly_reads(self.root, SLUG, P.utc_now(), P.REUSE_MINUTES), {})
+        before = len(self.board_calls())
+        code, out, err = self.check()
+        self.assertEqual(code, 10, err)
+        self.assertNotIn("REUSED", out)
+        self.assertEqual(self.board_line(out), (self.EMPTY, None))
+        self.assertEqual(len(self.board_calls()), before + 1)
 
 
 class RateLimitTests(Check):

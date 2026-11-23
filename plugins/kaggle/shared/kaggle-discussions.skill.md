@@ -3,7 +3,7 @@ name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
 summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the host mark (and what an unknown host mark means), the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 7_
+_Rev. 8_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -26,7 +26,11 @@ the web.
 ## Hourly Routine
 
 1. **`check <slug>`** lists every page of the forum (sorted by recent comments), diffs the listing with what was
-   read, and fetches the new and changed topics: about one call per 20 topics, plus one per topic fetched.
+   read, and fetches the new and changed topics: about one call per 20 topics, plus one per topic read. A topic
+   stays pending until `show` printed it and `commit` recorded it, and a later `check` reads a pending topic again
+   only when its listed comment count moved, its read failed or a rate limit left it unread: the others keep their
+   saved copy at no call (`N pending topics not read again: ...`), so a check over a forum that did not move makes
+   the listing calls only.
 2. **`show <slug> --new`** prints what is new: new topics whole, and for changed topics only the comments
    posted since the last read, each with the comment it replies to, then the topics that went missing.
    `show <slug>` prints changed topics whole. Either way it records what it printed. Without ids, `show` also
@@ -74,10 +78,10 @@ Run from the project root or task folder:
 
 | Command | Does |
 |---|---|
-| `check <slug>` | `list`, `diff` and `fetch` in one: the hourly check. Takes the options of `list`. |
+| `check <slug>` | `list`, `diff` and `fetch` in one: the hourly check. It reads a pending topic through the gateway only when that topic has no usable saved copy (none, an unreadable one, or one without the opening post) or its saved copy holds another comment count than the listing shows now. The other pending topics keep their saved copy and cost no call, and one line counts them: `N pending topics not read again: each saved copy has the comment count the listing shows`. To read them all again anyway, run `fetch <slug>`. Takes the options of `list`. |
 | `list <slug>` | Reads the topic list through the gateway (`competitions topics list <slug> --sort-by recent --format json -p <N>`, 20 topics a page, every page up to `--max-pages`, default 50) and saves it. `--from <page.json>... --pages <N>` takes pages a browser saved instead (below). |
 | `diff <slug>` | Compares the newest listing (or `--listing <file>`) with what was read: NEW topics, CHANGED ones (the comment count moved), BACK (a missing topic listed again) and MISSING ones (read before, not listed now; reported once, and only from a complete listing). Saves their ids to `pending.json`. |
-| `fetch <slug> [<id>...]` | Reads each topic (default: the pending new and changed ones) once, through the gateway's SDK read (`kaggle.py --sdk topic <id>`): the opening post and every comment in full, as HTML, each reply nested under the comment it answers. A failed read keeps the earlier file; after a 429 the rest waits for the next check. |
+| `fetch <slug> [<id>...]` | Reads each topic (default: every pending new and changed one, whatever copy is saved) once, through the gateway's SDK read (`kaggle.py --sdk topic <id>`): the opening post and every comment in full, as HTML, each reply nested under the comment it answers. A failed read keeps the earlier file; after a 429 the rest waits for the next check. |
 | `show <slug> [<id>...] [--new]` | Prints each topic (default: the pending ones, then the pending missing ones): title, author, date, link, the opening post, and the reply tree, each reply indented under its comment, HTML stripped and links kept, with the comments posted since the last read marked NEW. `--new` prints only what is new. Its second line is the `host mark:` line. Records what it printed in `shown.json`. |
 | `commit <slug> [<id>...]` | Records as read what `show` printed since the last commit (each topic up to the newest comment it showed; the missing topics it listed, as gone). A topic whose listing showed more comments than were read stays pending. With ids: those topics as shown, or else as fetched. |
 
