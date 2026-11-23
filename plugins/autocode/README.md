@@ -100,6 +100,10 @@ a stand-in `autocode` program first on the PATH and no autocode values in the en
 
 ## Changelog
 
+- 0.5.3: autocode 1.1.0-rc5. The rule (rev 9) names a wake's end (`every 1d until 2027-03-01`) for a wake that
+  the owner grants for a period, and says what to do where the owner approves periodic wakes first (`wake_mode`).
+  The Start skill (rev 4) says the same for the first start: the recurring wakes and the guard wait for the
+  owner's approval, and the old clock stays until they are set. No project steps.
 - 0.5.2: autocode 1.1.0-rc4. The Start skill (rev 3) says what a refused registration means: the ID is
   registered to another session, live or gone, and only the owner moves the agent to the new session. The rule
   (rev 8) says to close what no longer needs the owner in the owner's Inbox (`autocode_message action=close`),
