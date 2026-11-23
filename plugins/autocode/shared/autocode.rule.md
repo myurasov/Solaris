@@ -1,4 +1,4 @@
-_Rev. 9_
+_Rev. 10_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
@@ -8,7 +8,7 @@ Anywhere else (Claude Code, Cursor, OpenCode without autocode, a session nobody 
 the persona applies as written. In an autocode session it **replaces** what the persona and the
 plugin rules tie to harness hooks and the session clock (the wake-up clock, the Stop-hook guard, the session-start
 reload, self-compaction, Claude Code spend); everything else in the pack applies unchanged. Autocode's own guide
-(`autocode_me action=help`) is the reference for its tools. The rule follows autocode 1.1.0-rc5. `fire-only once`,
+(`autocode_me action=help`) is the reference for its tools. The rule follows autocode 1.1.0-rc6. `fire-only once`,
 a wake's `check_timeout`, `report` and `rename` need 1.1.0-rc1 or later: a server that refuses them is older, so
 tell the owner to upgrade it. The tools are named below where a copied plugin has them,
 `<pack>/plugins/autocode/tools/`; a linked plugin's are in `shared/tools/` under the plugin root its link file names.
@@ -27,12 +27,15 @@ tell the owner to upgrade it. The tools are named below where a copied plugin ha
   the pass; the wake's text says where the receipts are, and that a wake fired by hand skips its check (then run the
   same command once). A wake that the owner grants for a period carries its end in its trigger (`every 1d until
   2027-03-01`, autocode 1.1.0-rc5): it is removed at the end, and a notice says so.
-- **Wakes the owner approves:** where `autocode_me action=status` says that the owner approves periodic wakes
-  first (`wake_mode ask`, autocode 1.1.0-rc5), `autocode_wake action=set` of a recurring wake (`every`, `cron`,
-  `idle`, the guard included) answers that the wake is not set yet. It waits in the owner's Inbox with its exact
-  terms; a notice tells the outcome; go on meanwhile, and never rebuild such a wake from one-time wakes. Setting a
-  wake again with the terms it has asks nothing. With `wake_mode off` only the owner sets recurring wakes: give
-  the owner each one's name, trigger and text.
+- **Wakes the owner approves:** by default a session sets its wakes itself, at once, and asks nobody
+  (`wake_mode allow`; `autocode_me action=status` says "Wakes: you set them yourself, at once; no approval is
+  needed"): do not ask the owner for an approval of a wake that autocode does not ask for. Only where status says
+  that the owner approves periodic wakes first (`wake_mode ask`, autocode 1.1.0-rc5), `autocode_wake action=set`
+  of a recurring wake (`every`, `cron`, `idle`, the guard included) answers that the wake is not set yet. It
+  waits in the owner's Inbox with its exact terms; a notice tells the outcome; go on meanwhile, and never rebuild
+  such a wake from one-time wakes. Setting a wake again with the terms it has asks nothing. With `wake_mode deny`
+  only the owner sets recurring wakes: give the owner each one's name, trigger and text. Autocode 1.1.0-rc6
+  renamed two of these values: `allow` was `approve`, and `deny` was `off`.
 - **Guard:** one wake `guard`, trigger `idle 10m repeat`, check `python3 <pack>/plugins/autocode/tools/guard.py
   check` (with `--steps <file>` for each file whose unticked `- [ ]` lines are open steps), text "The idle guard
   found open work or a job that needs a look: its lines follow. Act on each, and clear what is done. Fired by hand,

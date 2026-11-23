@@ -3,8 +3,8 @@
   "schema_version": 1,
   "files": {
     "shared/autocode-start.skill.md": {
-      "rev": 4,
-      "hash": "340ad2c41aa8af7a96690b7692bae968dbe2427be668851ccb850f2feb282c0e",
+      "rev": 5,
+      "hash": "2dfda38a5b64a395bf19e4655a7f3959eabef17bedc9274c262138eff5593866",
       "history": [
         {
           "rev": 1,
@@ -21,12 +21,16 @@
         {
           "rev": 4,
           "hash": "340ad2c41aa8af7a96690b7692bae968dbe2427be668851ccb850f2feb282c0e"
+        },
+        {
+          "rev": 5,
+          "hash": "2dfda38a5b64a395bf19e4655a7f3959eabef17bedc9274c262138eff5593866"
         }
       ]
     },
     "shared/autocode.rule.md": {
-      "rev": 9,
-      "hash": "34d54c989c3b37abec0716bb0b900d91d589c66b928746febdfe641446365bf3",
+      "rev": 10,
+      "hash": "ec8b709dbd2a6e918cebf70531f1476f9555624b7be51d3b38f1c9515bfcf5f7",
       "history": [
         {
           "rev": 1,
@@ -63,6 +67,10 @@
         {
           "rev": 9,
           "hash": "34d54c989c3b37abec0716bb0b900d91d589c66b928746febdfe641446365bf3"
+        },
+        {
+          "rev": 10,
+          "hash": "ec8b709dbd2a6e918cebf70531f1476f9555624b7be51d3b38f1c9515bfcf5f7"
         }
       ]
     },

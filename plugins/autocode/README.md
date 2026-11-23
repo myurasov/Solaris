@@ -100,6 +100,10 @@ a stand-in `autocode` program first on the PATH and no autocode values in the en
 
 ## Changelog
 
+- 0.5.4: autocode 1.1.0-rc6, which renamed three values of its mode settings: `approve` is now `allow`, `auto`
+  is now `auto_answer`, and `off` is now `deny` (for `job_mode` and `wake_mode`). The rule (rev 10) and the Start
+  skill (rev 5) name `wake_mode deny`, and say first that under the default, `wake_mode allow`, a session sets its
+  wakes itself and asks nobody. No project steps.
 - 0.5.3: autocode 1.1.0-rc5. The rule (rev 9) names a wake's end (`every 1d until 2027-03-01`) for a wake that
   the owner grants for a period, and says what to do where the owner approves periodic wakes first (`wake_mode`).
   The Start skill (rev 4) says the same for the first start: the recurring wakes and the guard wait for the

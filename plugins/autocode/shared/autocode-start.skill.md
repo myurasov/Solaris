@@ -3,7 +3,7 @@ name: autocode-start
 triggers: ["run as autocode agent", "start as an autocode agent", "start the autocode session", "autocode start"]
 summary: Start a project's session as an autocode agent - register the agent ID, check that its shells carry autocode's values, turn Solaris self-compaction off where needed, read the read-first set by hand, convert the schedule into wakes (wakes.py), set the idle guard wake with its check (guard.py), stop the old session clock, and tell the owner whether the session comes back by itself after a reboot.
 ---
-_Rev. 4_
+_Rev. 5_
 
 # Skill: autocode-start - Start a Session as an Autocode Agent <!-- omit in toc -->
 
@@ -108,12 +108,13 @@ on. With none (the first start):
 5. **Stop the old clock:** `uv run --directory <solaris root> -m solaris.tools.session_clock --dir <project>
    --stop`.
 
-Where the owner approves periodic wakes first (autocode 1.1.0-rc5: `autocode_me action=status` says so, and a
-`set` in steps 3 and 4 answers that the wake is not set yet), the recurring wakes and the guard wait in the
-owner's Inbox. Tell the owner how many wait, and why the session needs them. Until they are approved the session
-has no clock and no guard of autocode's: leave the old clock running, and do step 5 once the notices of the
-approvals have come. With `wake_mode off` the owner sets them (`autocode wake set`, or the Wakes tab): give the
-owner each wake's name, trigger and text.
+By default (`wake_mode allow`, autocode 1.1.0-rc6; called `approve` before) the wakes of steps 3 and 4 are set at
+once, and nobody is asked. Where the owner approves periodic wakes first (`wake_mode ask`: `autocode_me
+action=status` says so, and a `set` in steps 3 and 4 answers that the wake is not set yet), the recurring wakes
+and the guard wait in the owner's Inbox. Tell the owner how many wait, and why the session needs them. Until
+they are approved the session has no clock and no guard of autocode's: leave the old clock running, and do step
+5 once the notices of the approvals have come. With `wake_mode deny` (called `off` before) the owner sets them
+(`autocode wake set`, or the Wakes tab): give the owner each wake's name, trigger and text.
 
 ## 6. Where the Session Comes Back by Itself
 
