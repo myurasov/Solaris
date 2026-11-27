@@ -16,7 +16,7 @@ questions: [{"key": "competition", "ask": "Kaggle competition slug, the path seg
   {"key": "cross-review", "ask": "Set up cross-family reviews now, other vendors' models reviewing the daily plan and each pick (yes, later or no)?", "choices": ["yes", "later", "no"], "default": "yes"},
   {"key": "timezone", "ask": "Your timezone for owner-facing times and the owner's day, an IANA name such as Europe/London (empty: owner.timezone, else this machine's)?"}]
 ---
-_Rev. 2_
+_Rev. 3_
 
 # Project Type: Kaggle Competition <!-- omit in toc -->
 
@@ -155,7 +155,9 @@ steps go on.
      `<pack>/housekeeping.json` as `"linked_roots": ["__data", "__out"]` (create the file with that one key,
      or add it), so that the housekeeping tool counts what is behind the links and the review runner reads
      files there. Write into `<pack>/instructions.md` where the data lives and that the drive holds the only
-     copy. The ignores below hold for the links as they do for folders.
+     copy. A folder pattern does not match a link, so the overlay's `.gitignore` also names `__data` and `__out`
+     as plain names: in the check below, name the two links themselves in place of `__data/x` (git refuses a
+     path beyond a link), and see that `git status` lists neither.
    - Main-developer mode, since the master commits on `main`: `"git.developer_branches": false` in
      `<pack>/.memory/config.json` (create it, or add the key and keep the others). `source/README.md` names
      `source/` as the git root in local mode: correct it to the project root.

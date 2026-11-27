@@ -27,6 +27,9 @@ __pycache__/
 
 # Local-only folders: __data/ (datasets and the Kaggle stores), __out/ (run outputs), __research/, __history/
 __*/
+# The same two as plain names: when they are links to another drive, a folder pattern does not match them
+__data
+__out
 
 # The status page (kaggle_status.py) and its source, reports/status.json, carry machines and spend: kept out of git,
 # they reach the owner through file sync; the patterns also cover the temporary and shorter-chart files a killed
