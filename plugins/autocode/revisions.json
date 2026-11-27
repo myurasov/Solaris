@@ -29,13 +29,9 @@
       ]
     },
     "shared/autocode.rule.md": {
-      "rev": 11,
-      "hash": "aca4f5c07ecb95496b1ed7ba5e1dc8146eb0f3b60c4b7f21c23388a0a167e88e",
+      "rev": 12,
+      "hash": "69b03635c592dbc8028fa7ec20116004e7eba02b0b088b98f67af37f1cea8a47",
       "history": [
-        {
-          "rev": 2,
-          "hash": "39d16f1c2aa26e4a93535b9d61fb2e552c4d2cd005fe0a6c7be9871b4d7e3c60"
-        },
         {
           "rev": 3,
           "hash": "75acafd0533536afb60ade1cd6e36ceecc6c9aac93443ca1ca7e01bdf0ac2a37"
@@ -71,6 +67,10 @@
         {
           "rev": 11,
           "hash": "aca4f5c07ecb95496b1ed7ba5e1dc8146eb0f3b60c4b7f21c23388a0a167e88e"
+        },
+        {
+          "rev": 12,
+          "hash": "69b03635c592dbc8028fa7ec20116004e7eba02b0b088b98f67af37f1cea8a47"
         }
       ]
     },

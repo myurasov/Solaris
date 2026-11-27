@@ -1,4 +1,4 @@
-_Rev. 11_
+_Rev. 12_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
@@ -123,6 +123,10 @@ tell the owner to upgrade it. The tools are named below where a copied plugin ha
     otherwise.
   - **A token for the CLI comes from a file:** `--token-file FILE`, never `--token "$(cat FILE)"`, which shows the
     token in the machine's process list.
+  - **`warming` is what OpenCode's cache warming spent** (autocode 1.1.2): requests between a session's turns
+    that keep the provider's cache of its context alive. It shows among what started the turns, though it is no
+    turn and no activity of the session. It counts toward a daily cap, and a session paused by its cap is still
+    warmed: that is the owner's to change, in OpenCode's config.
 - **Notices and restarts:** `[autocode] resume` continues the cut turn, and so does OpenCode's own "The server
   restarted while you were working" (it comes instead when OpenCode was killed, as at a power cut). After either,
   first run `guard.py job list` and `autocode_wake action=list` and start again what was lost. OpenCode's own

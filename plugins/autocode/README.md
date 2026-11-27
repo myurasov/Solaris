@@ -100,6 +100,10 @@ a stand-in `autocode` program first on the PATH and no autocode values in the en
 
 ## Changelog
 
+- 0.5.6: autocode 1.1.2, which counts what OpenCode's cache warming spends between a session's turns. The rule
+  (rev 12) names the cause `warming` that `autocode_me action=status` may now show, and says that it is no activity
+  of the session, that it counts toward a daily cap, and that a session paused by its cap is still warmed. No
+  project steps.
 - 0.5.5: autocode 1.1.0-rc7, which shows where the spend goes. The rule (rev 11) says what `autocode_me
   action=status` and `autocode_wake action=list` now tell (the spend by kind, by Subagents and by what started the
   turn; a wake's reload) and what follows from it: few long turns, a smaller context, a cheaper model for a
