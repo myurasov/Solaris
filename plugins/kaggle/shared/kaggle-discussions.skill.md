@@ -3,7 +3,7 @@ name: kaggle-discussions
 triggers: ["kaggle discussions", "competition discussions", "competition forum", "forum watch", "check the forum", "discussion topics"]
 summary: Watch a Kaggle competition's discussions - kaggle_forum.py lists the forum's topics through the CLI (or takes pages a browser saved, where the CLI cannot list them), diffs them against what was read, fetches the new and changed topics through the gateway, and prints each opening post and its comments with the new ones marked. Covers the hourly routine, the commands, the host mark (and what an unknown host mark means), the storage, listing without the CLI, logging insights with topic ids, and privacy.
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: kaggle-discussions - Watching a Competition's Discussions <!-- omit in toc -->
 
@@ -57,13 +57,13 @@ in the pre-submit check's `config.json` (`<context>/__data/kaggle/<slug>/presubm
 ["<display name>", ...]`: the `kaggle-checks` skill), which finds their posts by name.
 
 The check of the master's `hourly` autocode wake runs `check` among its reads (the wake calls `sh
-<pack>/plugins/kaggle/tools/kaggle_hourly_check.sh <slug>`: the `kaggle-checks` skill). A new topic or a host
-post wakes the master. New comments in known topics wake too, until that `config.json` names the hosts: any
-of them may be a host's. With hosts named, a named host's comment wakes and the others are held, printed at
-the next wake and at the hour-close (`"kaggle.wake_on"` with `"comments"` wakes for them as well). The `forum`
-line of the pass names the topics still to `show` and `commit`. No daemon, system cron job or other watcher
-outside the session. The OAuth login expires after about 12 hours, so a long unattended session
-needs the long-lived API token (the `kaggle-cli` skill's Signing In).
+<pack>/plugins/kaggle/tools/kaggle_hourly_check.sh <slug>`: the `kaggle-checks` skill). A host post wakes the
+master. A new topic and new comments in known topics wake too, until that `config.json` names the hosts: any
+of them may be a host's. With hosts named, a named host's topic or comment wakes and the others are held,
+printed at the next wake and at the hour-close (`"kaggle.wake_on"` with `"topics"` or `"comments"` wakes for
+them as well). The `forum` line of the pass names the topics still to `show` and `commit`. No daemon, system
+cron job or other watcher outside the session. The OAuth login expires after about 12 hours, so a long
+unattended session needs the long-lived API token (the `kaggle-cli` skill's Signing In).
 
 ## Commands
 

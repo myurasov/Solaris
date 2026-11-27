@@ -1,4 +1,4 @@
-# rev. 8
+# rev. 9
 
 """kaggle_hourly: the hourly pass of the read-only Kaggle checks, as an autocode wake check or by hand.
 
@@ -69,10 +69,10 @@ acks the pre-submit check and never submits.
     own rank is not below us; without our team on the board every line counts)
     a new or re-scored public notebook at or better than our best score (--vs
     replaces our best as the bar; with no bar known the plain notebooks flag
-    decides); a new forum topic
-    new comments in known topics, unless the pack names its hosts (the "hosts"
-    list of presubmit/config.json): then a named host's comment wakes, as the
-    review line's flag, and the others are held
+    decides)
+    a new forum topic and new comments in known topics, unless the pack names
+    its hosts (the "hosts" list of presubmit/config.json): then a named host's
+    topic or comment wakes, as the review line's flag, and the others are held
     a read that failed or came back incomplete (a partial board read, a partial
     forum listing, a topic that could not be fetched, a notebook list page that
     failed, a submissions list that came back empty after a pass that listed
@@ -81,21 +81,25 @@ acks the pre-submit check and never submits.
     an earlier wake that was not closed
   What is held, not woken for: our rank moving inside the same zone; a medal
   line below our team that moved (its news ends "; below our #<rank>"); the top
-  teams changing places without a jump; with hosts named, new comments in known
-  topics that are not a named host's (the held news and the quiet line say when
-  the forum read carried no host mark, so that a host is told by name only);
-  topics no longer listed; public notebooks below our best; a status page that
-  is only old (--close rebuilds it); an older plugin copy that was told before;
+  teams changing places without a jump; with hosts named, new forum topics and
+  new comments in known topics that are not a named host's (the held news and
+  the quiet line say when the forum read carried no host mark, so that a host
+  is told by name only); topics no longer listed; public notebooks below our
+  best; a status page that needs only the rebuild --close makes (it is over 2
+  hours old, the status JSON changed after its last build, or it was built
+  before the newest score landed); an older plugin copy that was told before;
   a flag held back as unchanged. Held news is kept in the receipt. The next
   wake prints it under "since the last turn" while reasons and held news fit
   1,500 characters; past that it prints how many items are held and the
   receipt's path, and --close prints them all. A pass with only held news is
   quiet.
   Pack settings: "kaggle.wake_on" (a list of held kinds to wake on as well:
-  "rank", "lines", "top", "comments", "notebooks", "status"; or "all" for every
-  one; "lines" wakes on every move of a medal line, also one below our team or
-  under the least move), "kaggle.wake_line_move" (a medal line that is not
-  below our team wakes when its score moved by at least this much, in score
+  "rank", "lines", "top", "topics", "comments", "notebooks", "status"; or "all"
+  for every one; "lines" wakes on every move of a medal line, also one below
+  our team or under the least move; "topics" wakes on every new forum topic;
+  "comments" gives the plain pass's forum flag back, which wakes on every
+  unread topic, new or changed), "kaggle.wake_line_move" (a medal line that is
+  not below our team wakes when its score moved by at least this much, in score
   units; default 0: any move) and "kaggle.board_jump" (the jump threshold when
   --jump is not given: "N%" or a number).
 
@@ -451,9 +455,14 @@ REASONS_ROOM, REASON_WIDTH = 1500, 320
 # pack settings: the held kinds of news to wake on as well, the least move of a medal line's score that wakes (score
 # units), and the jump threshold when --jump is not given
 WAKE_KEY, LINE_KEY, JUMP_KEY = "kaggle.wake_on", "kaggle.wake_line_move", "kaggle.board_jump"
-WAKE_KINDS = ("rank", "lines", "top", "comments", "notebooks", "status")
-# a status flag that only says the page is old: --close rebuilds the page, so it wakes no one
-AGE_ONLY = re.compile(r"the page is over [\d.]+ hours old: rebuild it \([^()]*kaggle_status\.py --keep-rev\)")
+WAKE_KINDS = ("rank", "lines", "top", "topics", "comments", "notebooks", "status")
+# the status flags that the rebuild of --close cures, so they wake no one: the page is old, the status JSON changed
+# after the last build, or the page was built before the newest score landed. Only a whole flag matches: one with
+# the git hint joined to it does not
+REBUILD_ONLY = re.compile(
+    r"(?:(?:the page is over [\d.]+ hours old|the page was built before the newest score landed \(.*\)): rebuild it "
+    r"\([^()]*kaggle_status\.py --keep-rev\)"
+    r"|the status JSON changed after the last build: rebuild the page \([^()]*kaggle_status\.py\))")
 # a figure in a flag that changes from pass to pass (a spend so far): left out when a flag is compared with the
 # last pass's, so a limit that stays reached is one unchanged flag
 MONEY_RE = re.compile(r"\$\d[\d,]*(?:\.\d+)?")
@@ -1952,11 +1961,12 @@ def id_list(ids):
                                                                          else "")
 
 
-def forum_news(was, new, named=False, unmarked=False):
+def forum_news(was, new, named=False, unmarked=False, wake_on=()):
     """[(kind, text, whether it wakes)] of the pending forum topics against those the last pass saw (forum_state): a
-    new topic wakes; a topic no longer listed is held. New comments in a known topic wake unless the pack names its
-    hosts (named: presubmit/config.json "hosts" is not empty): then a named host's comment is the review line's
-    flag, and the others are held. unmarked: the forum read carries no host mark, which the held news then says."""
+    new topic and new comments in a known topic wake unless the pack names its hosts (named: presubmit/config.json
+    "hosts" is not empty): then a named host's topic or comment is the review line's flag, and the others are held.
+    With "topics" in wake_on (the held kinds that wake as well) a new topic wakes with hosts named too. A topic no
+    longer listed is held. unmarked: the forum read carries no host mark, which the held news then says."""
     def got(key):
         return set(was.get(key) or []) if isinstance(was.get(key), list) else set()
 
@@ -1967,11 +1977,19 @@ def forum_news(was, new, named=False, unmarked=False):
              and (i not in known or before.get(i) != new["counts"].get(i))]
     gone = [i for i in new["missing"] if i not in got("missing")]
     out = []
-    if fresh:
-        out.append(("forum", f"{plural(len(fresh), 'new forum topic')} ({id_list(fresh)})", True))
+    tail = "; " + UNMARKED if unmarked else ""
+    topics = f"{plural(len(fresh), 'new forum topic')} ({id_list(fresh)})"
+    if fresh and "topics" in wake_on:
+        out.append(("forum", topics, True))
+    elif fresh and named:
+        out.append(("forum", topics + tail, False))
+    elif fresh:
+        out.append(("forum", f'{topics}: no host is named in presubmit/config.json "hosts", so '
+                             f"{'it' if len(fresh) == 1 else 'any of them'} may be a host's (name the hosts there to "
+                             "have the others held)", True))
     if grown and named:
-        out.append(("forum", f"new comments in {plural(len(grown), 'known forum topic')} ({id_list(grown)})"
-                             + ("; " + UNMARKED if unmarked else ""), False))
+        out.append(("forum", f"new comments in {plural(len(grown), 'known forum topic')} ({id_list(grown)})" + tail,
+                    False))
     elif grown:
         out.append(("forum", f"new comments in {plural(len(grown), 'known forum topic')} ({id_list(grown)}): no "
                              'host is named in presubmit/config.json "hosts", so any of them may be a host\'s (name '
@@ -2163,7 +2181,7 @@ def run_pass(P, slug, root, *, gateway=None, vs=None, status=None, now=None, jum
                 own.add("forum")
                 cfg = res.get("cfg") if isinstance(res.get("cfg"), dict) else {}
                 tell(forum_news(base["forum"], topics, named=bool(cfg.get("hosts")),
-                                unmarked=res.get("host_mark") != "known"))
+                                unmarked=res.get("host_mark") != "known", wake_on=wake_on))
             seen["forum"] = topics
     raw = {"at": P.iso(now)}
     reads.check = "subs"
@@ -2601,10 +2619,10 @@ def unclosed(P, earlier):
 
 
 def held_note(held, earlier):
-    """(how many held news items wait for the next wake, the words to add when forum comments among them were held
-    while the forum read carried no host mark)."""
+    """(how many held news items wait for the next wake, the words to add when forum topics or comments among them
+    were held while the forum read carried no host mark)."""
     items = [*held, *(h for e in earlier for h in e.get("held") or [])]
-    return len(items), (", comments among them held with the host mark unknown" if any(UNMARKED in h for h in items)
+    return len(items), (", forum news among them held with the host mark unknown" if any(UNMARKED in h for h in items)
                         else "")
 
 
@@ -2659,9 +2677,10 @@ def failed_read(check, line, flag):
 
 def check_reasons(lines, held, extra):
     """(the reasons a --check pass wakes for, the news it holds): a flag printed in full wakes, but for the checks
-    whose flag the news replaces (extra["own"]), a status page that is only old, and an owner's flag printed again
-    unchanged (ONCE_CHECKS), which are held; a failed read wakes even when its flag is unchanged; then the reads
-    that came back partial and the news that wakes."""
+    whose flag the news replaces (extra["own"]), a status flag that the rebuild of --close cures (REBUILD_ONLY: the
+    page old, built before the status JSON's last change or before the newest score landed; with "status" in the
+    pack's wake_on it wakes), and an owner's flag printed again unchanged (ONCE_CHECKS), which are held; a failed
+    read wakes even when its flag is unchanged; then the reads that came back partial and the news that wakes."""
     reasons, quiet, wake_on = [], [], extra["wake_on"]
     for i, (check, line, flag) in enumerate(lines):
         if not flag:
@@ -2670,7 +2689,7 @@ def check_reasons(lines, held, extra):
             reasons.append(f"{check}: {line}: {flag}" if line in ("not read", "not run") else f"{check}: {flag}")
         elif i in held or check in extra["own"]:
             continue
-        elif check == "status" and AGE_ONLY.fullmatch(flag) and "status" not in wake_on:
+        elif check == "status" and REBUILD_ONLY.fullmatch(flag) and "status" not in wake_on:
             quiet.append(f"status: {line}: --close rebuilds the page")
         elif check in ONCE_CHECKS and i in extra["repeats"]:
             quiet.append(f"{check}: {line} (told before, unchanged)")

@@ -1707,18 +1707,22 @@ class CheckTests(Checked):
         self.assertEqual((code, err), (0, ""), out)
         slot = self.slot()
         rows = out.splitlines()
-        self.assertEqual(rows[0], f"HOURLY WAKE {SLUG} {slot}: 3 reasons; receipt __data/kaggle/{SLUG}/hourly/"
+        self.assertEqual(rows[0], f"HOURLY WAKE {SLUG} {slot}: 2 reasons; receipt __data/kaggle/{SLUG}/hourly/"
                                   f"{slot}.json")
-        self.assertEqual(rows[1:4], [
+        self.assertEqual(rows[1:3], [
             "- subs: 1 score landed: update the records and the plan",
-            "- kernels: a run ended: check its result, fetch its output, release its lease",
-            "- status: the page was built before the newest score landed (S1: base 0.912): rebuild it "
-            f"({BUILD} --keep-rev)"])
-        self.assertEqual(rows[4], NEXT)
-        self.assertEqual(len(rows), 5)
+            "- kernels: a run ended: check its result, fetch its output, release its lease"])
+        self.assertEqual(rows[3], NEXT)
+        # the page cannot show the new score yet: the close this wake asks for rebuilds it, so that flag is held
+        self.assertEqual(rows[4], "since the last turn (held, not woken for):")
+        self.assertRegex(rows[5], r"^- this pass: status: reports/html/status\.html built 1\d min ago, rev 1: --close "
+                                  r"rebuilds the page$")
+        self.assertEqual(len(rows), 6)
         doc = self.receipt()
         self.assertEqual((doc["status"], doc["code"], doc["flags"], len(doc["reasons"]), doc["again"]),
-                         ("wake", 0, 3, 3, []))
+                         ("wake", 0, 3, 2, []))
+        self.assertIn("the page was built before the newest score landed (S1: base 0.912): rebuild it "
+                      f"({BUILD} --keep-rev)", [c["flag"] for c in doc["checks"]])
         self.assertIn({"check": "subs", "line": "0 scoring now; since the last pass: S1: base scored 0.912",
                        "flag": "1 score landed: update the records and the plan"}, doc["checks"])
         # the same slot again: the saved wake, no second read
@@ -1867,7 +1871,7 @@ class CheckTests(Checked):
         # the full list would pass the room: a count, where it is in full, and that the host mark was unknown
         reasons = ["subs: 1 score landed: update the records and the plan", "kernels: a run ended"]
         text = H.wake_text(P, "demo", "20261122T10Z", rel, tool, reasons, [], held, earlier)
-        self.assertEqual(text.splitlines()[-1], "since the last turn: 24 held news items, not shown here, comments "
+        self.assertEqual(text.splitlines()[-1], "since the last turn: 24 held news items, not shown here, forum news "
                                                 "among them held with the host mark unknown: --close prints them in "
                                                 f'full, and they are in "held" and "earlier" of {rel}')
         self.assertLess(len(text), 2000)
@@ -2247,13 +2251,16 @@ class NewsTests(Checked):
         code, out, _ = self.check()
         self.assertEqual(code, 0, out)
         rows = out.splitlines()
-        self.assertEqual((rows[0].split(";")[0], rows[1]), (f"HOURLY WAKE {SLUG} {self.slot()}: 1 reason",
-                                                            "- forum: 1 new forum topic (id 7)"))
+        # no host is named and the forum read marks none: a new topic may be a host's, so it wakes
+        self.assertEqual((rows[0].split(";")[0], rows[1]), (
+            f"HOURLY WAKE {SLUG} {self.slot()}: 1 reason",
+            '- forum: 1 new forum topic (id 7): no host is named in presubmit/config.json "hosts", so it may be a '
+            "host's (name the hosts there to have the others held)"))
         # no third-party text in what autocode quotes into the prompt: the title is in the receipt
         self.assertNotIn("A topic", out)
         self.assertEqual(self.close()[0], 0)
         self.next_hour()
-        # no host is named and the forum read marks none: a new comment in a known topic may be a host's, so it wakes
+        # a new comment in a known topic may be a host's too, so it wakes
         comments = [("Someone", 0.9, "A reply.")]
         self.forum([{"id": 7, "title": "A topic", "posted": 2, "comments": comments}])
         code, out, _ = self.check()
@@ -2270,7 +2277,8 @@ class NewsTests(Checked):
         self.forum([{"id": 7, "title": "A topic", "posted": 2, "comments": comments}])
         code, out, _ = self.check()
         self.assertEqual(code, 1, out)
-        self.assertIn("(1 held for the next wake, comments among them held with the host mark unknown; receipt ", out)
+        self.assertIn("(1 held for the next wake, forum news among them held with the host mark unknown; receipt ",
+                      out)
         self.assertEqual(self.receipt()["held"], [
             'forum: new comments in 1 known forum topic (id 7); host mark unknown: a host is told only by the names '
             'in presubmit/config.json "hosts"'])
@@ -2295,6 +2303,92 @@ class NewsTests(Checked):
         self.assertEqual(code, 0, out)
         self.assertIn(f"- forum: read them: python3 aipack/plugins/kaggle/tools/kaggle_forum.py show {SLUG} --new, log "
                       "what matters, then commit", out)
+
+    def name_hosts(self, *names):
+        self.store("presubmit").mkdir(parents=True, exist_ok=True)
+        self.store("presubmit", "config.json").write_text(json.dumps({"hosts": list(names)}))
+
+    def test_with_hosts_named_a_new_forum_topic_is_held_and_a_hosts_wakes(self):
+        self.name_hosts("Hosty")
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        # another author's new topic and nothing else new: a quiet pass, the topic kept as held news
+        self.forum([{"id": 7, "title": "A topic", "posted": 2}])
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        self.assertIn("(1 held for the next wake, forum news among them held with the host mark unknown; receipt ",
+                      out)
+        held = ('forum: 1 new forum topic (id 7); host mark unknown: a host is told only by the names in '
+                'presubmit/config.json "hosts"')
+        doc = self.receipt()
+        self.assertEqual((doc["status"], doc["held"]), ("quiet", [held]))
+        # the forum line counts it as before, and the plain pass's flag is in the receipt
+        self.assertIn({"check": "forum", "line": "1 new, 0 changed, 0 missing topics not shown and committed yet",
+                       "flag": f"read them: python3 aipack/plugins/kaggle/tools/kaggle_forum.py show {SLUG} --new, log "
+                               "what matters, then commit"}, doc["checks"])
+        self.next_hour()
+        # a named host's new topic wakes, as the review line's flag; the held topics print under it
+        self.forum([{"id": 8, "title": "A ruling", "posted": 0.5, "author": "Hosty"},
+                    {"id": 7, "title": "A topic", "posted": 2}])
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        rows = out.splitlines()
+        self.assertEqual((rows[0].split(";")[0], rows[1:3]), (f"HOURLY WAKE {SLUG} {self.slot()}: 1 reason", [
+            f"- review: a host post or a page change: run kaggle_presubmit.py {SLUG}, read it, decide, then --ack",
+            NEXT]))
+        self.assertEqual(rows[3], "since the last turn (held, not woken for):")
+        self.assertTrue(rows[4].endswith(": " + held), rows[4])
+        self.assertEqual(rows[5], "- this pass: " + held.replace("id 7", "id 8"))
+        self.assertEqual(len(rows), 6)
+        self.assertNotIn("A ruling", out)
+        self.assertEqual(self.receipt()["checks"][3]["line"], "2 new, 0 changed, 0 missing topics not shown and "
+                                                              "committed yet")
+        # the close prints the held topics too
+        code, out, _ = self.close()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(sum(1 for x in out.splitlines() if ", held: forum: 1 new forum topic (id " in x), 2)
+
+    def test_a_pack_that_wakes_on_topics_wakes_for_every_new_topic(self):
+        self.name_hosts("Hosty")
+        self.config({"kaggle.wake_on": ["topics"]})
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        self.forum([{"id": 7, "title": "A topic", "posted": 2}])
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(out.splitlines()[1], "- forum: 1 new forum topic (id 7)")
+        # "topics" is a kind the settings check knows
+        self.assertNotIn("settings", [c["check"] for c in self.receipt()["checks"]])
+        self.assertEqual(self.close()[0], 0)
+        self.next_hour()
+        # the comments keep their own rule: with hosts named, another author's is held
+        self.forum([{"id": 7, "title": "A topic", "posted": 2, "comments": [("Other", 0.7, "A reply.")]}])
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        self.assertEqual(self.receipt()["held"], [
+            'forum: new comments in 1 known forum topic (id 7); host mark unknown: a host is told only by the names '
+            'in presubmit/config.json "hosts"'])
+
+    def test_what_the_forum_news_says_of_new_topics(self):
+        H = self.module("kaggle_hourly")
+        was = {"new": ["5"], "changed": [], "missing": [], "counts": {"5": 0}}
+        one = {"new": ["5", "7"], "changed": [], "missing": [], "counts": {"5": 0, "7": 0}}
+        two = dict(one, new=["5", "7", "8"])
+        why = ('no host is named in presubmit/config.json "hosts", so {} may be a host\'s (name the hosts there to '
+               'have the others held)')
+        # no host named: a new topic wakes and says why; a topic the last pass saw is not new
+        self.assertEqual(H.forum_news(was, one), [("forum", "1 new forum topic (id 7): " + why.format("it"), True)])
+        self.assertEqual(H.forum_news(was, two, unmarked=True),
+                         [("forum", "2 new forum topics (ids 7, 8): " + why.format("any of them"), True)])
+        # hosts named: held, and the text says when the forum read carried no host mark
+        self.assertEqual(H.forum_news(was, one, named=True), [("forum", "1 new forum topic (id 7)", False)])
+        self.assertEqual(H.forum_news(was, two, named=True, unmarked=True),
+                         [("forum", f"2 new forum topics (ids 7, 8); {H.UNMARKED}", False)])
+        # "topics" in the pack's wake_on: it wakes, hosts named or not, with nothing to add
+        for named in (True, False):
+            self.assertEqual(H.forum_news(was, one, named=named, unmarked=True, wake_on=frozenset(["topics"])),
+                             [("forum", "1 new forum topic (id 7)", True)])
+        self.assertEqual(H.forum_news(was, was, named=True), [])
 
     def test_public_notebooks_wake_at_or_better_than_our_best_only(self):
         self.team()
@@ -2381,14 +2475,14 @@ class NewsTests(Checked):
         row = out.splitlines()[1]
         self.assertTrue(row.startswith('- settings: kaggle.wake_line_move in aipack/.memory/config.json must be a '
                                        'non-negative number: fix it; kaggle.wake_on in aipack/.memory/config.json '
-                                       'must be "all" or a list of rank, lines, top, comments, notebooks, status: fix '
-                                       'it; kaggle.board_jump in '), row)
+                                       'must be "all" or a list of rank, lines, top, topics, comments, notebooks, '
+                                       'status: fix it; kaggle.board_jump in '), row)
         self.assertTrue(row.endswith("...") and len(row) <= 322, row)
         self.assertEqual(self.receipt()["reasons"], [
             'settings: kaggle.wake_line_move in aipack/.memory/config.json must be a non-negative number: fix it; '
-            'kaggle.wake_on in aipack/.memory/config.json must be "all" or a list of rank, lines, top, comments, '
-            'notebooks, status: fix it; kaggle.board_jump in aipack/.memory/config.json must be "N%" of a team\'s '
-            'earlier score, or a score difference: fix it'])
+            'kaggle.wake_on in aipack/.memory/config.json must be "all" or a list of rank, lines, top, topics, '
+            'comments, notebooks, status: fix it; kaggle.board_jump in aipack/.memory/config.json must be "N%" of a '
+            'team\'s earlier score, or a score difference: fix it'])
 
     def test_the_plain_pass_says_the_news_and_takes_it(self):
         self.team()
@@ -2766,6 +2860,116 @@ class CloseTests(Checked):
         code, out, _ = self.check()
         self.assertEqual(code, 0, out)
         self.assertIn(f"- status: the page is over 2 hours old: rebuild it ({BUILD} --keep-rev)\n", out)
+
+    def test_a_page_that_needs_only_the_rebuild_is_held_and_the_close_cures_it(self):
+        # S1 scored before the first pass: its score landed at its submission time, 2026-10-01 01:00 UTC
+        self.subs([(55, "S1: base", "COMPLETE", "0.912")])
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        # the status JSON was edited after the last build, and nothing else is new
+        built = time.time() - 600
+        os.utime(self.status_html, (built, built))
+        os.utime(self.status_json, None)
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        doc = self.receipt()
+        self.assertEqual(doc["held"], ["status: reports/html/status.html built 10 min ago, rev 1: --close rebuilds "
+                                       "the page"])
+        self.assertIn(f"the status JSON changed after the last build: rebuild the page ({BUILD})",
+                      [c["flag"] for c in doc["checks"]])
+        # the close rebuilds the page: the next pass has no status flag
+        self.assertEqual(self.close()[0], 0)
+        self.next_hour()
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        self.assertEqual([c["flag"] for c in self.receipt()["checks"] if c["check"] == "status"], [None])
+        self.next_hour()
+        # the page is older than the newest score's landing (and than two hours: the score comes first)
+        early = datetime(2026, 9, 30, tzinfo=timezone.utc).timestamp()
+        os.utime(self.status_json, (early - 60, early - 60))
+        os.utime(self.status_html, (early, early))
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        doc = self.receipt()
+        self.assertEqual(len(doc["held"]), 1)
+        self.assertRegex(doc["held"][0], r"^status: reports/html/status\.html built [\d.]+ h ago, rev 1: --close "
+                                         r"rebuilds the page$")
+        self.assertIn("the page was built before the newest score landed (S1: base 0.912): rebuild it "
+                      f"({BUILD} --keep-rev)", [c["flag"] for c in doc["checks"]])
+        self.assertEqual(self.close()[0], 0)
+        self.next_hour()
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        self.assertEqual([c["flag"] for c in self.receipt()["checks"] if c["check"] == "status"], [None])
+
+    def test_a_page_that_needs_only_the_rebuild_wakes_where_the_pack_asks_for_it(self):
+        self.config({"kaggle.wake_on": ["status"]})
+        self.subs([(55, "S1: base", "COMPLETE", "0.912")])
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        built = time.time() - 600
+        os.utime(self.status_html, (built, built))
+        os.utime(self.status_json, None)
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"- status: the status JSON changed after the last build: rebuild the page ({BUILD})\n", out)
+        self.assertEqual(self.close()[0], 0)
+        self.next_hour()
+        early = datetime(2026, 9, 30, tzinfo=timezone.utc).timestamp()
+        os.utime(self.status_json, (early - 60, early - 60))
+        os.utime(self.status_html, (early, early))
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertIn("- status: the page was built before the newest score landed (S1: base 0.912): rebuild it "
+                      f"({BUILD} --keep-rev)\n", out)
+
+    @unittest.skipUnless(shutil.which("git"), "git is not installed")
+    def test_a_rebuild_flag_joined_with_the_git_hint_still_wakes(self):
+        subprocess.run(["git", "-C", str(self.root), "init", "-q"], env=self.env, capture_output=True, check=True)
+        gitignore = self.root / ".gitignore"
+        gitignore.write_text("reports/status*.pdf\nreports/html/status*.html\n")
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        # git no longer ignores the page, and the status JSON changed after the last build: no rebuild cures the first
+        gitignore.write_text("")
+        built = time.time() - 600
+        os.utime(self.status_html, (built, built))
+        os.utime(self.status_json, None)
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.receipt()["reasons"], [
+            f"status: the status JSON changed after the last build: rebuild the page ({BUILD}); keep the page out of "
+            "git: add reports/status*.pdf and reports/html/status*.html to the project's .gitignore (and git rm "
+            "--cached any already committed)"])
+        self.assertEqual(self.receipt()["held"], [])
+
+    def test_which_status_flags_the_check_holds(self):
+        H = self.module("kaggle_hourly")
+        fine = [(c, "fine", None) for c in ("review", "board", "notebooks", "forum", "subs", "kernels")]
+
+        def reasons(flag, wake_on=()):
+            extra = {"news": {"wake": [], "held": []}, "own": set(), "incomplete": [], "repeats": set(),
+                     "wake_on": frozenset(wake_on)}
+            return H.check_reasons([*fine, ("status", "the page", flag)], set(), extra)
+
+        cured = [f"the page is over 2 hours old: rebuild it ({BUILD} --keep-rev)",
+                 f"the status JSON changed after the last build: rebuild the page ({BUILD})",
+                 f"the page was built before the newest score landed (S1: base (v2); x 0.912): rebuild it ({BUILD} "
+                 "--keep-rev)",
+                 # with no lock to name, the flag names the tool alone
+                 "the page is over 2 hours old: rebuild it (kaggle_status.py --keep-rev)",
+                 "the status JSON changed after the last build: rebuild the page (kaggle_status.py)"]
+        for flag in cured:
+            self.assertEqual(reasons(flag), ([], ["status: the page: --close rebuilds the page"]), flag)
+            self.assertEqual(reasons(flag, ["status"]), ([f"status: {flag}"], []), flag)
+            # with the git hint joined, the flag is more than a rebuild cures
+            joined = f"{flag}; {H.GIT_HINT}"
+            self.assertEqual(reasons(joined), ([f"status: {joined}"], []), flag)
+        for flag in (f"no status page: write reports/status.json, then build it ({BUILD})",
+                     f"never built: build it ({BUILD})",
+                     f"unreadable: fix the status JSON, then rebuild the page ({BUILD})",
+                     "live plan retired: move to reports/status.json", H.GIT_HINT):
+            self.assertEqual(reasons(flag), ([f"status: {flag}"], []), flag)
 
     def test_the_rebuild_waits_for_the_lock_every_rebuild_shares(self):
         H, P = self.module("kaggle_hourly"), self.module("kaggle_presubmit")

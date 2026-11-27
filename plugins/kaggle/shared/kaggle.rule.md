@@ -1,4 +1,4 @@
-_Rev. 14_
+_Rev. 15_
 
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
@@ -130,7 +130,7 @@ prefix (`L01`, `L02`, ...) in its own files, so a later plugin release cannot gi
   the top teams' leaderboard progress, plan and timeline, spending, resources and their use, open questions and
   suggestions. The hour-close (`tools/kaggle_hourly.py <slug> --close`) rebuilds it at each woken hour; rebuild
   it on every plan change too (render plus layout check only). A quiet hour brings no turn and no rebuild, and a
-  page that is only old does not wake the master. Keep it out of git. <!-- OD41 -->
+  page that needs only that rebuild does not wake the master. Keep it out of git. <!-- OD41 -->
 
 Retired directions, their numbers never used again:
 

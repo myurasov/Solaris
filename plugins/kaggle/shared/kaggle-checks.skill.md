@@ -3,7 +3,7 @@ name: kaggle-checks
 triggers: ["presubmit", "pre-submit check", "pre-submit review", "hourly check", "hourly pass", "gated submit"]
 summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads and passes by a board read marked unreliable) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; a submit Kaggle refuses is recorded with Kaggle's reason; never retried blindly; --landed records an unclear attempt that the submissions list shows); kaggle_watch.py waits for one score as a watched background job; kaggle_hourly.py is the hourly pass of the read-only checks, run as the check of the hourly autocode wake through its guard kaggle_hourly_check.sh (--check, one pass per hour with a receipt, a quiet hour takes no turn, a wake that is not closed wakes again), as the hour-close of the turn it woke (--close, the status page rebuilt offline, every receipt since the last close marked handled, their reasons and held news printed in full, the status block) and as a plain pass by hand, with a line per check, flagging what needs a decision (board jumps, errored submissions with Kaggle's error text, unpushed commits, a master off its allowed models or at another effort than the pack sets, spend limits, a stopped peer master, an older plugin copy, a stalled own line, HTTP 429 as one line; an unchanged flag held back for hours), then a status block for the hour's log, not a message to the owner (outlook, progress, tracks, machine health).
 ---
-_Rev. 9_
+_Rev. 10_
 
 # Skill: kaggle-checks - Pre-Submit Check, Gated Submit, Hourly Pass <!-- omit in toc -->
 
@@ -76,9 +76,10 @@ Every tool exits 2 on bad usage and 1 on an error of its own, with one exception
    no post is badged. The HOST POSTS line then says `host mark: unknown` where it would have said
    `none new`: a missing mark does not mean that no host posted. It still lists the posts of the hosts
    `config.json` names; judge the rest by content and by the competition's host list. The hourly check
-   goes by the `hosts` list too: until it names the hosts, every new comment in a known topic wakes the
-   master, since any of them may be a host's. And the check tells a competition page change only once a
-   first review is recorded, which is one more reason to run and `--ack` the first check at once.
+   goes by the `hosts` list too: until it names the hosts, every new topic and every new comment in a
+   known topic wakes the master, since any of them may be a host's. And the check tells a competition
+   page change only once a first review is recorded, which is one more reason to run and `--ack` the
+   first check at once.
 2. **Run the check** within the half hour before the submit, away from other Kaggle reads: Kaggle
    answers a burst of reads with HTTP 429 (Too Many Requests), and the hourly pass makes the same
    reads. So the check reuses the last hourly pass's board snapshot and notebook list when that pass
@@ -297,9 +298,9 @@ held, and the news of the pass:
   medal line's score moved, unless our team stands above that line before and after the move (by rank; a line
   at our own rank is not below us; without our team on the board every line counts);
 - a new or re-scored public notebook at or better than our best score (`--vs` replaces our best as the bar;
-  with no bar known the plain `notebooks` flag decides); a new forum topic;
-- new comments in known topics, unless the pack names its hosts (below): then a named host's comment wakes, as
-  the `review` line's flag, and the others are held;
+  with no bar known the plain `notebooks` flag decides);
+- a new forum topic and new comments in known topics, unless the pack names its hosts (below): then a named
+  host's topic or comment wakes, as the `review` line's flag, and the others are held;
 - a read that failed or came back incomplete (a partial board read, a partial forum listing, a topic that
   could not be fetched, a notebook list page that failed, a submissions list that came back empty after a pass
   that listed some), also when its flag is unchanged; the board snapshot unreliable at three passes in a row;
@@ -307,24 +308,26 @@ held, and the news of the pass:
 
 **What is held, not woken for:** our rank moving inside the same medal zone; a medal line below our team that
 moved (news, but nothing to decide: its line ends `; below our #<rank>`); the top teams changing places
-without a jump; with hosts named, new comments in known topics that are not a named host's; topics no longer
-listed; public notebooks below our best; a status page that is only old (`--close` rebuilds it); an older
-plugin copy that was told before; a flag held back as unchanged. Held news is kept in the receipt. The next
-wake prints it under "since the last turn" while it fits, and `--close` prints all of it. A pass with only held
-news is quiet.
+without a jump; with hosts named, new forum topics and new comments in known topics that are not a named
+host's; topics no longer listed; public notebooks below our best; a status page that needs only the rebuild
+`--close` makes (it is over 2 hours old, the status JSON changed after its last build, or it was built before
+the newest score landed; a flag that also says a page file is not ignored by git still wakes); an older plugin
+copy that was told before; a flag held back as unchanged. Held news is kept in the receipt. The next wake
+prints it under "since the last turn" while it fits, and `--close` prints all of it. A pass with only held news
+is quiet.
 
-**Name the hosts.** The forum read carries no author type today, so the check cannot tell a host's comment by a
+**Name the hosts.** The forum read carries no author type today, so the check cannot tell a host's post by a
 mark. It goes by the `hosts` list of `<context>/__data/kaggle/<slug>/presubmit/config.json` (`"hosts": ["<display
-name>", ...]`, the file of the pre-submit check). Until that list names the hosts, every new comment in a known
-topic wakes, since any of them may be a host's. With hosts named, a named host's comment wakes and the others
-are held; the quiet line and the held news then say "host mark unknown", as a reminder that a host is told by
-name only.
+name>", ...]`, the file of the pre-submit check). Until that list names the hosts, every new topic and every new
+comment in a known topic wakes, since any of them may be a host's. With hosts named, a named host's topic or
+comment wakes and the others are held; the quiet line and the held news then say "host mark unknown", as a
+reminder that a host is told by name only.
 
 **Settings** (`<pack>/.memory/config.json`, else `<pack>/defaults.json`):
 
 | Key | Does | Default |
 |---|---|---|
-| `"kaggle.wake_on"` | The held kinds to wake on as well: a list of `"rank"`, `"lines"`, `"top"`, `"comments"`, `"notebooks"` and `"status"`, or `"all"` for every one. `"lines"` wakes on every move of a medal line, also one below our team or under the least move. | none |
+| `"kaggle.wake_on"` | The held kinds to wake on as well: a list of `"rank"`, `"lines"`, `"top"`, `"topics"`, `"comments"`, `"notebooks"` and `"status"`, or `"all"` for every one. `"lines"` wakes on every move of a medal line, also one below our team or under the least move. `"topics"` wakes on every new forum topic, also with hosts named. `"comments"` gives the plain pass's `forum` flag back, which wakes on every unread topic, new or changed. `"status"` wakes on a status page that needs only the rebuild. | none |
 | `"kaggle.wake_line_move"` | A medal line that is not below our team wakes when its score moved by at least this much, in score units. | 0: any move |
 | `"kaggle.board_jump"` | The jump threshold when `--jump` is not given: `"N%"` of a team's earlier score, or a number in score units. | 2% |
 
