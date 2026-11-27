@@ -3,7 +3,7 @@ name: kaggle-reviews
 triggers: ["outside review", "plan review", "daily review", "review package", "reviewer pool", "cross-family review", "review job", "strategy review", "question our rules", "kaggle_review", "kaggle_jobs"]
 summary: Outside reviews for a Kaggle team - the daily plan review (a package written for an outsider, a pool of reviewers from other model families, the master weighing the union of findings), one sandboxed read-only review with kaggle_review.py (the session's own key, never printed; a key gate before a model's first call), review jobs kept as pack files with kaggle_jobs.py, why a reviewer run directly as a job is the weaker form, and the strategy review that questions the team's own rules and ends in one table for the owner.
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Skill: kaggle-reviews - Outside Reviews and the Strategy Review <!-- omit in toc -->
 
@@ -224,12 +224,12 @@ the team's own rules held its entries back.
 5. **Write it** to `research/<MMDD>-strategy-review.md`. The pool may attack the draft before it is acted on.
 6. **Register the decisions in the plan and act** in the same turn: start the top levers, change the rules in
    the pack's own files, rebuild the status page.
-7. **Send the owner one message** of about 400 words. Most of it is one table with the columns finding,
-   change, expected public gain, status, cost. At most two lines above it: where the board and the team's best
-   stand. At most two below: what goes into the next rows, and what needs the owner. Send it as a report when
-   nothing in it needs the owner's answer.
+7. **Record the result** in about 400 words, at the top of the review file and on the status page. Most of it
+   is one table with the columns finding, change, expected public gain, status, cost. At most two lines above
+   it: where the board and the team's best stand. At most two below: what goes into the next rows, and what
+   needs the owner. Write to the owner only when something in it needs the owner's answer (the rule's OD55):
+   then send that question alone, with the options and a recommendation.
 
 **The owner's standing limits hold during it.** Budgets, approvals, the account's sharing, the rules of the
 competition and the plugin's own directions are not the team's rules, and the review does not loosen them. A
-limit that looks wrong goes into the message's last lines as a question to the owner, and stays in force
-until the owner answers.
+limit that looks wrong goes to the owner as a question, and stays in force until the owner answers.

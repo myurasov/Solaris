@@ -1,9 +1,9 @@
 ---
 name: kaggle-checks
 triggers: ["presubmit", "pre-submit check", "pre-submit review", "hourly check", "hourly pass", "gated submit"]
-summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads and passes by a board read marked unreliable) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; a submit Kaggle refuses is recorded with Kaggle's reason; never retried blindly; --landed records an unclear attempt that the submissions list shows); kaggle_watch.py waits for one score as a watched background job; kaggle_hourly.py is the hourly pass of the read-only checks, run as the check of the hourly autocode wake through its guard kaggle_hourly_check.sh (--check, one pass per hour with a receipt, a quiet hour takes no turn, a wake that is not closed wakes again), as the hour-close of the turn it woke (--close, the status page rebuilt offline, every receipt since the last close marked handled, their reasons and held news printed in full, the status block) and as a plain pass by hand, with a line per check, flagging what needs a decision (board jumps, errored submissions with Kaggle's error text, unpushed commits, a master off its allowed models or at another effort than the pack sets, spend limits, a stopped peer master, an older plugin copy, a stalled own line, HTTP 429 as one line; an unchanged flag held back for hours), then a status block to paste into the status message (outlook, progress, tracks, machine health).
+summary: The checks around a Kaggle submission - kaggle_presubmit.py shows what is new since the last pre-submit review (the forum with host posts first, the competition pages, the public notebooks, the board; it reuses a young hourly pass's board and notebook reads and passes by a board read marked unreliable) with a TRIGGERS block, and --ack records the review; kaggle_submit.py makes one gated submit from a submission record (refused without a complete record, a fresh acked check, a finished kernel run and a one-line review; a submit Kaggle refuses is recorded with Kaggle's reason; never retried blindly; --landed records an unclear attempt that the submissions list shows); kaggle_watch.py waits for one score as a watched background job; kaggle_hourly.py is the hourly pass of the read-only checks, run as the check of the hourly autocode wake through its guard kaggle_hourly_check.sh (--check, one pass per hour with a receipt, a quiet hour takes no turn, a wake that is not closed wakes again), as the hour-close of the turn it woke (--close, the status page rebuilt offline, every receipt since the last close marked handled, their reasons and held news printed in full, the status block) and as a plain pass by hand, with a line per check, flagging what needs a decision (board jumps, errored submissions with Kaggle's error text, unpushed commits, a master off its allowed models or at another effort than the pack sets, spend limits, a stopped peer master, an older plugin copy, a stalled own line, HTTP 429 as one line; an unchanged flag held back for hours), then a status block for the hour's log, not a message to the owner (outlook, progress, tracks, machine health).
 ---
-_Rev. 8_
+_Rev. 9_
 
 # Skill: kaggle-checks - Pre-Submit Check, Gated Submit, Hourly Pass <!-- omit in toc -->
 
@@ -234,8 +234,8 @@ autocode_wake action=set name=hourly trigger=<the trigger wakes.py prints for th
   check="sh <pack>/plugins/kaggle/tools/kaggle_hourly_check.sh <slug>" check_timeout=5m
   text="The hourly Kaggle check found something: its reasons and receipt follow. Act on each from the receipt,
         under __data/kaggle/<slug>/hourly/ (make no second pass), then run python3
-        <pack>/plugins/kaggle/tools/kaggle_hourly.py <slug> --close, read what it prints, and paste its STATUS
-        block into the status message. Fired by hand, the check did not run: run sh
+        <pack>/plugins/kaggle/tools/kaggle_hourly.py <slug> --close, read what it prints, and put its STATUS
+        block into the hour's log (not a message to the owner). Fired by hand, the check did not run: run sh
         <pack>/plugins/kaggle/tools/kaggle_hourly_check.sh <slug> once."
 ```
 
@@ -294,7 +294,8 @@ held, and the news of the pass:
   post or a competition page change (page changes are told only once a pre-submit review is recorded:
   `kaggle_presubmit.py <slug>`, then `--ack`); a top team's jump (`--jump`);
 - our best public score changed; our rank crossed a medal line, either way, or our team left the board; a
-  medal line's score moved;
+  medal line's score moved, unless our team stands above that line before and after the move (by rank; a line
+  at our own rank is not below us; without our team on the board every line counts);
 - a new or re-scored public notebook at or better than our best score (`--vs` replaces our best as the bar;
   with no bar known the plain `notebooks` flag decides); a new forum topic;
 - new comments in known topics, unless the pack names its hosts (below): then a named host's comment wakes, as
@@ -304,7 +305,8 @@ held, and the news of the pass:
   that listed some), also when its flag is unchanged; the board snapshot unreliable at three passes in a row;
 - an earlier wake that was not closed.
 
-**What is held, not woken for:** our rank moving inside the same medal zone; the top teams changing places
+**What is held, not woken for:** our rank moving inside the same medal zone; a medal line below our team that
+moved (news, but nothing to decide: its line ends `; below our #<rank>`); the top teams changing places
 without a jump; with hosts named, new comments in known topics that are not a named host's; topics no longer
 listed; public notebooks below our best; a status page that is only old (`--close` rebuilds it); an older
 plugin copy that was told before; a flag held back as unchanged. Held news is kept in the receipt. The next
@@ -322,13 +324,14 @@ name only.
 
 | Key | Does | Default |
 |---|---|---|
-| `"kaggle.wake_on"` | The held kinds to wake on as well: a list of `"rank"`, `"top"`, `"comments"`, `"notebooks"` and `"status"`, or `"all"` for every one. | none |
-| `"kaggle.wake_line_move"` | A medal line wakes when its score moved by at least this much, in score units. | 0: any move |
+| `"kaggle.wake_on"` | The held kinds to wake on as well: a list of `"rank"`, `"lines"`, `"top"`, `"comments"`, `"notebooks"` and `"status"`, or `"all"` for every one. `"lines"` wakes on every move of a medal line, also one below our team or under the least move. | none |
+| `"kaggle.wake_line_move"` | A medal line that is not below our team wakes when its score moved by at least this much, in score units. | 0: any move |
 | `"kaggle.board_jump"` | The jump threshold when `--jump` is not given: `"N%"` of a team's earlier score, or a number in score units. | 2% |
 
 `"kaggle.wake_line_move"` keeps its default of any move. A board over 1,000 teams needs a value: there the
 places of the medal lines shift as teams join, so a line's score moves a little in most hours and most hours
-wake. Set it to the smallest move, in score units, that would change a decision.
+wake. Set it to the smallest move, in score units, that would change a decision. A line our team stands above
+is held whatever its move: our rank crossing a line is its own news, and wakes.
 
 ### The Hour-Close
 
@@ -359,7 +362,7 @@ receipt:  <the receipt's path> (<quiet | woke with n reasons>, the pass of <time
 closed with it, in full (reasons, then held news):
 - <Mon DD HH:MM>, woke: <reason, uncut>
 - <Mon DD HH:MM>, held: <held news>
-STATUS as of <the pass's time> (paste into the status message)
+STATUS as of <the pass's time> (for the hour's log)
 pick:     ...
 ```
 
@@ -450,8 +453,9 @@ reviewer, say) is never the master: the line is n/a there. Allowed models: `clau
 names, `*` allowed) in `<pack>/.memory/config.json` (or `<pack>/defaults.json`). A model matches by its id as
 autocode names it (`<provider>/<model>`), by its id without the provider, by its family (`claude-opus-5-5`
 inside a longer id; a date or `[1m]` aside), or by autocode's display name ("Opus 5.5", also as `opus-5-5` and,
-for a Claude model, `claude-opus-5-5`). A master on any other model is flagged: tell the owner, who chooses the
-model or names it in the list. The effort is the owner's choice for each session, so the tool assumes no level:
+for a Claude model, `claude-opus-5-5`). A master on any other model is flagged: when the owner named that model
+for the session (the owner's word in `directions.md`), put it into the list; otherwise tell the owner, who chooses the
+model. The effort is the owner's choice for each session, so the tool assumes no level:
 it is flagged only when the pack sets the level it expects as `"kaggle.master_effort"` (the level's name as
 autocode gives it) and the master runs at another. Without that setting no effort is flagged, and a session
 with no recorded effort is never judged.
@@ -491,8 +495,10 @@ Said, never flagged: a peer whose guard recorded no check, and a peer paused on 
 note, by the time in its name, has no "resumed at" line and is newer than its guard's last check).
 
 **The status block.** The plain pass ends with a STATUS block, and `--close` prints the one of the receipt's
-pass, to paste into the status message: one line each (under 300 characters, cut at a word's end), `n/a` where
-the tool cannot tell, never a guess:
+pass, for the hour's log (not a message to the owner): one line each (under 300 characters, cut at a word's
+end), `n/a` where the tool cannot tell, never a guess. The hour's log is the turn's closing text and the
+project's own log; the owner is written to only for a new best public score or a decision that is the owner's (the
+kaggle rule's OD55). The rows:
 `pick` (today's slots used of the status JSON's `daily_slots`, the pending submissions, and the status
 JSON's optional `"pick"` text, where the master keeps the next pick and its confidence), `score` (our
 best public score, by the status JSON's `team` on the newest reliable board snapshot, else our best scored

@@ -1,12 +1,13 @@
-# rev. 7
+# rev. 8
 
 """kaggle_hourly: the hourly pass of the read-only Kaggle checks, as an autocode wake check or by hand.
 
 An agent working a competition checks it every hour. This tool runs those reads
 in one call and prints one line per check, marked FLAG where something needs a
 decision, so the agent reads a few lines instead of every source, then a status
-block to paste into its status message. It schedules nothing: the agent's hourly
-autocode wake runs it as the wake's check, and a quiet hour costs no turn.
+block for the hour's log (not a message to the owner). It schedules nothing: the
+agent's hourly autocode wake runs it as the wake's check, and a quiet hour costs
+no turn.
 
     sh <plugin-dir>/tools/kaggle_hourly_check.sh <slug> [--limit SECONDS] [--vs SCORE] [--status FILE] [--jump N%|N]
     python3 <plugin-dir>/tools/kaggle_hourly.py <slug> --check [--limit SECONDS] [--vs SCORE] [--status FILE]
@@ -63,7 +64,9 @@ acks the pre-submit check and never submits.
     changes are told only once a pre-submit review is recorded:
     kaggle_presubmit.py <slug>, then --ack); a top team's jump (--jump)
     our best public score changed; our rank crossed a medal line, either way,
-    or our team left the board; a medal line's score moved
+    or our team left the board; a medal line's score moved, unless our team
+    stands above that line before and after the move (by rank; a line at our
+    own rank is not below us; without our team on the board every line counts)
     a new or re-scored public notebook at or better than our best score (--vs
     replaces our best as the bar; with no bar known the plain notebooks flag
     decides); a new forum topic
@@ -76,7 +79,8 @@ acks the pre-submit check and never submits.
     some), also when its flag is unchanged; the board snapshot unreliable at
     three passes in a row
     an earlier wake that was not closed
-  What is held, not woken for: our rank moving inside the same zone; the top
+  What is held, not woken for: our rank moving inside the same zone; a medal
+  line below our team that moved (its news ends "; below our #<rank>"); the top
   teams changing places without a jump; with hosts named, new comments in known
   topics that are not a named host's (the held news and the quiet line say when
   the forum read carried no host mark, so that a host is told by name only);
@@ -88,10 +92,12 @@ acks the pre-submit check and never submits.
   receipt's path, and --close prints them all. A pass with only held news is
   quiet.
   Pack settings: "kaggle.wake_on" (a list of held kinds to wake on as well:
-  "rank", "top", "comments", "notebooks", "status"; or "all" for every one),
-  "kaggle.wake_line_move" (a medal line wakes when its score moved by at least
-  this much, in score units; default 0: any move) and "kaggle.board_jump" (the
-  jump threshold when --jump is not given: "N%" or a number).
+  "rank", "lines", "top", "comments", "notebooks", "status"; or "all" for every
+  one; "lines" wakes on every move of a medal line, also one below our team or
+  under the least move), "kaggle.wake_line_move" (a medal line that is not
+  below our team wakes when its score moved by at least this much, in score
+  units; default 0: any move) and "kaggle.board_jump" (the jump threshold when
+  --jump is not given: "N%" or a number).
 
 --close: the hour-close, in the turn that the check woke
 
@@ -445,7 +451,7 @@ REASONS_ROOM, REASON_WIDTH = 1500, 320
 # pack settings: the held kinds of news to wake on as well, the least move of a medal line's score that wakes (score
 # units), and the jump threshold when --jump is not given
 WAKE_KEY, LINE_KEY, JUMP_KEY = "kaggle.wake_on", "kaggle.wake_line_move", "kaggle.board_jump"
-WAKE_KINDS = ("rank", "top", "comments", "notebooks", "status")
+WAKE_KINDS = ("rank", "lines", "top", "comments", "notebooks", "status")
 # a status flag that only says the page is old: --close rebuilds the page, so it wakes no one
 AGE_ONLY = re.compile(r"the page is over [\d.]+ hours old: rebuild it \([^()]*kaggle_status\.py --keep-rev\)")
 # a figure in a flag that changes from pass to pass (a spend so far): left out when a flag is compared with the
@@ -1744,7 +1750,10 @@ def full_snapshots(P, root, slug):
 
 def unreliable(P, snap):
     """Whether a saved board snapshot is no rank source: kaggle_lb.py marked its walk unreliable ("unreliable":
-    true), or it holds duplicate rows (the only mark of an older file)."""
+    true), or it holds duplicate rows (the only mark of an older file), or the file could not be read (snap is
+    None, as P.board_rows gives it)."""
+    if not isinstance(snap, dict):
+        return True
     return bool(snap.get("unreliable")) or (P.num(snap.get("duplicates")) or 0) > 0
 
 
@@ -1887,8 +1896,11 @@ def differ(P, a, b):
 def board_news(P, was, new, line_move, jumped, wake_on):
     """[(kind, text, whether it wakes)] of a board against the one the last pass saw (board_state): our rank crossing
     a medal line or our team leaving the board wakes, a move inside the zone is held; a medal line whose score moved
-    by line_move or more wakes, a smaller move is held; the top teams changing places without a jump (jumped: the
-    board flag says one) is held. wake_on: the held kinds that wake as well."""
+    by line_move or more wakes, a smaller move is held, and so is a move of a line our team stands above on both
+    boards (our rank is a smaller number than the line's; an equal rank is not above; without our rank on either
+    board no line counts as below us), whose text then ends "; below our #<rank>"; the top teams changing places
+    without a jump (jumped: the board flag says one) is held. wake_on: the held kinds that wake as well ("lines":
+    every move of a line)."""
     out = []
     if "rank" in was and "rank" in new:
         teams = f"of {new['teams']:,} teams"
@@ -1907,7 +1919,12 @@ def board_news(P, was, new, line_move, jumped, wake_on):
             continue
         x, y = P.num(a[1]), P.num(b[1])
         big = x is None or y is None or abs(y - x) >= line_move - 1e-12
-        out.append(("lines", f"the {medal} line moved: {a[1]} (#{a[0]}) -> {b[1]} (#{b[0]})", big))
+        # a line we stand above before and after the move is news, but nothing to decide
+        ours, at = (P.num(was.get("rank")), P.num(new.get("rank"))), (P.num(a[0]), P.num(b[0]))
+        below = None not in (*ours, *at) and ours[0] < at[0] and ours[1] < at[1]
+        wake = "lines" in wake_on or (big and not below)
+        out.append(("lines", f"the {medal} line moved: {a[1]} (#{a[0]}) -> {b[1]} (#{b[0]})"
+                             + (f"; below our #{new['rank']}" if below and not wake else ""), wake))
     top = was.get("top") if isinstance(was.get("top"), list) else []
     if top and top != new["top"] and not jumped:
         moved = sum(1 for i, t in enumerate(new["top"]) if i >= len(top) or top[i] != t)
@@ -2877,7 +2894,7 @@ def run_close(P, a, root, now=None):
     block = doc.get("block") if isinstance(doc.get("block"), dict) else None
     if block:
         # the block is the pass's, not this moment's: what the turn did since is not in it
-        print(f"STATUS as of {P.local(doc.get('at'))} (paste into the status message)")
+        print(f"STATUS as of {P.local(doc.get('at'))} (for the hour's log)")
         for field in BLOCK:
             print(f"{field + ':':<9} {clip(block.get(field) or NA, ROW_WIDTH)}")
     else:
@@ -3005,7 +3022,7 @@ def cli(argv):
         print(f"  - {check}: {flag}")
     if unchanged:
         print(f"unchanged: {plural(len(unchanged), 'flag')} ({', '.join(unchanged)})")
-    print("STATUS (paste into the status message)")
+    print("STATUS (for the hour's log)")
     for field in BLOCK:
         print(f"{field + ':':<9} {block[field]}")
     return EXIT_FLAG if flags else 0

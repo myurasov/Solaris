@@ -170,7 +170,7 @@ class PassTests(Hourly):
     def test_a_quiet_pass_exits_0_and_saves_no_check(self):
         code, out, err = self.hourly()
         self.assertEqual(code, 0, out + err)
-        self.assertIn("\nFLAGS: none: nothing needs a decision\nSTATUS (paste into the status message)\n", out)
+        self.assertIn("\nFLAGS: none: nothing needs a decision\nSTATUS (for the hour's log)\n", out)
         self.assertIn("no review recorded; triggers: no review yet", self.line(out, "review"))
         self.assertEqual(self.line(out, "board"), self.line(out, "board").split(";")[0] + "; #1 Alpha 0.9")
         self.assertEqual(self.line(out, "forum"), "forum      nothing unread")
@@ -524,7 +524,7 @@ class BrowserTests(Hourly):
 
 def block_of(out):
     """The STATUS block of a pass's text output: {field: text}."""
-    tail = re.split(r"(?m)^STATUS (?:as of .+ )?\(paste into the status message\)\n", out, maxsplit=1)[1].splitlines()
+    tail = re.split(r"(?m)^STATUS (?:as of .+ )?\(for the hour's log\)\n", out, maxsplit=1)[1].splitlines()
     return {x[:9].rstrip()[:-1]: x[10:] for x in tail}
 
 
@@ -1581,6 +1581,18 @@ if code == 0 and sys.argv[1:2] == ["snapshot"] and os.path.exists(mark):
 sys.exit(code)
 """
 
+# kaggle_lb.py as the unreadable-snapshot test stands it in: the real tool, then the snapshot it saved is no gzip file
+UNREADABLE_LB = """\
+import glob, os, subprocess, sys
+here = os.path.dirname(os.path.abspath(__file__))
+code = subprocess.run([sys.executable, os.path.join(here, "kaggle_lb_real.py"), *sys.argv[1:]]).returncode
+if code == 0 and sys.argv[1:2] == ["snapshot"]:
+    files = glob.glob(os.path.join("__data", "kaggle", sys.argv[2], "leaderboard", "*.json.gz"))
+    with open(max(files, key=os.path.getmtime), "wb") as f:
+        f.write(b"not gzip")
+sys.exit(code)
+"""
+
 
 def spread(**moved):
     """12 teams with Our Team at #6, scores 0.01 apart but around us; moved names get other scores. Best first."""
@@ -2369,14 +2381,14 @@ class NewsTests(Checked):
         row = out.splitlines()[1]
         self.assertTrue(row.startswith('- settings: kaggle.wake_line_move in aipack/.memory/config.json must be a '
                                        'non-negative number: fix it; kaggle.wake_on in aipack/.memory/config.json '
-                                       'must be "all" or a list of rank, top, comments, notebooks, status: fix it; '
-                                       'kaggle.board_jump in '), row)
+                                       'must be "all" or a list of rank, lines, top, comments, notebooks, status: fix '
+                                       'it; kaggle.board_jump in '), row)
         self.assertTrue(row.endswith("...") and len(row) <= 322, row)
         self.assertEqual(self.receipt()["reasons"], [
             'settings: kaggle.wake_line_move in aipack/.memory/config.json must be a non-negative number: fix it; '
-            'kaggle.wake_on in aipack/.memory/config.json must be "all" or a list of rank, top, comments, notebooks, '
-            'status: fix it; kaggle.board_jump in aipack/.memory/config.json must be "N%" of a team\'s earlier score, '
-            'or a score difference: fix it'])
+            'kaggle.wake_on in aipack/.memory/config.json must be "all" or a list of rank, lines, top, comments, '
+            'notebooks, status: fix it; kaggle.board_jump in aipack/.memory/config.json must be "N%" of a team\'s '
+            'earlier score, or a score difference: fix it'])
 
     def test_the_plain_pass_says_the_news_and_takes_it(self):
         self.team()
@@ -2430,6 +2442,100 @@ class NewsTests(Checked):
                          [("top", "the top 10 changed places without a jump: 2 of 10 places", True)])
         # the first reading of our rank is no news; nor is a board read without our team before
         self.assertEqual(H.board_news(P, {"teams": 5, "lines": {}, "top": []}, was, 0.0, False, frozenset()), [])
+
+    def test_a_medal_line_below_our_team_is_held(self):
+        # 12 teams: the lines are #1, #2 and #4, and our team is #2, the last silver place
+        self.team()
+        self.board(spread(**{"Our Team": 0.795}))
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        # the bronze line moves, below us before and after: news, nothing to decide
+        self.board(spread(**{"Our Team": 0.795, "T03": 0.785}))
+        code, out, _ = self.check()
+        self.assertEqual(code, 1, out)
+        self.assertIn("(1 held for the next wake; receipt ", out)
+        held = "lines: the bronze line moved: 0.78 (#4) -> 0.785 (#4); below our #2"
+        doc = self.receipt()
+        self.assertEqual((doc["status"], doc["reasons"], doc["held"]), ("quiet", [], [held]))
+        self.next_hour()
+        # the gold line, above us, wakes as before, and the held news comes with it
+        self.board(spread(**{"Our Team": 0.795, "T03": 0.785, "T01": 0.81}))
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertEqual(self.receipt()["reasons"], ["lines: the gold line moved: 0.8 (#1) -> 0.81 (#1)"])
+        self.assertRegex(out, rf"\nsince the last turn \(held, not woken for\):\n- .+: {re.escape(held)}\n")
+        self.assertEqual(self.close()[0], 0)
+        self.next_hour()
+        # the silver line is our own score (its rank is ours, so we do not stand above it): its move wakes
+        self.board(spread(**{"Our Team": 0.796, "T03": 0.785, "T01": 0.81}))
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        self.assertIn("lines: the silver line moved: 0.795 (#2) -> 0.796 (#2)", self.receipt()["reasons"])
+        self.assertEqual(self.receipt()["held"], [])
+        self.assertEqual(self.close()[0], 0)
+        self.next_hour()
+        # a pack that wants every line move: the bronze line below us wakes again, and the setting is no flag
+        self.config({"kaggle.wake_on": ["lines"]})
+        self.board(spread(**{"Our Team": 0.796, "T03": 0.787, "T01": 0.81}))
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        doc = self.receipt()
+        self.assertEqual((doc["reasons"], doc["held"]), (["lines: the bronze line moved: 0.785 (#4) -> 0.787 (#4)"],
+                                                         []))
+        self.assertNotIn("settings", [c["check"] for c in doc["checks"]])
+
+    def test_without_our_team_on_the_board_a_line_move_wakes(self):
+        # the same board and the same move, but the status JSON names no team: no rank of ours to compare with
+        self.board(spread(**{"Our Team": 0.795}))
+        self.assertEqual(self.check()[0], 1)
+        self.next_hour()
+        self.board(spread(**{"Our Team": 0.795, "T03": 0.785}))
+        code, out, _ = self.check()
+        self.assertEqual(code, 0, out)
+        doc = self.receipt()
+        self.assertEqual((doc["reasons"], doc["held"]), (["lines: the bronze line moved: 0.78 (#4) -> 0.785 (#4)"],
+                                                         []))
+
+    def test_a_line_is_below_us_by_rank_on_both_boards(self):
+        H, P = self.module("kaggle_hourly"), self.module("kaggle_presubmit")
+        was = {"teams": 5920, "rank": 33, "zone": "silver", "score": "0.515",
+               "lines": {"gold": [21, "0.52"], "silver": [296, "0.507"], "bronze": [592, "0.5"]},
+               "top": [str(i) for i in range(10)]}
+
+        def news(lines, wake_on=(), least=0.0005, **ours):
+            return H.board_news(P, dict(was, **ours), dict(was, lines=dict(was["lines"], **lines), **ours), least,
+                                False, frozenset(wake_on))
+
+        moved = {"gold": [21, "0.521"], "silver": [296, "0.508"], "bronze": [593, "0.4999"]}
+        # the gold line is above us; the silver line's move is big and below us; the bronze line's is small too
+        self.assertEqual(news(moved), [
+            ("lines", "the gold line moved: 0.52 (#21) -> 0.521 (#21)", True),
+            ("lines", "the silver line moved: 0.507 (#296) -> 0.508 (#296); below our #33", False),
+            ("lines", "the bronze line moved: 0.5 (#592) -> 0.4999 (#593); below our #33", False)])
+        # a small move of a line that is not below us is held as before, without the tail
+        self.assertEqual(news({"gold": [21, "0.5201"]}), [
+            ("lines", "the gold line moved: 0.52 (#21) -> 0.5201 (#21)", False)])
+        # by rank, so on a board where lower is better as well
+        self.assertEqual(news({"silver": [296, "0.506"]}), [
+            ("lines", "the silver line moved: 0.507 (#296) -> 0.506 (#296); below our #33", False)])
+        # "lines" in the pack's wake_on: every move wakes, the small one too
+        self.assertEqual(news(moved, wake_on=["lines"]), [
+            ("lines", "the gold line moved: 0.52 (#21) -> 0.521 (#21)", True),
+            ("lines", "the silver line moved: 0.507 (#296) -> 0.508 (#296)", True),
+            ("lines", "the bronze line moved: 0.5 (#592) -> 0.4999 (#593)", True)])
+        # at the line's own rank we are not above it, and above it on one board only does not count
+        silver = {"silver": [296, "0.508"]}
+        woken = [("lines", "the silver line moved: 0.507 (#296) -> 0.508 (#296)", True)]
+        self.assertEqual(news(silver, rank=296), woken)
+        self.assertEqual([x for x in H.board_news(P, dict(was, rank=296), dict(was, rank=295, lines=dict(
+            was["lines"], **silver)), 0.0005, False, frozenset()) if x[0] == "lines"], woken)
+        # without our rank on the board before, or on the board now
+        gone = {k: v for k, v in was.items() if k not in ("rank", "zone", "score")}
+        self.assertEqual(H.board_news(P, gone, dict(was, lines=dict(was["lines"], **silver)), 0.0005, False,
+                                      frozenset()), woken)
+        self.assertEqual(H.board_news(P, was, dict(gone, lines=dict(was["lines"], **silver)), 0.0005, False,
+                                      frozenset()),
+                         [("rank", "our team is no longer on the board (it was #33)", True), *woken])
 
     def test_the_packs_jump_threshold(self):
         teams = JumpTests.teams
@@ -2533,6 +2639,26 @@ class UnreliableTests(Checked):
         self.assertEqual(block_of(out)["rank"], "n/a (no full board snapshot saved)")
         self.assertEqual(json.loads(self.store("hourly", "last.json").read_text())["unreliable"], 1)
 
+    def test_a_fresh_snapshot_that_cannot_be_read_is_unreliable(self):
+        H, P = self.module("kaggle_hourly"), self.module("kaggle_presubmit")
+        self.assertTrue(H.unreliable(P, None))
+        self.team()
+        self.board(spread())
+        self.assertEqual(self.hourly()[0], 0)
+        good = json.loads(self.store("hourly", "last.json").read_text())["board"]
+        # the next walk leaves a file that is no gzip JSON: the pass does not fail, and takes no ranks from it
+        (self.tools / "kaggle_lb.py").write_text(UNREADABLE_LB)
+        self.board(spread(**{"Our Team": 0.1}))
+        code, out, err = self.hourly()
+        self.assertEqual((code, err), (0, ""), out)
+        self.assertRegex(self.line(out, "board"), r"^board      12 teams, snapshot .+; #1 T01 0\.8; snapshot "
+                                                  r"unreliable; ranks from \d\d:\d\d$")
+        self.assertTrue(block_of(out)["rank"].startswith("#6 of 12 teams "), out)
+        last = json.loads(self.store("hourly", "last.json").read_text())
+        self.assertEqual((last["board"], last["unreliable"], sorted(last["reads"])), (good, 1, ["notebooks"]))
+        fresh = sorted(self.store("leaderboard").glob("*.json.gz"), key=lambda p: p.stat().st_mtime_ns)[-1]
+        self.assertEqual(fresh.read_bytes(), b"not gzip")
+
     def test_an_empty_board_is_not_unreliable_until_it_had_teams(self):
         # the real kaggle_lb.py: a board nobody has scored on yet reads clean, without a row
         (self.tools / "kaggle_lb.py").unlink()
@@ -2601,7 +2727,7 @@ class CloseTests(Checked):
                                      f"- {P.local(doc['at'], '%b %d %H:%M')}, held: status: reports/html/status.html "
                                      "built 3.0 h ago, rev 1: --close rebuilds the page"])
         # the block is the pass's, and says so
-        self.assertEqual(rows[5], f"STATUS as of {P.local(doc['at'])} (paste into the status message)")
+        self.assertEqual(rows[5], f"STATUS as of {P.local(doc['at'])} (for the hour's log)")
         self.assertEqual(block_of(out), doc["block"])
         # the build's own output is kept whole, not quoted
         log = self.store("hourly", "status-build.log").read_text()
@@ -2669,7 +2795,7 @@ class CloseTests(Checked):
         # the receipt is closed all the same, and its block printed
         self.assertTrue(self.receipt()["handled"])
         self.assertIn("\nclosed with it: nothing woke and nothing was held\nSTATUS as of ", out)
-        self.assertRegex(out, r"\nSTATUS as of .+ \(paste into the status message\)\npick: ")
+        self.assertRegex(out, r"\nSTATUS as of .+ \(for the hour's log\)\npick: ")
         # a task folder's pass, without a status JSON: nothing to rebuild
         self.status_json.unlink()
         code, out, _ = self.close()

@@ -10,12 +10,13 @@ questions: [{"key": "competition", "ask": "Kaggle competition slug, the path seg
   {"key": "goal", "ask": "Goal on the leaderboard (for example a gold place on the public board)?", "default": "a gold place on the public board"},
   {"key": "unattended", "ask": "May the master run unattended under your standing grant, deciding and reporting (yes or no)?", "choices": ["yes", "no"], "default": "yes"},
   {"key": "compute", "ask": "Compute: your own hosts, hosts shared by your other projects, cloud GPUs (Brev), or Kaggle's own GPUs only (any mix)?", "default": "Kaggle's own GPUs only"},
+  {"key": "data-root", "ask": "Keep the data (__data and __out) on another drive? Give a folder there (empty: inside the project)."},
   {"key": "ai-budget", "ask": "Daily AI spending limit in USD (empty: none)?"},
   {"key": "brev-limit", "ask": "Daily cloud-GPU (Brev) limit in USD (empty: none)?"},
   {"key": "cross-review", "ask": "Set up cross-family reviews now, other vendors' models reviewing the daily plan and each pick (yes, later or no)?", "choices": ["yes", "later", "no"], "default": "yes"},
   {"key": "timezone", "ask": "Your timezone for owner-facing times and the owner's day, an IANA name such as Europe/London (empty: owner.timezone, else this machine's)?"}]
 ---
-_Rev. 1_
+_Rev. 2_
 
 # Project Type: Kaggle Competition <!-- omit in toc -->
 
@@ -70,7 +71,7 @@ The shape of the competition projects this type was drawn from; planning keeps i
     reports/                 status.json*, status.pdf and html/ (all out of git: machines and spend), other reports
     tools/                   README.md*, one folder per project tool
     __data/                  data, and the Kaggle stores under __data/kaggle/<competition>/ (local only)
-    __out/                   run outputs (local only)
+    __out/                   run outputs (local only); both are links when the data lives on another drive
   ```
 
 - **Standing files** (the playbook's Setup): the owner's directions log `<pack>/.memory/directions.md`, the shared
@@ -89,6 +90,7 @@ The shape of the competition projects this type was drawn from; planning keeps i
   | `goal` | `reports/status.json` (`phase`), `<pack>/spec.md` (Goal), `README.md` |
   | `unattended` | `<pack>/instructions.md` (Owner's Standing Grant), `<pack>/spec.md` (Autonomy Grant) |
   | `compute` | the optional plugins, `<pack>/instructions.md`, `README.md`, `reports/status.json` (`resources`) |
+  | `data-root` | Step 2: `__data` and `__out` as links to folders on that drive, listed in `<pack>/housekeeping.json` (`linked_roots`); the facts in `<pack>/instructions.md` |
   | `ai-budget`, `brev-limit` | `<pack>/.memory/config.json` (`ai.daily_budget_usd`, `brev.daily_limit_usd`) |
   | `cross-review` | `<pack>/instructions.md`, the schedule's daily plan review |
   | `timezone` | `reports/status.json` (`timezone`), `<pack>/.memory/config.json` (`owner.timezone`, the owner's day for the hourly pass) and the `zone` of the schedule's events tied to the owner's day |
@@ -147,6 +149,13 @@ steps go on.
      git status --short -uall
      ```
 
+   - Data on another drive (a `data-root` answer): make `<data-root>/<project>/__data` and
+     `<data-root>/<project>/__out` there (`<project>` as above, so two projects never share a folder), link both
+     at the project root (`ln -s <target> __data`, the same for `__out`), and list them in
+     `<pack>/housekeeping.json` as `"linked_roots": ["__data", "__out"]` (create the file with that one key,
+     or add it), so that the housekeeping tool counts what is behind the links and the review runner reads
+     files there. Write into `<pack>/instructions.md` where the data lives and that the drive holds the only
+     copy. The ignores below hold for the links as they do for folders.
    - Main-developer mode, since the master commits on `main`: `"git.developer_branches": false` in
      `<pack>/.memory/config.json` (create it, or add the key and keep the others). `source/README.md` names
      `source/` as the git root in local mode: correct it to the project root.
@@ -314,7 +323,7 @@ steps go on.
       --close`: it prints what the check found and held, rebuilds the status page and marks the hour handled. A
       wake that is not closed wakes again the next hour.
     - On a board of thousands of teams the medal lines' scores move a little in most hours, and by default any
-      move wakes: set `"kaggle.wake_line_move"` in `<pack>/.memory/config.json` to the smallest move, in score
+      move of a line that is not below our own place wakes: set `"kaggle.wake_line_move"` in `<pack>/.memory/config.json` to the smallest move, in score
       units, that would change a decision (the `kaggle-checks` skill names the other settings of the check).
     - Check the schedule from the project root: `python3 <autocode>/wakes.py --dir . --zone <the owner's zone>`
       prints one wake per event, with its trigger and its next time, and changes nothing. Exit 2 names what is
@@ -328,7 +337,8 @@ steps go on.
       Kaggle, the grant's reserved list); submit only through the gate, and never lose a day's slot to a pending
       entry; the main session never prints agent prompts, model outputs, trajectories or long third-party text
       (workers and counting scripts read them); when unsure, take the option that moves the public board faster,
-      act, then report; calls the owner has not reserved are stated as "doing X at T unless you object"; answer
+      act, then record it; calls the owner has not reserved are taken and logged, never asked; write to the
+      owner only for a decision that is the owner's and for a new best public score (the rule's OD55); answer
       the owner first, in about 100 words; after a compaction, re-read the playbook core, the kind skill and
       `<pack>/.memory/context.md`. Later owner directions that must survive a compaction join it, numbered `L01`
       onward; the rest go to `<pack>/instructions.md`.
@@ -371,7 +381,8 @@ Tell the owner, briefly:
   unattended work, the reviewing models, a plugin to attach, the remote).
 - **How to start:** the master runs only as an autocode agent. On the machine that runs the project (best the
   autocode server's own, in OpenCode's background service, where the session comes back by itself after a
-  restart), open OpenCode 2 in the project folder, on Opus 5.5 at the effort the owner chooses: the effort is the
+  restart), open OpenCode 2 in the project folder, on Opus 5.5 or the model the owner names (that one goes into
+  `"kaggle.allowed_models"` of `<pack>/.memory/config.json`), at the effort the owner chooses: the effort is the
   owner's choice for each session, no file fixes it, and workers never run above it. Give it: "Act as the
   project's primary persona and run as autocode agent `kaggle:<short name>:master`: follow
   `<pack>/plugins/autocode/autocode-start.skill.md`." The master registers, records its agent ID and this prompt

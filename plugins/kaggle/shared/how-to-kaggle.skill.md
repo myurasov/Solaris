@@ -3,7 +3,7 @@ name: how-to-kaggle
 triggers: ["kaggle competition", "compete on kaggle", "new kaggle competition", "kaggle playbook", "how to kaggle"]
 summary: Core of the playbook for competing on Kaggle with an autonomous agent team, read at every session start and after every compaction - the first hour and the competition facts sheet, Kaggle access, the kinds of contest and their skills, compute, phases, honest validation, daily submission discipline, agent organization, research, the base to stack changes on, a pitfalls log, and the settled decisions, each rule with the evidence behind it told as a generic example. The kind skills (kaggle-kind-*), kaggle-kernels (read before building a submission) and the tool skills hold the rest; Kaggle commands go through the kaggle-cli skill's gateway.
 ---
-_Rev. 30_
+_Rev. 31_
 
 # Skill: how-to-kaggle - Competing on Kaggle With an Autonomous Agent Team <!-- omit in toc -->
 
@@ -410,7 +410,7 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
   hardware that will run it, and log how often it triggers.
 - **Parallel submissions are fine** (Kaggle scores each independently; leave a few minutes between submits).
 - **Never lose a day's slot because an earlier entry is still scoring:** submit the day's best anyway; if Kaggle
-  refuses (`kaggle_submit.py` exit 5), retry until the reset and report each refusal. A quiet hour brings no turn,
+  refuses (`kaggle_submit.py` exit 5), retry until the reset and log each refusal. A quiet hour brings no turn,
   so set the retries: when the pending entry lands (its score wakes the master, and a watch on it is surer), and
   at a wake set for a last call before the reset. Under a one-pending-entry limit, submit early in the Kaggle
   day. <!-- OD46 -->
@@ -449,7 +449,8 @@ validation, submission and pitfall material. A contest that mixes kinds reads ea
 - **Worker briefs** follow the subagents rule's task contract and ask for a "New ideas" block and a "for
   instructions.md" block. Each launch passes the model (below); a brief keeps each wait to about 270 seconds a
   call, hands longer waits to a background script, and never starts a command with `sleep`.
-- **Calls the owner has not reserved** are stated as "doing X at T unless you object", never asked as a question.
+- **Calls the owner has not reserved** are taken and written into the project's log (what, when, why): never
+  asked as a question, and never announced to the owner one by one (the rule's OD55).
 - **Adversarial review before every push to Kaggle** caught real problems every time (a missing image pin,
   uncalibrated thresholds, uncoupled fallbacks, duplicate training rows, a two-factor change that needed isolating).
 - **Cross-family review:** models from other vendors review the daily plan and each pre-submit pick, read-only,

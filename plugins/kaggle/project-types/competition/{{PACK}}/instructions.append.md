@@ -29,8 +29,9 @@ and plan derives from this sheet. Times are UTC with the owner's time beside the
 
 The owner's answer at creation ({{DATE}}) to running unattended: **{{ANSWER_UNATTENDED}}**.
 
-- On yes, the master runs the competition unattended: it decides on its best judgement and reports, gives a one-line
-  heads-up for each outward action, and never depends on the owner's help or logins. Covered: submissions within the
+- On yes, the master runs the competition unattended: it decides on its best judgement and records its decisions,
+  writes a one-line heads-up into the log before each outward action, and never depends on the owner's help or
+  logins. It writes to the owner only for a decision that is the owner's and for a new best public score. Covered: submissions within the
   day's limit through the gated submit; private Kaggle notebooks and private datasets a submission needs; jobs on
   this project's own hosts; paid compute within the daily limits in `{{PACK}}/.memory/config.json`; commits, version
   bumps and pushes to this project's own private remote.
@@ -61,10 +62,10 @@ the rules and their evidence. Kaggle commands run from the project root; `<tools
   lets only a verified quiet pass skip the turn: a quiet hour ends there and costs no turn. When it wakes the
   master: act on each reason from the receipt it names and make no second pass, run this project's own host and
   job checks beside it, then close the hour with `python3 <tools>/kaggle_hourly.py {{ANSWER_COMPETITION}} --close`.
-  The close prints what the check found and held, with the STATUS block for the status message, rebuilds the
-  status page and marks the hour handled: do not rebuild the page by hand at each pass. A wake that is not closed
-  wakes again the next hour. Then rewrite the snapshot in `{{PACK}}/.memory/context.md`. A wake fired by hand
-  skips its check: run the check command once.
+  The close prints what the check found and held, with the STATUS block for the hour's log (not a message to
+  the owner), rebuilds the status page and marks the hour handled: do not rebuild the page by hand at each pass.
+  A wake that is not closed wakes again the next hour. Then rewrite the snapshot in
+  `{{PACK}}/.memory/context.md`. A wake fired by hand skips its check: run the check command once.
 - **Status page:** the master edits `reports/status.json`; `python3 <tools>/kaggle_status.py` builds
   `reports/status.pdf` and raises the rev. The JSON, the PDF and its HTML stay out of git: they carry machines and
   spend. The hour-close rebuilds the page at each woken hour; rebuild it by hand in the same turn as any plan

@@ -63,6 +63,6 @@ From the project root, with `<tools>` the kaggle plugin's tools (`{{PACK}}/plugi
    with `--ack`.
 3. **Gated submit:** `python3 <tools>/kaggle_submit.py submissions/<folder>/submission.json` runs every check and
    prints the exact command; `--go --review "<one line>"` submits once, on the owner's approval or under the standing
-   grant (with a one-line heads-up).
+   grant (with a one-line heads-up in the log).
 4. **An unclear result** (exit 4) is never resubmitted blindly: read `competitions submissions` and
    `competitions submission-limits` through the gateway first.

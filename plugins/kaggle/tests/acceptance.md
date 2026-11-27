@@ -636,8 +636,8 @@ else echo "the hour has turned: no third check"; fi
 PASS: the close exits 0; its lines read `CLOSE <slug>, <time>`, `page:     rebuilt offline in <n> s (the
 build's output: __data/kaggle/<slug>/hourly/status-build.log)`, `receipt:  __data/kaggle/<slug>/hourly/
 <slot>.json (...) marked handled`, `closed with it, in full (reasons, then held news):` (or `closed with
-it: nothing woke and nothing was held` after a quiet pass) and `STATUS as of <time> (paste into the status
-message)`; the build log's last layout check reads `layout check: <k> half-empty page(s), ...`;
+it: nothing woke and nothing was held` after a quiet pass) and `STATUS as of <time> (for the hour's log)`;
+the build log's last layout check reads `layout check: <k> half-empty page(s), ...`;
 `reports/status.pdf` starts with `%PDF` and `reports/html/status.html` is there; the count of `as of the
 hourly pass` is 1 or above, since the offline build took the GPU week from check 11's receipt (0 only when
 that receipt's `raw:` lacked `account`); the third check, when the hour has not turned, prints one line,

@@ -1,4 +1,4 @@
-_Rev. 13_
+_Rev. 14_
 
 # Rule: Kaggle (Always-On) <!-- omit in toc -->
 
@@ -31,7 +31,8 @@ takes no turn. A woken hour ends with `tools/kaggle_hourly.py <slug> --close`.
   `benchmarks tasks push|run|publish`; the competition-host commands (`competitions create`,
   `launch`, `pages create|update`, and the `data`, `settings` and `solution` groups); any
   `delete`; and `auth revoke`. When unsure whether a command writes, treat it as a write.
-  Under a standing autonomy grant, still give a one-line heads-up.
+  Under a standing autonomy grant, still write a one-line heads-up before the write, into the
+  project's log (it is no message to the owner: OD55).
 - **Submit through the gate.** Submits go through `tools/kaggle_submit.py`, never a bare
   `competitions submit`: it refuses until the submission record is complete, what
   `tools/kaggle_presubmit.py <slug>` lists as new is acknowledged (`--ack`), the kernel run has
@@ -89,26 +90,39 @@ The tags on these lines and in the playbook (`ODnn`, `Cn`, `Dn`) are this plugin
 number is never used twice, and a project never mints an `ODnn`. A project numbers its own directions with an `L`
 prefix (`L01`, `L02`, ...) in its own files, so a later plugin release cannot give its number to something else.
 
-- Decide on your best judgement and report; ask the owner only about what this rule or the pack reserves for
-  the owner. <!-- OD01 -->
-- When unsure, take the option that moves the public board faster, act, then report; the hard rules, gates and
-  confirm list still apply. <!-- OD52 -->
+- Decide on your best judgement and record the decision in the project's records; ask the owner only about
+  what this rule or the pack reserves for the owner. <!-- OD01 -->
+- When unsure, take the option that moves the public board faster, act, then record it; the hard rules, gates
+  and confirm list still apply. <!-- OD52 -->
 - Answer the owner first, in about 100 words unless the owner asks for more, in plain words; details only on
   request. This applies to the master's messages to the owner. <!-- OD54 -->
+- Write to the owner for two things only. One: what you cannot decide yourself (a decision this rule or the
+  pack reserves for the owner, a choice the rules do not settle, a step only the owner can take), as one ask
+  with the point first, the options and your recommendation. Two: a new best public score, one short message
+  each time (the score, the rank, the entry). Everything routine stays in the project's records, where the
+  owner looks at will (the status page, the plan, the logs): entries sent or scored that are no new best,
+  slots and resets, plans, digests, the hour's status block, review results, housekeeping, hosts, alerts
+  raised or cleared, progress. For a Kaggle master this narrows the autocode rule's "digests and news".
+  <!-- OD55 -->
 - Never probe hidden scorers or hidden test data. <!-- OD04 -->
 - Never hide our real score with 1-p (inverted) submissions. <!-- OD05 -->
 - The control machine stays light: agents, git, light scripts and small reads only; no heavy compute and no
   bulk data. <!-- OD06 -->
 - Models by job: the master and every decision, research, analysis or review job on Opus 5.5; technical-only
   jobs (builds, bring-up, cleanup, file edits) on Sonnet 5.5; read-only mechanical sweeps may use Haiku.
-  Newest and strongest variant first, cost only breaks ties. Pass the model on every launch and check the
-  model that actually ran; the playbook's cross-family review adds another vendor's model. <!-- OD07 -->
+  Newest and strongest variant first, cost only breaks ties. The owner may name another model for a session or
+  a job (a master on another model, say): that word, logged in `directions.md`, wins, and the model goes into
+  `"kaggle.allowed_models"`, so that the hourly pass does not flag it. Pass the model on every launch, by its
+  full ID through the endpoint the owner chose for it (where a hub offers one model through several clouds,
+  never switch between them yourself), and check the model that actually ran; the playbook's cross-family
+  review adds another vendor's model. <!-- OD07 -->
 - This model list replaces the older line that put every worker on the frontier tier, and for Kaggle work it
   overrides the tier defaults of `info/model-tiers.md` and the subagents rule. <!-- C1 -->
 - Workers run at the master's effort, never above it; the owner chooses that effort per session, and no file
   fixes the level. <!-- C6 -->
 - Run browsers headless by default, and close every browser you start. <!-- OD09 -->
-- Track spend (AI, cloud GPUs, other paid services) and report it with each status: autocode counts the session's
+- Track spend (AI, cloud GPUs, other paid services) and show it with each status (the status page, the hour's
+  block): autocode counts the session's
   own AI spend, its subagents and jobs included, and each cost it does not count is one line in
   `<pack>/.memory/spend.jsonl`. Check the daily AI budget when the pack sets `ai.daily_budget_usd`. <!-- OD11 -->
 - One status page per project, `reports/status.pdf`, built by this plugin's `tools/kaggle_status.py` from
