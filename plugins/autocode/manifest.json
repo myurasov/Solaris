@@ -2,7 +2,7 @@
   "_comment": "Plugin manifest (authored by the plugin author). 'version' is the plugin semver (release-only); install-plugin reads 'setup'.",
   "schema_version": 1,
   "name": "autocode",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Run a project's primary session as an autocode agent under OpenCode 2: autocode.rule.md (always-on, dormant in a session that is not an autocode agent) maps what the persona ties to harness hooks and the session clock onto autocode's wakes, checks, messages, jobs and compaction; autocode-start.skill.md starts such a session (register, read-first by hand, the schedule as wakes, the guard); tools/guard.py is the idle guard's check (open work, and background jobs that are watched: lost at a reboot, past their deadline, their wake not fired); tools/wakes.py prints wake specs from <pack>/.memory/schedule.json.",
   "dependencies": {
     "optional": [

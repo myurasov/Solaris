@@ -100,6 +100,10 @@ a stand-in `autocode` program first on the PATH and no autocode values in the en
 
 ## Changelog
 
+- 0.5.5: autocode 1.1.0-rc7, which shows where the spend goes. The rule (rev 11) says what `autocode_me
+  action=status` and `autocode_wake action=list` now tell (the spend by kind, by Subagents and by what started the
+  turn; a wake's reload) and what follows from it: few long turns, a smaller context, a cheaper model for a
+  Subagent's mechanical work. It also names `--token-file` for a token the CLI is given. No project steps.
 - 0.5.4: autocode 1.1.0-rc6, which renamed three values of its mode settings: `approve` is now `allow`, `auto`
   is now `auto_answer`, and `off` is now `deny` (for `job_mode` and `wake_mode`). The rule (rev 10) and the Start
   skill (rev 5) name `wake_mode deny`, and say first that under the default, `wake_mode allow`, a session sets its

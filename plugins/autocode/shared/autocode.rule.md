@@ -1,4 +1,4 @@
-_Rev. 10_
+_Rev. 11_
 
 # Rule: Autocode Sessions (Always-On) <!-- omit in toc -->
 
@@ -112,6 +112,17 @@ tell the owner to upgrade it. The tools are named below where a copied plugin ha
   what the session spent before it registered, on the days it was spent, and its compactions. With a daily cap,
   what the session spent earlier today counts toward it: a session paused right after it registered met its cap,
   which is the owner's to raise. `ai_spend` reads only Claude Code transcripts.
+- **Where the spend goes** (autocode 1.1.0-rc7): `autocode_me action=status` also says today's spend by kind (cache
+  writes, cache reads, new input, output), the Subagents' part, and the spend by what started the turn (wake,
+  message, owner, compaction, job, ask, retry); `autocode_wake action=list` says each wake's reload. The first step
+  of a turn loads the whole context, and after the provider's cache has expired it writes all of it again. So:
+  - **Few long turns, not many short ones far apart:** do a pass's work in one turn; a wake that mostly finds
+    nothing moves its pass into its check.
+  - **A smaller context** makes every step and every start cheaper: compact at a stable point when it has grown.
+  - **Name a cheaper model for a Subagent** that reads or does mechanical work: it runs on the session's own model
+    otherwise.
+  - **A token for the CLI comes from a file:** `--token-file FILE`, never `--token "$(cat FILE)"`, which shows the
+    token in the machine's process list.
 - **Notices and restarts:** `[autocode] resume` continues the cut turn, and so does OpenCode's own "The server
   restarted while you were working" (it comes instead when OpenCode was killed, as at a power cut). After either,
   first run `guard.py job list` and `autocode_wake action=list` and start again what was lost. OpenCode's own
